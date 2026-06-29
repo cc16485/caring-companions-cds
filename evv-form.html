@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVV Correction Form — Caring Companions CDS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #0e3860;
+    --teal: #54bdb8;
+    --danger: #e74c3c;
+    --success: #27ae60;
+    --warn: #f39c12;
+    --gray-100: #f8f9fa;
+    --gray-300: #dee2e6;
+    --gray-600: #6c757d;
+    --gray-800: #343a40;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: var(--gray-100);
+    color: var(--gray-800);
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--primary);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header-logo {
+    width: 36px; height: 36px;
+    background: var(--teal);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: white;
+  }
+  .header-title { color: white; font-size: 16px; font-weight: 600; line-height: 1.2; }
+  .header-sub { color: rgba(255,255,255,0.65); font-size: 11px; }
+  .header-spacer { flex: 1; }
+  .signout-btn {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.8);
+    padding: 5px 12px; border-radius: 6px;
+    font-size: 12px; font-family: inherit; cursor: pointer;
+  }
+
+  /* ── LOGIN OVERLAY ── */
+  #loginOverlay {
+    position: fixed; inset: 0;
+    background: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999; flex-direction: column;
+  }
+  .login-card {
+    background: white; border-radius: 12px;
+    padding: 36px 40px; width: 380px; max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .login-logo {
+    width: 52px; height: 52px;
+    background: var(--teal); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 700; color: white;
+    margin: 0 auto 16px;
+  }
+  .login-title { text-align: center; font-size: 20px; font-weight: 700; color: var(--primary); }
+  .login-sub { text-align: center; font-size: 12px; color: var(--gray-600); margin-top: 4px; margin-bottom: 24px; }
+  .login-error {
+    display: none; color: var(--danger); font-size: 12px;
+    padding: 8px 12px; background: #fdedec; border-radius: 6px; margin-bottom: 12px;
+  }
+  #login_loading { display: none; color: rgba(255,255,255,0.8); margin-top: 20px; font-size: 14px; }
+
+  /* ── FORM PAGE ── */
+  #formPage { display: none; }
+  .container { max-width: 680px; margin: 0 auto; padding: 24px 16px 60px; }
+  .page-title { font-size: 20px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: var(--gray-600); margin-bottom: 24px; }
+
+  .card {
+    background: white; border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    padding: 20px; margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 13px; font-weight: 600; color: var(--primary);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 16px; padding-bottom: 10px;
+    border-bottom: 2px solid var(--teal);
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-row.single { grid-template-columns: 1fr; }
+  @media (max-width: 500px) { .form-row { grid-template-columns: 1fr; } }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group label {
+    font-size: 12px; font-weight: 600; color: var(--gray-600);
+    margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .form-group label .req { color: var(--danger); }
+  .form-group input, .form-group select, .form-group textarea {
+    border: 1.5px solid var(--gray-300); border-radius: 6px;
+    padding: 9px 11px; font-size: 14px; font-family: inherit;
+    transition: border-color 0.15s;
+    background: white; color: var(--gray-800);
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: var(--teal);
+  }
+  .form-group textarea { resize: vertical; min-height: 70px; }
+  #reason_other { display: none; margin-top: 8px; }
+
+  .time-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .time-label { font-size: 11px; color: var(--gray-600); margin-bottom: 3px; font-weight: 500; }
+
+  .submit-btn {
+    width: 100%; padding: 13px;
+    background: var(--teal); color: white;
+    border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: background 0.15s; margin-top: 4px;
+  }
+  .submit-btn:hover { background: #3da8a3; }
+  .submit-btn:disabled { background: var(--gray-300); cursor: not-allowed; }
+
+  .required-note { font-size: 11px; color: var(--gray-600); margin-bottom: 16px; }
+
+  /* ── SUCCESS STATE ── */
+  #successPage {
+    display: none;
+    max-width: 440px; margin: 60px auto; padding: 0 16px; text-align: center;
+  }
+  .success-icon {
+    width: 72px; height: 72px; background: #eafaf1; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; margin: 0 auto 20px;
+  }
+  .success-title { font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+  .success-detail { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 28px; }
+  .another-btn {
+    background: var(--primary); color: white;
+    border: none; border-radius: 8px; padding: 12px 28px;
+    font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .another-btn:hover { background: #0a2d4f; }
+
+  /* ── SHARED INPUTS ── */
+  input[type="date"], input[type="time"] { appearance: none; -webkit-appearance: none; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN OVERLAY -->
+<div id="loginOverlay">
+  <div class="login-card">
+    <div class="login-logo">C</div>
+    <div class="login-title">Caring Companions CDS</div>
+    <div class="login-sub">EVV Correction Form — Staff Login</div>
+    <div id="login_error" class="login-error"></div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Email</label>
+      <input type="email" id="login_email" placeholder="you@caringcds.com">
+    </div>
+    <div class="form-group" style="margin-bottom:20px">
+      <label>Password</label>
+      <input type="password" id="login_password" placeholder="••••••••"
+        onkeydown="if(event.key==='Enter')signIn()">
+    </div>
+    <button id="login_btn" class="submit-btn" onclick="signIn()">Sign In</button>
+  </div>
+  <div id="login_loading">Loading…</div>
+</div>
+
+<!-- HEADER (hidden until logged in) -->
+<div class="header" id="appHeader" style="display:none">
+  <div class="header-logo">C</div>
+  <div>
+    <div class="header-title">Caring Companions CDS</div>
+    <div class="header-sub">EVV Correction Form</div>
+  </div>
+  <div class="header-spacer"></div>
+  <span id="header_user" style="font-size:11px;color:rgba(255,255,255,0.6);margin-right:8px"></span>
+  <button class="signout-btn" onclick="signOut()">Sign Out</button>
+</div>
+
+<!-- CORRECTION FORM -->
+<div id="formPage">
+  <div class="container">
+    <div class="page-title">EVV Manual Correction</div>
+    <div class="page-sub">Submit a correction for a missed or incorrect EVV clock-in/out. All submissions are logged immediately in the tracker.</div>
+    <div class="required-note"><span style="color:var(--danger)">*</span> Required fields</div>
+
+    <!-- WHO & WHEN -->
+    <div class="card">
+      <div class="card-title">Visit Information</div>
+      <div class="form-row" style="margin-bottom:12px">
+        <div class="form-group">
+          <label>Attendant Name <span class="req">*</span></label>
+          <input type="text" id="f_attendant" placeholder="First Last">
+        </div>
+        <div class="form-group">
+          <label>Consumer Name <span class="req">*</span></label>
+          <input type="text" id="f_consumer" placeholder="First Last">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Date of Visit <span class="req">*</span></label>
+          <input type="date" id="f_visitdate">
+        </div>
+        <div class="form-group">
+          <label>Date Form Submitted</label>
+          <input type="date" id="f_submitdate">
+        </div>
+      </div>
+    </div>
+
+    <!-- TIMES -->
+    <div class="card">
+      <div class="card-title">Clock-In / Clock-Out Times</div>
+      <div class="form-row" style="margin-bottom:16px">
+        <div class="form-group">
+          <label>Original Times</label>
+          <div class="time-pair">
+            <div>
+              <div class="time-label">Clock In</div>
+              <input type="time" id="f_orig_in">
+            </div>
+            <div>
+              <div class="time-label">Clock Out</div>
+              <input type="time" id="f_orig_out">
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Corrected Times</label>
+          <div class="time-pair">
+            <div>
+              <div class="time-label">Clock In</div>
+              <input type="time" id="f_new_in">
+            </div>
+            <div>
+              <div class="time-label">Clock Out</div>
+              <input type="time" id="f_new_out">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REASON -->
+    <div class="card">
+      <div class="card-title">Reason for Correction</div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Reason <span class="req">*</span></label>
+        <select id="f_reason" onchange="document.getElementById('reason_other').style.display=this.value==='Other'?'block':'none'">
+          <option value="">— Select reason —</option>
+          <option>Phone dead / no battery</option>
+          <option>App crashed or technical error</option>
+          <option>No cell service at consumer location</option>
+          <option>Forgot to clock in</option>
+          <option>Forgot to clock out</option>
+          <option>WellSky app error / update disruption</option>
+          <option>Landline EVV not available</option>
+          <option>Other</option>
+        </select>
+        <input type="text" id="reason_other" placeholder="Describe reason…">
+      </div>
+    </div>
+
+    <!-- PROCESSING STATUS -->
+    <div class="card">
+      <div class="card-title">Processing Status</div>
+      <div class="form-row" style="margin-bottom:12px">
+        <div class="form-group">
+          <label>Correction Form Received?</label>
+          <select id="f_form_received">
+            <option value="">— Select —</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>WellSky Updated?</label>
+          <select id="f_wellsky_done">
+            <option value="">— Select —</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>WellSky Update Date</label>
+          <input type="date" id="f_wellsky_date">
+        </div>
+        <div class="form-group">
+          <label>Processed By (Admin)</label>
+          <input type="text" id="f_admin" placeholder="Admin name">
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="card">
+      <div class="card-title">Notes</div>
+      <div class="form-group form-row single">
+        <label>Additional Notes</label>
+        <textarea id="f_notes" placeholder="Any additional context or details…"></textarea>
+      </div>
+    </div>
+
+    <div id="submit_error" style="display:none;color:var(--danger);font-size:13px;margin-bottom:12px;padding:10px 14px;background:#fdedec;border-radius:8px"></div>
+    <button id="submit_btn" class="submit-btn" onclick="submitForm()">Submit Correction</button>
+  </div>
+</div>
+
+<!-- SUCCESS -->
+<div id="successPage">
+  <div class="success-icon">✅</div>
+  <div class="success-title">Correction Logged</div>
+  <div class="success-detail" id="success_detail">
+    The EVV correction has been saved and is now visible in the tracker under EVV Corrections.
+  </div>
+  <button class="another-btn" onclick="resetForm()">Submit Another Correction</button>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIG
+// ============================================================
+const SUPABASE_URL      = 'https://siivpekcaryeyttszwav.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_iDJ00Ve4hw5iw2YtVmiulg__FmjShmO';
+const AGENCY_ID         = 'caring-companions-cds';
+
+let _db   = null;
+let _user = null;
+let _store = {};
+
+// ── BOOT ──
+document.addEventListener('DOMContentLoaded', async () => {
+  _db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data: { session } } = await _db.auth.getSession();
+  if (session) {
+    document.getElementById('login_loading').style.display = 'block';
+    await _loadData();
+    _showApp(session.user);
+  }
+});
+
+// ── AUTH ──
+async function signIn() {
+  const email    = document.getElementById('login_email').value.trim();
+  const password = document.getElementById('login_password').value;
+  const errEl    = document.getElementById('login_error');
+  const btn      = document.getElementById('login_btn');
+  errEl.style.display = 'none';
+
+  if (!email || !password) {
+    errEl.textContent = 'Please enter your email and password.';
+    errEl.style.display = 'block'; return;
+  }
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+
+  const { data, error } = await _db.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    btn.textContent = 'Sign In'; btn.disabled = false; return;
+  }
+  document.getElementById('login_loading').style.display = 'block';
+  await _loadData();
+  _showApp(data.user);
+}
+
+async function signOut() {
+  await _db.auth.signOut();
+  location.reload();
+}
+
+function _showApp(user) {
+  _user = user;
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appHeader').style.display = 'flex';
+  document.getElementById('formPage').style.display = 'block';
+  document.getElementById('header_user').textContent = user.email;
+
+  // Pre-fill today's date
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_submitdate').value = today;
+
+  // Pre-fill admin name from email
+  const name = user.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  document.getElementById('f_admin').value = name;
+}
+
+// ── DATA ──
+async function _loadData() {
+  const { data } = await _db.from('agency_data')
+    .select('data_key, data_value')
+    .eq('agency_id', AGENCY_ID)
+    .eq('data_key', 'evvCorrections');
+  if (data && data[0]) _store.evvCorrections = data[0].data_value;
+  else _store.evvCorrections = [];
+}
+
+// ── SUBMIT ──
+async function submitForm() {
+  const attendant = document.getElementById('f_attendant').value.trim();
+  const consumer  = document.getElementById('f_consumer').value.trim();
+  const visitdate = document.getElementById('f_visitdate').value;
+  const reason    = document.getElementById('f_reason').value;
+  const errEl     = document.getElementById('submit_error');
+  errEl.style.display = 'none';
+
+  if (!attendant || !consumer || !visitdate) {
+    errEl.textContent = 'Attendant name, consumer name, and date of visit are required.';
+    errEl.style.display = 'block'; return;
+  }
+  if (!reason) {
+    errEl.textContent = 'Please select a reason for the correction.';
+    errEl.style.display = 'block'; return;
+  }
+
+  const btn = document.getElementById('submit_btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  const reasonOther = document.getElementById('reason_other').value.trim();
+  const entry = {
+    id:           Date.now().toString(),
+    attendant,
+    consumer,
+    visitdate,
+    submitdate:   document.getElementById('f_submitdate').value,
+    origIn:       document.getElementById('f_orig_in').value,
+    origOut:      document.getElementById('f_orig_out').value,
+    newIn:        document.getElementById('f_new_in').value,
+    newOut:       document.getElementById('f_new_out').value,
+    reason:       reason === 'Other' ? (reasonOther || 'Other') : reason,
+    formReceived: document.getElementById('f_form_received').value,
+    wellskyDone:  document.getElementById('f_wellsky_done').value,
+    admin:        document.getElementById('f_admin').value.trim(),
+    wellskyDate:  document.getElementById('f_wellsky_date').value,
+    notes:        document.getElementById('f_notes').value.trim(),
+    loggedAt:     new Date().toISOString(),
+    loggedBy:     _user ? _user.email : ''
+  };
+
+  // Prepend to existing corrections
+  const corrections = [entry, ..._store.evvCorrections];
+
+  const { error } = await _db.from('agency_data')
+    .upsert({ agency_id: AGENCY_ID, data_key: 'evvCorrections', data_value: corrections });
+
+  if (error) {
+    errEl.textContent = 'Error saving: ' + error.message;
+    errEl.style.display = 'block';
+    btn.textContent = 'Submit Correction'; btn.disabled = false;
+    return;
+  }
+
+  _store.evvCorrections = corrections;
+
+  // Show success
+  const visitStr = new Date(visitdate + 'T12:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+  document.getElementById('success_detail').textContent =
+    `Correction for ${attendant} (visit on ${visitStr}) has been saved and is now visible in the tracker under EVV Corrections.`;
+
+  document.getElementById('formPage').style.display = 'none';
+  document.getElementById('successPage').style.display = 'block';
+}
+
+// ── RESET ──
+function resetForm() {
+  ['f_attendant','f_consumer','f_visitdate','f_orig_in','f_orig_out',
+   'f_new_in','f_new_out','f_notes','f_wellsky_date','reason_other'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('f_reason').value = '';
+  document.getElementById('f_form_received').value = '';
+  document.getElementById('f_wellsky_done').value = '';
+  document.getElementById('reason_other').style.display = 'none';
+  document.getElementById('submit_error').style.display = 'none';
+  document.getElementById('submit_btn').textContent = 'Submit Correction';
+  document.getElementById('submit_btn').disabled = false;
+
+  // Reset submit date to today
+  document.getElementById('f_submitdate').value = new Date().toISOString().split('T')[0];
+
+  document.getElementById('successPage').style.display = 'none';
+  document.getElementById('formPage').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>
