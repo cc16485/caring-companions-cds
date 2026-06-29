@@ -4,12 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Caring Companions CDS — Agency Responsibility Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --primary: #1a5276;
-    --primary-light: #2e86c1;
-    --accent: #148f77;
-    --accent-light: #1abc9c;
+    /* Caring Companions brand colors */
+    --primary: #0e3860;        /* Brand dark navy */
+    --primary-light: #1a5e9b;  /* Medium navy */
+    --accent: #54bdb8;         /* Brand teal */
+    --accent-light: #7ecfcb;   /* Light teal */
+    --accent-dark: #3a9e99;    /* Deeper teal for hover */
     --warn: #b7770d;
     --warn-light: #f39c12;
     --danger: #922b21;
@@ -26,7 +32,7 @@
     --radius: 8px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--gray-100); color: var(--gray-800); min-height: 100vh; }
+  body { font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--gray-100); color: var(--gray-800); min-height: 100vh; }
 
   /* HEADER */
   .header { background: var(--primary); color: white; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
@@ -39,6 +45,10 @@
   .tab { padding: 10px 20px; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
   .tab:hover { color: white; background: rgba(255,255,255,0.1); }
   .tab.active { color: white; border-bottom-color: var(--accent-light); }
+  .sub-nav { display:flex; gap:0; border-bottom:2px solid var(--gray-200); margin-bottom:22px; }
+  .sub-nav-tab { padding:9px 20px; font-size:13px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--gray-600); font-weight:500; transition:all 0.15s; white-space:nowrap; }
+  .sub-nav-tab:hover { color:var(--primary); background:var(--gray-100); }
+  .sub-nav-tab.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
 
   /* LAYOUT */
   .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
@@ -85,6 +95,8 @@
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s; }
   .btn-primary { background: var(--primary); color: white; }
   .btn-primary:hover { background: var(--primary-light); }
+  .btn-accent { background: var(--accent); color: white; }
+  .btn-accent:hover { background: var(--accent-dark); }
   .btn-success { background: var(--success); color: white; }
   .btn-success:hover { background: var(--success-light); }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
@@ -196,24 +208,52 @@
 </head>
 <body>
 
-<div class="header">
-  <div>
-    <h1>🏠 Caring Companions CDS</h1>
-    <div class="subtitle">Missouri Medicaid Consumer Directed Services — Agency Responsibility Tracker</div>
+<!-- LOGIN OVERLAY -->
+<div id="loginOverlay" style="position:fixed;inset:0;background:var(--primary);display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column">
+  <div style="background:white;border-radius:12px;padding:40px 44px;width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,0.4)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-size:22px;font-weight:700;color:var(--primary);font-family:'Poppins',sans-serif">Caring Companions CDS</div>
+      <div style="font-size:13px;color:var(--gray-600);margin-top:4px">Agency Responsibility Tracker</div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Email</label>
+      <input type="email" id="login_email" placeholder="you@caringcds.com" style="width:100%;font-size:14px;padding:10px 12px">
+    </div>
+    <div class="form-group" style="margin-bottom:20px">
+      <label>Password</label>
+      <input type="password" id="login_password" placeholder="••••••••" style="width:100%;font-size:14px;padding:10px 12px"
+        onkeydown="if(event.key==='Enter')signIn()">
+    </div>
+    <div id="login_error" style="display:none;color:var(--danger);font-size:12px;margin-bottom:12px;padding:8px 12px;background:#fdedec;border-radius:6px"></div>
+    <button id="login_btn" class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;font-size:14px" onclick="signIn()">Sign In</button>
+    <div style="font-size:11px;color:var(--gray-600);margin-top:14px;text-align:center">Contact your administrator to create or reset your account</div>
   </div>
-  <div class="header-badge" id="todayBadge"></div>
+  <div id="login_loading" style="display:none;color:rgba(255,255,255,0.8);margin-top:20px;font-size:14px">Loading your data…</div>
+</div>
+
+<div class="header">
+  <div style="display:flex;align-items:center">
+    <span style="font-family:'Poppins',sans-serif;font-size:22px;font-weight:700;color:white;letter-spacing:-0.3px">Caring Companions CDS</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="header_user" style="font-size:11px;color:rgba(255,255,255,0.7);margin-right:4px"></span>
+    <button onclick="exportData()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:5px 12px;border-radius:6px;font-size:12px;font-family:Poppins,sans-serif;cursor:pointer;font-weight:500" title="Download all data as a backup file">💾 Backup</button>
+    <button onclick="document.getElementById('importFileInput').click()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:5px 12px;border-radius:6px;font-size:12px;font-family:Poppins,sans-serif;cursor:pointer;font-weight:500" title="Restore data from a backup file">📂 Restore</button>
+    <button onclick="signOut()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);padding:5px 12px;border-radius:6px;font-size:12px;font-family:Poppins,sans-serif;cursor:pointer;font-weight:500" title="Sign out">Sign Out</button>
+    <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importData(event)">
+    <div class="header-badge" id="todayBadge"></div>
+  </div>
 </div>
 
 <div class="tabs">
   <div class="tab active" onclick="showPage('dashboard')">📊 Dashboard</div>
   <div class="tab" onclick="showPage('consumers')">👥 Consumers</div>
   <div class="tab" onclick="showPage('attendants')">🧑‍🤝‍🧑 Attendants</div>
-  <div class="tab" onclick="showPage('calendar')">📅 Deadlines & Calendar</div>
-  <div class="tab" onclick="showPage('compliance')">✅ Compliance Checklist</div>
-  <div class="tab" onclick="showPage('onboarding')">📋 Onboarding Checklists</div>
-  <div class="tab" onclick="showPage('pipeline')">🔮 Consumer Pipeline</div>
   <div class="tab" onclick="showPage('evvcorrections')">📝 EVV Corrections</div>
-  <div class="tab" onclick="showPage('reference')">📖 Reference</div>
+  <div class="tab" onclick="showPage('automations')">🤖 Automations</div>
+  <div class="tab" onclick="showPage('guides')">📚 Guides</div>
+  <div class="tab" onclick="showPage('quarterly')">📋 Quarterly Report</div>
+  <div class="tab" onclick="showPage('financials')">📈 Financials</div>
 </div>
 
 <div class="container">
@@ -268,6 +308,30 @@
       <div class="stat-value" id="statPCCP">0</div>
       <div class="stat-sub">switching from another agency</div>
     </div>
+  </div>
+
+  <!-- MARGIN TEASER — links to financials tab -->
+  <div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent);cursor:pointer" onclick="showPage('financials')">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary)">💰 Financial Dashboard</div>
+        <div style="font-size:12px;color:var(--gray-600);margin-top:2px">Revenue · Labor Cost · Gross Margin · Per-Consumer Profitability · Utilization History</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--gray-600);text-transform:uppercase;font-weight:700">Est. Monthly Margin</div>
+          <div style="font-size:22px;font-weight:700;color:var(--success)" id="dashMargin">—</div>
+          <div style="font-size:11px;color:var(--gray-600)" id="dashMarginPct"></div>
+        </div>
+        <span style="font-size:20px;color:var(--accent)">→</span>
+      </div>
+    </div>
+    <!-- hidden elements still needed by updateDashboard -->
+    <span id="dashAuthHrs" style="display:none"></span>
+    <span id="dashRevenue" style="display:none"></span>
+    <span id="dashLabor" style="display:none"></span>
+    <span id="dashBillingRate" style="display:none"></span>
+    <span id="dashPayRate" style="display:none"></span>
   </div>
 
   <div id="pipelineFollowUpAlert" style="display:none;margin-bottom:16px"></div>
@@ -406,51 +470,123 @@
 
 <!-- ==================== CONSUMERS ==================== -->
 <div id="page-consumers" class="page">
-  <div class="section-header">
-    <div class="section-title">Consumer Roster</div>
-    <button class="btn btn-primary" onclick="openModal('addConsumerModal')">+ Add Consumer</button>
+  <!-- Sub-navigation -->
+  <div class="sub-nav">
+    <div class="sub-nav-tab" id="csub-tab-pipeline" onclick="showConsumerTab('pipeline')">🔮 Pipeline</div>
+    <div class="sub-nav-tab active" id="csub-tab-active" onclick="showConsumerTab('active')">👥 Active Consumers</div>
   </div>
 
-  <div class="alert alert-info">
-    ℹ️ Agency must perform case management with each consumer <strong>at least monthly</strong>, and conduct an <strong>annual face-to-face home visit</strong>. Consumers must be trained on: timesheet prep, fraud identification, allowable tasks, attendant rights, and abuse/neglect/exploitation recognition.
-  </div>
+  <!-- ── PIPELINE SUB-SECTION ── -->
+  <div id="csub-pipeline" style="display:none">
+    <div class="section-header">
+      <div class="section-title">Consumer Pipeline</div>
+      <button class="btn btn-primary" onclick="openModal('addPipelineModal')">+ Add to Pipeline</button>
+    </div>
 
-  <div class="card">
-    <div class="card-title"><span class="icon">📞</span> Monthly Contact Tracker — <span id="currentMonthLabel"></span></div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Consumer Name</th>
-            <th>DCN</th>
-            <th>County</th>
-            <th>Attendant(s)</th>
-            <th>Care Plan Hours/Wk</th>
-            <th>Monthly Contact</th>
-            <th>Annual Home Visit</th>
-            <th>Backup Plan</th>
-            <th>Consumer Training</th>
-            <th>Tax Setup</th>
-            <th>Status</th>
-            <th>Care Plan</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="consumerTableBody">
-          <tr id="emptyConsumerRow">
-            <td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers added yet.<br>Click "Add Consumer" to get started.</p></div></td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="grid-3" style="margin-bottom:16px">
+      <div class="card" style="border-top:4px solid var(--primary-light);padding:14px 18px">
+        <div style="font-weight:700;color:var(--primary-light);font-size:14px;margin-bottom:6px">🌱 Lead</div>
+        <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Called in but <strong>not ready yet</strong> — maybe still deciding, waiting on a family member, or wants to learn more. No state submission yet. Needs periodic follow-up to stay warm.</div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Nurturing → Ready to Submit → Closed</div>
+      </div>
+      <div class="card" style="border-top:4px solid var(--success-light);padding:14px 18px">
+        <div style="font-weight:700;color:var(--success);font-size:14px;margin-bottom:6px">📋 Referral (New to CDS)</div>
+        <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>new to the Missouri CDS program</strong> and we have submitted (or are submitting) a request to DHSS/DSDS to start services. State authorization typically takes 2–6+ weeks.</div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Submitted to State → State Processing → Authorized → Active</div>
+      </div>
+      <div class="card" style="border-top:4px solid var(--warn-light);padding:14px 18px">
+        <div style="font-weight:700;color:var(--warn);font-size:14px;margin-bottom:6px">🔄 PCCP Transfer</div>
+        <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>currently with another CDS agency</strong> and wants to transfer to Caring Companions. Request submitted to DSDS. Current agency must be notified. Transfer can take 2–4+ weeks.</div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: Request Received → Submitted to DSDS → Processing → Transfer Complete → Active</div>
+      </div>
+    </div>
+
+    <div id="pipelineFollowUpBanner"></div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> All Pipeline Contacts</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+        <select id="pipeFilterType" onchange="renderPipeline()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
+          <option value="">All Types</option>
+          <option value="lead">🌱 Leads Only</option>
+          <option value="referral">📋 Referrals Only</option>
+          <option value="pccp">🔄 PCCP Transfers Only</option>
+        </select>
+        <select id="pipeFilterStatus" onchange="renderPipeline()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
+          <option value="">All Statuses</option>
+          <option value="active">Active / Open</option>
+          <option value="closed">Closed / Not Interested</option>
+          <option value="authorized">Authorized / Complete</option>
+        </select>
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="pipeShowClosed" onchange="renderPipeline()" style="accent-color:var(--accent)">
+          Show closed / not interested
+        </label>
+        <span style="font-size:12px;color:var(--gray-600);margin-left:auto" id="pipeCount"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="pipelineTable">
+          <thead>
+            <tr>
+              <th>Name</th><th>Type</th><th>County</th><th>Phone</th><th>First Contact</th>
+              <th>Status</th><th>Submitted to State</th><th>Next Follow-Up</th><th>Notes</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="pipelineTableBody">
+            <tr><td colspan="10"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts yet.<br>Click "+ Add to Pipeline" to get started.</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🏛️</span> State Submission Tracker — Referrals &amp; PCCP Transfers Pending Authorization</div>
+      <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">These contacts have been submitted to DSDS/DHSS and are awaiting state authorization. Track submission dates and follow up every 1–2 weeks.</div>
+      <div id="stateSubmissionList">
+        <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
+      </div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title"><span class="icon">🗓️</span> Monthly Contact History (by Consumer)</div>
-    <div id="monthlyContactHistory">
-      <p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>
+  <!-- ── ACTIVE CONSUMERS SUB-SECTION ── -->
+  <div id="csub-active">
+    <div class="section-header">
+      <div class="section-title">Consumer Roster</div>
+      <button class="btn btn-primary" onclick="openModal('addConsumerModal')">+ Add Consumer</button>
     </div>
-  </div>
+
+    <div class="alert alert-info">
+      ℹ️ Agency must perform case management with each consumer <strong>at least monthly</strong>, and conduct an <strong>annual face-to-face home visit</strong>. Consumers must be trained on: timesheet prep, fraud identification, allowable tasks, attendant rights, and abuse/neglect/exploitation recognition.
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">📞</span> Monthly Contact Tracker — <span id="currentMonthLabel"></span></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Consumer Name</th><th>DCN</th><th>County</th><th>Attendant(s)</th>
+              <th>Care Plan Hours/Wk</th><th>Monthly Contact</th><th>Annual Home Visit</th>
+              <th>Backup Plan</th><th>Consumer Training</th><th>Tax Setup</th>
+              <th>Status</th><th>Care Plan</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="consumerTableBody">
+            <tr id="emptyConsumerRow">
+              <td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers added yet.<br>Click "Add Consumer" to get started.</p></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🗓️</span> Monthly Contact History (by Consumer)</div>
+      <div id="monthlyContactHistory">
+        <p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>
+      </div>
+    </div>
+  </div><!-- end csub-active -->
 </div>
 
 <!-- ==================== ATTENDANTS ==================== -->
@@ -524,8 +660,17 @@
   </div>
 </div>
 
-<!-- ==================== CALENDAR ==================== -->
-<div id="page-calendar" class="page">
+<!-- ==================== GUIDES (wrapper) ==================== -->
+<div id="page-guides" class="page">
+  <div class="sub-nav">
+    <div class="sub-nav-tab active" id="gsub-tab-onboarding" onclick="showGuideTab('onboarding')">📋 Onboarding Checklists</div>
+    <div class="sub-nav-tab" id="gsub-tab-compliance" onclick="showGuideTab('compliance')">✅ Compliance</div>
+    <div class="sub-nav-tab" id="gsub-tab-calendar" onclick="showGuideTab('calendar')">📅 Calendar</div>
+    <div class="sub-nav-tab" id="gsub-tab-reference" onclick="showGuideTab('reference')">📖 Reference</div>
+  </div>
+
+  <!-- ── CALENDAR SUB-SECTION ── -->
+  <div id="gsub-calendar" style="display:none">
   <div class="section-title" style="margin-bottom:16px">Deadlines & Reporting Calendar</div>
 
   <div class="grid-2">
@@ -726,10 +871,10 @@
       </div>
     </div>
   </div>
-</div>
+  </div><!-- end gsub-calendar -->
 
-<!-- ==================== COMPLIANCE ==================== -->
-<div id="page-compliance" class="page">
+  <!-- ── COMPLIANCE SUB-SECTION ── -->
+  <div id="gsub-compliance" style="display:none">
   <div class="section-header">
     <div class="section-title">Agency Compliance Checklist</div>
     <span style="font-size:13px;color:var(--gray-600)">Check each item as complete. Progress saves automatically.</span>
@@ -914,10 +1059,10 @@
       </div>
     </div>
   </div>
-</div>
+  </div><!-- end gsub-compliance -->
 
-<!-- ==================== ONBOARDING ==================== -->
-<div id="page-onboarding" class="page">
+  <!-- ── ONBOARDING SUB-SECTION ── -->
+  <div id="gsub-onboarding">
   <div class="section-title" style="margin-bottom:16px">Onboarding Checklists</div>
 
   <div class="grid-2">
@@ -1233,91 +1378,118 @@
       </div>
     </div>
   </div>
-</div>
+  </div><!-- end gsub-onboarding -->
 
-<!-- ==================== CONSUMER PIPELINE ==================== -->
-<div id="page-pipeline" class="page">
-  <div class="section-header">
-    <div class="section-title">Consumer Pipeline</div>
-    <button class="btn btn-primary" onclick="openModal('addPipelineModal')">+ Add to Pipeline</button>
+  <!-- ── REFERENCE SUB-SECTION ── -->
+  <div id="gsub-reference" style="display:none">
+  <div class="section-title" style="margin-bottom:16px">Quick Reference Guide</div>
+
+  <div class="card" style="background:linear-gradient(135deg,#1a5276 0%,#2e86c1 100%);color:white">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;font-size:13px">
+      <div>
+        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Agency Name</div>
+        <div style="font-weight:700;font-size:15px">Caring Companions In-Home Senior Care</div>
+        <div style="opacity:0.85;margin-top:2px">Troutman Enterprises LLC (DBA)</div>
+        <div style="margin-top:8px;opacity:0.85">1331 N Stewart Ave<br>Springfield MO 65802</div>
+      </div>
+      <div>
+        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Identifiers</div>
+        <div>NPI: <strong>1548725682</strong></div>
+        <div>Federal EIN: <strong>82-0968875</strong></div>
+        <div style="margin-top:8px">EVV Vendor: <strong>WellSky Personal Care</strong></div>
+        <div>EVV Portal: <a href="https://mycaringcds.com" target="_blank" style="color:rgba(255,255,255,0.9)">mycaringcds.com</a></div>
+        <div>Website: <a href="https://caringcds.com" target="_blank" style="color:rgba(255,255,255,0.9)">caringcds.com</a></div>
+      </div>
+      <div>
+        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Contact & Service Area</div>
+        <div>Samantha Troutman (Owner)</div>
+        <div>📞 417-234-8494 | 866-863-5151</div>
+        <div>📧 samantha@ccseniorhomecare.com</div>
+        <div style="margin-top:8px;font-size:12px;opacity:0.85"><strong>9 Service Counties:</strong><br>Christian · Dade · Douglas · Greene · Lawrence · Phelps · Polk · Taney · Webster</div>
+      </div>
+    </div>
   </div>
 
-  <!-- TYPE KEY -->
-  <div class="grid-3" style="margin-bottom:16px">
-    <div class="card" style="border-top:4px solid var(--primary-light);padding:14px 18px">
-      <div style="font-weight:700;color:var(--primary-light);font-size:14px;margin-bottom:6px">🌱 Lead</div>
-      <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Called in but <strong>not ready yet</strong> — maybe still deciding, waiting on a family member, or wants to learn more. No state submission yet. Needs periodic follow-up to stay warm.</div>
-      <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Nurturing → Ready to Submit → Closed</div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="icon">🔗</span> Key Websites & Portals</div>
+      <table><tbody>
+        <tr><td><strong>🏠 Caring Companions Staff Portal (EVV / Payroll)</strong></td><td><a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light);font-weight:700">mycaringcds.com</a></td></tr>
+        <tr><td><strong>🏠 Caring Companions Website</strong></td><td><a href="https://caringcds.com" target="_blank">caringcds.com</a></td></tr>
+        <tr><td><strong>🏠 Find CDS Caregivers (Job Board)</strong></td><td><a href="https://findcdscaregivers.com" target="_blank">findcdscaregivers.com</a></td></tr>
+        <tr><td><strong>🖥️ WellSky Personal Care (EVV Vendor)</strong></td><td><a href="https://mycaringcds.com" target="_blank">WellSky / mycaringcds.com</a></td></tr>
+        <tr><td><strong>MMAC (Contracts, Enrollment, Provider Review)</strong></td><td><a href="https://mmac.mo.gov" target="_blank">mmac.mo.gov</a></td></tr>
+        <tr><td><strong>DSDS – HCBS Provider Page</strong></td><td><a href="https://health.mo.gov/seniors/hcbs/" target="_blank">health.mo.gov/seniors/hcbs</a></td></tr>
+        <tr><td><strong>DSDS – Provider Memos</strong></td><td><a href="https://health.mo.gov/seniors/hcbs/infomemos.php" target="_blank">health.mo.gov/seniors/hcbs/infomemos</a></td></tr>
+        <tr><td><strong>MO HealthNet – EVV Page</strong></td><td><a href="https://mydss.mo.gov/mhd/evv" target="_blank">mydss.mo.gov/mhd/evv</a></td></tr>
+        <tr><td><strong>FCSR Screening</strong></td><td><a href="https://health.mo.gov/safety/fcsr/" target="_blank">health.mo.gov/safety/fcsr</a></td></tr>
+        <tr><td><strong>EDL Check</strong></td><td><a href="https://health.mo.gov/safety/edl/index.php" target="_blank">health.mo.gov/safety/edl</a></td></tr>
+        <tr><td><strong>OIG LEIE Exclusions</strong></td><td><a href="https://exclusions.oig.hhs.gov/" target="_blank">exclusions.oig.hhs.gov</a></td></tr>
+        <tr><td><strong>E-Verify</strong></td><td><a href="https://www.e-verify.gov" target="_blank">e-verify.gov</a></td></tr>
+        <tr><td><strong>Empeon (Attendant Onboarding &amp; Payroll)</strong></td><td><a href="https://www.empeon.com" target="_blank">empeon.com</a></td></tr>
+        <tr><td><strong>MSHP Fingerprint / MACHS (Out-of-State)</strong></td><td><a href="https://www.machs.mo.gov/MACHSFP/wizard.html" target="_blank">machs.mo.gov</a> | IDEMIA: (844) 543-9712</td></tr>
+        <tr><td><strong>MO Dept of Revenue (State Tax)</strong></td><td><a href="https://dor.mo.gov" target="_blank">dor.mo.gov</a></td></tr>
+        <tr><td><strong>DES (Unemployment Insurance)</strong></td><td><a href="https://uinteract.labor.mo.gov" target="_blank">uinteract.labor.mo.gov</a></td></tr>
+      </tbody></table>
     </div>
-    <div class="card" style="border-top:4px solid var(--success-light);padding:14px 18px">
-      <div style="font-weight:700;color:var(--success);font-size:14px;margin-bottom:6px">📋 Referral (New to CDS)</div>
-      <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>new to the Missouri CDS program</strong> and we have submitted (or are submitting) a request to DHSS/DSDS to start services. State authorization typically takes 2–6+ weeks.</div>
-      <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Submitted to State → State Processing → Authorized → Active</div>
-    </div>
-    <div class="card" style="border-top:4px solid var(--warn-light);padding:14px 18px">
-      <div style="font-weight:700;color:var(--warn);font-size:14px;margin-bottom:6px">🔄 PCCP Transfer</div>
-      <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>currently with another CDS agency</strong> and wants to transfer to Caring Companions. Request submitted to DSDS. Current agency must be notified. Transfer can take 2–4+ weeks.</div>
-      <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: Request Received → Submitted to DSDS → Processing → Transfer Complete → Active</div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📞</span> Key Phone & Email Contacts</div>
+      <table><tbody>
+        <tr><td><strong>MMAC Main</strong></td><td>573-751-3399</td></tr>
+        <tr><td><strong>MMAC CDS Reports</strong></td><td>MMAC.CDS@DSS.MO.GOV</td></tr>
+        <tr><td><strong>MMAC Contracts Unit</strong></td><td>mmac.ihscontracts@dss.mo.gov</td></tr>
+        <tr><td><strong>MMAC Provider Review</strong></td><td>Tamara Wills — 573-751-3399</td></tr>
+        <tr><td><strong>MMAC Fraud Hotline</strong></td><td>573-751-3285</td></tr>
+        <tr><td><strong>EVV Questions</strong></td><td>ask.evv@dss.mo.gov | mmac.evv@dss.mo.gov</td></tr>
+        <tr><td><strong>DSDS Policy Questions</strong></td><td>programintegrity@health.mo.gov | 573-526-8557</td></tr>
+        <tr><td><strong>Elder Abuse Hotline (DHSS)</strong></td><td>1-800-392-0210 — report within 24 hrs</td></tr>
+        <tr><td><strong>Child Abuse/Neglect Hotline (CAN)</strong></td><td>1-800-392-3738 — report within 24 hrs</td></tr>
+        <tr><td><strong>MO HealthNet Participant Services</strong></td><td>(800) 392-2161 / (573) 751-6527</td></tr>
+        <tr><td><strong>EDL Phone Check (DHSS)</strong></td><td>573-522-1119</td></tr>
+        <tr><td><strong>DES CDS Tax Line</strong></td><td>573-751-1995 Opt. 1 | cdstax@labor.mo.gov</td></tr>
+        <tr><td><strong>Christopher Matzke — DES Collections</strong></td><td>573-751-1867 | christopher.matzke@labor.mo.gov</td></tr>
+        <tr><td><strong>Kristie Riedmann — DES Employer Accounts</strong></td><td>573-751-1995 Ext. 4105 | kristie.riedmann@labor.mo.gov</td></tr>
+        <tr><td><strong>MMAC Fax</strong></td><td>573-526-4375</td></tr>
+        <tr><td><strong>MMAC Physical Address</strong></td><td>205 Jefferson St., 2nd Floor, Jefferson City, MO 65101</td></tr>
+        <tr><td><strong>MMAC Mailing Address</strong></td><td>P.O. Box 6500, Jefferson City, MO 65102</td></tr>
+      </tbody></table>
     </div>
   </div>
 
-  <!-- FOLLOW-UP DUE ALERT -->
-  <div id="pipelineFollowUpBanner"></div>
-
-  <!-- PIPELINE TABLE -->
   <div class="card">
-    <div class="card-title"><span class="icon">📊</span> All Pipeline Contacts</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <select id="pipeFilterType" onchange="renderPipeline()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
-        <option value="">All Types</option>
-        <option value="lead">🌱 Leads Only</option>
-        <option value="referral">📋 Referrals Only</option>
-        <option value="pccp">🔄 PCCP Transfers Only</option>
-      </select>
-      <select id="pipeFilterStatus" onchange="renderPipeline()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
-        <option value="">All Statuses</option>
-        <option value="active">Active / Open</option>
-        <option value="closed">Closed / Not Interested</option>
-        <option value="authorized">Authorized / Complete</option>
-      </select>
-      <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="pipeShowClosed" onchange="renderPipeline()" style="accent-color:var(--accent)">
-        Show closed / not interested
-      </label>
-      <span style="font-size:12px;color:var(--gray-600);margin-left:auto" id="pipeCount"></span>
-    </div>
-    <div class="table-wrap">
-      <table id="pipelineTable">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>County</th>
-            <th>Phone</th>
-            <th>First Contact</th>
-            <th>Status</th>
-            <th>Submitted to State</th>
-            <th>Next Follow-Up</th>
-            <th>Notes</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="pipelineTableBody">
-          <tr><td colspan="10"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts yet.<br>Click "+ Add to Pipeline" to get started.</p></div></td></tr>
-        </tbody>
-      </table>
-    </div>
+    <div class="card-title"><span class="icon">⚠️</span> Penalties & Consequences Summary</div>
+    <table>
+      <thead><tr><th>Violation</th><th>Penalty</th><th>Authority</th></tr></thead>
+      <tbody>
+        <tr><td>Failure to pay payroll taxes timely</td><td><strong>$1,000 per occurrence</strong></td><td>Senate Bill 710 (RSMo 208.909)</td></tr>
+        <tr><td>HIPAA violation (unknowing)</td><td>$100–$50,000 per violation, up to $1.5M/year</td><td>HIPAA/HITECH</td></tr>
+        <tr><td>HIPAA violation (willful neglect, corrected)</td><td>$10,000–$50,000 per violation, up to $1.5M/year</td><td>HIPAA/HITECH</td></tr>
+        <tr><td>Medicaid fraud</td><td>Civil/criminal penalties; contract termination</td><td>RSMo 191.905</td></tr>
+        <tr><td>Failure to submit quarterly/annual reports</td><td>Education → Suspend payments → Termination</td><td>RSMo 208.918.2</td></tr>
+        <tr><td>Employing excluded individual (LEIE)</td><td>No reimbursement; repayment required</td><td>CDS Program Req. §5.2</td></tr>
+        <tr><td>EVV non-compliance</td><td>Claims denied; up to termination</td><td>13 CSR 70-3.320</td></tr>
+        <tr><td>DES quarterly wage report filed late</td><td><strong>10% of taxes due OR $100/month, max 20%/$200</strong></td><td>MO DES / UInteract</td></tr>
+      </tbody>
+    </table>
   </div>
 
-  <!-- STATE SUBMISSION TRACKER (Referrals & PCCP only) -->
   <div class="card">
-    <div class="card-title"><span class="icon">🏛️</span> State Submission Tracker — Referrals &amp; PCCP Transfers Pending Authorization</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">These contacts have been submitted to DSDS/DHSS and are awaiting state authorization. Track submission dates and follow up every 1–2 weeks.</div>
-    <div id="stateSubmissionList">
-      <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
-    </div>
+    <div class="card-title"><span class="icon">📋</span> MMAC Change Request — When to Submit</div>
+    <table>
+      <thead><tr><th>Change Type</th><th>Timing</th><th>Form</th></tr></thead>
+      <tbody>
+        <tr><td>Address, phone, fax, email, hours</td><td>At least 5 business days BEFORE change</td><td>Change Request Form</td></tr>
+        <tr><td>Executive Director substitution</td><td>IMMEDIATELY in writing</td><td>Written notice to MMAC</td></tr>
+        <tr><td>CDS Coordinator substitution</td><td>IMMEDIATELY in writing</td><td>Written notice to MMAC</td></tr>
+        <tr><td>Ownership change (5%+ stock)</td><td>At least 45 days BEFORE change</td><td>Change Request Form</td></tr>
+        <tr><td>County service area addition/removal</td><td>Prior written approval required</td><td>Change Request Form</td></tr>
+        <tr><td>Banking / EFT changes</td><td>As soon as known</td><td>EFT Form + Change Request</td></tr>
+        <tr><td>Security breach / HIPAA breach</td><td>Immediately; written report within 5–10 days</td><td>Written report</td></tr>
+      </tbody>
+    </table>
   </div>
-</div>
+  </div><!-- end gsub-reference -->
+</div><!-- end page-guides -->
 
 <!-- ==================== EVV CORRECTIONS ==================== -->
 <div id="page-evvcorrections" class="page">
@@ -1461,129 +1633,209 @@
 </div>
 
 <!-- ==================== REFERENCE ==================== -->
-<div id="page-reference" class="page">
-  <div class="section-title" style="margin-bottom:16px">Quick Reference Guide</div>
-
-  <div class="card" style="background:linear-gradient(135deg,#1a5276 0%,#2e86c1 100%);color:white">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;font-size:13px">
-      <div>
-        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Agency Name</div>
-        <div style="font-weight:700;font-size:15px">Caring Companions In-Home Senior Care</div>
-        <div style="opacity:0.85;margin-top:2px">Troutman Enterprises LLC (DBA)</div>
-        <div style="margin-top:8px;opacity:0.85">1331 N Stewart Ave<br>Springfield MO 65802</div>
-      </div>
-      <div>
-        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Identifiers</div>
-        <div>NPI: <strong>1548725682</strong></div>
-        <div>Federal EIN: <strong>82-0968875</strong></div>
-        <div style="margin-top:8px">EVV Vendor: <strong>WellSky Personal Care</strong></div>
-        <div>EVV Portal: <a href="https://mycaringcds.com" target="_blank" style="color:rgba(255,255,255,0.9)">mycaringcds.com</a></div>
-        <div>Website: <a href="https://caringcds.com" target="_blank" style="color:rgba(255,255,255,0.9)">caringcds.com</a></div>
-      </div>
-      <div>
-        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Contact & Service Area</div>
-        <div>Samantha Troutman (Owner)</div>
-        <div>📞 417-234-8494 | 866-863-5151</div>
-        <div>📧 samantha@ccseniorhomecare.com</div>
-        <div style="margin-top:8px;font-size:12px;opacity:0.85"><strong>9 Service Counties:</strong><br>Christian · Dade · Douglas · Greene · Lawrence · Phelps · Polk · Taney · Webster</div>
-      </div>
+<!-- ==================== AUTOMATIONS ==================== -->
+<div id="page-automations" class="page">
+  <div class="section-header">
+    <div class="section-title">🤖 Outreach Automations</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline" onclick="openOutreachSettings()" style="font-size:12px">⚙️ GHL Settings</button>
+      <button class="btn btn-outline" onclick="renderAutomations()" style="font-size:12px">↻ Refresh</button>
     </div>
   </div>
 
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title"><span class="icon">🔗</span> Key Websites & Portals</div>
-      <table>
-        <tbody>
-          <tr><td><strong>🏠 Caring Companions Staff Portal (EVV / Payroll)</strong></td><td><a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light);font-weight:700">mycaringcds.com</a></td></tr>
-          <tr><td><strong>🏠 Caring Companions Website</strong></td><td><a href="https://caringcds.com" target="_blank">caringcds.com</a></td></tr>
-          <tr><td><strong>🏠 Find CDS Caregivers (Job Board)</strong></td><td><a href="https://findcdscaregivers.com" target="_blank">findcdscaregivers.com</a></td></tr>
-          <tr><td><strong>🖥️ WellSky Personal Care (EVV Vendor)</strong></td><td><a href="https://mycaringcds.com" target="_blank">WellSky / mycaringcds.com</a></td></tr>
-          <tr><td><strong>MMAC (Contracts, Enrollment, Provider Review)</strong></td><td><a href="https://mmac.mo.gov" target="_blank">mmac.mo.gov</a></td></tr>
-          <tr><td><strong>DSDS – HCBS Provider Page</strong></td><td><a href="https://health.mo.gov/seniors/hcbs/" target="_blank">health.mo.gov/seniors/hcbs</a></td></tr>
-          <tr><td><strong>DSDS – Provider Memos</strong></td><td><a href="https://health.mo.gov/seniors/hcbs/infomemos.php" target="_blank">health.mo.gov/seniors/hcbs/infomemos</a></td></tr>
-          <tr><td><strong>MO HealthNet – Billing & Claims</strong></td><td><strong>CDS billing is through WellSky</strong> (mycaringcds.com) — not submitted to emomed.com directly. emomed.com is for eligibility/TPL verification only.</td></tr>
-          <tr><td><strong>MO HealthNet – EVV Page</strong></td><td><a href="https://mydss.mo.gov/mhd/evv" target="_blank">mydss.mo.gov/mhd/evv</a></td></tr>
-          <tr><td><strong>FCSR Screening</strong></td><td><a href="https://health.mo.gov/safety/fcsr/" target="_blank">health.mo.gov/safety/fcsr</a></td></tr>
-          <tr><td><strong>EDL Check</strong></td><td><a href="https://health.mo.gov/safety/edl/index.php" target="_blank">health.mo.gov/safety/edl</a></td></tr>
-          <tr><td><strong>OIG LEIE Exclusions</strong></td><td><a href="https://exclusions.oig.hhs.gov/" target="_blank">exclusions.oig.hhs.gov</a></td></tr>
-          <tr><td><strong>Sandata EVV Aggregator</strong></td><td>MOAltEVV@Sandata.com</td></tr>
-          <tr><td><strong>E-Verify</strong></td><td><a href="https://www.e-verify.gov" target="_blank">e-verify.gov</a></td></tr>
-          <tr><td><strong>Empeon (Attendant Onboarding &amp; Payroll)</strong></td><td><a href="https://www.empeon.com" target="_blank">empeon.com</a></td></tr>
-          <tr><td><strong>MSHP Fingerprint / MACHS (Out-of-State Attendants)</strong></td><td><a href="https://www.machs.mo.gov/MACHSFP/wizard.html" target="_blank">machs.mo.gov</a> | IDEMIA: (844) 543-9712</td></tr>
-          <tr><td><strong>MSHP CJIS Division (Fingerprint submissions)</strong></td><td>573-526-6153 | PO Box 9500, Jefferson City MO 65102-9500</td></tr>
-          <tr><td><strong>MMAC Provider Forms</strong></td><td><a href="https://mmac.mo.gov/providers/provider-enrollment/home-and-community-based-services/provider-contracts-forms/" target="_blank">MMAC Provider Forms Page</a></td></tr>
-          <tr><td><strong>MO Dept of Revenue (State Tax)</strong></td><td><a href="https://dor.mo.gov" target="_blank">dor.mo.gov</a></td></tr>
-          <tr><td><strong>DES (Unemployment Insurance)</strong></td><td><a href="https://uinteract.labor.mo.gov" target="_blank">uinteract.labor.mo.gov</a></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">📞</span> Key Phone & Email Contacts</div>
-      <table>
-        <tbody>
-          <tr><td><strong>MMAC Main</strong></td><td>573-751-3399</td></tr>
-          <tr><td><strong>MMAC CDS Reports (email)</strong></td><td>MMAC.CDS@DSS.MO.GOV</td></tr>
-          <tr><td><strong>MMAC Contracts Unit</strong></td><td>mmac.ihscontracts@dss.mo.gov</td></tr>
-          <tr><td><strong>MMAC Provider Review</strong></td><td>Tamara Wills — 573-751-3399</td></tr>
-          <tr><td><strong>MMAC Fraud Hotline</strong></td><td>573-751-3285</td></tr>
-          <tr><td><strong>MMAC Fraud Email</strong></td><td>MMAC.ReportFraud@dss.mo.gov</td></tr>
-          <tr><td><strong>EVV Questions</strong></td><td>ask.evv@dss.mo.gov | mmac.evv@dss.mo.gov</td></tr>
-          <tr><td><strong>DSDS Policy Questions</strong></td><td>programintegrity@health.mo.gov | 573-526-8557</td></tr>
-          <tr><td><strong>Elder Abuse Hotline (DHSS)</strong></td><td>1-800-392-0210 — report within 24 hrs</td></tr>
-          <tr><td><strong>Child Abuse/Neglect Hotline (CAN)</strong></td><td>1-800-392-3738 — report within 24 hrs</td></tr>
-          <tr><td><strong>MO HealthNet Participant Services</strong></td><td>(800) 392-2161 toll-free · (573) 751-6527 · PO Box 3535, Jefferson City MO 65102-3535 — Direct participants here; do NOT give Provider Relations number to participants</td></tr>
-          <tr><td><strong>MO HealthNet TPL/Eligibility Verification (IVR)</strong></td><td>(573) 635-8908 · also: emomed.com — verify TPL &amp; Medicare before billing</td></tr>
-          <tr><td><strong>EDL Phone Check (DHSS)</strong></td><td>573-522-1119 · also: health.mo.gov/safety/edl</td></tr>
-          <tr><td><strong>DES CDS Tax Line (UInteract / General)</strong></td><td>573-751-1995 Opt. 1 | cdstax@labor.mo.gov</td></tr>
-          <tr><td><strong>Christopher Matzke — DES Collections / Delinquent</strong></td><td>573-751-1867 | christopher.matzke@labor.mo.gov</td></tr>
-          <tr><td><strong>Kristie Riedmann — DES Employer Accounts / Wages</strong></td><td>573-751-1995 Ext. 4105 | kristie.riedmann@labor.mo.gov</td></tr>
-          <tr><td><strong>DES (Employment Security — UInteract portal)</strong></td><td><a href="https://uinteract.labor.mo.gov" target="_blank">uinteract.labor.mo.gov</a></td></tr>
-          <tr><td><strong>MMAC Fax</strong></td><td>573-526-4375</td></tr>
-          <tr><td><strong>MMAC Physical Address</strong></td><td>205 Jefferson St., 2nd Floor, Jefferson City, MO 65101</td></tr>
-          <tr><td><strong>MMAC Mailing Address</strong></td><td>P.O. Box 6500, Jefferson City, MO 65102</td></tr>
-        </tbody>
-      </table>
+  <!-- PENDING OUTREACHES -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">⚠️ Pending Outreaches</div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:12px">People who need an outreach that hasn't been sent yet.</p>
+    <div id="pendingOutreachList">
+      <p style="font-size:13px;color:var(--gray-600)">Loading…</p>
     </div>
   </div>
 
+  <!-- QUICK SEND -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">📤 Quick Send</div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">Trigger any outreach for any person without navigating to their tab.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px" id="quickSendGrid"></div>
+  </div>
+
+  <!-- SCHEDULED -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">🕐 Scheduled Automations</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
+        <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:4px">📱 Friday EVV Reminder</div>
+        <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Runs every <strong>Friday at 9 AM</strong><br>Reminds you to send EVV deadline alert to all active attendants</div>
+      </div>
+      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
+        <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:4px">📋 Care Plan Digest</div>
+        <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Runs every <strong>Monday at 8 AM</strong><br>Reminds you to review consumers with expiring care plans</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;padding:10px 14px;background:#f0faf9;border-left:4px solid var(--accent);border-radius:0 6px 6px 0;font-size:12px">
+      <strong>Bulk EVV Reminder</strong> → go to <a href="#" onclick="showPage('evvcorrections');return false" style="color:var(--primary)">EVV Corrections tab</a> → click <strong>📱 Friday EVV Reminder</strong> → paste command here in Claude.
+    </div>
+  </div>
+
+  <!-- OUTREACH LOG -->
   <div class="card">
-    <div class="card-title"><span class="icon">⚠️</span> Penalties & Consequences Summary</div>
-    <table>
-      <thead><tr><th>Violation</th><th>Penalty</th><th>Authority</th></tr></thead>
-      <tbody>
-        <tr><td>Failure to pay payroll taxes timely</td><td><strong>$1,000 per occurrence</strong>; agency liable to consumer for any IRS garnishment actions</td><td>Senate Bill 710 (RSMo 208.909)</td></tr>
-        <tr><td>HIPAA violation (unknowing)</td><td>$100–$50,000 per violation, up to $1.5M/year</td><td>HIPAA/HITECH</td></tr>
-        <tr><td>HIPAA violation (willful neglect, corrected)</td><td>$10,000–$50,000 per violation, up to $1.5M/year</td><td>HIPAA/HITECH</td></tr>
-        <tr><td>HIPAA criminal (unknowing)</td><td>Up to 1 year jail</td><td>HIPAA/HITECH</td></tr>
-        <tr><td>Medicaid fraud</td><td>Civil/criminal penalties; contract termination; exclusion from program</td><td>RSMo 191.905</td></tr>
-        <tr><td>Failure to submit quarterly/annual reports</td><td>Education → Suspend payments → Suspend MO HealthNet participation → Termination</td><td>RSMo 208.918.2; 19 CSR 15-8.400(7)</td></tr>
-        <tr><td>Employing excluded individual (LEIE)</td><td>No reimbursement for services; repayment required</td><td>CDS Program Req. §5.2</td></tr>
-        <tr><td>Attendant not screened/employable (FCSR/EDL)</td><td>No reimbursement; repayment of all funds paid</td><td>CDS Program Req. §4.3</td></tr>
-        <tr><td>Refusing MMAC monitoring</td><td>Material breach → contract termination</td><td>CDS Program Req. §5.18.1</td></tr>
-        <tr><td>6+ consecutive months without serving a consumer</td><td>MMAC may cancel agreement</td><td>CDS Program Req. §5.6</td></tr>
-        <tr><td>EVV non-compliance (Hard Launch April 1, 2026)</td><td>Claims denied; administrative actions up to termination</td><td>13 CSR 70-3.320; MMAC EVV guidance</td></tr>
-        <tr><td>DES quarterly wage report filed late (per consumer account)</td><td><strong>10% of taxes due OR $100/month, whichever is greater — max 20%/$200</strong>. Contact Christopher Matzke (573-751-1867) for delinquent accounts.</td><td>MO DES / UInteract; Senate Bill 710</td></tr>
-      </tbody>
-    </table>
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>📋 Outreach Log</span>
+      <button class="btn btn-sm btn-outline" onclick="clearOutreachLog()" style="font-size:11px;color:var(--gray-600)">Clear Log</button>
+    </div>
+    <div id="outreachLogTable">
+      <p style="font-size:13px;color:var(--gray-600)">No outreaches logged yet.</p>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- ==================== FINANCIALS ==================== -->
+<div id="page-financials" class="page">
+  <div class="section-header">
+    <div class="section-title">📈 Financial Dashboard</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-sm btn-outline" onclick="openRateSettings()" style="font-size:12px">⚙️ Edit Rates</button>
+      <button class="btn btn-sm btn-outline" onclick="renderFinancials()" style="font-size:12px">↻ Refresh</button>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-title"><span class="icon">📋</span> MMAC Change Request — When to Submit</div>
-    <table>
-      <thead><tr><th>Change Type</th><th>Timing</th><th>Form</th></tr></thead>
-      <tbody>
-        <tr><td>Address, phone, fax, email, hours</td><td>At least 5 business days BEFORE change</td><td>Change Request Form</td></tr>
-        <tr><td>Executive Director substitution</td><td>IMMEDIATELY in writing</td><td>Written notice to MMAC</td></tr>
-        <tr><td>CDS Coordinator substitution</td><td>IMMEDIATELY in writing</td><td>Written notice to MMAC</td></tr>
-        <tr><td>Ownership change (5%+ stock, partner addition/removal, LLC member change)</td><td>At least 45 days BEFORE change</td><td>Change Request Form</td></tr>
-        <tr><td>County service area addition/removal</td><td>Prior written approval required</td><td>Change Request Form</td></tr>
-        <tr><td>Banking / EFT changes</td><td>As soon as known (do not close old account first)</td><td>EFT Form + Change Request</td></tr>
-        <tr><td>Conflict of interest discovered</td><td>IMMEDIATELY</td><td>Written notice to MMAC</td></tr>
-        <tr><td>Security breach / HIPAA breach</td><td>Immediately; written report within 5–10 days</td><td>Written report to Security/Privacy Officer</td></tr>
-      </tbody>
-    </table>
+  <!-- TOP KPIs -->
+  <div id="fin_kpi_row" class="grid-4" style="margin-bottom:16px"></div>
+
+  <!-- BREAK-EVEN & MARGIN ANALYSIS -->
+  <div class="grid-2" style="margin-bottom:16px">
+    <div class="card">
+      <div class="card-title">💸 Rate Analysis</div>
+      <div id="fin_rate_analysis"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📉 Revenue Leakage — Underutilization</div>
+      <div id="fin_leakage"></div>
+    </div>
+  </div>
+
+  <!-- PER-CONSUMER PROFITABILITY -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">👤 Per-Consumer Monthly Profitability <span style="font-size:11px;font-weight:400;color:var(--gray-600)">(based on authorized hours)</span></div>
+    <div id="fin_consumer_table"></div>
+  </div>
+
+  <!-- QUARTERLY HISTORY -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">📊 Quarterly Revenue History <span style="font-size:11px;font-weight:400;color:var(--gray-600)">(from delivered units entered in Quarterly Report tab)</span></div>
+    <div id="fin_quarterly_history"></div>
+  </div>
+
+  <!-- GROWTH -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">🚀 Growth Opportunity</div>
+    <div id="fin_growth"></div>
+  </div>
+</div>
+
+<!-- ==================== QUARTERLY REPORT ==================== -->
+<div id="page-quarterly" class="page">
+  <div class="section-header">
+    <div class="section-title">📋 Missouri CDS Quarterly Report Prep</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="qr_year" style="padding:6px 10px;border:1.5px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit"></select>
+      <select id="qr_quarter" style="padding:6px 10px;border:1.5px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit">
+        <option value="1">Q1 (Jan–Mar)</option>
+        <option value="2">Q2 (Apr–Jun)</option>
+        <option value="3" selected>Q3 (Jul–Sep)</option>
+        <option value="4">Q4 (Oct–Dec)</option>
+      </select>
+      <button class="btn btn-outline" onclick="openWellskyImport()" style="font-size:12px">📥 Import from WellSky</button>
+      <button class="btn btn-primary" onclick="renderQuarterlyReport()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="alert alert-info" style="margin-bottom:16px">
+    ℹ️ This page auto-calculates <strong>Sections II, III, and IV</strong> from your tracker data. Enter <strong>Section V payroll numbers</strong> manually from Empeon. When complete, use the <strong>Copy Summary</strong> button to transfer values to your MMAC form.
+  </div>
+
+  <!-- SECTION II — COMPLAINTS -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title" style="justify-content:space-between">
+      <span>⚠️ Section II — Complaints & Grievances</span>
+      <button class="btn btn-sm btn-danger" onclick="openComplaintModal()">+ Log Complaint</button>
+    </div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">From the Missouri CDS Financial & Service Report — all complaints received during the quarter, by category and reporter. Click "Log Complaint" to record a new one.</p>
+    <div id="qr_complaints_table"></div>
+  </div>
+
+  <!-- SECTION III — MISSED CONTACTS -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">📵 Section III — Missed Monthly Contacts</div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">Auto-calculated from your monthly contact logs. Any consumer without a logged contact for a month in this quarter counts as "missed."</p>
+    <div id="qr_missed_contacts"></div>
+    <div id="qr_missed_list" style="margin-top:12px"></div>
+    <p style="font-size:11px;color:var(--gray-600);margin-top:10px">⚠️ The state form requires a separate DCN list with reasons for all missed contacts. Use the list above as your source.</p>
+  </div>
+
+  <!-- SECTION IV — UTILIZATION -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">📊 Section IV — Financial Utilization</div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">Authorized units are calculated from each consumer's authorized hours/week × 13 weeks × 4 units/hour. Enter <strong>Units Actually Delivered</strong> from your WellSky EVV report for the quarter.</p>
+    <div id="qr_utilization_table"></div>
+    <div id="qr_utilization_totals" style="margin-top:14px;padding:14px;background:var(--gray-100);border-radius:6px"></div>
+  </div>
+
+  <!-- SECTION V — PAYROLL -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">💰 Section V — CDS Attendant Payroll <span style="font-size:11px;font-weight:400;color:var(--gray-600)">(enter from Empeon)</span></div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">These numbers come from Empeon payroll. Enter them here to keep everything in one place for the report.</p>
+    <div class="form-row" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>Total Paid CDS Claims ($)</label>
+        <input type="number" id="qrp_paid_claims" step="0.01" placeholder="0.00" oninput="savePayrollInput()">
+      </div>
+      <div class="form-group">
+        <label>Total Net CDS Attendant Payroll ($)</label>
+        <input type="number" id="qrp_net_payroll" step="0.01" placeholder="0.00" oninput="savePayrollInput()">
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>Total Medicare & OASDI Taxes ($)</label>
+        <input type="number" id="qrp_medicare" step="0.01" placeholder="0.00" oninput="savePayrollInput()">
+      </div>
+      <div class="form-group">
+        <label>Total Federal Income Tax Withheld ($)</label>
+        <input type="number" id="qrp_fed_tax" step="0.01" placeholder="0.00" oninput="savePayrollInput()">
+      </div>
+    </div>
+    <div class="form-row" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>Total State Income Tax Withheld ($)</label>
+        <input type="number" id="qrp_state_tax" step="0.01" placeholder="0.00" oninput="savePayrollInput()">
+      </div>
+      <div class="form-group">
+        <label>Total FUTA & SUTA Contributions ($)</label>
+        <input type="number" id="qrp_futa" step="0.01" placeholder="0.00" oninput="savePayrollInput()">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Total CDS Payroll Expenditures ($)</label>
+        <input type="number" id="qrp_total_exp" step="0.01" placeholder="0.00" oninput="savePayrollInput()">
+      </div>
+      <div class="form-group">
+        <label>Total # of CDS Attendants</label>
+        <input type="number" id="qrp_attendant_count" placeholder="0" oninput="savePayrollInput()">
+      </div>
+    </div>
+  </div>
+
+  <!-- COPY SUMMARY -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title" style="justify-content:space-between">
+      <span>📄 Report Summary — Ready to Transcribe</span>
+      <button class="btn btn-accent" onclick="copyQuarterlySummary()">📋 Copy Summary</button>
+    </div>
+    <div id="qr_summary" style="background:var(--gray-100);border-radius:6px;padding:16px;font-size:13px;white-space:pre-wrap;font-family:monospace;line-height:1.7"></div>
   </div>
 </div>
 
@@ -1592,6 +1844,316 @@
 <!-- ==================== MODALS ==================== -->
 
 <!-- Add Consumer Modal -->
+<!-- MONTHLY CONTACT LOG MODAL -->
+<div class="modal-overlay" id="contactLogModal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header" style="background:var(--primary)">
+      <div class="modal-title" style="color:white">📞 Monthly Contact Log — <span id="clm_name"></span></div>
+      <button class="modal-close" onclick="closeModal('contactLogModal')" style="color:white">×</button>
+    </div>
+    <div id="clm_dhss_alert" style="display:none;background:#fdedec;border-left:4px solid var(--danger);padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:12px">
+      ⚠️ <strong>DHSS Notification Required.</strong> A significant change was noted. Notify DHSS within <strong>10 days</strong> per your policy agreement.
+    </div>
+    <div id="clm_existing_note" style="display:none;background:#eaf4fb;border-left:4px solid var(--accent);padding:10px 14px;font-size:13px;margin-bottom:12px">
+      📋 A contact is already logged for this month. Saving will overwrite it.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Date of Contact *</label>
+        <input type="date" id="clm_date" class="form-input" style="margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Contact Method *</label>
+        <select id="clm_method" class="form-input" style="margin-top:4px">
+          <option value="">— Select —</option>
+          <option value="phone">📞 Phone Call</option>
+          <option value="in-person">🏠 In-Person Visit</option>
+          <option value="video">💻 Video Call</option>
+          <option value="text">💬 Text Message</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Who Was Contacted?</label>
+      <select id="clm_person" class="form-input" style="margin-top:4px">
+        <option value="consumer">Consumer directly</option>
+        <option value="family">Family member / representative</option>
+        <option value="attendant">Attendant</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div style="background:var(--gray-100);border-radius:8px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Missouri Required Assessments</div>
+
+      <div style="margin-bottom:10px">
+        <label style="font-size:13px;font-weight:600">Is the current plan of care still appropriate?</label>
+        <div style="display:flex;gap:12px;margin-top:5px">
+          <label style="font-size:13px"><input type="radio" name="clm_poc" value="yes"> ✅ Yes</label>
+          <label style="font-size:13px"><input type="radio" name="clm_poc" value="no"> ❌ No — needs update</label>
+        </div>
+      </div>
+
+      <div style="margin-bottom:10px">
+        <label style="font-size:13px;font-weight:600">Is unit utilization on track with authorized hours?</label>
+        <div style="display:flex;gap:12px;margin-top:5px">
+          <label style="font-size:13px"><input type="radio" name="clm_util" value="yes"> ✅ Yes</label>
+          <label style="font-size:13px"><input type="radio" name="clm_util" value="no"> ❌ No</label>
+        </div>
+        <input type="text" id="clm_util_notes" class="form-input" placeholder="Notes on utilization..." style="margin-top:6px;font-size:12px">
+      </div>
+
+      <div style="margin-bottom:10px">
+        <label style="font-size:13px;font-weight:600">Is the consumer satisfied with the quality of care?</label>
+        <div style="display:flex;gap:12px;margin-top:5px">
+          <label style="font-size:13px"><input type="radio" name="clm_sat" value="yes"> ✅ Yes</label>
+          <label style="font-size:13px"><input type="radio" name="clm_sat" value="no"> ❌ No / Concern raised</label>
+        </div>
+        <input type="text" id="clm_sat_notes" class="form-input" placeholder="Notes on satisfaction..." style="margin-top:6px;font-size:12px">
+      </div>
+
+      <div style="margin-bottom:10px;padding:10px;background:white;border-radius:6px;border:1.5px solid var(--gray-200)">
+        <label style="font-size:13px;font-weight:700;color:var(--danger)">⚠️ Any significant changes in the consumer's health or ability to self-direct?</label>
+        <div style="display:flex;gap:12px;margin-top:5px">
+          <label style="font-size:13px"><input type="radio" name="clm_health" value="no" checked> ✅ No change</label>
+          <label style="font-size:13px"><input type="radio" name="clm_health" value="yes" onchange="checkDhssAlert()"> ⚠️ Yes — change noted</label>
+        </div>
+        <input type="text" id="clm_health_notes" class="form-input" placeholder="Describe change..." style="margin-top:6px;font-size:12px">
+        <div style="font-size:11px;color:var(--danger);margin-top:4px">If yes → report to DHSS. Notify within 10 days of any change affecting the care plan or residence.</div>
+      </div>
+
+      <div style="padding:10px;background:white;border-radius:6px;border:1.5px solid var(--gray-200)">
+        <label style="font-size:13px;font-weight:700;color:var(--warn)">🏠 Any changes in living situation or care plan circumstances?</label>
+        <div style="display:flex;gap:12px;margin-top:5px">
+          <label style="font-size:13px"><input type="radio" name="clm_circ" value="no" checked> ✅ No change</label>
+          <label style="font-size:13px"><input type="radio" name="clm_circ" value="yes" onchange="checkDhssAlert()"> ⚠️ Yes — change noted</label>
+        </div>
+        <input type="text" id="clm_circ_notes" class="form-input" placeholder="Describe change..." style="margin-top:6px;font-size:12px">
+      </div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:13px;font-weight:600">Any consumer complaints or concerns?</label>
+      <div style="display:flex;gap:12px;margin-top:5px">
+        <label style="font-size:13px"><input type="radio" name="clm_complaint" value="no" checked> None</label>
+        <label style="font-size:13px"><input type="radio" name="clm_complaint" value="yes"> Yes</label>
+      </div>
+      <input type="text" id="clm_complaint_notes" class="form-input" placeholder="Describe complaint / action taken..." style="margin-top:6px;font-size:12px">
+    </div>
+
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Contact Notes / Summary</label>
+      <textarea id="clm_notes" class="form-input" rows="3" placeholder="General notes from this contact..." style="margin-top:4px;resize:vertical"></textarea>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="closeModal('contactLogModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveContactLog()">💾 Save Contact Log</button>
+    </div>
+  </div>
+</div>
+
+<!-- WELLSKY CSV IMPORT MODAL -->
+<div class="modal-overlay" id="wellskyImportModal">
+  <div class="modal" style="width:700px;max-width:97vw">
+    <div class="modal-header" style="background:var(--primary);margin:-24px -24px 20px;padding:18px 24px;border-radius:8px 8px 0 0">
+      <div class="modal-title" style="color:white">📥 Import WellSky Utilization Data</div>
+      <button class="modal-close" onclick="closeModal('wellskyImportModal')" style="color:white">×</button>
+    </div>
+
+    <!-- STEP 1: Upload -->
+    <div id="ws_step1">
+      <div class="alert alert-info" style="margin-bottom:16px">
+        In WellSky, run a <strong>Visit Detail</strong> or <strong>Billing Summary</strong> report for the quarter and export as CSV. Upload it here — the importer will sum units per consumer and fill the Quarterly Report automatically.
+      </div>
+      <div id="ws_drop_zone" style="border:2px dashed var(--gray-300);border-radius:8px;padding:36px;text-align:center;cursor:pointer;transition:border-color 0.2s"
+        onclick="document.getElementById('ws_csv_file').click()"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondragleave="this.style.borderColor='var(--gray-300)'"
+        ondrop="event.preventDefault();this.style.borderColor='var(--gray-300)';handleWellskyDrop(event)">
+        <div style="font-size:40px;margin-bottom:10px">📄</div>
+        <div style="font-size:14px;font-weight:600;color:var(--primary)">Click to upload WellSky CSV export</div>
+        <div style="font-size:12px;color:var(--gray-600);margin-top:4px">Drag and drop also works · .csv files only</div>
+      </div>
+      <input type="file" id="ws_csv_file" accept=".csv" style="display:none" onchange="handleWellskyUpload(event)">
+      <div id="ws_upload_error" style="display:none" class="alert alert-danger" style="margin-top:12px"></div>
+    </div>
+
+    <!-- STEP 2: Column Mapping -->
+    <div id="ws_step2" style="display:none">
+      <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:4px">Step 2 — Map columns</div>
+      <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">Tell us which column in your WellSky export contains each piece of data. We've pre-selected the most likely matches.</p>
+      <div class="form-row" style="margin-bottom:10px">
+        <div class="form-group">
+          <label>Consumer Name column *</label>
+          <select id="ws_col_name" style="font-family:inherit;font-size:13px"></select>
+        </div>
+        <div class="form-group">
+          <label>Medicaid ID / DCN column <span style="font-weight:400">(recommended)</span></label>
+          <select id="ws_col_dcn" style="font-family:inherit;font-size:13px"></select>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:10px">
+        <div class="form-group">
+          <label>Service Date column *</label>
+          <select id="ws_col_date" style="font-family:inherit;font-size:13px"></select>
+        </div>
+        <div class="form-group">
+          <label>Units / Hours column *</label>
+          <select id="ws_col_units" style="font-family:inherit;font-size:13px"></select>
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="form-group">
+          <label>This column contains</label>
+          <select id="ws_unit_type" style="font-family:inherit;font-size:13px">
+            <option value="units">Units (15-min each) — divide by 4 for hours</option>
+            <option value="hours">Hours — multiply by 4 for units</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Filter to quarter</label>
+          <div style="padding:8px 10px;background:var(--gray-100);border-radius:6px;font-size:13px;font-weight:600;color:var(--primary)" id="ws_quarter_label">—</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px" id="ws_row_count"></div>
+      <button class="btn btn-primary" onclick="previewWellskyImport()">Preview Results →</button>
+    </div>
+
+    <!-- STEP 3: Preview -->
+    <div id="ws_step3" style="display:none">
+      <div style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:8px">Step 3 — Review and confirm</div>
+      <p style="font-size:12px;color:var(--gray-600);margin-bottom:12px">Green rows matched to a consumer in your tracker. Yellow rows had no match — you can still import matched rows only.</p>
+      <div id="ws_preview_table" style="max-height:320px;overflow-y:auto"></div>
+      <div id="ws_preview_summary" style="margin-top:12px;padding:10px 14px;background:var(--gray-100);border-radius:6px;font-size:13px"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="ws_back_btn" style="display:none" onclick="wsGoBack()">← Back</button>
+      <button class="btn btn-outline" onclick="closeModal('wellskyImportModal')">Cancel</button>
+      <button class="btn btn-accent" id="ws_import_btn" style="display:none" onclick="confirmWellskyImport()">✅ Import Matched Consumers</button>
+    </div>
+  </div>
+</div>
+
+<!-- RATE SETTINGS MODAL -->
+<div class="modal-overlay" id="rateSettingsModal">
+  <div class="modal" style="width:420px">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ CDS Rate Settings</div>
+      <button class="modal-close" onclick="closeModal('rateSettingsModal')">×</button>
+    </div>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:16px">Update these if MMAC adjusts the reimbursement rate or your attendant pay changes. All margin calculations update automatically.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>MMAC Reimbursement Rate ($/hr)</label>
+        <input type="number" id="rs_billing" step="0.01" min="0" placeholder="20.21">
+        <span style="font-size:11px;color:var(--gray-600)">What MMAC pays you per hour</span>
+      </div>
+      <div class="form-group">
+        <label>Attendant Pay Rate ($/hr)</label>
+        <input type="number" id="rs_pay" step="0.01" min="0" placeholder="15.00">
+        <span style="font-size:11px;color:var(--gray-600)">What you pay attendants per hour</span>
+      </div>
+    </div>
+    <div style="background:var(--gray-100);border-radius:6px;padding:12px;font-size:13px;margin-top:4px">
+      <strong>Gross margin per hour:</strong> <span id="rs_margin_preview" style="color:var(--success);font-weight:700"></span>
+      <script>
+        document.getElementById('rs_billing').addEventListener('input', updateMarginPreview);
+        document.getElementById('rs_pay').addEventListener('input', updateMarginPreview);
+        function updateMarginPreview() {
+          const b = parseFloat(document.getElementById('rs_billing').value) || 0;
+          const p = parseFloat(document.getElementById('rs_pay').value) || 0;
+          const m = b - p;
+          const el = document.getElementById('rs_margin_preview');
+          el.textContent = m >= 0 ? `$${m.toFixed(2)}/hr (${b > 0 ? Math.round(m/b*100) : 0}%)` : '—';
+          el.style.color = m > 0 ? 'var(--success)' : 'var(--danger)';
+        }
+      </script>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('rateSettingsModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRateSettings()">💾 Save Rates</button>
+    </div>
+  </div>
+</div>
+
+<!-- COMPLAINT / GRIEVANCE LOG MODAL -->
+<div class="modal-overlay" id="complaintModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header" style="background:var(--danger);margin:-24px -24px 20px;padding:18px 24px;border-radius:8px 8px 0 0">
+      <div class="modal-title" style="color:white">⚠️ Log Complaint / Grievance</div>
+      <button class="modal-close" onclick="closeModal('complaintModal')" style="color:white">×</button>
+    </div>
+    <div class="alert alert-warn" style="margin-bottom:14px">
+      All complaints must be documented, investigated, and reported to MMAC on the quarterly report. Keep complaint records on file for audit.
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date Received *</label>
+        <input type="date" id="cmp_date">
+      </div>
+      <div class="form-group">
+        <label>Consumer (if applicable)</label>
+        <select id="cmp_consumer">
+          <option value="">— General / Unknown —</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Complaint Category *</label>
+        <select id="cmp_category">
+          <option value="">— Select category —</option>
+          <option value="abuse">Abuse</option>
+          <option value="neglect">Neglect</option>
+          <option value="exploitation">Exploitation</option>
+          <option value="falsification">Falsification of Timesheets</option>
+          <option value="payroll_personnel">Payroll / Personnel Issues</option>
+          <option value="services_not_delivered">Services Not Delivered</option>
+          <option value="program_fraud">Program Fraud</option>
+          <option value="consumer_fraud">Consumer Fraud</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Reported By *</label>
+        <select id="cmp_reporter">
+          <option value="">— Select —</option>
+          <option value="consumer">Consumer</option>
+          <option value="attendant">Attendant</option>
+          <option value="family">Family Member</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Description of Complaint *</label>
+      <textarea id="cmp_description" rows="3" style="padding:8px 10px;border:1.5px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical" placeholder="Describe what was reported…"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Status</label>
+        <select id="cmp_status">
+          <option value="open">Open — Under Investigation</option>
+          <option value="resolved">Resolved</option>
+          <option value="unfounded">Unfounded / No Merit</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Resolution / Action Taken</label>
+        <input type="text" id="cmp_resolution" placeholder="e.g., referred to APS, corrected attendance…">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('complaintModal')">Cancel</button>
+      <button class="btn btn-danger" onclick="saveComplaint()">💾 Save Complaint</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addConsumerModal">
   <div class="modal">
     <div class="modal-header">
@@ -1812,12 +2374,12 @@
 <!-- Universal Outreach Modal -->
 <div class="modal-overlay" id="universalOutreachModal">
   <div class="modal" style="width:680px">
-    <div class="modal-header" style="background:var(--primary)">
+    <div class="modal-header" style="background:var(--accent)">
       <div class="modal-title" id="uom_title" style="color:white">📤 Send Outreach</div>
       <button class="modal-close" onclick="closeModal('universalOutreachModal')" style="color:white">×</button>
     </div>
 
-    <div id="uom_info_bar" style="background:#f0faf9;border-left:4px solid var(--teal);padding:10px 14px;font-size:12px;margin-bottom:14px;border-radius:0 6px 6px 0;line-height:1.6"></div>
+    <div id="uom_info_bar" style="background:#f0faf9;border-left:4px solid var(--accent);padding:10px 14px;font-size:12px;margin-bottom:14px;border-radius:0 6px 6px 0;line-height:1.6"></div>
 
     <!-- EMAIL DRAFT -->
     <div id="uom_email_section" style="margin-bottom:14px">
@@ -1841,7 +2403,7 @@
     <div class="modal-footer" id="uom_footer">
       <button class="btn btn-outline" onclick="closeModal('universalOutreachModal')">Skip for Now</button>
       <button class="btn btn-outline" onclick="markOutreachSent()" style="color:var(--gray-600);font-size:12px">Mark Sent (Already Did This)</button>
-      <button class="btn btn-primary" id="uom_send_btn" onclick="sendUniversalOutreachNow()" style="background:var(--teal)">📤 Send Both Now</button>
+      <button class="btn btn-primary" id="uom_send_btn" onclick="sendUniversalOutreachNow()" style="background:var(--accent)">📤 Send Both Now</button>
     </div>
   </div>
 </div>
@@ -1854,7 +2416,7 @@
       <button class="modal-close" onclick="closeModal('outreachSettingsModal')">×</button>
     </div>
 
-    <div style="background:#f0faf9;border-left:4px solid var(--teal);padding:10px 14px;font-size:12px;margin-bottom:16px;border-radius:0 6px 6px 0;line-height:1.6">
+    <div style="background:#f0faf9;border-left:4px solid var(--accent);padding:10px 14px;font-size:12px;margin-bottom:16px;border-radius:0 6px 6px 0;line-height:1.6">
       Welcome outreach is sent via the <strong>GoHighLevel API</strong> — SMS from your GHL Twilio number, email from <strong>intake@caringcds.com</strong>. No Zapier or GHL Workflow needed.
     </div>
 
@@ -1887,13 +2449,13 @@
 <!-- Welcome Outreach Modal -->
 <div class="modal-overlay" id="welcomeOutreachModal">
   <div class="modal" style="width:660px">
-    <div class="modal-header" style="background:var(--primary)">
+    <div class="modal-header" style="background:var(--accent)">
       <div class="modal-title" style="color:white">📤 Send Welcome to <span id="wo_name"></span></div>
       <button class="modal-close" onclick="closeModal('welcomeOutreachModal')" style="color:white">×</button>
     </div>
     <input type="hidden" id="wo_attendant_id">
 
-    <div style="background:#f0faf9;border-left:4px solid var(--teal);padding:10px 14px;font-size:12px;margin-bottom:14px;border-radius:0 6px 6px 0">
+    <div style="background:#f0faf9;border-left:4px solid var(--accent);padding:10px 14px;font-size:12px;margin-bottom:14px;border-radius:0 6px 6px 0">
       ✅ Attendant added! Review the messages below, then click <strong>Send Both Now</strong> — Claude will send the email via GoHighLevel (from intake@caringcds.com) and the text via your GHL Twilio number automatically.
     </div>
 
@@ -1918,7 +2480,7 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('welcomeOutreachModal')">Skip for Now</button>
       <button class="btn btn-outline" onclick="markWelcomeSentManual()" style="color:var(--gray-600);font-size:12px">Mark Sent (Already Did This)</button>
-      <button class="btn btn-primary" id="wo_send_btn" onclick="sendWelcomeNow()" style="background:var(--teal)">📤 Send Both Now</button>
+      <button class="btn btn-primary" id="wo_send_btn" onclick="sendWelcomeNow()" style="background:var(--accent)">📤 Send Both Now</button>
     </div>
   </div>
 </div>
@@ -2376,33 +2938,251 @@ VISIT DATE: 2026-06-27
 
 <script>
 // ============================================================
-// DATA STORAGE
+// SUPABASE CONFIGURATION — paste your values from supabase.com
 // ============================================================
+const SUPABASE_URL     = 'https://siivpekcaryeyttsxwav.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpaXZwZWtjYXJ5ZXl0dHN6d2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NzkyOTQsImV4cCI6MjA5ODI1NTI5NH0.Xds9FzUFLhYa3sr4rUS2aFWcuHVvLtrF3zX15tBXhaU';
+const AGENCY_ID        = 'caring-companions-cds';
+
+// ============================================================
+// DATA STORAGE — in-memory store backed by Supabase
+// All reads are synchronous (from memory). All writes sync to
+// Supabase in the background. Zero changes needed to render fns.
+// ============================================================
+let _db   = null;   // Supabase client
+let _store = {};    // In-memory cache
+
 function getData(key) {
-  try { return JSON.parse(localStorage.getItem(key)) || []; } catch(e) { return []; }
+  return Array.isArray(_store[key]) ? _store[key] : [];
 }
 function setData(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+  _store[key] = val;
+  _dbUpsert(key, val);
 }
 function getObj(key) {
-  try { return JSON.parse(localStorage.getItem(key)) || {}; } catch(e) { return {}; }
+  const v = _store[key];
+  return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
 }
 function setObj(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+  _store[key] = val;
+  _dbUpsert(key, val);
+}
+
+function _dbUpsert(key, val) {
+  if (!_db) return;
+  _db.from('agency_data')
+    .upsert({ agency_id: AGENCY_ID, data_key: key, data_value: val })
+    .then(({ error }) => { if (error) console.error('Supabase write error:', key, error.message); });
+}
+
+// ============================================================
+// AUTH + INIT
+// ============================================================
+async function initApp_boot() {
+  _db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Check for existing session (page refresh while logged in)
+  const { data: { session } } = await _db.auth.getSession();
+  if (session) {
+    document.getElementById('login_loading').style.display = 'block';
+    await _loadAllData();
+    document.getElementById('loginOverlay').style.display = 'none';
+    _afterLoad(session.user);
+  }
+  // else: login overlay stays visible, waiting for signIn()
+}
+
+async function signIn() {
+  const email    = document.getElementById('login_email').value.trim();
+  const password = document.getElementById('login_password').value;
+  const errEl    = document.getElementById('login_error');
+  const btn      = document.getElementById('login_btn');
+  errEl.style.display = 'none';
+
+  if (!email || !password) {
+    errEl.textContent = 'Please enter your email and password.';
+    errEl.style.display = 'block';
+    return;
+  }
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+
+  const { data, error } = await _db.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    btn.textContent = 'Sign In'; btn.disabled = false;
+    return;
+  }
+
+  document.getElementById('login_loading').style.display = 'block';
+  await _loadAllData();
+  document.getElementById('loginOverlay').style.display = 'none';
+  _afterLoad(data.user);
+}
+
+async function signOut() {
+  if (_db) await _db.auth.signOut();
+  location.reload();
+}
+
+async function _loadAllData() {
+  // Load all main data keys
+  const { data } = await _db.from('agency_data')
+    .select('data_key, data_value')
+    .eq('agency_id', AGENCY_ID);
+  if (data) data.forEach(row => { _store[row.data_key] = row.data_value; });
+
+  // Load delivered units into a fast lookup map
+  const { data: du } = await _db.from('delivered_units')
+    .select('consumer_id, quarter_key, units')
+    .eq('agency_id', AGENCY_ID);
+  _store._du = {};
+  if (du) du.forEach(r => { _store._du[r.consumer_id + '_' + r.quarter_key] = r.units; });
+}
+
+function _afterLoad(user) {
+  const emailEl = document.getElementById('header_user');
+  if (emailEl) emailEl.textContent = user.email;
+  initApp();    // runs the original DOMContentLoaded body
+}
+
+// Real-time sync: if another user saves data, refresh current view
+function _enableRealtime() {
+  if (!_db) return;
+  _db.channel('cds-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'agency_data', filter: `agency_id=eq.${AGENCY_ID}` },
+      async () => {
+        await _loadAllData();
+        const active = document.querySelector('.page.active');
+        if (active) {
+          const id = active.id.replace('page-','');
+          if (id === 'dashboard')    updateDashboard();
+          if (id === 'consumers')    { renderConsumers(); renderPipeline(); }
+          if (id === 'attendants')   renderAttendants();
+          if (id === 'evvcorrections') renderCorrections();
+          if (id === 'quarterly')    renderQuarterlyReport();
+          if (id === 'financials')   renderFinancials();
+        }
+      })
+    .subscribe();
+}
+
+const DATA_KEYS = ['consumers','attendants','pipeline','leieLog','evvCorrections','outreachLog','settings','complaints','payrollData'];
+
+function exportData() {
+  const backup = { exportedAt: new Date().toISOString(), version: 2 };
+  DATA_KEYS.forEach(k => { if (_store[k] !== undefined) backup[k] = _store[k]; });
+  // Export delivered units map
+  if (_store._du && Object.keys(_store._du).length) backup._deliveredUnits = _store._du;
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `CDS_Tracker_Backup_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const backup = JSON.parse(e.target.result);
+      if (!backup.version) throw new Error('Invalid backup file.');
+      if (!confirm(`Restore data from backup dated ${backup.exportedAt ? new Date(backup.exportedAt).toLocaleDateString() : 'unknown'}?\n\nThis will overwrite all current data.`)) return;
+      // Write each key to memory + Supabase
+      DATA_KEYS.forEach(k => { if (backup[k] !== undefined) setData(k, backup[k]); });
+      // Restore delivered units
+      if (backup._deliveredUnits && _db) {
+        _store._du = backup._deliveredUnits;
+        const rows = Object.entries(backup._deliveredUnits).map(([key, units]) => {
+          const [consumerId, ...qParts] = key.split('_');
+          return { agency_id: AGENCY_ID, consumer_id: consumerId, quarter_key: qParts.join('_'), units: parseInt(units) || 0 };
+        });
+        if (rows.length) await _db.from('delivered_units').upsert(rows);
+      }
+      alert('Restore complete.');
+      location.reload();
+    } catch(err) {
+      alert('Could not read backup file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
 
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
+const MAIN_TABS    = ['dashboard','consumers','attendants','evvcorrections','automations','guides','quarterly','financials'];
+const PAGE_TO_TAB  = {
+  dashboard:'dashboard',
+  consumers:'consumers', pipeline:'consumers',
+  attendants:'attendants',
+  evvcorrections:'evvcorrections',
+  automations:'automations',
+  guides:'guides', calendar:'guides', compliance:'guides', onboarding:'guides', reference:'guides',
+  quarterly:'quarterly',
+  financials:'financials'
+};
+
 function showPage(id) {
+  // Hide all .page divs
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // Unhighlight all tabs
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  const tabs = document.querySelectorAll('.tab');
-  const pages = ['dashboard','consumers','attendants','calendar','compliance','onboarding','pipeline','evvcorrections','reference'];
-  const idx = pages.indexOf(id);
-  if (idx >= 0) tabs[idx].classList.add('active');
+
+  // If pipeline requested, redirect to consumers page + activate pipeline sub-tab
+  if (id === 'pipeline') {
+    document.getElementById('page-consumers').classList.add('active');
+    showConsumerTab('pipeline');
+  } else if (id === 'calendar' || id === 'compliance' || id === 'onboarding' || id === 'reference') {
+    document.getElementById('page-guides').classList.add('active');
+    showGuideTab(id);
+  } else if (id === 'guides') {
+    document.getElementById('page-guides').classList.add('active');
+    showGuideTab('onboarding'); // default guide sub-tab
+  } else {
+    const pageEl = document.getElementById('page-' + id);
+    if (pageEl) pageEl.classList.add('active');
+  }
+
+  // Highlight the correct main tab
+  const mainKey = PAGE_TO_TAB[id] || id;
+  const tabIdx  = MAIN_TABS.indexOf(mainKey);
+  if (tabIdx >= 0) document.querySelectorAll('.tab')[tabIdx].classList.add('active');
+
   if (id === 'dashboard') updateDashboard();
+  if (id === 'automations') renderAutomations();
+  if (id === 'quarterly') renderQuarterlyReport();
+  if (id === 'financials') renderFinancials();
+  if (id === 'consumers' || id === 'pipeline') {
+    renderConsumers();
+    renderPipeline();
+  }
+}
+
+function showConsumerTab(tab) {
+  // default to active consumers if no tab specified
+  tab = tab || 'active';
+  document.getElementById('csub-pipeline').style.display = tab === 'pipeline' ? 'block' : 'none';
+  document.getElementById('csub-active').style.display   = tab === 'active'   ? 'block' : 'none';
+  document.getElementById('csub-tab-pipeline').classList.toggle('active', tab === 'pipeline');
+  document.getElementById('csub-tab-active').classList.toggle('active',   tab === 'active');
+  if (tab === 'pipeline') renderPipeline();
+  if (tab === 'active') renderConsumers();
+}
+
+function showGuideTab(tab) {
+  tab = tab || 'onboarding';
+  ['calendar','compliance','onboarding','reference'].forEach(t => {
+    const el = document.getElementById('gsub-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+    const tabEl = document.getElementById('gsub-tab-' + t);
+    if (tabEl) tabEl.classList.toggle('active', t === tab);
+  });
 }
 
 // ============================================================
@@ -2477,9 +3257,11 @@ function renderConsumers() {
     const statusBadge = c.status === 'active' ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-warn">Pending</span>';
     const trainedBadge = c.trained === 'yes' ? '<span class="badge badge-green">✓ Done</span>' : c.trained === 'partial' ? '<span class="badge badge-warn">Partial</span>' : '<span class="badge badge-red">Needed</span>';
     const backupBadge = c.backupPlan ? '<span class="badge badge-green">✓ Yes</span>' : '<span class="badge badge-red">Missing</span>';
+    const contactDetail = contacted && typeof contacted === 'object' ? contacted : null;
+    const dhssFlag = contactDetail && contactDetail.dhssFlag;
     const contactBtn = contacted ?
-      `<button class="btn btn-sm" style="background:#d5f5e3;color:var(--success);border:none;cursor:pointer" onclick="toggleContact('${c.id}')">✓ Contacted</button>` :
-      `<button class="btn btn-sm btn-danger" onclick="toggleContact('${c.id}')">⚠ Not Done</button>`;
+      `<button class="btn btn-sm" style="background:#d5f5e3;color:var(--success);border:1px solid #a9dfbf;cursor:pointer;position:relative" onclick="toggleContact('${c.id}')" title="${contactDetail ? 'Logged ' + contactDetail.date + ' via ' + contactDetail.method + (contactDetail.notes ? ' — ' + contactDetail.notes.substring(0,60) : '') : ''}">✓ Contacted${dhssFlag ? ' <span style=\'color:var(--danger)\'>⚠</span>' : ''}</button>` :
+      `<button class="btn btn-sm btn-danger" onclick="toggleContact('${c.id}')">📋 Log Contact</button>`;
 
     // Tax setup badge
     const taxItems = [c.ein, c.irs8821, c.irs2678, c.mo2643a, c.mo2827, c.desRegistered];
@@ -2508,7 +3290,7 @@ function renderConsumers() {
       <td>${statusBadge}</td>
       <td><button class="btn btn-sm btn-outline" onclick="openCarePlan('${c.id}')" style="font-size:11px;color:var(--primary)">${c.carePlan && c.carePlan.tasks && c.carePlan.tasks.length ? '📋 View Plan' : '📋 Add Plan'}</button></td>
       <td style="min-width:110px">
-        <button class="btn btn-sm btn-outline" onclick="openConsumerOutreach('${c.id}','service_start')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--teal)">🚀 Service Start</button>
+        <button class="btn btn-sm btn-outline" onclick="openConsumerOutreach('${c.id}','service_start')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--accent)">🚀 Service Start</button>
         <button class="btn btn-sm btn-outline" onclick="openConsumerOutreach('${c.id}','consumer_orientation')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--primary)">📺 Training Reminder</button>
         <button class="btn btn-sm btn-outline" onclick="openConsumerOutreach('${c.id}','care_renewal')" style="width:100%;font-size:10px;color:var(--warn)">🔄 Care Renewal</button>
       </td>
@@ -2525,8 +3307,11 @@ function renderConsumers() {
       const key = `${year}-${String(m+1).padStart(2,'0')}`;
       const isPast = m <= now.getMonth();
       const isDone = c.contacts && c.contacts[key];
-      months.push(`<div class="month-cell ${isDone ? 'done' : (isPast ? 'overdue' : 'future')}" onclick="toggleContactMonth('${c.id}','${key}')" title="${MONTHS[m]} ${year}: ${isDone ? 'Contacted ✓' : 'Not recorded'}">
-        <div class="mo">${MONTHS[m]}</div><div class="dot"></div></div>`);
+      const logDetail = isDone && typeof isDone === 'object' ? isDone : null;
+      const dhss = logDetail && logDetail.dhssFlag;
+      const tip = isDone ? `${MONTHS[m]} ${year}: ✓ Logged ${logDetail ? '(' + logDetail.method + ' on ' + logDetail.date + ')' : ''} — click to edit` : `${MONTHS[m]} ${year}: Not recorded — click to log`;
+      months.push(`<div class="month-cell ${isDone ? 'done' : (isPast ? 'overdue' : 'future')}" onclick="toggleContactMonth('${c.id}','${key}')" title="${tip}" style="${dhss ? 'outline:2px solid var(--danger)' : ''}">
+        <div class="mo">${MONTHS[m]}${dhss ? '<span style="color:var(--danger);font-size:9px">⚠</span>' : ''}</div><div class="dot"></div></div>`);
     }
     return `<div style="margin-bottom:16px">
       <div style="font-size:13px;font-weight:700;margin-bottom:6px">${c.name} <span style="font-weight:400;color:var(--gray-600);font-size:12px">${c.county ? '— ' + c.county : ''}</span></div>
@@ -2535,22 +3320,117 @@ function renderConsumers() {
   }).join('');
 }
 
+// Monthly contact log - open form
+let _clm_cid = null;
+let _clm_key = null;
+
 function toggleContact(cid) {
   const now = new Date();
   const key = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  toggleContactMonth(cid, key);
+  openContactLog(cid, key);
 }
 
 function toggleContactMonth(cid, key) {
+  openContactLog(cid, key);
+}
+
+function openContactLog(cid, key) {
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === cid);
   if (!c) return;
+  _clm_cid = cid;
+  _clm_key = key;
+
+  // Set consumer name
+  document.getElementById('clm_name').textContent = c.name + ' — ' + (key.split('-')[0] === String(new Date().getFullYear()) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(key.split('-')[1])-1] + ' ' + key.split('-')[0] : key);
+
+  // Check if existing log
+  const existing = c.contacts && c.contacts[key] && typeof c.contacts[key] === 'object' ? c.contacts[key] : null;
+  document.getElementById('clm_existing_note').style.display = existing ? 'block' : 'none';
+  document.getElementById('clm_dhss_alert').style.display = 'none';
+
+  // Pre-fill or reset
+  document.getElementById('clm_date').value = existing ? existing.date : new Date().toISOString().split('T')[0];
+  document.getElementById('clm_method').value = existing ? existing.method : '';
+  document.getElementById('clm_person').value = existing ? existing.person : 'consumer';
+  document.getElementById('clm_util_notes').value = existing ? (existing.utilNotes||'') : '';
+  document.getElementById('clm_sat_notes').value = existing ? (existing.satNotes||'') : '';
+  document.getElementById('clm_health_notes').value = existing ? (existing.healthNotes||'') : '';
+  document.getElementById('clm_circ_notes').value = existing ? (existing.circNotes||'') : '';
+  document.getElementById('clm_complaint_notes').value = existing ? (existing.complaintNotes||'') : '';
+  document.getElementById('clm_notes').value = existing ? (existing.notes||'') : '';
+
+  // Radio buttons
+  const setRadio = (name, val) => {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(r => r.checked = r.value === (val||''));
+  };
+  setRadio('clm_poc', existing ? existing.poc : '');
+  setRadio('clm_util', existing ? existing.util : '');
+  setRadio('clm_sat', existing ? existing.sat : '');
+  setRadio('clm_health', existing ? existing.health : 'no');
+  setRadio('clm_circ', existing ? existing.circ : 'no');
+  setRadio('clm_complaint', existing ? existing.complaint : 'no');
+
+  if (existing && (existing.health === 'yes' || existing.circ === 'yes')) {
+    document.getElementById('clm_dhss_alert').style.display = 'block';
+  }
+
+  openModal('contactLogModal');
+}
+
+function checkDhssAlert() {
+  const healthYes = document.querySelector('input[name="clm_health"]:checked')?.value === 'yes';
+  const circYes = document.querySelector('input[name="clm_circ"]:checked')?.value === 'yes';
+  document.getElementById('clm_dhss_alert').style.display = (healthYes || circYes) ? 'block' : 'none';
+}
+
+function saveContactLog() {
+  const date = document.getElementById('clm_date').value;
+  const method = document.getElementById('clm_method').value;
+  if (!date) { alert('Please enter the date of contact.'); return; }
+  if (!method) { alert('Please select a contact method.'); return; }
+
+  const pocVal = document.querySelector('input[name="clm_poc"]:checked')?.value || '';
+  const utilVal = document.querySelector('input[name="clm_util"]:checked')?.value || '';
+  const satVal = document.querySelector('input[name="clm_sat"]:checked')?.value || '';
+  const healthVal = document.querySelector('input[name="clm_health"]:checked')?.value || 'no';
+  const circVal = document.querySelector('input[name="clm_circ"]:checked')?.value || 'no';
+  const complaintVal = document.querySelector('input[name="clm_complaint"]:checked')?.value || 'no';
+
+  const log = {
+    date,
+    method,
+    person: document.getElementById('clm_person').value,
+    poc: pocVal,
+    util: utilVal,
+    utilNotes: document.getElementById('clm_util_notes').value,
+    sat: satVal,
+    satNotes: document.getElementById('clm_sat_notes').value,
+    health: healthVal,
+    healthNotes: document.getElementById('clm_health_notes').value,
+    circ: circVal,
+    circNotes: document.getElementById('clm_circ_notes').value,
+    complaint: complaintVal,
+    complaintNotes: document.getElementById('clm_complaint_notes').value,
+    notes: document.getElementById('clm_notes').value,
+    loggedAt: new Date().toISOString(),
+    dhssFlag: healthVal === 'yes' || circVal === 'yes'
+  };
+
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === _clm_cid);
+  if (!c) return;
   if (!c.contacts) c.contacts = {};
-  c.contacts[key] = !c.contacts[key];
-  if (!c.contacts[key]) delete c.contacts[key];
+  c.contacts[_clm_key] = log;
   setData('consumers', consumers);
+
+  closeModal('contactLogModal');
   renderConsumers();
   updateDashboard();
+
+  if (log.dhssFlag) {
+    setTimeout(() => alert('⚠️ DHSS Notification Required\n\nA significant change was noted for ' + c.name + '.\n\nPer your policy agreement, notify DHSS within 10 days of any change in health status or circumstances affecting the care plan or residence.'), 200);
+  }
 }
 
 function logHomeVisit(cid) {
@@ -2912,7 +3792,7 @@ function renderPipeline() {
           <button class="btn btn-sm btn-primary" onclick="openPipelineEdit('${p.id}')" style="width:100%;font-size:11px;margin-bottom:3px">Update</button>
           ${isDone?'<button class="btn btn-sm btn-success" onclick="convertToConsumer(\''+p.id+'\')" style="width:100%;font-size:11px;margin-bottom:3px">→ Move to Consumers</button>':''}
           ${p.type==='lead'?`<button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','lead_welcome')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--primary)">${p.welcomeSent?'✓ Welcome Sent':'📤 Send Welcome'}</button>`:''}
-          ${(p.type==='referral'||p.type==='pccp')?`<button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','consumer_onboarding')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--teal)">${p.onboardingSent?'✓ Onboarding Sent':'📤 Send Onboarding'}</button>`:''}
+          ${(p.type==='referral'||p.type==='pccp')?`<button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','consumer_onboarding')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--accent)">${p.onboardingSent?'✓ Onboarding Sent':'📤 Send Onboarding'}</button>`:''}
           <button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','app_sent')" style="width:100%;font-size:10px;color:var(--gray-600)">📦 Packet Sent</button>
         </td>
       </tr>`;
@@ -3235,7 +4115,7 @@ function openOutreachModal(type, data) {
   document.getElementById('uom_footer').innerHTML = `
     <button class="btn btn-outline" onclick="closeModal('universalOutreachModal')">Skip for Now</button>
     <button class="btn btn-outline" onclick="markOutreachSent()" style="color:var(--gray-600);font-size:12px">Mark Sent (Already Did This)</button>
-    <button class="btn btn-primary" id="uom_send_btn" onclick="sendUniversalOutreachNow()" style="background:var(--teal)"${noContact?' disabled':''}>📤 Send Both Now</button>`;
+    <button class="btn btn-primary" id="uom_send_btn" onclick="sendUniversalOutreachNow()" style="background:var(--accent)"${noContact?' disabled':''}>📤 Send Both Now</button>`;
 
   openModal('universalOutreachModal');
 }
@@ -3356,6 +4236,9 @@ Confirm each step succeeded.`
     if (p) { p[config.sentField] = true; setData('pipeline', pipeline); renderPipeline(); }
   }
 
+  // Log the outreach
+  logOutreach(type, data, config, 'sent');
+
   document.getElementById('uom_footer').innerHTML = `
     <div style="background:#d5f5e3;border-radius:8px;padding:12px 16px;font-size:13px;width:100%;text-align:center">
       ✅ <strong>GHL send command copied!</strong><br>
@@ -3371,7 +4254,189 @@ function markOutreachSent() {
     const p = pipeline.find(x => x.id === data.id);
     if (p) { p[config.sentField] = true; setData('pipeline', pipeline); renderPipeline(); }
   }
+  // log it
+  logOutreach(type, data, config, 'marked_sent');
   closeModal('universalOutreachModal');
+}
+
+// ============================================================
+// OUTREACH LOGGING
+// ============================================================
+function logOutreach(type, data, config, method) {
+  const log = getData('outreachLog') || [];
+  log.unshift({
+    id: Date.now(),
+    type,
+    label: config ? config.title : type,
+    recipientName: data.name || data.attendantName || '',
+    recipientPhone: data.phone || '',
+    recipientEmail: data.email || '',
+    sentAt: new Date().toLocaleDateString('en-US'),
+    method: method || 'sent'
+  });
+  // keep last 100
+  setData('outreachLog', log.slice(0, 100));
+}
+
+function clearOutreachLog() {
+  if (!confirm('Clear all outreach log entries?')) return;
+  setData('outreachLog', []);
+  renderAutomations();
+}
+
+// ============================================================
+// AUTOMATIONS TAB
+// ============================================================
+function renderAutomations() {
+  renderPendingOutreaches();
+  renderQuickSendGrid();
+  renderOutreachLog();
+}
+
+function daysUntil(dateStr) {
+  if (!dateStr) return 9999;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(dateStr + 'T00:00:00');
+  return Math.round((d - today) / 86400000);
+}
+
+function renderPendingOutreaches() {
+  const container = document.getElementById('pendingOutreachList');
+  if (!container) return;
+
+  const attendants = getData('attendants') || [];
+  const pipeline   = getData('pipeline')   || [];
+  const consumers  = getData('consumers')  || [];
+
+  const items = [];
+
+  // Attendants without welcome
+  attendants.filter(a => a.status !== 'inactive' && !a.welcomeSent).forEach(a => {
+    items.push({ icon: '📤', label: `Send Welcome to <strong>${a.name}</strong> (Attendant)`, action: `openAttendantOutreach('${a.id}','bg_cleared')`, altAction: `openWelcomeModal('${a.id}')`, altLabel: 'Send Welcome' });
+  });
+
+  // Pipeline leads without welcome
+  pipeline.filter(p => p.type === 'lead' && !p.welcomeSent && p.status !== 'closed').forEach(p => {
+    items.push({ icon: '📤', label: `Send Welcome to <strong>${p.name}</strong> (Lead)`, action: `openPipelineOutreach('${p.id}','lead_welcome')`, altLabel: 'Send Welcome' });
+  });
+
+  // Referrals/PCCP without onboarding
+  pipeline.filter(p => (p.type === 'referral' || p.type === 'pccp') && !p.onboardingSent && p.status !== 'closed').forEach(p => {
+    items.push({ icon: '📋', label: `Send Onboarding to <strong>${p.name}</strong> (${p.type.toUpperCase()})`, action: `openPipelineOutreach('${p.id}','consumer_onboarding')`, altLabel: 'Send Onboarding' });
+  });
+
+  // Active consumers not yet trained
+  consumers.filter(c => c.status !== 'inactive' && c.trained !== 'yes').forEach(c => {
+    items.push({ icon: '📺', label: `Orientation not complete — <strong>${c.name}</strong>`, action: `openConsumerOutreach('${c.id}','consumer_orientation')`, altLabel: 'Send Reminder' });
+  });
+
+  // Care plans expiring within 30 days
+  consumers.filter(c => c.status !== 'inactive' && c.carePlan && c.carePlan.endDate && daysUntil(c.carePlan.endDate) <= 30).forEach(c => {
+    const days = daysUntil(c.carePlan.endDate);
+    const urgency = days <= 7 ? 'color:var(--danger);font-weight:700' : days <= 14 ? 'color:var(--warn-text)' : '';
+    items.push({ icon: '🔄', label: `<strong>${c.name}</strong> care plan expires in <span style="${urgency}">${days} day${days===1?'':'s'}</span>`, action: `openConsumerOutreach('${c.id}','care_renewal')`, altLabel: 'Send Renewal' });
+  });
+
+  if (items.length === 0) {
+    container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--gray-600);font-size:13px">🎉 No pending outreaches right now — you\'re all caught up!</div>';
+    return;
+  }
+
+  container.innerHTML = `<table class="table">
+    <thead><tr><th></th><th>Who / What</th><th>Action</th></tr></thead>
+    <tbody>
+      ${items.map(it => `<tr>
+        <td style="font-size:18px;width:32px">${it.icon}</td>
+        <td style="font-size:13px">${it.label}</td>
+        <td><button class="btn btn-sm btn-primary" onclick="${it.altAction || it.action}" style="font-size:11px;white-space:nowrap">${it.altLabel || '📤 Send'}</button></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function renderQuickSendGrid() {
+  const grid = document.getElementById('quickSendGrid');
+  if (!grid) return;
+
+  const attendants = (getData('attendants') || []).filter(a => a.status !== 'inactive');
+  const pipeline   = (getData('pipeline')   || []).filter(p => p.status !== 'closed');
+  const consumers  = (getData('consumers')  || []).filter(c => c.status !== 'inactive');
+
+  const cards = [
+    { icon: '👋', title: 'Lead Welcome',        desc: 'Welcome a new lead to Caring Companions',          entityType: 'pipeline_lead', outreachType: 'lead_welcome',         items: pipeline.filter(p => p.type === 'lead') },
+    { icon: '📋', title: 'Consumer Onboarding', desc: 'Send onboarding link to referral/PCCP',            entityType: 'pipeline_ref',  outreachType: 'consumer_onboarding',  items: pipeline.filter(p => p.type==='referral'||p.type==='pccp') },
+    { icon: '📦', title: 'Hiring Packet Sent',  desc: 'Notify attendant their hiring packet was sent',    entityType: 'pipeline_lead', outreachType: 'app_sent',             items: pipeline.filter(p => p.type==='lead') },
+    { icon: '✅', title: 'Background Cleared',  desc: 'Notify attendant background check passed',         entityType: 'attendant',     outreachType: 'bg_cleared',           items: attendants },
+    { icon: '📺', title: 'Orientation Nudge',   desc: 'Remind attendant to complete orientation',         entityType: 'attendant',     outreachType: 'orientation_nudge',    items: attendants },
+    { icon: '👤', title: 'Consumer Orientation',desc: 'Remind consumer to complete required training',    entityType: 'consumer',      outreachType: 'consumer_orientation', items: consumers },
+    { icon: '🚀', title: 'Service Start',        desc: 'Confirm services are starting for a consumer',    entityType: 'consumer',      outreachType: 'service_start',        items: consumers },
+    { icon: '🔄', title: 'Care Renewal',         desc: 'Remind consumer about care plan renewal',         entityType: 'consumer',      outreachType: 'care_renewal',         items: consumers },
+    { icon: '📱', title: 'EVV Bulk Reminder',    desc: 'Send Friday EVV deadline alert to all attendants', entityType: 'bulk',          outreachType: 'evv_bulk_reminder',    items: [] }
+  ];
+
+  // store cards for button onclick dispatch
+  window._qsCards = cards;
+
+  grid.innerHTML = cards.map((card, idx) => {
+    const selectId = `qs_select_${idx}`;
+    if (card.entityType === 'bulk') {
+      return `<div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:20px">${card.icon}</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text)">${card.title}</div>
+        <div style="font-size:11px;color:var(--gray-600);flex:1">${card.desc}</div>
+        <button class="btn btn-sm btn-primary" onclick="quickSendDispatch(${idx})" style="font-size:11px;margin-top:4px">📤 Send</button>
+      </div>`;
+    }
+    const options = card.items.length
+      ? card.items.map(it => `<option value="${it.id}">${it.name}</option>`).join('')
+      : `<option value="">— No active records —</option>`;
+    return `<div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:20px">${card.icon}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--text)">${card.title}</div>
+      <div style="font-size:11px;color:var(--gray-600);flex:1">${card.desc}</div>
+      <select id="${selectId}" style="font-size:11px;padding:4px 6px;border:1px solid #ccc;border-radius:6px;width:100%">${options}</select>
+      <button class="btn btn-sm btn-primary" onclick="quickSendDispatch(${idx})" style="font-size:11px" ${card.items.length?'':'disabled'}>📤 Send</button>
+    </div>`;
+  }).join('');
+}
+
+function quickSendDispatch(idx) {
+  const card = window._qsCards && window._qsCards[idx];
+  if (!card) return;
+  if (card.entityType === 'bulk') {
+    openOutreachModal('evv_bulk_reminder', {});
+    return;
+  }
+  const sel = document.getElementById(`qs_select_${idx}`);
+  const id = sel ? sel.value : '';
+  if (!id) { alert('Please select a person first.'); return; }
+  // dispatch by outreach type key stored in card.outreachType
+  if (card.entityType === 'attendant') openAttendantOutreach(id, card.outreachType);
+  else if (card.entityType === 'consumer') openConsumerOutreach(id, card.outreachType);
+  else if (card.entityType === 'pipeline_lead' || card.entityType === 'pipeline_ref') openPipelineOutreach(id, card.outreachType);
+  else openPipelineOutreach(id, card.outreachType);
+}
+
+function renderOutreachLog() {
+  const el = document.getElementById('outreachLogTable');
+  if (!el) return;
+  const log = getData('outreachLog') || [];
+  if (!log.length) {
+    el.innerHTML = '<p style="font-size:13px;color:var(--gray-600);padding:8px 0">No outreaches logged yet. Outreaches will appear here once sent or marked.</p>';
+    return;
+  }
+  el.innerHTML = `<table class="table" style="font-size:12px">
+    <thead><tr><th>Date</th><th>Type</th><th>Recipient</th><th>Contact</th><th>Method</th></tr></thead>
+    <tbody>
+      ${log.map(l => `<tr>
+        <td style="white-space:nowrap">${l.sentAt}</td>
+        <td>${l.label}</td>
+        <td>${l.recipientName || '—'}</td>
+        <td style="font-size:11px;color:var(--gray-600)">${[l.recipientPhone, l.recipientEmail].filter(Boolean).join(' · ') || '—'}</td>
+        <td><span class="badge ${l.method==='sent'?'badge-green':'badge-blue'}">${l.method==='sent'?'GHL Sent':'Marked Sent'}</span></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
 }
 
 // ============================================================
@@ -3605,7 +4670,7 @@ function addCpTaskRow(task) {
     </td>
     ${CP_DAYS.map((d,i) => `
     <td style="padding:4px;text-align:center">
-      <input type="checkbox" onchange="calcCpSchedule()" ${days.includes(i)?'checked':''} style="width:15px;height:15px;accent-color:var(--teal)">
+      <input type="checkbox" onchange="calcCpSchedule()" ${days.includes(i)?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)">
     </td>`).join('')}
     <td style="padding:4px;text-align:center;font-size:12px;color:var(--gray-600)" class="days-count">0</td>
     <td style="padding:4px;text-align:center">
@@ -3656,7 +4721,7 @@ function calcCpSchedule() {
     const timeStr = hrs > 0 ? `${hrs}h ${remMin > 0 ? remMin+'m' : ''}` : `${mins}m`;
     const units = Math.ceil(mins/15);
     const active = mins > 0;
-    return `<div style="background:${active?'#f0faf9':'#f8f9fa'};border:${active?'2px solid var(--teal)':'1.5px solid #ddd'};border-radius:8px;padding:8px 6px;text-align:center">
+    return `<div style="background:${active?'#f0faf9':'#f8f9fa'};border:${active?'2px solid var(--accent)':'1.5px solid #ddd'};border-radius:8px;padding:8px 6px;text-align:center">
       <div style="font-size:10px;font-weight:700;color:${active?'var(--navy)':'#aaa'};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${dayShort[i]}</div>
       ${active ? `
         <div style="font-size:16px;font-weight:800;color:var(--navy)">${timeStr}</div>
@@ -4096,6 +5161,24 @@ function updateDashboard() {
   document.getElementById('compPct').textContent = `${doneChecks}/${totalChecks} (${compPct}%)`;
   document.getElementById('compBar').style.width = Math.min(compPct, 100) + '%';
 
+  // Margin snapshot
+  const rates = getRates();
+  const WEEKS_PER_MONTH = 4.33;
+  const totalAuthHrsWeek = consumers.reduce((sum, c) => sum + (parseFloat(c.hours) || 0), 0);
+  const totalAuthHrsMonth = totalAuthHrsWeek * WEEKS_PER_MONTH;
+  const estRevenue = totalAuthHrsMonth * rates.billing;
+  const estLabor   = totalAuthHrsMonth * rates.pay;
+  const estMargin  = estRevenue - estLabor;
+  const marginPct  = estRevenue > 0 ? Math.round((estMargin / estRevenue) * 100) : 0;
+  const fmtD = v => v > 0 ? '$' + v.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0}) : '—';
+  document.getElementById('dashAuthHrs').textContent = totalAuthHrsMonth > 0 ? Math.round(totalAuthHrsMonth).toLocaleString() : '—';
+  document.getElementById('dashRevenue').textContent = fmtD(estRevenue);
+  document.getElementById('dashLabor').textContent   = fmtD(estLabor);
+  document.getElementById('dashMargin').textContent  = fmtD(estMargin);
+  document.getElementById('dashBillingRate').textContent = `@ $${rates.billing.toFixed(2)}/hr`;
+  document.getElementById('dashPayRate').textContent     = `@ $${rates.pay.toFixed(2)}/hr`;
+  document.getElementById('dashMarginPct').textContent   = totalAuthHrsMonth > 0 ? `${marginPct}% gross margin` : 'add consumers to calculate';
+
   // Tax setup incomplete alert
   const taxAlert = document.getElementById('taxSetupAlert');
   if (taxAlert) {
@@ -4118,7 +5201,1005 @@ function updateDashboard() {
 // ============================================================
 // INIT
 // ============================================================
-document.addEventListener('DOMContentLoaded', function() {
+// WELLSKY CSV IMPORT
+// ============================================================
+let _ws_parsed = null;    // { headers, rows }
+let _ws_preview = null;   // preview results to confirm
+
+// Common WellSky column name patterns (case-insensitive contains)
+const WS_COL_HINTS = {
+  name:  ['client name','consumer name','patient name','member name','participant','client'],
+  dcn:   ['medicaid id','medicaid number','member id','client id','dcn','recipient id','medicaid'],
+  date:  ['service date','visit date','date of service','dos','start date','date'],
+  units: ['units','billed units','total units','actual units','hours','actual hours','duration','quantity']
+};
+
+function autoDetectCol(headers, field) {
+  const hints = WS_COL_HINTS[field];
+  for (const hint of hints) {
+    const match = headers.find(h => h.toLowerCase().includes(hint));
+    if (match) return match;
+  }
+  return '';
+}
+
+function parseCSVText(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return null;
+  const headers = parseCSVRow(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVRow(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (vals[idx] || '').trim(); });
+    rows.push(obj);
+  }
+  return { headers, rows };
+}
+
+function parseCSVRow(line) {
+  const result = [];
+  let inQuote = false;
+  let current = '';
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i+1] === '"') { current += '"'; i++; }
+      else inQuote = !inQuote;
+    } else if (ch === ',' && !inQuote) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function openWellskyImport() {
+  // Reset state
+  _ws_parsed = null;
+  _ws_preview = null;
+  document.getElementById('ws_step1').style.display = 'block';
+  document.getElementById('ws_step2').style.display = 'none';
+  document.getElementById('ws_step3').style.display = 'none';
+  document.getElementById('ws_import_btn').style.display = 'none';
+  document.getElementById('ws_back_btn').style.display = 'none';
+  document.getElementById('ws_upload_error').style.display = 'none';
+  document.getElementById('ws_csv_file').value = '';
+
+  // Set quarter label
+  const year = parseInt(document.getElementById('qr_year').value);
+  const quarter = parseInt(document.getElementById('qr_quarter').value);
+  document.getElementById('ws_quarter_label').textContent = getQuarterLabel(year, quarter);
+
+  openModal('wellskyImportModal');
+}
+
+function handleWellskyDrop(event) {
+  const file = event.dataTransfer.files[0];
+  if (file) processWellskyFile(file);
+}
+
+function handleWellskyUpload(event) {
+  const file = event.target.files[0];
+  if (file) processWellskyFile(file);
+}
+
+function processWellskyFile(file) {
+  if (!file.name.endsWith('.csv')) {
+    showWsError('Please upload a CSV file. If WellSky gave you an Excel file, open it and Save As CSV first.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const parsed = parseCSVText(e.target.result);
+    if (!parsed || parsed.headers.length < 2 || parsed.rows.length === 0) {
+      showWsError('Could not parse this CSV. Make sure it has a header row and at least one data row.');
+      return;
+    }
+    _ws_parsed = parsed;
+    setupWellskyMapping();
+  };
+  reader.onerror = () => showWsError('Could not read the file. Please try again.');
+  reader.readAsText(file);
+}
+
+function showWsError(msg) {
+  const el = document.getElementById('ws_upload_error');
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
+function setupWellskyMapping() {
+  const { headers, rows } = _ws_parsed;
+
+  // Populate all column selectors
+  ['ws_col_name','ws_col_dcn','ws_col_date','ws_col_units'].forEach(id => {
+    const sel = document.getElementById(id);
+    const noneOpt = id === 'ws_col_dcn' ? '<option value="">— Not in this file —</option>' : '<option value="">— Select column —</option>';
+    sel.innerHTML = noneOpt + headers.map(h => `<option value="${h}">${h}</option>`).join('');
+  });
+
+  // Auto-detect
+  const autoName  = autoDetectCol(headers, 'name');
+  const autoDcn   = autoDetectCol(headers, 'dcn');
+  const autoDate  = autoDetectCol(headers, 'date');
+  const autoUnits = autoDetectCol(headers, 'units');
+  if (autoName)  document.getElementById('ws_col_name').value  = autoName;
+  if (autoDcn)   document.getElementById('ws_col_dcn').value   = autoDcn;
+  if (autoDate)  document.getElementById('ws_col_date').value  = autoDate;
+  if (autoUnits) document.getElementById('ws_col_units').value = autoUnits;
+
+  // Auto-detect hours vs units
+  if (autoUnits && autoUnits.toLowerCase().includes('hour')) {
+    document.getElementById('ws_unit_type').value = 'hours';
+  } else {
+    document.getElementById('ws_unit_type').value = 'units';
+  }
+
+  document.getElementById('ws_row_count').textContent = `${rows.length.toLocaleString()} rows loaded from file · ${headers.length} columns detected`;
+  document.getElementById('ws_step1').style.display = 'none';
+  document.getElementById('ws_step2').style.display = 'block';
+  document.getElementById('ws_back_btn').style.display = 'inline-flex';
+}
+
+function wsGoBack() {
+  document.getElementById('ws_step1').style.display = 'block';
+  document.getElementById('ws_step2').style.display = 'none';
+  document.getElementById('ws_step3').style.display = 'none';
+  document.getElementById('ws_import_btn').style.display = 'none';
+}
+
+function previewWellskyImport() {
+  const colName  = document.getElementById('ws_col_name').value;
+  const colDcn   = document.getElementById('ws_col_dcn').value;
+  const colDate  = document.getElementById('ws_col_date').value;
+  const colUnits = document.getElementById('ws_col_units').value;
+  const unitType = document.getElementById('ws_unit_type').value;
+
+  if (!colName) { alert('Please select the Consumer Name column.'); return; }
+  if (!colDate) { alert('Please select the Service Date column.'); return; }
+  if (!colUnits) { alert('Please select the Units/Hours column.'); return; }
+
+  const year    = parseInt(document.getElementById('qr_year').value);
+  const quarter = parseInt(document.getElementById('qr_quarter').value);
+  const qMonths = getQuarterMonths(year, quarter);
+  const qStart  = new Date(year, (quarter-1)*3, 1);
+  const qEnd    = new Date(year, quarter*3, 0, 23, 59, 59);
+
+  // Aggregate by consumer name/DCN
+  const totals = {}; // key → { name, dcn, units }
+  let skippedDate = 0, skippedUnits = 0;
+
+  _ws_parsed.rows.forEach(row => {
+    const rawDate = row[colDate];
+    if (!rawDate) { skippedDate++; return; }
+    const d = new Date(rawDate);
+    if (isNaN(d.getTime()) || d < qStart || d > qEnd) { skippedDate++; return; }
+
+    const rawUnits = parseFloat(row[colUnits]);
+    if (isNaN(rawUnits) || rawUnits <= 0) { skippedUnits++; return; }
+    const units = unitType === 'hours' ? rawUnits * 4 : rawUnits;
+
+    const name = (row[colName] || '').trim();
+    const dcn  = colDcn ? (row[colDcn] || '').trim() : '';
+    const key  = dcn || name.toLowerCase();
+    if (!key) return;
+
+    if (!totals[key]) totals[key] = { name, dcn, units: 0, rows: 0 };
+    totals[key].units += units;
+    totals[key].rows++;
+  });
+
+  // Match to tracker consumers
+  const consumers = getData('consumers').filter(c => c.status !== 'inactive');
+  const results = Object.values(totals).map(t => {
+    let match = null;
+    // Try DCN first (exact)
+    if (t.dcn) match = consumers.find(c => c.dcn && c.dcn.replace(/\D/g,'') === t.dcn.replace(/\D/g,''));
+    // Fall back to name (case-insensitive, trim)
+    if (!match && t.name) {
+      const norm = s => s.toLowerCase().replace(/[^a-z]/g,'');
+      match = consumers.find(c => norm(c.name) === norm(t.name));
+      // Partial match: last name
+      if (!match) {
+        const lastName = norm(t.name).split(' ').pop();
+        match = consumers.find(c => norm(c.name).includes(lastName));
+      }
+    }
+    return { ...t, units: Math.round(t.units), match };
+  });
+
+  _ws_preview = results;
+
+  const matched = results.filter(r => r.match);
+  const unmatched = results.filter(r => !r.match);
+
+  document.getElementById('ws_preview_table').innerHTML = `
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:8px 10px;background:var(--gray-100);border-bottom:2px solid var(--gray-200)">Name in WellSky</th>
+          <th style="text-align:left;padding:8px 10px;background:var(--gray-100);border-bottom:2px solid var(--gray-200)">DCN</th>
+          <th style="text-align:right;padding:8px 10px;background:var(--gray-100);border-bottom:2px solid var(--gray-200)">Units</th>
+          <th style="text-align:right;padding:8px 10px;background:var(--gray-100);border-bottom:2px solid var(--gray-200)">Hours</th>
+          <th style="padding:8px 10px;background:var(--gray-100);border-bottom:2px solid var(--gray-200)">Tracker Match</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${results.map(r => `
+          <tr style="background:${r.match ? '#f0fff4' : '#fffbea'};border-bottom:1px solid var(--gray-200)">
+            <td style="padding:7px 10px;font-weight:600">${r.name}</td>
+            <td style="padding:7px 10px;font-size:11px;color:var(--gray-600)">${r.dcn || '—'}</td>
+            <td style="padding:7px 10px;text-align:right;font-weight:700">${r.units.toLocaleString()}</td>
+            <td style="padding:7px 10px;text-align:right;color:var(--gray-600)">${(r.units/4).toFixed(1)}</td>
+            <td style="padding:7px 10px">${r.match
+              ? `<span class="badge badge-green">✓ ${r.match.name}</span>`
+              : `<span class="badge badge-warn">⚠ No match — will skip</span>`}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+
+  const qKey = `${year}-Q${quarter}`;
+  document.getElementById('ws_preview_summary').innerHTML = `
+    <strong>${matched.length} consumers matched</strong> · ${unmatched.length} unmatched (skipped) ·
+    ${skippedDate > 0 ? skippedDate + ' rows outside quarter date range · ' : ''}
+    ${skippedUnits > 0 ? skippedUnits + ' rows with no units · ' : ''}
+    Delivering to <strong>${qKey}</strong>
+    ${matched.length > 0
+      ? `<br><span style="color:var(--success)">Ready to import ${matched.reduce((s,r)=>s+r.units,0).toLocaleString()} total units across ${matched.length} consumer${matched.length!==1?'s':''}.</span>`
+      : `<span style="color:var(--danger)"><br>No consumers matched. Check that consumer names or DCNs in WellSky match your tracker.</span>`}
+  `;
+
+  document.getElementById('ws_step2').style.display = 'none';
+  document.getElementById('ws_step3').style.display = 'block';
+  document.getElementById('ws_import_btn').style.display = matched.length > 0 ? 'inline-flex' : 'none';
+}
+
+function confirmWellskyImport() {
+  if (!_ws_preview) return;
+  const year    = parseInt(document.getElementById('qr_year').value);
+  const quarter = parseInt(document.getElementById('qr_quarter').value);
+  const qKey    = `${year}-Q${quarter}`;
+
+  let count = 0;
+  _ws_preview.filter(r => r.match).forEach(r => {
+    const deliveredKey = `delivered_${r.match.id}_${qKey}`;
+    saveDeliveredUnits(deliveredKey, r.units);
+    count++;
+  });
+
+  closeModal('wellskyImportModal');
+  renderQuarterlyReport();
+  alert(`✅ Imported ${count} consumer${count!==1?'s':''} for ${qKey}. Delivered units updated in the Quarterly Report.`);
+}
+
+// ============================================================
+// RATE SETTINGS
+// ============================================================
+function getRates() {
+  const r = getObj('rateSettings');
+  return {
+    billing: parseFloat(r.billing) || 20.21,  // MMAC reimburses per hour
+    pay:     parseFloat(r.pay)     || 15.00   // attendant hourly pay
+  };
+}
+
+function openRateSettings() {
+  const r = getRates();
+  document.getElementById('rs_billing').value = r.billing;
+  document.getElementById('rs_pay').value = r.pay;
+  openModal('rateSettingsModal');
+}
+
+function saveRateSettings() {
+  const billing = parseFloat(document.getElementById('rs_billing').value);
+  const pay = parseFloat(document.getElementById('rs_pay').value);
+  if (!billing || billing <= 0 || !pay || pay <= 0) { alert('Please enter valid rates.'); return; }
+  setObj('rateSettings', { billing, pay });
+  closeModal('rateSettingsModal');
+  updateDashboard();
+  if (document.getElementById('page-quarterly').classList.contains('active')) renderQuarterlyReport();
+}
+
+// ============================================================
+// COMPLAINT / GRIEVANCE LOG
+// ============================================================
+const COMPLAINT_CATEGORIES = {
+  abuse: 'Abuse',
+  neglect: 'Neglect',
+  exploitation: 'Exploitation',
+  falsification: 'Falsification of Timesheets',
+  payroll_personnel: 'Payroll / Personnel Issues',
+  services_not_delivered: 'Services Not Delivered',
+  program_fraud: 'Program Fraud',
+  consumer_fraud: 'Consumer Fraud',
+  other: 'Other'
+};
+const COMPLAINT_REPORTERS = { consumer:'Consumer', attendant:'Attendant', family:'Family Member', other:'Other' };
+
+function openComplaintModal(editId) {
+  const consumers = getData('consumers');
+  const sel = document.getElementById('cmp_consumer');
+  sel.innerHTML = '<option value="">— General / Unknown —</option>' +
+    consumers.filter(c => c.status !== 'inactive').map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  if (editId) {
+    const complaints = getData('complaints');
+    const c = complaints.find(x => x.id === editId);
+    if (c) {
+      document.getElementById('cmp_date').value = c.date;
+      sel.value = c.consumerId || '';
+      document.getElementById('cmp_category').value = c.category;
+      document.getElementById('cmp_reporter').value = c.reporter;
+      document.getElementById('cmp_description').value = c.description;
+      document.getElementById('cmp_status').value = c.status;
+      document.getElementById('cmp_resolution').value = c.resolution || '';
+      document.getElementById('complaintModal').dataset.editId = editId;
+    }
+  } else {
+    document.getElementById('cmp_date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('cmp_category').value = '';
+    document.getElementById('cmp_reporter').value = '';
+    document.getElementById('cmp_description').value = '';
+    document.getElementById('cmp_status').value = 'open';
+    document.getElementById('cmp_resolution').value = '';
+    delete document.getElementById('complaintModal').dataset.editId;
+  }
+  openModal('complaintModal');
+}
+
+function saveComplaint() {
+  const date = document.getElementById('cmp_date').value;
+  const category = document.getElementById('cmp_category').value;
+  const reporter = document.getElementById('cmp_reporter').value;
+  const description = document.getElementById('cmp_description').value.trim();
+  if (!date) { alert('Date is required.'); return; }
+  if (!category) { alert('Please select a complaint category.'); return; }
+  if (!reporter) { alert('Please select who reported this.'); return; }
+  if (!description) { alert('Description is required.'); return; }
+
+  const complaints = getData('complaints');
+  const editId = document.getElementById('complaintModal').dataset.editId;
+  const entry = {
+    id: editId || Date.now().toString(),
+    date,
+    consumerId: document.getElementById('cmp_consumer').value || '',
+    category,
+    reporter,
+    description,
+    status: document.getElementById('cmp_status').value,
+    resolution: document.getElementById('cmp_resolution').value.trim(),
+    loggedAt: new Date().toISOString()
+  };
+
+  if (editId) {
+    const idx = complaints.findIndex(x => x.id === editId);
+    if (idx >= 0) complaints[idx] = entry;
+  } else {
+    complaints.push(entry);
+  }
+  setData('complaints', complaints);
+  closeModal('complaintModal');
+  if (document.getElementById('page-quarterly').classList.contains('active')) renderQuarterlyReport();
+}
+
+function deleteComplaint(id) {
+  if (!confirm('Delete this complaint record?')) return;
+  const complaints = getData('complaints').filter(c => c.id !== id);
+  setData('complaints', complaints);
+  renderQuarterlyReport();
+}
+
+// ============================================================
+// QUARTERLY REPORT GENERATOR
+// ============================================================
+function getQuarterMonths(year, quarter) {
+  const qStart = (quarter - 1) * 3;
+  const months = [];
+  for (let i = 0; i < 3; i++) {
+    const m = qStart + i + 1;
+    months.push(`${year}-${String(m).padStart(2,'0')}`);
+  }
+  return months;
+}
+
+function getQuarterLabel(year, quarter) {
+  const labels = ['','Jan–Mar','Apr–Jun','Jul–Sep','Oct–Dec'];
+  return `Q${quarter} ${year} (${labels[quarter]})`;
+}
+
+function renderQuarterlyReport() {
+  const year = parseInt(document.getElementById('qr_year').value);
+  const quarter = parseInt(document.getElementById('qr_quarter').value);
+  if (!year || !quarter) return;
+
+  const qMonths = getQuarterMonths(year, quarter);
+  const consumers = getData('consumers').filter(c => c.status !== 'inactive');
+  const complaints = getData('complaints');
+  const qLabel = getQuarterLabel(year, quarter);
+
+  // Determine which quarter we're in for date range filtering
+  const qStart = new Date(year, (quarter-1)*3, 1);
+  const qEnd = new Date(year, quarter*3, 0);
+
+  // ── SECTION II: Complaints ──────────────────────────────
+  const qComplaints = complaints.filter(c => {
+    const d = new Date(c.date);
+    return d >= qStart && d <= qEnd;
+  });
+
+  const catKeys = Object.keys(COMPLAINT_CATEGORIES);
+  const repKeys = Object.keys(COMPLAINT_REPORTERS);
+
+  // Build tally matrix
+  const tally = {};
+  catKeys.forEach(cat => { tally[cat] = {}; repKeys.forEach(r => tally[cat][r] = 0); });
+  qComplaints.forEach(c => {
+    if (tally[c.category] && tally[c.category][c.reporter] !== undefined) {
+      tally[c.category][c.reporter]++;
+    }
+  });
+
+  const totalComplaints = qComplaints.length;
+  document.getElementById('qr_complaints_table').innerHTML = `
+    <div style="margin-bottom:10px">
+      <span class="badge ${totalComplaints === 0 ? 'badge-green' : 'badge-red'}">${totalComplaints} complaint${totalComplaints !== 1 ? 's' : ''} in ${qLabel}</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            ${repKeys.map(r => `<th>${COMPLAINT_REPORTERS[r]}</th>`).join('')}
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${catKeys.map(cat => {
+            const rowTotal = repKeys.reduce((s, r) => s + tally[cat][r], 0);
+            return `<tr>
+              <td style="font-weight:500">${COMPLAINT_CATEGORIES[cat]}</td>
+              ${repKeys.map(r => `<td style="text-align:center">${tally[cat][r] || '—'}</td>`).join('')}
+              <td style="text-align:center;font-weight:700">${rowTotal || '—'}</td>
+            </tr>`;
+          }).join('')}
+          <tr style="background:var(--gray-100);font-weight:700">
+            <td>TOTAL</td>
+            ${repKeys.map(r => `<td style="text-align:center">${catKeys.reduce((s,c)=>s+tally[c][r],0)||'—'}</td>`).join('')}
+            <td style="text-align:center">${totalComplaints || '—'}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    ${qComplaints.length > 0 ? `
+    <div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Individual Complaint Records</div>
+      ${qComplaints.map(c => {
+        const consumer = c.consumerId ? (getData('consumers').find(x => x.id === c.consumerId) || {}).name || 'Unknown' : 'N/A';
+        const statusColor = c.status === 'resolved' ? 'badge-green' : c.status === 'unfounded' ? 'badge-gray' : 'badge-red';
+        return `<div style="border:1px solid var(--gray-200);border-radius:6px;padding:10px 14px;margin-bottom:8px;font-size:13px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <strong>${COMPLAINT_CATEGORIES[c.category]}</strong> — reported by ${COMPLAINT_REPORTERS[c.reporter] || c.reporter}
+              <span class="badge ${statusColor}" style="margin-left:6px">${c.status}</span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm btn-outline" onclick="openComplaintModal('${c.id}')" style="font-size:11px">Edit</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteComplaint('${c.id}')" style="font-size:11px">Delete</button>
+            </div>
+          </div>
+          <div style="color:var(--gray-600);margin-top:4px">${c.date} · Consumer: ${consumer}</div>
+          <div style="margin-top:4px">${c.description}</div>
+          ${c.resolution ? `<div style="color:var(--success);margin-top:4px">✓ ${c.resolution}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>` : '<div class="alert alert-success" style="margin-top:12px">✅ No complaints recorded for this quarter.</div>'}
+  `;
+
+  // ── SECTION III: Missed Contacts ───────────────────────
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let missedHtml = '<div class="grid-3" style="gap:12px;margin-bottom:12px">';
+  let totalMissed = 0;
+  const missedByMonth = {};
+
+  qMonths.forEach((mk, idx) => {
+    const monthNum = parseInt(mk.split('-')[1]);
+    const label = monthNames[monthNum - 1];
+    const missed = consumers.filter(c => !c.contacts || !c.contacts[mk]);
+    const isPast = new Date(`${mk}-01`) <= new Date();
+    missedByMonth[mk] = missed;
+    totalMissed += missed.length;
+    missedHtml += `<div style="text-align:center;padding:16px;background:${missed.length > 0 && isPast ? '#fdedec' : '#d5f5e3'};border-radius:8px">
+      <div style="font-size:22px;font-weight:700;color:${missed.length > 0 && isPast ? 'var(--danger)' : 'var(--success)'}">${missed.length}</div>
+      <div style="font-size:13px;font-weight:600;margin-top:4px">Month ${idx+1} (${label})</div>
+      <div style="font-size:11px;color:var(--gray-600);margin-top:2px">${isPast ? 'missed contacts' : '(future)'}</div>
+    </div>`;
+  });
+  missedHtml += '</div>';
+
+  // DCN list for missed contacts
+  let missedListHtml = '';
+  qMonths.forEach((mk, idx) => {
+    const monthNum = parseInt(mk.split('-')[1]);
+    const label = monthNames[monthNum - 1];
+    const missed = missedByMonth[mk];
+    if (missed.length > 0) {
+      missedListHtml += `<div style="margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--danger);margin-bottom:6px">Month ${idx+1} (${label}) — ${missed.length} missed:</div>
+        ${missed.map(c => `<div style="font-size:12px;padding:6px 10px;background:var(--gray-100);border-radius:4px;margin-bottom:4px">
+          DCN: <strong>${c.dcn || '—'}</strong> · ${c.name} · ${c.county || 'County unknown'}
+        </div>`).join('')}
+      </div>`;
+    }
+  });
+
+  document.getElementById('qr_missed_contacts').innerHTML = missedHtml;
+  document.getElementById('qr_missed_list').innerHTML = missedListHtml || '<div class="alert alert-success">✅ All consumers were contacted in every month this quarter.</div>';
+
+  // ── SECTION IV: Utilization ────────────────────────────
+  const rates = getRates();
+  const WEEKS_PER_QUARTER = 13;
+  let totalAuthorized = 0;
+  let totalDelivered = 0;
+  let totalEstRevenue = 0;
+  let totalEstLabor = 0;
+
+  const qKey = `${year}-Q${quarter}`;
+  const utilRows = consumers.map(c => {
+    const hoursPerWeek = parseFloat(c.hours) || 0;
+    const authorizedUnits = Math.round(hoursPerWeek * 4 * WEEKS_PER_QUARTER); // hrs × 4 units/hr × 13 weeks
+    // Load saved delivered units for this consumer for this quarter
+    const deliveredKey = `delivered_${c.id}_${qKey}`;
+    const savedDelivered = (_store._du || {})[c.id + '_' + qKey];
+    const deliveredUnits = savedDelivered !== undefined ? savedDelivered : '';
+    const utilPct = deliveredUnits !== '' && authorizedUnits > 0 ? Math.round((deliveredUnits / authorizedUnits) * 100) : null;
+    totalAuthorized += authorizedUnits;
+    const dUnits = deliveredUnits !== '' ? (parseInt(deliveredUnits) || 0) : 0;
+    if (deliveredUnits !== '') totalDelivered += dUnits;
+    const dHours = dUnits / 4; // 4 units per hour
+    const estRevenue = dHours * rates.billing;
+    const estLabor   = dHours * rates.pay;
+    const estMargin  = estRevenue - estLabor;
+    if (deliveredUnits !== '') { totalEstRevenue += estRevenue; totalEstLabor += estLabor; }
+    return { c, authorizedUnits, deliveredUnits, deliveredKey, utilPct, estRevenue, estLabor, estMargin, hasDelivered: deliveredUnits !== '' };
+  });
+
+  const fmtMoney = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0});
+  document.getElementById('qr_utilization_table').innerHTML = `
+    <div style="font-size:11px;color:var(--gray-600);margin-bottom:8px">Rates: MMAC $${rates.billing.toFixed(2)}/hr · Attendant $${rates.pay.toFixed(2)}/hr · Margin $${(rates.billing - rates.pay).toFixed(2)}/hr — <a href="#" onclick="openRateSettings();return false" style="color:var(--primary)">Edit rates</a></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Consumer</th>
+            <th>DCN</th>
+            <th>Auth Hrs/Wk</th>
+            <th>Auth Units</th>
+            <th>Units Delivered <span style="font-size:10px;font-weight:400">(from WellSky)</span></th>
+            <th>Util %</th>
+            <th>Est. Revenue</th>
+            <th>Est. Labor</th>
+            <th>Est. Margin</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${utilRows.map(({ c, authorizedUnits, deliveredUnits, deliveredKey, utilPct, estRevenue, estLabor, estMargin, hasDelivered }) => {
+            const pctColor = utilPct === null ? '' : utilPct < 50 ? 'color:var(--danger)' : utilPct < 80 ? 'color:var(--warn)' : 'color:var(--success)';
+            const marginColor = !hasDelivered ? '' : estMargin > 0 ? 'color:var(--success)' : 'color:var(--danger)';
+            return `<tr>
+              <td><strong>${c.name}</strong></td>
+              <td style="font-size:11px">${c.dcn || '—'}</td>
+              <td style="text-align:center">${c.hours || '—'}</td>
+              <td style="text-align:center;font-weight:600">${authorizedUnits || '—'}</td>
+              <td style="text-align:center">
+                <input type="number" value="${deliveredUnits}" min="0" max="${authorizedUnits * 2}"
+                  style="width:80px;padding:4px 8px;border:1.5px solid var(--gray-300);border-radius:4px;font-size:13px;text-align:center"
+                  onchange="saveDeliveredUnits('${deliveredKey}', this.value); renderQuarterlyReport()"
+                  placeholder="—">
+              </td>
+              <td style="text-align:center;font-weight:700;${pctColor}">${utilPct !== null ? utilPct + '%' : '—'}</td>
+              <td style="text-align:right;color:var(--primary-light)">${hasDelivered ? fmtMoney(estRevenue) : '—'}</td>
+              <td style="text-align:right;color:var(--warn)">${hasDelivered ? fmtMoney(estLabor) : '—'}</td>
+              <td style="text-align:right;font-weight:700;${marginColor}">${hasDelivered ? fmtMoney(estMargin) : '—'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  const overallPct = totalAuthorized > 0 ? Math.round((totalDelivered / totalAuthorized) * 100) : 0;
+  const totalEstMargin = totalEstRevenue - totalEstLabor;
+  const overallMarginPct = totalEstRevenue > 0 ? Math.round((totalEstMargin / totalEstRevenue) * 100) : 0;
+  document.getElementById('qr_utilization_totals').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px">
+      <div style="text-align:center">
+        <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:var(--gray-600);margin-bottom:4px">Participants</div>
+        <div style="font-size:24px;font-weight:700;color:var(--primary)">${consumers.length}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:var(--gray-600);margin-bottom:4px">Units Auth.</div>
+        <div style="font-size:24px;font-weight:700;color:var(--primary-light)">${totalAuthorized.toLocaleString()}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:var(--gray-600);margin-bottom:4px">Units Del.</div>
+        <div style="font-size:24px;font-weight:700;color:${overallPct < 50 ? 'var(--danger)' : overallPct < 80 ? 'var(--warn)' : 'var(--success)'}">${totalDelivered > 0 ? totalDelivered.toLocaleString() : '—'}</div>
+        ${totalDelivered > 0 ? `<div style="font-size:11px;color:var(--gray-600)">${overallPct}% util.</div>` : ''}
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:var(--gray-600);margin-bottom:4px">Est. Revenue</div>
+        <div style="font-size:24px;font-weight:700;color:var(--primary-light)">${totalEstRevenue > 0 ? fmtMoney(totalEstRevenue) : '—'}</div>
+        ${totalEstRevenue > 0 ? `<div style="font-size:11px;color:var(--gray-600)">$${rates.billing}/hr</div>` : ''}
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:var(--gray-600);margin-bottom:4px">Est. Labor</div>
+        <div style="font-size:24px;font-weight:700;color:var(--warn)">${totalEstLabor > 0 ? fmtMoney(totalEstLabor) : '—'}</div>
+        ${totalEstLabor > 0 ? `<div style="font-size:11px;color:var(--gray-600)">$${rates.pay}/hr</div>` : ''}
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;text-transform:uppercase;font-weight:700;color:var(--gray-600);margin-bottom:4px">Est. Margin</div>
+        <div style="font-size:24px;font-weight:700;color:${totalEstMargin > 0 ? 'var(--success)' : 'var(--danger)'}">${totalEstMargin !== 0 ? fmtMoney(totalEstMargin) : '—'}</div>
+        ${totalEstRevenue > 0 ? `<div style="font-size:11px;color:var(--gray-600)">${overallMarginPct}%</div>` : ''}
+      </div>
+    </div>
+  `;
+
+  // ── Load saved payroll data ────────────────────────────
+  const payrollData = getObj('payrollData');
+  const pd = payrollData[qKey] || {};
+  ['paid_claims','net_payroll','medicare','fed_tax','state_tax','futa','total_exp','attendant_count'].forEach(f => {
+    const el = document.getElementById('qrp_' + f);
+    if (el) el.value = pd[f] || '';
+  });
+
+  // ── Build text summary ─────────────────────────────────
+  const pd2 = payrollData[qKey] || {};
+  const fmt = v => v ? '$' + parseFloat(v).toFixed(2) : '—';
+  const summary = `CARING COMPANIONS CDS — QUARTERLY REPORT DATA
+${qLabel}
+Generated: ${new Date().toLocaleDateString()}
+═══════════════════════════════════════════
+
+SECTION II — COMPLAINTS & GRIEVANCES
+${catKeys.map(cat => `  ${COMPLAINT_CATEGORIES[cat]}: ${repKeys.map(r => `${COMPLAINT_REPORTERS[r]}=${tally[cat][r]}`).join(', ')}`).join('\n')}
+  TOTAL COMPLAINTS: ${totalComplaints}
+
+SECTION III — MISSED MONTHLY CONTACTS
+  Month 1 (${monthNames[parseInt(qMonths[0].split('-')[1])-1]}): ${missedByMonth[qMonths[0]]?.length ?? 0} missed
+  Month 2 (${monthNames[parseInt(qMonths[1].split('-')[1])-1]}): ${missedByMonth[qMonths[1]]?.length ?? 0} missed
+  Month 3 (${monthNames[parseInt(qMonths[2].split('-')[1])-1]}): ${missedByMonth[qMonths[2]]?.length ?? 0} missed
+  (Attach DCN list with reasons for all missed contacts)
+
+SECTION IV — FINANCIAL UTILIZATION
+  Total # of CDS Participants:   ${consumers.length}
+  Total CDS Units Authorized:    ${totalAuthorized.toLocaleString()}
+  Total CDS Units Delivered:     ${totalDelivered > 0 ? totalDelivered.toLocaleString() : '[enter from WellSky]'}
+  Utilization Rate:              ${totalDelivered > 0 ? overallPct + '%' : '—'}
+  Est. Revenue (@ $${rates.billing}/hr):  ${totalEstRevenue > 0 ? fmtMoney(totalEstRevenue) : '—'}
+  Est. Labor Cost (@ $${rates.pay}/hr):   ${totalEstLabor > 0 ? fmtMoney(totalEstLabor) : '—'}
+  Est. Gross Margin:             ${totalEstMargin !== 0 ? fmtMoney(totalEstMargin) + ' (' + overallMarginPct + '%)' : '—'}
+
+SECTION V — CDS ATTENDANT PAYROLL (from Empeon)
+  Total Paid CDS Claims:               ${fmt(pd2.paid_claims)}
+  Total Net CDS Attendant Payroll:     ${fmt(pd2.net_payroll)}
+  Total Medicare & OASDI Taxes:        ${fmt(pd2.medicare)}
+  Total Federal Income Tax Withheld:   ${fmt(pd2.fed_tax)}
+  Total State Income Tax Withheld:     ${fmt(pd2.state_tax)}
+  Total FUTA & SUTA Contributions:     ${fmt(pd2.futa)}
+  Total CDS Payroll Expenditures:      ${fmt(pd2.total_exp)}
+  Total # of CDS Attendants:           ${pd2.attendant_count || '—'}
+`;
+  document.getElementById('qr_summary').textContent = summary;
+}
+
+function saveDeliveredUnits(key, value) {
+  // key format: "delivered_{consumerId}_{year}-Q{n}"
+  // Parse out consumer ID and quarter key
+  const withoutPrefix = key.replace(/^delivered_/, '');
+  // quarter key is always "YYYY-QN" at the end
+  const qMatch = withoutPrefix.match(/^(.+?)_(\d{4}-Q\d)$/);
+  if (!qMatch) return;
+  const consumerId = qMatch[1];
+  const quarterKey = qMatch[2];
+  const units = parseInt(value) || 0;
+
+  // Update in-memory store
+  if (!_store._du) _store._du = {};
+  _store._du[consumerId + '_' + quarterKey] = units;
+
+  // Sync to Supabase
+  if (_db) {
+    _db.from('delivered_units')
+      .upsert({ agency_id: AGENCY_ID, consumer_id: consumerId, quarter_key: quarterKey, units })
+      .then(({ error }) => { if (error) console.error('Delivered units write error:', error.message); });
+  }
+}
+
+function savePayrollInput() {
+  const year = parseInt(document.getElementById('qr_year').value);
+  const quarter = parseInt(document.getElementById('qr_quarter').value);
+  const qKey = `${year}-Q${quarter}`;
+  const payrollData = getObj('payrollData');
+  payrollData[qKey] = {};
+  ['paid_claims','net_payroll','medicare','fed_tax','state_tax','futa','total_exp','attendant_count'].forEach(f => {
+    payrollData[qKey][f] = document.getElementById('qrp_' + f).value;
+  });
+  setObj('payrollData', payrollData);
+  // Refresh summary text
+  renderQuarterlyReport();
+}
+
+function copyQuarterlySummary() {
+  const text = document.getElementById('qr_summary').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Summary copied to clipboard! Paste into your notes or MMAC form.');
+  }).catch(() => {
+    // Fallback: select the text
+    const el = document.getElementById('qr_summary');
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    alert('Text selected — press Ctrl+C (or Cmd+C) to copy.');
+  });
+}
+
+// ============================================================
+// FINANCIAL DASHBOARD
+// ============================================================
+function renderFinancials() {
+  const consumers = getData('consumers').filter(c => c.status !== 'inactive');
+  const rates = getRates();
+  const WEEKS_PER_MONTH = 4.33;
+  const WEEKS_PER_QUARTER = 13;
+
+  const fmtD = v => '$' + Math.round(v).toLocaleString('en-US');
+  const fmtDec = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const pctStr = (n, d) => d > 0 ? Math.round(n / d * 100) + '%' : '—';
+
+  // ── Total authorized hours ───────────────────────────────
+  const totalAuthHrsWeek = consumers.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0);
+  const totalAuthHrsMonth = totalAuthHrsWeek * WEEKS_PER_MONTH;
+  const estMonthlyRevenue = totalAuthHrsMonth * rates.billing;
+  const estMonthlyLabor   = totalAuthHrsMonth * rates.pay;
+  const estMonthlyMargin  = estMonthlyRevenue - estMonthlyLabor;
+  const marginPct = estMonthlyRevenue > 0 ? Math.round(estMonthlyMargin / estMonthlyRevenue * 100) : 0;
+
+  // ── KPI Row ──────────────────────────────────────────────
+  document.getElementById('fin_kpi_row').innerHTML = [
+    { label:'Active Consumers', value: consumers.length, sub: 'enrolled & receiving services', color:'blue', icon:'👥' },
+    { label:'Monthly Revenue Potential', value: fmtD(estMonthlyRevenue), sub: `${Math.round(totalAuthHrsMonth).toLocaleString()} authorized hrs × $${rates.billing}/hr`, color:'blue', icon:'💵' },
+    { label:'Monthly Labor Cost', value: fmtD(estMonthlyLabor), sub: `${Math.round(totalAuthHrsMonth).toLocaleString()} hrs × $${rates.pay}/hr`, color:'warn', icon:'👷' },
+    { label:'Monthly Gross Margin', value: fmtD(estMonthlyMargin), sub: `${marginPct}% margin · $${(rates.billing - rates.pay).toFixed(2)}/hr`, color: estMonthlyMargin > 0 ? 'green' : 'red', icon:'📈' }
+  ].map(k => `
+    <div class="stat-card ${k.color}">
+      <div class="stat-label">${k.icon} ${k.label}</div>
+      <div class="stat-value">${k.value}</div>
+      <div class="stat-sub">${k.sub}</div>
+    </div>`).join('');
+
+  // ── Rate Analysis ─────────────────────────────────────────
+  const marginPerHr = rates.billing - rates.pay;
+  const marginPerUnit = marginPerHr / 4;
+  const hrsToBreakEven = 0; // margin is always positive per hour unless overhead > margin
+  // Admin cost context: assume agency overhead (non-attendant cost) ≈ ?
+  // We don't track overhead, so just show rate math
+  document.getElementById('fin_rate_analysis').innerHTML = `
+    <div class="grid-2" style="gap:12px;margin-bottom:14px">
+      <div style="background:#ebf5fb;border-radius:6px;padding:14px;text-align:center">
+        <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:var(--gray-600)">MMAC Reimbursement</div>
+        <div style="font-size:32px;font-weight:700;color:var(--primary-light)">$${rates.billing.toFixed(2)}</div>
+        <div style="font-size:12px;color:var(--gray-600)">per hour</div>
+      </div>
+      <div style="background:#fef9e7;border-radius:6px;padding:14px;text-align:center">
+        <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:var(--gray-600)">Attendant Pay</div>
+        <div style="font-size:32px;font-weight:700;color:var(--warn)">$${rates.pay.toFixed(2)}</div>
+        <div style="font-size:12px;color:var(--gray-600)">per hour</div>
+      </div>
+    </div>
+    <div style="background:#d5f5e3;border-radius:6px;padding:14px;text-align:center;margin-bottom:12px">
+      <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:var(--gray-600)">Gross Margin Per Hour</div>
+      <div style="font-size:36px;font-weight:700;color:var(--success)">$${marginPerHr.toFixed(2)}</div>
+      <div style="font-size:12px;color:var(--gray-600)">${marginPct}% · $${marginPerUnit.toFixed(4)} per 15-min unit</div>
+    </div>
+    <div style="font-size:12px;color:var(--gray-600);line-height:1.6">
+      <strong>What this means:</strong> Every authorized hour actually delivered earns $${marginPerHr.toFixed(2)} before agency overhead (your salary, office, insurance, etc.).
+      With ${consumers.length} consumer${consumers.length !== 1 ? 's' : ''} at ${Math.round(totalAuthHrsWeek)} authorized hrs/week, you have <strong>$${fmtD(estMonthlyMargin).replace('$','')} gross margin per month</strong> to cover all agency costs.
+      Every hour that goes undelivered costs you <strong>$${marginPerHr.toFixed(2)}</strong> in lost margin.
+    </div>
+  `;
+
+  // ── Revenue Leakage (Underutilization) ────────────────────
+  // Look at all quarters where delivered data exists and compare to authorized
+  const now = new Date();
+  let leakageHtml = '';
+  const leakageData = [];
+  for (let q = 1; q <= 4; q++) {
+    for (let y = now.getFullYear(); y >= now.getFullYear() - 1; y--) {
+      const qKey = `${y}-Q${q}`;
+      let qAuthorized = 0, qDelivered = 0, hasAnyDelivered = false;
+      consumers.forEach(c => {
+        const authUnits = Math.round((parseFloat(c.hours) || 0) * 4 * WEEKS_PER_QUARTER);
+        qAuthorized += authUnits;
+        const saved = (_store._du || {})[c.id + '_' + qKey];
+        if (saved !== undefined) { hasAnyDelivered = true; qDelivered += parseInt(saved) || 0; }
+      });
+      if (hasAnyDelivered && qAuthorized > 0) {
+        const utilPct = Math.round(qDelivered / qAuthorized * 100);
+        const missedUnits = qAuthorized - qDelivered;
+        const lostMargin = (missedUnits / 4) * marginPerHr;
+        leakageData.push({ qKey, utilPct, missedUnits, lostMargin, qDelivered, qAuthorized });
+      }
+    }
+  }
+
+  if (leakageData.length === 0) {
+    leakageHtml = '<p style="font-size:13px;color:var(--gray-600)">Enter delivered units in the Quarterly Report tab to see utilization gaps and lost margin here.</p>';
+  } else {
+    leakageHtml = leakageData.map(d => {
+      const pctColor = d.utilPct < 60 ? 'var(--danger)' : d.utilPct < 80 ? 'var(--warn)' : 'var(--success)';
+      return `<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px;font-weight:600">${d.qKey}</span>
+          <span style="font-size:13px;font-weight:700;color:${pctColor}">${d.utilPct}% utilized</span>
+        </div>
+        <div class="progress-bar" style="margin-bottom:6px"><div class="progress-fill ${d.utilPct >= 80 ? 'green' : d.utilPct >= 60 ? 'warn' : ''}" style="width:${d.utilPct}%;background:${pctColor}"></div></div>
+        <div style="font-size:12px;color:var(--gray-600)">${d.missedUnits.toLocaleString()} units undelivered · <strong style="color:var(--danger)">$${Math.round(d.lostMargin).toLocaleString()} lost margin</strong></div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('fin_leakage').innerHTML = leakageHtml;
+
+  // ── Per-Consumer Profitability ────────────────────────────
+  if (consumers.length === 0) {
+    document.getElementById('fin_consumer_table').innerHTML = '<div class="empty"><div class="empty-icon">👥</div><p>No active consumers.</p></div>';
+  } else {
+    const rows = consumers.map(c => {
+      const hrsWeek = parseFloat(c.hours) || 0;
+      const hrsMonth = hrsWeek * WEEKS_PER_MONTH;
+      const revenue = hrsMonth * rates.billing;
+      const labor   = hrsMonth * rates.pay;
+      const margin  = revenue - labor;
+      const mPct    = revenue > 0 ? Math.round(margin / revenue * 100) : 0;
+      return { c, hrsWeek, hrsMonth, revenue, labor, margin, mPct };
+    }).sort((a, b) => b.margin - a.margin); // highest margin first
+
+    document.getElementById('fin_consumer_table').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Consumer</th>
+              <th>County</th>
+              <th style="text-align:right">Auth Hrs/Wk</th>
+              <th style="text-align:right">Auth Hrs/Mo</th>
+              <th style="text-align:right">Est. Revenue/Mo</th>
+              <th style="text-align:right">Est. Labor/Mo</th>
+              <th style="text-align:right">Gross Margin/Mo</th>
+              <th style="text-align:right">Margin %</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(({ c, hrsWeek, hrsMonth, revenue, labor, margin, mPct }) => `
+              <tr>
+                <td><strong>${c.name}</strong></td>
+                <td>${c.county || '—'}</td>
+                <td style="text-align:right">${hrsWeek || '—'}</td>
+                <td style="text-align:right">${hrsMonth > 0 ? Math.round(hrsMonth) : '—'}</td>
+                <td style="text-align:right;color:var(--primary-light)">${revenue > 0 ? fmtD(revenue) : '—'}</td>
+                <td style="text-align:right;color:var(--warn)">${labor > 0 ? fmtD(labor) : '—'}</td>
+                <td style="text-align:right;font-weight:700;color:${margin > 0 ? 'var(--success)' : 'var(--danger)'}">${margin !== 0 ? fmtD(margin) : '—'}</td>
+                <td style="text-align:right;font-weight:700;color:${mPct >= 20 ? 'var(--success)' : mPct >= 10 ? 'var(--warn)' : 'var(--danger)'}">${mPct > 0 ? mPct + '%' : '—'}</td>
+              </tr>`).join('')}
+            <tr style="background:var(--gray-100);font-weight:700;border-top:2px solid var(--gray-300)">
+              <td colspan="2">TOTAL</td>
+              <td style="text-align:right">${Math.round(totalAuthHrsWeek)}</td>
+              <td style="text-align:right">${Math.round(totalAuthHrsMonth)}</td>
+              <td style="text-align:right;color:var(--primary-light)">${fmtD(estMonthlyRevenue)}</td>
+              <td style="text-align:right;color:var(--warn)">${fmtD(estMonthlyLabor)}</td>
+              <td style="text-align:right;color:var(--success)">${fmtD(estMonthlyMargin)}</td>
+              <td style="text-align:right;color:var(--success)">${marginPct}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // ── Quarterly History ─────────────────────────────────────
+  if (leakageData.length === 0) {
+    document.getElementById('fin_quarterly_history').innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Enter delivered units in the Quarterly Report tab to populate this section.</p>';
+  } else {
+    const sortedQ = [...leakageData].sort((a, b) => a.qKey.localeCompare(b.qKey));
+    document.getElementById('fin_quarterly_history').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Quarter</th>
+              <th style="text-align:right">Units Auth.</th>
+              <th style="text-align:right">Units Del.</th>
+              <th style="text-align:right">Utilization</th>
+              <th style="text-align:right">Est. Revenue</th>
+              <th style="text-align:right">Est. Labor</th>
+              <th style="text-align:right">Est. Gross Margin</th>
+              <th style="text-align:right">Lost Margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedQ.map(d => {
+              const rev = (d.qDelivered / 4) * rates.billing;
+              const lab = (d.qDelivered / 4) * rates.pay;
+              const mgn = rev - lab;
+              const pctColor = d.utilPct < 60 ? 'var(--danger)' : d.utilPct < 80 ? 'var(--warn)' : 'var(--success)';
+              return `<tr>
+                <td><strong>${d.qKey}</strong></td>
+                <td style="text-align:right">${d.qAuthorized.toLocaleString()}</td>
+                <td style="text-align:right">${d.qDelivered.toLocaleString()}</td>
+                <td style="text-align:right;font-weight:700;color:${pctColor}">${d.utilPct}%</td>
+                <td style="text-align:right;color:var(--primary-light)">${fmtD(rev)}</td>
+                <td style="text-align:right;color:var(--warn)">${fmtD(lab)}</td>
+                <td style="text-align:right;font-weight:700;color:var(--success)">${fmtD(mgn)}</td>
+                <td style="text-align:right;color:var(--danger)">-${fmtD(d.lostMargin)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // ── Growth Opportunity ────────────────────────────────────
+  const marginPerConsumer = consumers.length > 0 ? estMonthlyMargin / consumers.length : 0;
+  const revenuePerConsumer = consumers.length > 0 ? estMonthlyRevenue / consumers.length : rates.billing * (20 * WEEKS_PER_MONTH); // assume 20hrs
+  document.getElementById('fin_growth').innerHTML = `
+    <div class="grid-3" style="gap:16px">
+      <div style="background:var(--gray-100);border-radius:8px;padding:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;margin-bottom:8px">Value of 1 New Consumer</div>
+        <div style="font-size:22px;font-weight:700;color:var(--success)">+${fmtD(marginPerConsumer)}/mo</div>
+        <div style="font-size:12px;color:var(--gray-600);margin-top:4px">≈ ${fmtD(marginPerConsumer * 12)}/year gross margin</div>
+        <div style="font-size:11px;color:var(--gray-600);margin-top:4px">Based on avg ${Math.round(totalAuthHrsWeek / (consumers.length || 1))} hrs/wk per consumer</div>
+      </div>
+      <div style="background:var(--gray-100);border-radius:8px;padding:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;margin-bottom:8px">Value of +1 Hr/Wk per Consumer</div>
+        <div style="font-size:22px;font-weight:700;color:var(--success)">+${fmtD(marginPerHr * WEEKS_PER_MONTH * consumers.length)}/mo</div>
+        <div style="font-size:12px;color:var(--gray-600);margin-top:4px">$${marginPerHr.toFixed(2)}/hr margin × ${consumers.length} consumers × ${WEEKS_PER_MONTH} wks</div>
+        <div style="font-size:11px;color:var(--gray-600);margin-top:4px">Consider requesting hours increases at plan reviews</div>
+      </div>
+      <div style="background:var(--gray-100);border-radius:8px;padding:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;margin-bottom:8px">Impact of +$1/hr Pay Increase</div>
+        <div style="font-size:22px;font-weight:700;color:var(--danger)">-${fmtD(totalAuthHrsMonth)}/mo</div>
+        <div style="font-size:12px;color:var(--gray-600);margin-top:4px">${Math.round(totalAuthHrsMonth).toLocaleString()} authorized hrs × $1</div>
+        <div style="font-size:11px;color:var(--gray-600);margin-top:4px">= ${fmtD(totalAuthHrsMonth * 12)}/year reduction in gross margin</div>
+      </div>
+    </div>
+  `;
+}
+
+function initQuarterlyYearSelect() {
+  const sel = document.getElementById('qr_year');
+  const now = new Date();
+  const curYear = now.getFullYear();
+  for (let y = curYear; y >= curYear - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    if (y === curYear) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  // Auto-select current quarter
+  const curQ = Math.ceil((now.getMonth() + 1) / 3);
+  document.getElementById('qr_quarter').value = curQ;
+}
+
+// ============================================================
+// initApp() is called after auth + data load (by _afterLoad)
+function initApp() {
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
   document.getElementById('todayBadge').textContent = dateStr;
@@ -4129,6 +6210,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Set current month in LEIE modal
   document.getElementById('l_month').value = MONTHS[now.getMonth()];
 
+  initQuarterlyYearSelect();
   loadChecks();
   loadQuarterStatus();
   renderConsumers();
@@ -4137,6 +6219,7 @@ document.addEventListener('DOMContentLoaded', function() {
   renderPipeline();
   renderCorrections();
   updateDashboard();
+  _enableRealtime();
 
   // Checkbox change → mark done class
   document.querySelectorAll('.checklist input[type="checkbox"]').forEach(cb => {
@@ -4145,7 +6228,9 @@ document.addEventListener('DOMContentLoaded', function() {
       else this.closest('li').classList.remove('done');
     });
   });
-});
+}
+
+document.addEventListener('DOMContentLoaded', () => { initApp_boot(); });
 </script>
 </body>
 </html>
