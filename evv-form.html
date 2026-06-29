@@ -104,6 +104,12 @@
   </div>
 </div>
 
+<!-- SHARE BANNER -->
+<div style="background:#f0fafa;border-bottom:1.5px solid #b2dfdb;padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+  <span style="font-size:11px;font-weight:600;color:#1a5276;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap">📋 Share this form with attendants:</span>
+  <code style="font-size:13px;font-weight:600;color:#0e3860;background:#ddf0f0;padding:4px 10px;border-radius:5px;letter-spacing:0.01em;word-break:break-all">hub.caringcds.com/evv-form.html</code>
+</div>
+
 <!-- FORM -->
 <div id="formPage">
 <div class="container">
@@ -144,7 +150,11 @@
     <div class="form-row">
       <div class="form-group">
         <label>Date of Visit <span class="req">*</span></label>
-        <input type="date" id="f_visitdate">
+        <input type="date" id="f_visitdate" onchange="updatePayPeriod()">
+        <div id="payPeriodDisplay" style="display:none;margin-top:6px;padding:8px 12px;background:#eaf6f6;border-radius:6px;font-size:12px;color:#0e3860">
+          <strong>Pay Period:</strong> <span id="payPeriodText"></span>
+          <div style="margin-top:3px;font-size:11px;color:#555">EVV correction must be submitted by <strong>Saturday 11:59 PM</strong> of this pay period.</div>
+        </div>
       </div>
       <div class="form-group">
         <label>Date Submitted</label>
@@ -334,6 +344,22 @@ document.addEventListener('DOMContentLoaded', () => {
   _initSigPads();
   _styleCheckboxes();
 });
+
+// ── PAY PERIOD ──
+function updatePayPeriod() {
+  const val = document.getElementById('f_visitdate').value;
+  const display = document.getElementById('payPeriodDisplay');
+  const text    = document.getElementById('payPeriodText');
+  if (!val) { display.style.display = 'none'; return; }
+  const d = new Date(val + 'T12:00:00');
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - d.getDay());
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  const fmt = dt => dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  text.textContent = `${fmt(sunday)} – ${fmt(saturday)}`;
+  display.style.display = 'block';
+}
 
 // ── SIGNATURE PADS ──
 function _initSigPads() {
