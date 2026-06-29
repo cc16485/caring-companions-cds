@@ -1558,6 +1558,17 @@
     </div>
   </div>
 
+  <!-- PENDING FORM SUBMISSIONS -->
+  <div class="card" id="pendingSubmissionsCard">
+    <div class="card-title" style="justify-content:space-between">
+      <span><span class="icon">📬</span> Pending Form Submissions <span id="pendingSubmissionsBadge" class="badge badge-warn" style="display:none;margin-left:6px"></span></span>
+      <button class="btn btn-outline" onclick="loadPendingSubmissions()" style="font-size:11px">↻ Refresh</button>
+    </div>
+    <div id="pendingSubmissionsBody">
+      <p style="font-size:13px;color:var(--gray-600)">Loading submissions…</p>
+    </div>
+  </div>
+
   <!-- CORRECTION LOG TABLE -->
   <div class="card">
     <div class="card-title"><span class="icon">📋</span> Correction Log — <span id="correctionMonthLabel"></span></div>
@@ -3059,7 +3070,7 @@ function _enableRealtime() {
           if (id === 'dashboard')    updateDashboard();
           if (id === 'consumers')    { renderConsumers(); renderPipeline(); }
           if (id === 'attendants')   renderAttendants();
-          if (id === 'evvcorrections') renderCorrections();
+          if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); }
           if (id === 'quarterly')    renderQuarterlyReport();
           if (id === 'financials')   renderFinancials();
         }
@@ -4842,6 +4853,29 @@ function addCorrection() {
   updateDashboard();
 }
 
+// Returns "Sun Jun 22 – Sat Jun 28, 2026" for any date in that week
+function getPayPeriod(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T12:00:00');
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - d.getDay());
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  const fmt = dt => dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  return `${fmt(sunday)} – ${fmt(saturday)}`;
+}
+
+// Returns true if submitdate is after Saturday 11:59 PM of the visit's pay period
+function isSubmissionLate(visitdate, submitdate) {
+  if (!visitdate || !submitdate) return false;
+  const visit = new Date(visitdate + 'T12:00:00');
+  const saturday = new Date(visit);
+  saturday.setDate(visit.getDate() + (6 - visit.getDay()));
+  saturday.setHours(23, 59, 59);
+  const submit = new Date(submitdate + 'T23:59:59');
+  return submit > saturday;
+}
+
 function getStatusFromCorrection(c) {
   if (c.wellskyDone === 'yes' && c.formReceived === 'yes') return 'complete';
   if (c.formReceived === 'no') return 'pending_form';
@@ -4958,6 +4992,122 @@ function renderCorrections() {
       }).join('') + '</div>';
   }
 }
+
+// ── PENDING SUBMISSIONS (from evv_submissions table) ──────────────────
+async function loadPendingSubmissions() {
+  const container = document.getElementById('pendingSubmissionsBody');
+  const badge     = document.getElementById('pendingSubmissionsBadge');
+  if (!_db) { container.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Database not connected.</p>'; return; }
+
+  container.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Loading…</p>';
+
+  const { data, error } = await _db.from('evv_submissions')
+    .select('*')
+    .eq('agency_id', AGENCY_ID)
+    .eq('processed', false)
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    container.innerHTML = `<p style="font-size:13px;color:var(--danger-light)">Error loading submissions: ${error.message}</p>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    badge.style.display = 'none';
+    container.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">No pending submissions — all caught up ✅</p>';
+    return;
+  }
+
+  badge.textContent = data.length + ' new';
+  badge.style.display = 'inline-block';
+
+  container.innerHTML = data.map(sub => {
+    const tasks = Array.isArray(sub.tasks_performed) ? sub.tasks_performed.join(', ') : '—';
+    const origTime = [sub.orig_in, sub.orig_out].filter(Boolean).join(' – ') || '—';
+    const newTime  = [sub.new_in,  sub.new_out ].filter(Boolean).join(' – ') || '—';
+    const submitted = sub.submitted_at ? new Date(sub.submitted_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+
+    const sigHtml = (sig, label) => sig
+      ? `<div style="margin-top:6px"><div style="font-size:10px;color:var(--gray-600);margin-bottom:2px">${label}</div><img src="${sig}" style="max-width:160px;border:1px solid var(--gray-300);border-radius:4px"></div>`
+      : '';
+
+    return `<div style="border:1.5px solid var(--gray-200);border-radius:8px;padding:14px;margin-bottom:12px;background:#fafbfc">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <div>
+          <div style="font-weight:700;font-size:14px">${sub.attendant} &nbsp;→&nbsp; ${sub.consumer}</div>
+          <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <span style="font-size:12px;background:#e8f4fd;color:#1a5276;padding:3px 10px;border-radius:12px;font-weight:600">📅 Visit: ${sub.visitdate || '—'}</span>
+            <span style="font-size:12px;background:#eaf6f6;color:var(--primary);padding:3px 10px;border-radius:12px;font-weight:600">📆 Pay Period: ${getPayPeriod(sub.visitdate)}</span>
+            ${isSubmissionLate(sub.visitdate, sub.submitdate) ? '<span style="font-size:11px;background:#fdedec;color:var(--danger);padding:3px 10px;border-radius:12px;font-weight:700">⚠️ Submitted Late (after Saturday deadline)</span>' : '<span style="font-size:11px;background:#d5f5e3;color:var(--success);padding:3px 10px;border-radius:12px;font-weight:600">✓ On Time</span>'}
+          </div>
+          <div style="font-size:11px;color:var(--gray-600);margin-top:4px">Form submitted: ${submitted}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-success" style="font-size:12px" onclick="acceptSubmission(${JSON.stringify(sub).split('"').join("'")})">✓ Accept &amp; Log</button>
+          <button class="btn btn-outline" style="font-size:12px;color:var(--danger)" onclick="dismissSubmission('${sub.id}')">✕ Dismiss</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px;margin-bottom:10px">
+        <div><span style="color:var(--gray-600)">Original time:</span><br><strong>${origTime}</strong></div>
+        <div><span style="color:var(--gray-600)">Corrected time:</span><br><strong>${newTime}</strong></div>
+        <div><span style="color:var(--gray-600)">Reason:</span><br><strong>${sub.reason || '—'}</strong></div>
+      </div>
+      ${tasks !== '—' ? `<div style="font-size:12px;margin-bottom:8px"><span style="color:var(--gray-600)">Tasks performed:</span> ${tasks}</div>` : ''}
+      ${sub.notes ? `<div style="font-size:12px;margin-bottom:8px;padding:8px;background:var(--gray-100);border-radius:5px"><span style="color:var(--gray-600)">Notes:</span> ${sub.notes}</div>` : ''}
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        ${sigHtml(sub.sig_attendant, 'Attendant signature')}
+        ${sigHtml(sub.sig_consumer,  'Consumer signature')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function acceptSubmission(sub) {
+  // sub is passed as an object — may arrive as a string via onclick attr
+  if (typeof sub === 'string') {
+    try { sub = JSON.parse(sub.split("'").join('"')); } catch(e) { alert('Error parsing submission.'); return; }
+  }
+  const corrections = getData('evvCorrections');
+  corrections.unshift({
+    id: 'sub_' + sub.id,
+    attendant:    sub.attendant,
+    consumer:     sub.consumer,
+    visitdate:    sub.visitdate,
+    submitdate:   sub.submitdate || new Date().toISOString().split('T')[0],
+    origIn:       sub.orig_in  || '',
+    origOut:      sub.orig_out || '',
+    newIn:        sub.new_in   || '',
+    newOut:       sub.new_out  || '',
+    reason:       sub.reason   || '',
+    notes:        sub.notes    || '',
+    tasks:        Array.isArray(sub.tasks_performed) ? sub.tasks_performed : [],
+    formReceived: 'yes',   // digital form was submitted
+    wellskyDone:  'no',    // still needs WellSky update
+    admin:        '',
+    wellskyDate:  '',
+    loggedBy:     'EVV Form (digital)',
+    source:       'evv_form'
+  });
+  setData('evvCorrections', corrections);
+
+  // Mark as processed in evv_submissions
+  if (_db) {
+    await _db.from('evv_submissions').update({ processed: true }).eq('id', sub.id);
+  }
+
+  renderCorrections();
+  loadPendingSubmissions();
+  updateDashboard();
+}
+
+async function dismissSubmission(id) {
+  if (!confirm('Dismiss this submission without logging a correction?')) return;
+  if (_db) {
+    await _db.from('evv_submissions').update({ processed: true }).eq('id', id);
+  }
+  loadPendingSubmissions();
+}
+// ── END PENDING SUBMISSIONS ────────────────────────────────────────────
 
 function markCorrectionComplete(id) {
   const corrections = getData('evvCorrections');
