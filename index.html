@@ -1503,6 +1503,14 @@
     </div>
   </div>
 
+  <!-- FORM LINK ADMIN BAR -->
+  <div style="background:#f0f7ff;border:1.5px solid #b8d4ef;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap">📋 Attendant Form Link</div>
+    <code style="font-size:13px;font-weight:600;color:var(--primary);background:#dde9f8;padding:5px 12px;border-radius:6px;flex:1;min-width:200px">hub.caringcds.com/evv-form.html</code>
+    <button class="btn btn-outline" style="font-size:12px;white-space:nowrap" onclick="navigator.clipboard.writeText('https://hub.caringcds.com/evv-form.html').then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='📋 Copy Link',1800)})">📋 Copy Link</button>
+    <button class="btn btn-accent" style="font-size:12px;white-space:nowrap" onclick="openModal('sendEvvFormLinkModal')">📱 Send to Attendant</button>
+  </div>
+
   <!-- WORKFLOW BANNER -->
   <div class="card" style="background:#f0f7ff;border-left:4px solid var(--primary-light)">
     <div class="card-title" style="margin-bottom:10px"><span class="icon">🔄</span> Required Correction Workflow — Follow Every Time</div>
@@ -2758,6 +2766,30 @@
   </div>
 </div>
 
+<!-- Send EVV Form Link Modal -->
+<div class="modal-overlay" id="sendEvvFormLinkModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">📱 Send EVV Form Link to Attendant</div>
+      <button class="modal-close" onclick="closeModal('sendEvvFormLinkModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--gray-600);margin-bottom:14px">Select an attendant to send them the EVV correction form link via SMS and email.</p>
+      <div class="form-group">
+        <label class="form-label">Attendant</label>
+        <select id="evvLinkAttendantSelect" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-300);border-radius:6px;font-size:14px;font-family:inherit">
+          <option value="">— Select attendant —</option>
+        </select>
+      </div>
+      <div id="evvLinkAttendantInfo" style="display:none;margin-top:10px;padding:10px;background:var(--gray-100);border-radius:6px;font-size:12px;color:var(--gray-600)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('sendEvvFormLinkModal')">Cancel</button>
+      <button class="btn btn-accent" onclick="sendEvvFormLink()">📤 Send via GHL</button>
+    </div>
+  </div>
+</div>
+
 <!-- EVV Settings Modal -->
 <div class="modal-overlay" id="evvSettingsModal">
   <div class="modal" style="width:580px">
@@ -3199,7 +3231,22 @@ function showGuideTab(tab) {
 // ============================================================
 // MODAL
 // ============================================================
-function openModal(id) { document.getElementById(id).classList.add('open'); }
+function openModal(id) {
+  if (id === 'sendEvvFormLinkModal') {
+    const sel = document.getElementById('evvLinkAttendantSelect');
+    const attendants = getData('attendants');
+    sel.innerHTML = '<option value="">— Select attendant —</option>' +
+      attendants.map(a => `<option value="${a.id}">${a.name}${a.phone ? ' · ' + a.phone : ''}${a.email ? ' · ' + a.email : ''}</option>`).join('');
+    sel.onchange = () => {
+      const a = attendants.find(x => x.id === sel.value);
+      const info = document.getElementById('evvLinkAttendantInfo');
+      if (a) { info.style.display = 'block'; info.innerHTML = `<strong>${a.name}</strong><br>📞 ${a.phone || 'No phone'} &nbsp;|&nbsp; ✉️ ${a.email || 'No email'}`; }
+      else { info.style.display = 'none'; }
+    };
+    document.getElementById('evvLinkAttendantInfo').style.display = 'none';
+  }
+  document.getElementById(id).classList.add('open');
+}
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', function(e) { if (e.target === this) this.classList.remove('open'); });
@@ -4081,12 +4128,20 @@ const OUTREACH_CONFIGS = {
     buildSMS: (fn) => `Hi ${fn}! Important: your CDS care plan is coming up for renewal. Please watch for contact from your DSDS caseworker — they\'ll need to schedule your renewal assessment. Questions? Contact us at intake@caringcds.com!`,
     sentField: null, entityType: 'consumer'
   },
+  evv_form_link: {
+    title: 'Send EVV Correction Form Link',
+    infoBar: '📋 Send this attendant the direct link to submit an EVV correction form.',
+    emailSubject: 'EVV Correction Form Link — Caring Companions CDS',
+    buildEmail: (fn) => `Hi ${fn},\n\nIf you need to submit an EVV correction, please use the link below:\n\n👉 hub.caringcds.com/evv-form.html\n\nThe form walks you through everything step by step. You will need both your signature and your consumer's signature to submit.\n\nRemember: corrections must be submitted by Saturday 11:59 PM of the pay period in which the visit occurred.\n\nIf you have questions or are unsure whether your situation qualifies for a correction, please contact us before submitting.\n\nintake@caringcds.com\n\nThank you,\nSamantha\nCaring Companions In Home Senior Care | CDS Division`,
+    buildSMS: (fn) => `Hi ${fn}! Here's your EVV correction form link: hub.caringcds.com/evv-form.html — Complete it with your consumer's signature. Corrections are due Saturday 11:59 PM. Questions? Reply here or email intake@caringcds.com`,
+    sentField: null, entityType: 'attendant'
+  },
   evv_bulk_reminder: {
     title: 'Friday EVV Reminder — All Attendants',
     infoBar: '📱 Send the weekly EVV deadline reminder to all active attendants.',
     emailSubject: 'Weekly EVV Reminder — Corrections Due Saturday 11:59 PM',
-    buildEmail: (fn) => `Hi ${fn},\n\nThis is your weekly reminder that any EVV corrections for this week must be submitted by Saturday at 11:59 PM.\n\nPlease log in to your WellSky portal at mycaringcds.com and review your visits. If any clock-in or clock-out times need to be corrected, submit your correction now — do not wait until the last minute.\n\nRemember:\n• Corrections not submitted by Saturday 11:59 PM cannot be processed for that week\n• Falsifying EVV data is fraud and may result in termination and legal action\n• If you need help with a correction, contact us immediately\n\nThank you for staying on top of this!\n\nSamantha\nCaring Companions In Home Senior Care | CDS Division\nintake@caringcds.com`,
-    buildSMS: (fn) => `Hi ${fn}! ⏰ Weekly EVV reminder: any corrections must be submitted by Saturday 11:59 PM. Log in at mycaringcds.com to review your visits. Need help? Reply here or contact intake@caringcds.com. Thank you!`,
+    buildEmail: (fn) => `Hi there,\n\nThis is your weekly reminder to review your Completed Visits in the WellSky app and submit any EVV corrections by Saturday at 11:59 PM.\n\nPlease open the WellSky app, go to your Completed Visits, and verify that your clock-in and clock-out times are accurate. If you notice an error, complete the EVV Correction Form as soon as possible — please don't wait until the last minute.\n\nEVV Correction Form: hub.caringcds.com/evv-form.html\n\nImportant reminders:\n\n• EVV corrections must be submitted by Saturday at 11:59 PM to be processed for that week's payroll.\n• Corrections received after the deadline cannot be processed until the following payroll, if applicable.\n• Please save the EVV Correction Form and use it only when necessary. Clocking in and out should be completed correctly 90%+ of the time using the WellSky app or by calling from the client's home phone.\n• Falsifying EVV records is considered fraud and may result in termination and legal consequences.\n• If you need help submitting a correction, please contact us right away.\n\nThank you for helping us keep your time records accurate!\n\nSamantha\nCaring Companions Consumer Directed Services\nintake@caringcds.com`,
+    buildSMS: (fn) => `Hi! This is your weekly reminder to check your Completed Visits in the WellSky app. If any clock-in/out times are wrong, submit an EVV correction by Saturday 11:59 PM: hub.caringcds.com/evv-form.html\n\nRemember: corrections are a last resort — please clock in/out correctly in WellSky every visit. Need help? Contact us at intake@caringcds.com`,
     sentField: null, entityType: 'bulk_attendants'
   }
 };
@@ -5107,6 +5162,16 @@ async function dismissSubmission(id) {
   }
   loadPendingSubmissions();
 }
+function sendEvvFormLink() {
+  const sel = document.getElementById('evvLinkAttendantSelect');
+  if (!sel.value) { alert('Please select an attendant.'); return; }
+  const attendants = getData('attendants');
+  const a = attendants.find(x => x.id === sel.value);
+  if (!a) return;
+  closeModal('sendEvvFormLinkModal');
+  openOutreachModal('evv_form_link', a);
+}
+
 // ── END PENDING SUBMISSIONS ────────────────────────────────────────────
 
 function markCorrectionComplete(id) {
