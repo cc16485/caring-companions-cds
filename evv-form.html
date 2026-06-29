@@ -14,155 +14,116 @@
     --success: #27ae60;
     --warn: #f39c12;
     --gray-100: #f8f9fa;
+    --gray-200: #e9ecef;
     --gray-300: #dee2e6;
     --gray-600: #6c757d;
     --gray-800: #343a40;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: 'Poppins', sans-serif;
-    background: var(--gray-100);
-    color: var(--gray-800);
-    min-height: 100vh;
-  }
+  body { font-family: 'Poppins', sans-serif; background: var(--gray-100); color: var(--gray-800); min-height: 100vh; }
 
-  /* ── HEADER ── */
-  .header {
-    background: var(--primary);
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .header-logo {
-    width: 36px; height: 36px;
-    background: var(--teal);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; font-weight: 700; color: white;
-  }
-  .header-title { color: white; font-size: 16px; font-weight: 600; line-height: 1.2; }
+  /* HEADER */
+  .header { background: var(--primary); padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+  .header-logo { width: 36px; height: 36px; background: var(--teal); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: white; flex-shrink: 0; }
+  .header-title { color: white; font-size: 15px; font-weight: 600; line-height: 1.2; }
   .header-sub { color: rgba(255,255,255,0.65); font-size: 11px; }
   .header-spacer { flex: 1; }
-  .signout-btn {
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.3);
-    color: rgba(255,255,255,0.8);
-    padding: 5px 12px; border-radius: 6px;
-    font-size: 12px; font-family: inherit; cursor: pointer;
-  }
+  .signout-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.8); padding: 5px 12px; border-radius: 6px; font-size: 12px; font-family: inherit; cursor: pointer; }
 
-  /* ── LOGIN OVERLAY ── */
-  #loginOverlay {
-    position: fixed; inset: 0;
-    background: var(--primary);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 9999; flex-direction: column;
-  }
-  .login-card {
-    background: white; border-radius: 12px;
-    padding: 36px 40px; width: 380px; max-width: 95vw;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
-  }
-  .login-logo {
-    width: 52px; height: 52px;
-    background: var(--teal); border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 24px; font-weight: 700; color: white;
-    margin: 0 auto 16px;
-  }
+  /* LOGIN */
+  #loginOverlay { position: fixed; inset: 0; background: var(--primary); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; }
+  .login-card { background: white; border-radius: 12px; padding: 36px 40px; width: 380px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+  .login-logo { width: 52px; height: 52px; background: var(--teal); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; color: white; margin: 0 auto 16px; }
   .login-title { text-align: center; font-size: 20px; font-weight: 700; color: var(--primary); }
   .login-sub { text-align: center; font-size: 12px; color: var(--gray-600); margin-top: 4px; margin-bottom: 24px; }
-  .login-error {
-    display: none; color: var(--danger); font-size: 12px;
-    padding: 8px 12px; background: #fdedec; border-radius: 6px; margin-bottom: 12px;
-  }
+  .login-error { display: none; color: var(--danger); font-size: 12px; padding: 8px 12px; background: #fdedec; border-radius: 6px; margin-bottom: 12px; }
   #login_loading { display: none; color: rgba(255,255,255,0.8); margin-top: 20px; font-size: 14px; }
 
-  /* ── FORM PAGE ── */
+  /* LAYOUT */
   #formPage { display: none; }
-  .container { max-width: 680px; margin: 0 auto; padding: 24px 16px 60px; }
-  .page-title { font-size: 20px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
-  .page-sub { font-size: 13px; color: var(--gray-600); margin-bottom: 24px; }
+  .container { max-width: 700px; margin: 0 auto; padding: 20px 16px 80px; }
+  .page-title { font-size: 20px; font-weight: 700; color: var(--primary); margin-bottom: 2px; }
+  .page-sub { font-size: 13px; color: var(--gray-600); margin-bottom: 6px; }
+  .required-note { font-size: 11px; color: var(--gray-600); margin-bottom: 20px; }
 
-  .card {
-    background: white; border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-    padding: 20px; margin-bottom: 16px;
-  }
-  .card-title {
-    font-size: 13px; font-weight: 600; color: var(--primary);
-    text-transform: uppercase; letter-spacing: 0.05em;
-    margin-bottom: 16px; padding-bottom: 10px;
-    border-bottom: 2px solid var(--teal);
-  }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* CARDS */
+  .card { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--primary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid var(--teal); display: flex; align-items: center; gap: 8px; }
+  .admin-badge { background: var(--primary); color: white; font-size: 10px; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* FORM FIELDS */
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
   .form-row.single { grid-template-columns: 1fr; }
-  @media (max-width: 500px) { .form-row { grid-template-columns: 1fr; } }
+  .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 520px) { .form-row, .form-row.three { grid-template-columns: 1fr; } }
   .form-group { display: flex; flex-direction: column; }
-  .form-group label {
-    font-size: 12px; font-weight: 600; color: var(--gray-600);
-    margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em;
-  }
+  .form-group label { font-size: 11px; font-weight: 600; color: var(--gray-600); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
   .form-group label .req { color: var(--danger); }
   .form-group input, .form-group select, .form-group textarea {
-    border: 1.5px solid var(--gray-300); border-radius: 6px;
-    padding: 9px 11px; font-size: 14px; font-family: inherit;
-    transition: border-color 0.15s;
-    background: white; color: var(--gray-800);
+    border: 1.5px solid var(--gray-300); border-radius: 6px; padding: 9px 11px;
+    font-size: 14px; font-family: inherit; background: white; color: var(--gray-800); transition: border-color 0.15s;
   }
-  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-    outline: none; border-color: var(--teal);
-  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--teal); }
   .form-group textarea { resize: vertical; min-height: 70px; }
-  #reason_other { display: none; margin-top: 8px; }
 
+  /* TIMES */
+  .time-block label { font-size: 11px; color: var(--gray-600); margin-bottom: 4px; font-weight: 500; display: block; }
   .time-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .time-label { font-size: 11px; color: var(--gray-600); margin-bottom: 3px; font-weight: 500; }
 
-  .submit-btn {
-    width: 100%; padding: 13px;
-    background: var(--teal); color: white;
-    border: none; border-radius: 8px;
-    font-size: 15px; font-weight: 600; font-family: inherit;
-    cursor: pointer; transition: background 0.15s; margin-top: 4px;
-  }
+  /* TASKS CHECKBOXES */
+  .task-section-label { font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em; margin: 14px 0 8px; }
+  .task-section-label:first-child { margin-top: 0; }
+  .task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+  @media (max-width: 400px) { .task-grid { grid-template-columns: 1fr; } }
+  .task-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1.5px solid var(--gray-200); border-radius: 6px; cursor: pointer; transition: all 0.12s; user-select: none; }
+  .task-item:hover { border-color: var(--teal); background: #f0fafa; }
+  .task-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--teal); cursor: pointer; flex-shrink: 0; }
+  .task-item span { font-size: 13px; color: var(--gray-800); line-height: 1.3; }
+  .task-item.checked { border-color: var(--teal); background: #f0fafa; }
+
+  /* SIGNATURE */
+  .sig-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 520px) { .sig-wrap { grid-template-columns: 1fr; } }
+  .sig-block { display: flex; flex-direction: column; gap: 6px; }
+  .sig-label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.04em; }
+  .sig-canvas-wrap { border: 1.5px solid var(--gray-300); border-radius: 8px; background: #fafafa; position: relative; touch-action: none; }
+  .sig-canvas-wrap canvas { display: block; width: 100%; height: 110px; cursor: crosshair; border-radius: 7px; }
+  .sig-hint { font-size: 10px; color: var(--gray-600); text-align: center; margin-top: 2px; }
+  .sig-actions { display: flex; gap: 6px; }
+  .clear-btn { background: none; border: 1px solid var(--gray-300); color: var(--gray-600); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-family: inherit; cursor: pointer; }
+  .clear-btn:hover { border-color: var(--danger); color: var(--danger); }
+  .sig-date { margin-top: 4px; }
+
+  /* PROCESSING STATUS (admin) */
+  .admin-section { border: 1.5px dashed var(--gray-300); border-radius: 10px; padding: 16px; background: #f9f9fc; }
+
+  /* BUTTONS */
+  .submit-btn { width: 100%; padding: 14px; background: var(--teal); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s; margin-top: 4px; }
   .submit-btn:hover { background: #3da8a3; }
   .submit-btn:disabled { background: var(--gray-300); cursor: not-allowed; }
 
-  .required-note { font-size: 11px; color: var(--gray-600); margin-bottom: 16px; }
+  /* ERROR */
+  .form-error { display: none; color: var(--danger); font-size: 13px; margin-bottom: 12px; padding: 10px 14px; background: #fdedec; border-radius: 8px; }
 
-  /* ── SUCCESS STATE ── */
-  #successPage {
-    display: none;
-    max-width: 440px; margin: 60px auto; padding: 0 16px; text-align: center;
-  }
-  .success-icon {
-    width: 72px; height: 72px; background: #eafaf1; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 36px; margin: 0 auto 20px;
-  }
+  /* SUCCESS */
+  #successPage { display: none; max-width: 440px; margin: 60px auto; padding: 0 16px; text-align: center; }
+  .success-icon { width: 72px; height: 72px; background: #eafaf1; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 20px; }
   .success-title { font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
   .success-detail { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 28px; }
-  .another-btn {
-    background: var(--primary); color: white;
-    border: none; border-radius: 8px; padding: 12px 28px;
-    font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
-  }
-  .another-btn:hover { background: #0a2d4f; }
+  .another-btn { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 12px 28px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; }
 
-  /* ── SHARED INPUTS ── */
-  input[type="date"], input[type="time"] { appearance: none; -webkit-appearance: none; }
+  /* OTHER REASON */
+  #reason_other_wrap { display: none; margin-top: 8px; }
 </style>
 </head>
 <body>
 
-<!-- LOGIN OVERLAY -->
+<!-- LOGIN -->
 <div id="loginOverlay">
   <div class="login-card">
     <div class="login-logo">C</div>
     <div class="login-title">Caring Companions CDS</div>
-    <div class="login-sub">EVV Correction Form — Staff Login</div>
+    <div class="login-sub">EVV Correction Form</div>
     <div id="login_error" class="login-error"></div>
     <div class="form-group" style="margin-bottom:12px">
       <label>Email</label>
@@ -170,114 +131,180 @@
     </div>
     <div class="form-group" style="margin-bottom:20px">
       <label>Password</label>
-      <input type="password" id="login_password" placeholder="••••••••"
-        onkeydown="if(event.key==='Enter')signIn()">
+      <input type="password" id="login_password" placeholder="••••••••" onkeydown="if(event.key==='Enter')signIn()">
     </div>
     <button id="login_btn" class="submit-btn" onclick="signIn()">Sign In</button>
   </div>
   <div id="login_loading">Loading…</div>
 </div>
 
-<!-- HEADER (hidden until logged in) -->
+<!-- HEADER -->
 <div class="header" id="appHeader" style="display:none">
   <div class="header-logo">C</div>
   <div>
     <div class="header-title">Caring Companions CDS</div>
-    <div class="header-sub">EVV Correction Form</div>
+    <div class="header-sub">EVV Manual Correction Form</div>
   </div>
   <div class="header-spacer"></div>
   <span id="header_user" style="font-size:11px;color:rgba(255,255,255,0.6);margin-right:8px"></span>
   <button class="signout-btn" onclick="signOut()">Sign Out</button>
 </div>
 
-<!-- CORRECTION FORM -->
+<!-- FORM -->
 <div id="formPage">
-  <div class="container">
-    <div class="page-title">EVV Manual Correction</div>
-    <div class="page-sub">Submit a correction for a missed or incorrect EVV clock-in/out. All submissions are logged immediately in the tracker.</div>
-    <div class="required-note"><span style="color:var(--danger)">*</span> Required fields</div>
+<div class="container">
+  <div class="page-title">EVV Manual Correction</div>
+  <div class="page-sub">Complete all sections below. Both the attendant and consumer must sign before submitting.</div>
+  <div class="required-note"><span style="color:var(--danger)">*</span> Required</div>
 
-    <!-- WHO & WHEN -->
-    <div class="card">
-      <div class="card-title">Visit Information</div>
-      <div class="form-row" style="margin-bottom:12px">
-        <div class="form-group">
-          <label>Attendant Name <span class="req">*</span></label>
-          <input type="text" id="f_attendant" placeholder="First Last">
-        </div>
-        <div class="form-group">
-          <label>Consumer Name <span class="req">*</span></label>
-          <input type="text" id="f_consumer" placeholder="First Last">
-        </div>
+  <!-- VISIT INFO -->
+  <div class="card">
+    <div class="card-title">Visit Information</div>
+    <div class="form-row" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>Attendant Name <span class="req">*</span></label>
+        <input type="text" id="f_attendant" placeholder="First Last">
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Date of Visit <span class="req">*</span></label>
-          <input type="date" id="f_visitdate">
-        </div>
-        <div class="form-group">
-          <label>Date Form Submitted</label>
-          <input type="date" id="f_submitdate">
-        </div>
+      <div class="form-group">
+        <label>Consumer Name <span class="req">*</span></label>
+        <input type="text" id="f_consumer" placeholder="First Last">
       </div>
     </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date of Visit <span class="req">*</span></label>
+        <input type="date" id="f_visitdate">
+      </div>
+      <div class="form-group">
+        <label>Date Form Submitted</label>
+        <input type="date" id="f_submitdate">
+      </div>
+    </div>
+  </div>
 
-    <!-- TIMES -->
-    <div class="card">
-      <div class="card-title">Clock-In / Clock-Out Times</div>
-      <div class="form-row" style="margin-bottom:16px">
-        <div class="form-group">
-          <label>Original Times</label>
-          <div class="time-pair">
-            <div>
-              <div class="time-label">Clock In</div>
-              <input type="time" id="f_orig_in">
-            </div>
-            <div>
-              <div class="time-label">Clock Out</div>
-              <input type="time" id="f_orig_out">
-            </div>
+  <!-- CLOCK TIMES -->
+  <div class="card">
+    <div class="card-title">Clock-In / Clock-Out Times</div>
+    <div class="form-row">
+      <div class="time-block">
+        <label>Original Times</label>
+        <div class="time-pair">
+          <div class="form-group">
+            <label>Clock In</label>
+            <input type="time" id="f_orig_in">
           </div>
-        </div>
-        <div class="form-group">
-          <label>Corrected Times</label>
-          <div class="time-pair">
-            <div>
-              <div class="time-label">Clock In</div>
-              <input type="time" id="f_new_in">
-            </div>
-            <div>
-              <div class="time-label">Clock Out</div>
-              <input type="time" id="f_new_out">
-            </div>
+          <div class="form-group">
+            <label>Clock Out</label>
+            <input type="time" id="f_orig_out">
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- REASON -->
-    <div class="card">
-      <div class="card-title">Reason for Correction</div>
-      <div class="form-group" style="margin-bottom:0">
-        <label>Reason <span class="req">*</span></label>
-        <select id="f_reason" onchange="document.getElementById('reason_other').style.display=this.value==='Other'?'block':'none'">
-          <option value="">— Select reason —</option>
-          <option>Phone dead / no battery</option>
-          <option>App crashed or technical error</option>
-          <option>No cell service at consumer location</option>
-          <option>Forgot to clock in</option>
-          <option>Forgot to clock out</option>
-          <option>WellSky app error / update disruption</option>
-          <option>Landline EVV not available</option>
-          <option>Other</option>
-        </select>
-        <input type="text" id="reason_other" placeholder="Describe reason…">
+      <div class="time-block">
+        <label>Corrected Times</label>
+        <div class="time-pair">
+          <div class="form-group">
+            <label>Clock In</label>
+            <input type="time" id="f_new_in">
+          </div>
+          <div class="form-group">
+            <label>Clock Out</label>
+            <input type="time" id="f_new_out">
+          </div>
+        </div>
       </div>
     </div>
+  </div>
 
-    <!-- PROCESSING STATUS -->
-    <div class="card">
-      <div class="card-title">Processing Status</div>
+  <!-- REASON -->
+  <div class="card">
+    <div class="card-title">Reason for Correction <span style="color:var(--danger)">*</span></div>
+    <div class="form-group">
+      <select id="f_reason" onchange="document.getElementById('reason_other_wrap').style.display=this.value==='Other'?'block':'none'">
+        <option value="">— Select reason —</option>
+        <option>Phone dead / no battery</option>
+        <option>App crashed or technical error</option>
+        <option>No cell service at consumer location</option>
+        <option>Forgot to clock in</option>
+        <option>Forgot to clock out</option>
+        <option>WellSky app error / update disruption</option>
+        <option>Landline EVV not available</option>
+        <option>Other</option>
+      </select>
+      <div id="reason_other_wrap">
+        <input type="text" id="f_reason_other" placeholder="Describe reason…" style="margin-top:8px">
+      </div>
+    </div>
+  </div>
+
+  <!-- CDS TASKS -->
+  <div class="card">
+    <div class="card-title">Missouri CDS Program Tasks Performed</div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:12px">Select all services provided during this visit.</p>
+
+    <div class="task-section-label">Personal Care</div>
+    <div class="task-grid">
+      <label class="task-item"><input type="checkbox" name="tasks" value="Bathing"><span>Bathing</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Dressing/Grooming"><span>Dressing / Grooming</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Toileting"><span>Toileting</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Bowel/Bladder"><span>Bowel / Bladder</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Catheter Hygiene"><span>Catheter Hygiene</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Ostomy Hygiene"><span>Ostomy Hygiene</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Medications"><span>Medications</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Treatments (eye drops, creams/lotions)"><span>Treatments (eye drops, creams/lotions)</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Passive Range of Motion"><span>Passive Range of Motion</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Cleaning/Maintaining Equipment"><span>Cleaning / Maintaining Equipment</span></label>
+    </div>
+
+    <div class="task-section-label">Mobility &amp; Transfers</div>
+    <div class="task-grid">
+      <label class="task-item"><input type="checkbox" name="tasks" value="Mobility/Transfer"><span>Mobility / Transfer</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Assistance with Transfer Device"><span>Assistance with Transfer Device</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Turning/Positioning"><span>Turning / Positioning</span></label>
+    </div>
+
+    <div class="task-section-label">Household Tasks</div>
+    <div class="task-grid">
+      <label class="task-item"><input type="checkbox" name="tasks" value="Make Bed"><span>Make Bed</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Change Linens"><span>Change Linens</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Wash Dishes"><span>Wash Dishes</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Clean Kitchen"><span>Clean Kitchen</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Clean Bath"><span>Clean Bath</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Clean Floors"><span>Clean Floors</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Tidy and Dust"><span>Tidy and Dust</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Trash"><span>Trash</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Laundry (Home)"><span>Laundry (Home)</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Laundry (Off-Site)"><span>Laundry (Off-Site)</span></label>
+    </div>
+
+    <div class="task-section-label">Meals</div>
+    <div class="task-grid">
+      <label class="task-item"><input type="checkbox" name="tasks" value="Meal Prep/Eating"><span>Meal Prep / Eating</span></label>
+    </div>
+
+    <div class="task-section-label">Community &amp; Transportation</div>
+    <div class="task-grid">
+      <label class="task-item"><input type="checkbox" name="tasks" value="Essential Transportation (shopping, errands, appointments, school, employment)"><span>Essential Transportation</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Essential Correspondence"><span>Essential Correspondence</span></label>
+    </div>
+
+    <div class="form-group" style="margin-top:14px">
+      <label>Other task(s) not listed above</label>
+      <input type="text" id="f_tasks_other" placeholder="Describe any additional tasks…">
+    </div>
+  </div>
+
+  <!-- NOTES -->
+  <div class="card">
+    <div class="card-title">Additional Notes</div>
+    <div class="form-group">
+      <textarea id="f_notes" placeholder="Any additional context, observations, or details about this visit…"></textarea>
+    </div>
+  </div>
+
+  <!-- PROCESSING STATUS (admin) -->
+  <div class="card">
+    <div class="card-title">Processing Status <span class="admin-badge">Office Use</span></div>
+    <div class="admin-section">
       <div class="form-row" style="margin-bottom:12px">
         <div class="form-group">
           <label>Correction Form Received?</label>
@@ -307,42 +334,75 @@
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- NOTES -->
-    <div class="card">
-      <div class="card-title">Notes</div>
-      <div class="form-group form-row single">
-        <label>Additional Notes</label>
-        <textarea id="f_notes" placeholder="Any additional context or details…"></textarea>
+  <!-- SIGNATURES -->
+  <div class="card">
+    <div class="card-title">Signatures <span style="color:var(--danger)">*</span></div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:16px">
+      By signing below, both parties confirm that the information on this form is accurate and that the services listed were provided during the visit described.
+    </p>
+    <div class="sig-wrap">
+      <!-- Attendant signature -->
+      <div class="sig-block">
+        <div class="sig-label">Attendant Signature <span style="color:var(--danger)">*</span></div>
+        <div class="sig-canvas-wrap">
+          <canvas id="sig_attendant" height="110"></canvas>
+        </div>
+        <div class="sig-hint">Sign above with finger or mouse</div>
+        <div class="sig-actions">
+          <button type="button" class="clear-btn" onclick="clearSig('attendant')">Clear</button>
+        </div>
+        <div class="form-group sig-date">
+          <label>Date</label>
+          <input type="date" id="sig_attendant_date">
+        </div>
+      </div>
+      <!-- Consumer signature -->
+      <div class="sig-block">
+        <div class="sig-label">Consumer Signature <span style="color:var(--danger)">*</span></div>
+        <div class="sig-canvas-wrap">
+          <canvas id="sig_consumer" height="110"></canvas>
+        </div>
+        <div class="sig-hint">Sign above with finger or mouse</div>
+        <div class="sig-actions">
+          <button type="button" class="clear-btn" onclick="clearSig('consumer')">Clear</button>
+        </div>
+        <div class="form-group sig-date">
+          <label>Date</label>
+          <input type="date" id="sig_consumer_date">
+        </div>
       </div>
     </div>
-
-    <div id="submit_error" style="display:none;color:var(--danger);font-size:13px;margin-bottom:12px;padding:10px 14px;background:#fdedec;border-radius:8px"></div>
-    <button id="submit_btn" class="submit-btn" onclick="submitForm()">Submit Correction</button>
   </div>
+
+  <div id="submit_error" class="form-error"></div>
+  <button id="submit_btn" class="submit-btn" onclick="submitForm()">Submit Correction Form</button>
+</div>
 </div>
 
 <!-- SUCCESS -->
 <div id="successPage">
   <div class="success-icon">✅</div>
-  <div class="success-title">Correction Logged</div>
-  <div class="success-detail" id="success_detail">
-    The EVV correction has been saved and is now visible in the tracker under EVV Corrections.
-  </div>
+  <div class="success-title">Form Submitted</div>
+  <div class="success-detail" id="success_detail">The correction has been logged and is now visible in the agency tracker.</div>
   <button class="another-btn" onclick="resetForm()">Submit Another Correction</button>
 </div>
 
 <script>
 // ============================================================
-// SUPABASE CONFIG
+// CONFIG
 // ============================================================
 const SUPABASE_URL      = 'https://siivpekcaryeyttszwav.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_iDJ00Ve4hw5iw2YtVmiulg__FmjShmO';
 const AGENCY_ID         = 'caring-companions-cds';
 
-let _db   = null;
-let _user = null;
-let _store = {};
+let _db    = null;
+let _user  = null;
+let _store = { evvCorrections: [] };
+
+// Signature state
+const _sigs = { attendant: { drawn: false }, consumer: { drawn: false } };
 
 // ── BOOT ──
 document.addEventListener('DOMContentLoaded', async () => {
@@ -353,6 +413,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await _loadData();
     _showApp(session.user);
   }
+  _initSignaturePads();
+  _styleCheckboxes();
 });
 
 // ── AUTH ──
@@ -362,77 +424,136 @@ async function signIn() {
   const errEl    = document.getElementById('login_error');
   const btn      = document.getElementById('login_btn');
   errEl.style.display = 'none';
-
-  if (!email || !password) {
-    errEl.textContent = 'Please enter your email and password.';
-    errEl.style.display = 'block'; return;
-  }
+  if (!email || !password) { errEl.textContent = 'Please enter your email and password.'; errEl.style.display = 'block'; return; }
   btn.textContent = 'Signing in…'; btn.disabled = true;
-
   const { data, error } = await _db.auth.signInWithPassword({ email, password });
-  if (error) {
-    errEl.textContent = error.message;
-    errEl.style.display = 'block';
-    btn.textContent = 'Sign In'; btn.disabled = false; return;
-  }
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; btn.textContent = 'Sign In'; btn.disabled = false; return; }
   document.getElementById('login_loading').style.display = 'block';
   await _loadData();
   _showApp(data.user);
 }
 
-async function signOut() {
-  await _db.auth.signOut();
-  location.reload();
-}
+async function signOut() { await _db.auth.signOut(); location.reload(); }
 
 function _showApp(user) {
   _user = user;
   document.getElementById('loginOverlay').style.display = 'none';
-  document.getElementById('appHeader').style.display = 'flex';
-  document.getElementById('formPage').style.display = 'block';
-  document.getElementById('header_user').textContent = user.email;
-
-  // Pre-fill today's date
+  document.getElementById('appHeader').style.display    = 'flex';
+  document.getElementById('formPage').style.display     = 'block';
+  document.getElementById('header_user').textContent    = user.email;
   const today = new Date().toISOString().split('T')[0];
-  document.getElementById('f_submitdate').value = today;
-
-  // Pre-fill admin name from email
+  document.getElementById('f_submitdate').value         = today;
+  document.getElementById('sig_attendant_date').value   = today;
+  document.getElementById('sig_consumer_date').value    = today;
   const name = user.email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   document.getElementById('f_admin').value = name;
+  _resizeCanvases();
 }
 
 // ── DATA ──
 async function _loadData() {
-  const { data } = await _db.from('agency_data')
-    .select('data_key, data_value')
-    .eq('agency_id', AGENCY_ID)
-    .eq('data_key', 'evvCorrections');
-  if (data && data[0]) _store.evvCorrections = data[0].data_value;
-  else _store.evvCorrections = [];
+  const { data } = await _db.from('agency_data').select('data_value').eq('agency_id', AGENCY_ID).eq('data_key', 'evvCorrections').single();
+  _store.evvCorrections = (data && Array.isArray(data.data_value)) ? data.data_value : [];
+}
+
+// ── SIGNATURE PADS ──
+function _initSignaturePads() {
+  ['attendant', 'consumer'].forEach(name => {
+    const canvas = document.getElementById('sig_' + name);
+    const ctx    = canvas.getContext('2d');
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth   = 2.2;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    let drawing = false;
+
+    function pos(e) {
+      const rect  = canvas.getBoundingClientRect();
+      const src   = e.touches ? e.touches[0] : e;
+      return { x: (src.clientX - rect.left) * (canvas.width / rect.width), y: (src.clientY - rect.top) * (canvas.height / rect.height) };
+    }
+    function start(e) { e.preventDefault(); drawing = true; _sigs[name].drawn = true; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+    function move(e)  { e.preventDefault(); if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }
+    function end()    { drawing = false; }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+  });
+}
+
+function _resizeCanvases() {
+  ['attendant', 'consumer'].forEach(name => {
+    const canvas = document.getElementById('sig_' + name);
+    const rect   = canvas.parentElement.getBoundingClientRect();
+    const ratio  = window.devicePixelRatio || 1;
+    canvas.width  = rect.width * ratio;
+    canvas.height = 110 * ratio;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(ratio, ratio);
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth   = 2.2;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+  });
+}
+
+function clearSig(name) {
+  const canvas = document.getElementById('sig_' + name);
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  _sigs[name].drawn = false;
+}
+
+// ── CHECKBOX STYLING ──
+function _styleCheckboxes() {
+  document.querySelectorAll('.task-item input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.closest('.task-item').classList.toggle('checked', cb.checked);
+    });
+  });
 }
 
 // ── SUBMIT ──
 async function submitForm() {
+  const errEl = document.getElementById('submit_error');
+  errEl.style.display = 'none';
+
   const attendant = document.getElementById('f_attendant').value.trim();
   const consumer  = document.getElementById('f_consumer').value.trim();
   const visitdate = document.getElementById('f_visitdate').value;
   const reason    = document.getElementById('f_reason').value;
-  const errEl     = document.getElementById('submit_error');
-  errEl.style.display = 'none';
 
   if (!attendant || !consumer || !visitdate) {
     errEl.textContent = 'Attendant name, consumer name, and date of visit are required.';
-    errEl.style.display = 'block'; return;
+    errEl.style.display = 'block'; window.scrollTo(0,0); return;
   }
   if (!reason) {
     errEl.textContent = 'Please select a reason for the correction.';
+    errEl.style.display = 'block'; return;
+  }
+  if (!_sigs.attendant.drawn) {
+    errEl.textContent = 'Attendant signature is required.';
+    errEl.style.display = 'block'; return;
+  }
+  if (!_sigs.consumer.drawn) {
+    errEl.textContent = 'Consumer signature is required.';
     errEl.style.display = 'block'; return;
   }
 
   const btn = document.getElementById('submit_btn');
   btn.textContent = 'Saving…'; btn.disabled = true;
 
-  const reasonOther = document.getElementById('reason_other').value.trim();
+  // Collect checked tasks
+  const tasks = Array.from(document.querySelectorAll('input[name="tasks"]:checked')).map(cb => cb.value);
+  const tasksOther = document.getElementById('f_tasks_other').value.trim();
+  if (tasksOther) tasks.push(tasksOther);
+
+  const reasonOther = document.getElementById('f_reason_other').value.trim();
+
   const entry = {
     id:           Date.now().toString(),
     attendant,
@@ -444,59 +565,64 @@ async function submitForm() {
     newIn:        document.getElementById('f_new_in').value,
     newOut:       document.getElementById('f_new_out').value,
     reason:       reason === 'Other' ? (reasonOther || 'Other') : reason,
+    tasksPerformed: tasks,
+    notes:        document.getElementById('f_notes').value.trim(),
     formReceived: document.getElementById('f_form_received').value,
     wellskyDone:  document.getElementById('f_wellsky_done').value,
     admin:        document.getElementById('f_admin').value.trim(),
     wellskyDate:  document.getElementById('f_wellsky_date').value,
-    notes:        document.getElementById('f_notes').value.trim(),
+    sigAttendant: document.getElementById('sig_attendant').toDataURL(),
+    sigAttendantDate: document.getElementById('sig_attendant_date').value,
+    sigConsumer:  document.getElementById('sig_consumer').toDataURL(),
+    sigConsumerDate:  document.getElementById('sig_consumer_date').value,
     loggedAt:     new Date().toISOString(),
     loggedBy:     _user ? _user.email : ''
   };
 
-  // Prepend to existing corrections
   const corrections = [entry, ..._store.evvCorrections];
-
   const { error } = await _db.from('agency_data')
     .upsert({ agency_id: AGENCY_ID, data_key: 'evvCorrections', data_value: corrections });
 
   if (error) {
     errEl.textContent = 'Error saving: ' + error.message;
     errEl.style.display = 'block';
-    btn.textContent = 'Submit Correction'; btn.disabled = false;
+    btn.textContent = 'Submit Correction Form'; btn.disabled = false;
     return;
   }
 
   _store.evvCorrections = corrections;
-
-  // Show success
   const visitStr = new Date(visitdate + 'T12:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
   document.getElementById('success_detail').textContent =
-    `Correction for ${attendant} (visit on ${visitStr}) has been saved and is now visible in the tracker under EVV Corrections.`;
+    `Correction for ${attendant} (visit on ${visitStr}) has been logged and is now visible in the agency tracker under EVV Corrections.`;
 
-  document.getElementById('formPage').style.display = 'none';
+  document.getElementById('formPage').style.display   = 'none';
   document.getElementById('successPage').style.display = 'block';
+  window.scrollTo(0, 0);
 }
 
 // ── RESET ──
 function resetForm() {
-  ['f_attendant','f_consumer','f_visitdate','f_orig_in','f_orig_out',
-   'f_new_in','f_new_out','f_notes','f_wellsky_date','reason_other'].forEach(id => {
+  ['f_attendant','f_consumer','f_visitdate','f_orig_in','f_orig_out','f_new_in','f_new_out',
+   'f_notes','f_wellsky_date','f_reason_other','f_tasks_other'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  document.getElementById('f_reason').value = '';
+  document.getElementById('f_reason').value        = '';
   document.getElementById('f_form_received').value = '';
-  document.getElementById('f_wellsky_done').value = '';
-  document.getElementById('reason_other').style.display = 'none';
+  document.getElementById('f_wellsky_done').value  = '';
+  document.getElementById('reason_other_wrap').style.display = 'none';
+  document.querySelectorAll('input[name="tasks"]').forEach(cb => { cb.checked = false; cb.closest('.task-item').classList.remove('checked'); });
+  clearSig('attendant'); clearSig('consumer');
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_submitdate').value         = today;
+  document.getElementById('sig_attendant_date').value   = today;
+  document.getElementById('sig_consumer_date').value    = today;
   document.getElementById('submit_error').style.display = 'none';
-  document.getElementById('submit_btn').textContent = 'Submit Correction';
-  document.getElementById('submit_btn').disabled = false;
-
-  // Reset submit date to today
-  document.getElementById('f_submitdate').value = new Date().toISOString().split('T')[0];
-
-  document.getElementById('successPage').style.display = 'none';
-  document.getElementById('formPage').style.display = 'block';
+  document.getElementById('submit_btn').textContent     = 'Submit Correction Form';
+  document.getElementById('submit_btn').disabled        = false;
+  document.getElementById('successPage').style.display  = 'none';
+  document.getElementById('formPage').style.display     = 'block';
+  _resizeCanvases();
   window.scrollTo(0, 0);
 }
 </script>
