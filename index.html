@@ -4991,7 +4991,15 @@ function renderCorrections() {
       const origTime = (c.origIn || '?') + ' – ' + (c.origOut || '?');
       const newTime = (c.newIn || '?') + ' – ' + (c.newOut || '?');
       const formBadge = c.formReceived === 'yes' ? '<span class="badge badge-green">✓ On File</span>' : '<span class="badge badge-red">Missing</span>';
-      const wssBadge = c.wellskyDone === 'yes' ? `<span class="badge badge-green">✓ ${c.wellskyDate||'Done'}</span>` : '<span class="badge badge-red">Not Yet</span>';
+      const wssChecked = c.wellskyDone === 'yes';
+      const wssCell = `<label style="display:flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" ${wssChecked?'checked':''} onchange="toggleWellskyDone('${c.id}',this.checked)"
+          style="width:17px;height:17px;accent-color:var(--success);cursor:pointer;flex-shrink:0">
+        <span style="font-size:11px;color:${wssChecked?'var(--success)':'var(--danger)'}">
+          ${wssChecked ? (c.wellskyDate ? 'Done '+c.wellskyDate : 'Done') : 'Not yet'}
+        </span>
+      </label>
+      ${c.admin ? '<div style="font-size:10px;color:var(--gray-600);margin-top:3px">By: '+c.admin+'</div>' : ''}`;
       return `<tr>
         <td style="font-size:11px;color:var(--gray-600)">${corrections.indexOf(c)+1}</td>
         <td><strong>${c.visitdate}</strong>${c.submitdate ? '<div style="font-size:10px;color:var(--gray-600)">Submitted: '+c.submitdate+'</div>' : ''}</td>
@@ -5001,10 +5009,9 @@ function renderCorrections() {
         <td style="font-size:12px;font-weight:600">${newTime}</td>
         <td style="font-size:12px;max-width:160px">${c.reason || '—'}${c.notes ? '<div style="font-size:10px;color:var(--gray-600);margin-top:2px">'+c.notes+'</div>' : ''}</td>
         <td>${formBadge}</td>
-        <td>${wssBadge}${c.admin ? '<div style="font-size:10px;color:var(--gray-600)">By: '+c.admin+'</div>' : ''}</td>
+        <td>${wssCell}</td>
         <td>${statusBadgeHTML(status)}</td>
         <td>
-          <button class="btn btn-sm btn-outline" onclick="markCorrectionComplete('${c.id}')" style="font-size:11px;margin-bottom:3px;width:100%">Mark Complete</button>
           <button class="btn btn-sm btn-danger" onclick="removeCorrection('${c.id}')" style="font-size:11px;width:100%">Remove</button>
         </td>
       </tr>`;
@@ -5174,15 +5181,25 @@ function sendEvvFormLink() {
 
 // ── END PENDING SUBMISSIONS ────────────────────────────────────────────
 
+function toggleWellskyDone(id, checked) {
+  const corrections = getData('evvCorrections');
+  const c = corrections.find(x => x.id === id);
+  if (!c) return;
+  c.wellskyDone = checked ? 'yes' : 'no';
+  c.wellskyDate = checked ? new Date().toISOString().split('T')[0] : '';
+  c.admin = checked ? (_user ? _user.email.split('@')[0] : 'admin') : '';
+  setData('evvCorrections', corrections);
+  renderCorrections();
+  updateDashboard();
+}
+
 function markCorrectionComplete(id) {
   const corrections = getData('evvCorrections');
   const c = corrections.find(x => x.id === id);
   if (!c) return;
-  const admin = prompt('Admin name completing this correction:', '');
-  if (admin === null) return;
   c.formReceived = 'yes';
   c.wellskyDone = 'yes';
-  c.admin = admin || c.admin;
+  c.admin = _user ? _user.email.split('@')[0] : 'admin';
   c.wellskyDate = new Date().toISOString().split('T')[0];
   setData('evvCorrections', corrections);
   renderCorrections();
