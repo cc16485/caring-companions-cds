@@ -4,6 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Caring Companions CDS — Agency Responsibility Tracker</title>
+<script>
+  // Embedded mode: when this hub runs inside a GHL iframe, drop our own tab bar
+  // if a specific page was deep-linked (e.g. hub.caringcds.com/#consumers), since
+  // GHL's sidebar is already providing that navigation. Runs before first paint.
+  try {
+    if (window.self !== window.top) {
+      document.documentElement.classList.add('embedded');
+      if (location.hash.replace('#','')) document.documentElement.classList.add('focused');
+    }
+  } catch (e) { /* cross-origin access to window.top means we are framed */
+    document.documentElement.classList.add('embedded');
+    if (location.hash.replace('#','')) document.documentElement.classList.add('focused');
+  }
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -45,6 +59,10 @@
   .tab { padding: 10px 20px; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
   .tab:hover { color: white; background: rgba(255,255,255,0.1); }
   .tab.active { color: white; border-bottom-color: var(--accent-light); }
+  /* Focused mode: deep-linked inside a GHL iframe. Hide our main tab bar (GHL's
+     sidebar owns that navigation) but keep sub-navs, which have no equivalent there. */
+  html.embedded.focused .tabs { display: none; }
+
   .sub-nav { display:flex; gap:0; border-bottom:2px solid var(--gray-200); margin-bottom:22px; }
   .sub-nav-tab { padding:9px 20px; font-size:13px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--gray-600); font-weight:500; transition:all 0.15s; white-space:nowrap; }
   .sub-nav-tab:hover { color:var(--primary); background:var(--gray-100); }
@@ -1538,9 +1556,9 @@
 
   <!-- RED FLAG THRESHOLD CARD -->
   <div class="card" id="correctionThresholdCard">
-    <div class="card-title"><span class="icon">⚠️</span> Monthly Volume Monitor — Fraud Red Flag Tracker</div>
+    <div class="card-title"><span class="icon">⚠️</span> Monthly Volume Monitor — EVV Compliance Tracker</div>
     <div class="alert alert-warn" style="margin-bottom:12px">
-      ⚠️ <strong>Missouri Medicaid (MMAC) treats high manual correction rates as a potential fraud indicator.</strong> Keep corrections to an absolute minimum. Each correction must have a legitimate, documented reason and a signed form on file. If MMAC audits, every manual adjustment will be scrutinized.
+      ⚠️ <strong>Missouri Medicaid (MMAC) treats high manual correction rates as a potential fraud indicator.</strong> Our internal standard is <strong>≥85% real-time EVV compliance</strong> — meaning no more than 15% of visits should require a manual correction. Each correction must have a legitimate, documented reason and a signed form on file. If MMAC audits, every manual adjustment will be scrutinized. <em style="opacity:0.8">(MMAC has not published a specific numeric threshold; 85% is Caring Companions' internal compliance target.)</em>
     </div>
     <div class="grid-3" style="margin-bottom:14px">
       <div style="text-align:center;padding:14px;background:var(--gray-100);border-radius:8px">
@@ -1553,8 +1571,9 @@
         <div style="font-size:11px;color:var(--gray-600)" id="threshMaxAttendantName">—</div>
       </div>
       <div style="text-align:center;padding:14px;background:var(--gray-100);border-radius:8px">
-        <div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">Threshold settings</div>
-        <div style="font-size:11px">🟡 Agency-wide: <strong id="threshAgencyWarn">5+</strong> corrections/month = review</div>
+        <div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">Internal thresholds</div>
+        <div style="font-size:11px">✅ Target: <strong>≥85%</strong> real-time EVV rate</div>
+        <div style="font-size:11px;margin-top:4px">🟡 Agency-wide: <strong id="threshAgencyWarn">5+</strong> corrections/month = review</div>
         <div style="font-size:11px;margin-top:4px">🔴 Agency-wide: <strong id="threshAgencyDanger">10+</strong> = red flag</div>
         <div style="font-size:11px;margin-top:4px">🔴 Per attendant: <strong>3+</strong>/month = red flag</div>
       </div>
@@ -3225,6 +3244,28 @@ function showGuideTab(tab) {
     if (tabEl) tabEl.classList.toggle('active', t === tab);
   });
 }
+
+// ============================================================
+// HASH DEEP LINKS
+// Lets GHL custom menu links point straight at one page, e.g.
+// hub.caringcds.com/#consumers. Any key of PAGE_TO_TAB is a valid target,
+// so #pipeline and the guide sub-tabs (#compliance, #reference, ...) work too.
+// ============================================================
+function applyHashRoute() {
+  const target = location.hash.replace('#', '').trim().toLowerCase();
+  if (!target || !PAGE_TO_TAB[target]) return false;
+  showPage(target);
+  return true;
+}
+
+// Keep focused mode in sync if the hash changes after load (GHL re-uses the iframe
+// when you click a different menu link, which fires hashchange rather than reloading).
+window.addEventListener('hashchange', () => {
+  if (document.documentElement.classList.contains('embedded')) {
+    document.documentElement.classList.toggle('focused', !!location.hash.replace('#', '').trim());
+  }
+  applyHashRoute();
+});
 
 // ============================================================
 // MODAL
@@ -6458,6 +6499,10 @@ function initApp() {
       else this.closest('li').classList.remove('done');
     });
   });
+
+  // Honor a deep link (#consumers, #evvcorrections, ...) now that everything
+  // has rendered. Falls through to the dashboard when there's no valid hash.
+  applyHashRoute();
 }
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); });
