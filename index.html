@@ -68,6 +68,11 @@
   .tab { padding: 10px 20px; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
   .tab:hover { color: white; background: rgba(255,255,255,0.1); }
   .tab.active { color: white; border-bottom-color: var(--accent-light); }
+  /* Pipeline type icons. Drawn in currentColor so each card's own colour drives
+     them — emoji ignore CSS colour, which is how green kept surviving here. */
+  .type-icon { width: 17px; height: 17px; flex: none; fill: none;
+    stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
   /* Focused mode: deep-linked inside a GHL iframe. Hide our main tab bar (GHL's
      sidebar owns that navigation) but keep sub-navs, which have no equivalent there. */
   html.embedded.focused .tabs { display: none; }
@@ -518,17 +523,17 @@
 
     <div class="grid-3" style="margin-bottom:16px">
       <div class="card" style="border-top:4px solid var(--primary-light);padding:14px 18px">
-        <div style="font-weight:700;color:var(--primary-light);font-size:14px;margin-bottom:6px">🌱 Lead</div>
+        <div style="font-weight:700;color:var(--primary-light);font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:7px"><svg class="type-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21v-7"/><path d="M12 14c0-3.6-2.6-6.2-6.4-6.6C5.2 11 7.6 13.7 12 14Z"/><path d="M12 14c0-4.4 2.9-7.4 7-7.8.4 4.2-2.3 7.4-7 7.8Z"/></svg>Lead</div>
         <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Called in but <strong>not ready yet</strong> — maybe still deciding, waiting on a family member, or wants to learn more. No state submission yet. Needs periodic follow-up to stay warm.</div>
         <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Nurturing → Ready to Submit → Closed</div>
       </div>
       <div class="card" style="border-top:4px solid var(--success-light);padding:14px 18px">
-        <div style="font-weight:700;color:var(--success);font-size:14px;margin-bottom:6px">📋 Referral (New to CDS)</div>
+        <div style="font-weight:700;color:var(--success);font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:7px"><svg class="type-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/><path d="M9 12h6M9 16h4"/></svg>Referral (New to CDS)</div>
         <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>new to the Missouri CDS program</strong> and we have submitted (or are submitting) a request to DHSS/DSDS to start services. State authorization typically takes 2–6+ weeks.</div>
         <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Submitted to State → State Processing → Authorized → Active</div>
       </div>
       <div class="card" style="border-top:4px solid var(--warn-light);padding:14px 18px">
-        <div style="font-weight:700;color:var(--warn);font-size:14px;margin-bottom:6px">🔄 PCCP Transfer</div>
+        <div style="font-weight:700;color:var(--warn);font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:7px"><svg class="type-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5"/></svg>PCCP Transfer</div>
         <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>currently with another CDS agency</strong> and wants to transfer to Caring Companions. Request submitted to DSDS. Current agency must be notified. Transfer can take 2–4+ weeks.</div>
         <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: Request Received → Submitted to DSDS → Processing → Transfer Complete → Active</div>
       </div>
@@ -541,7 +546,7 @@
       <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
         <select id="pipeFilterType" onchange="renderPipeline()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
           <option value="">All Types</option>
-          <option value="lead">🌱 Leads Only</option>
+          <option value="lead">Leads Only</option>
           <option value="referral">📋 Referrals Only</option>
           <option value="pccp">🔄 PCCP Transfers Only</option>
         </select>
@@ -2647,7 +2652,7 @@
       <div class="form-group"><label>Full Name *</label><input type="text" id="pl_name" placeholder="Potential consumer's name"></div>
       <div class="form-group"><label>Type *</label>
         <select id="pl_type" onchange="updatePipelineModalFields()">
-          <option value="lead">🌱 Lead — Not Ready Yet</option>
+          <option value="lead">Lead — Not Ready Yet</option>
           <option value="referral">📋 Referral — New to CDS Program</option>
           <option value="pccp">🔄 PCCP — Transferring from Another Agency</option>
         </select>
@@ -3792,7 +3797,7 @@ function removeAttendant(aid) {
 // ============================================================
 // CONSUMER PIPELINE
 // ============================================================
-const PIPELINE_TYPE_LABELS = { lead: '🌱 Lead', referral: '📋 Referral', pccp: '🔄 PCCP' };
+const PIPELINE_TYPE_LABELS = { lead: 'Lead', referral: 'Referral', pccp: 'PCCP' };
 const PIPELINE_STATUS_LABELS = {
   new: 'New', nurturing: 'Nurturing', submitted: 'Submitted to State',
   processing: 'State Processing', authorized: 'Authorized', transfer_complete: 'Transfer Complete',
