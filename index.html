@@ -286,6 +286,7 @@
   <div class="tab active" onclick="showPage('dashboard')">📊 Dashboard</div>
   <div class="tab" onclick="showPage('consumers')">👥 Consumers</div>
   <div class="tab" onclick="showPage('statesubmissions')">🏛️ State Submissions</div>
+  <div class="tab" onclick="showPage('taxcompliance')">🧾 Tax &amp; EIN</div>
   <div class="tab" onclick="showPage('attendants')">🧑‍🤝‍🧑 Attendants</div>
   <div class="tab" onclick="showPage('evvcorrections')">📝 EVV Corrections</div>
   <div class="tab" onclick="showPage('automations')">🤖 Automations</div>
@@ -630,6 +631,66 @@
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">These contacts have been submitted to DSDS/DHSS and are awaiting state authorization. Track submission dates and follow up every 1–2 weeks.</div>
     <div id="stateSubmissionList">
       <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAX & EIN COMPLIANCE ==================== -->
+<div id="page-taxcompliance" class="page">
+  <div class="section-header">
+    <div class="section-title">🧾 Tax &amp; EIN Compliance</div>
+    <button class="btn btn-outline" onclick="renderTaxCompliance()" style="font-size:12px">↻ Refresh</button>
+  </div>
+
+  <div id="taxDeadlineBanner"></div>
+
+  <div class="grid-3" style="margin-bottom:18px" id="taxStatTiles"></div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📋</span> Remediation Worklist</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      What DHSS audits is two things per consumer: both numbers typed into Fusion under <strong>HCBS Eligibility</strong>,
+      and acceptable proof uploaded to the <strong>Documents</strong> tab under <strong>EIN Tax Documents</strong>.
+      Sorted hardest first, because those are the only ones that can still run out of time.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <select id="taxFilterLane" onchange="renderTaxCompliance()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
+        <option value="">All lanes</option>
+        <option value="D">Lane D — no EIN yet</option>
+        <option value="C">Lane C — need IRS letter</option>
+        <option value="B">Lane B — ready to upload</option>
+        <option value="A">Lane A — just enter in Fusion</option>
+        <option value="OK">Compliant</option>
+      </select>
+      <span style="font-size:12px;color:var(--gray-600);margin-left:auto" id="taxCount"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Consumer</th><th>Lane</th><th>What to do next</th>
+            <th>Fed EIN</th><th>MO Tax ID</th><th>Proof held</th>
+            <th>Uploaded</th><th>In Fusion</th><th>90-day due</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="taxComplianceBody">
+          <tr><td colspan="10"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">⛔</span> What will fail the audit</div>
+    <div style="font-size:12.5px;line-height:1.8">
+      <strong>A W-9 is not proof.</strong> It is self-reported, not issued by the IRS. This is the most common way to
+      fail while believing you complied.<br>
+      <strong>A number typed into a letter or spreadsheet is not proof.</strong> It has to come from the IRS or the
+      Missouri Department of Revenue with the legal name and number already on it.<br>
+      <strong>The wrong category is not an upload.</strong> If it is not filed under <em>EIN Tax Documents</em>, treat it as missing.<br>
+      <strong>Entered but not uploaded, or uploaded but not entered, is still a finding.</strong> Both halves are required.<br>
+      <span style="color:var(--gray-600)">Two free passes: a single document showing <strong>both</strong> numbers covers both, and
+      no upload is needed at all where a <strong>previous CDS vendor</strong> already uploaded proof to that case record.</span>
     </div>
   </div>
 </div>
@@ -2434,6 +2495,29 @@
     <div style="background:#fff3cd;border-radius:6px;padding:8px 12px;font-size:11.5px;margin-bottom:10px;line-height:1.6">
       ⚠️ <strong>Wet signature:</strong> Forms 8821 and 2678 may require original signatures — confirm with your accountant before marking filed. &nbsp;|&nbsp; ⚠️ <strong>DES:</strong> Cannot register in UInteract until after first payroll and $1,000+ paid in a single quarter.
     </div>
+    <div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">DHSS Fusion verification &nbsp;·&nbsp; this is what gets audited</div>
+    <div class="form-row">
+      <div class="form-group"><label>CDS start date <span style="font-weight:400;color:var(--gray-600)">(starts the 90-day clock)</span></label><input type="date" id="tax_cds_start"></div>
+      <div class="form-group"><label>Proof uploaded to Fusion (date)</label><input type="date" id="tax_proof_uploaded"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Federal EIN proof held</label><select id="tax_proof_doc"></select></div>
+      <div class="form-group"><label>Missouri Tax ID proof held</label><select id="tax_mo_proof_doc"></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_fusion_entered"> <span><strong>Both numbers entered in Fusion</strong> — participant page, HCBS Eligibility section</span></label>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_prior_vendor"> <span><strong>A previous CDS vendor already uploaded proof</strong> — no upload needed</span></label>
+      </div>
+    </div>
+    <div style="background:#fdedec;border-left:4px solid var(--danger);border-radius:4px;padding:8px 12px;font-size:11.5px;margin-bottom:12px;line-height:1.6">
+      ⛔ <strong>A W-9 is not acceptable proof</strong>, nor is anything you typed yourself. Proof must come from the IRS
+      or the MO Department of Revenue with the legal name and number already on it. Upload under the
+      <strong>EIN Tax Documents</strong> category, or the auditor will not find it.
+    </div>
+
     <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Enrollment Packet (GoHighLevel)</div>
     <div class="form-row">
       <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
@@ -3283,11 +3367,12 @@ function importData(event) {
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
-const MAIN_TABS    = ['dashboard','consumers','statesubmissions','attendants','evvcorrections','automations','guides','quarterly','financials'];
+const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials'];
 const PAGE_TO_TAB  = {
   dashboard:'dashboard',
   consumers:'consumers', pipeline:'consumers',
   statesubmissions:'statesubmissions',
+  taxcompliance:'taxcompliance',
   attendants:'attendants',
   evvcorrections:'evvcorrections',
   automations:'automations',
@@ -3339,6 +3424,7 @@ function showPage(id) {
   // The state submission list is built by renderPipeline (it reads the same
   // pipeline records), which finds the container by id wherever it now lives.
   if (id === 'statesubmissions') renderPipeline();
+  if (id === 'taxcompliance') renderTaxCompliance();
 }
 
 function showConsumerTab(tab) {
@@ -3683,6 +3769,19 @@ function openTaxSetup(cid) {
   document.getElementById('tax_mo2827').checked = !!c.mo2827;
   document.getElementById('tax_des_reg').checked = !!c.desRegistered;
   document.getElementById('tax_des_ean').value = c.desEan || '';
+  // DHSS Fusion verification. Options are built from the accepted-document lists
+  // so an unacceptable document cannot be recorded as proof in the first place.
+  const fill = (id, list, val) => {
+    const el = document.getElementById(id);
+    el.innerHTML = list.map(([v, label]) =>
+      '<option value="' + v + '"' + ((val || '') === v ? ' selected' : '') + '>' + label + '</option>').join('');
+  };
+  fill('tax_proof_doc', EIN_PROOF_DOCS, c.proofDocType);
+  fill('tax_mo_proof_doc', MO_PROOF_DOCS, c.moProofDocType);
+  document.getElementById('tax_cds_start').value      = c.cdsStartDate || '';
+  document.getElementById('tax_proof_uploaded').value = c.proofUploaded || '';
+  document.getElementById('tax_fusion_entered').checked = !!c.fusionEntered;
+  document.getElementById('tax_prior_vendor').checked   = !!c.priorVendorProof;
   openModal('taxSetupModal');
 }
 
@@ -3701,9 +3800,16 @@ function saveTaxSetup() {
   c.mo2827 = document.getElementById('tax_mo2827').checked;
   c.desRegistered = document.getElementById('tax_des_reg').checked;
   c.desEan = document.getElementById('tax_des_ean').value.trim();
+  c.cdsStartDate     = document.getElementById('tax_cds_start').value || '';
+  c.proofDocType     = document.getElementById('tax_proof_doc').value || '';
+  c.moProofDocType   = document.getElementById('tax_mo_proof_doc').value || '';
+  c.proofUploaded    = document.getElementById('tax_proof_uploaded').value || '';
+  c.fusionEntered    = document.getElementById('tax_fusion_entered').checked;
+  c.priorVendorProof = document.getElementById('tax_prior_vendor').checked;
   setData('consumers', consumers);
   closeModal('taxSetupModal');
   renderConsumers();
+  renderTaxCompliance();
   updateDashboard();
 }
 
@@ -4665,6 +4771,170 @@ function renderOutreachLog() {
 // ============================================================
 // OUTREACH SETTINGS (GoHighLevel)
 // ============================================================
+// ============================================================
+// TAX & EIN COMPLIANCE
+// The DHSS finding turns on two things per consumer: both numbers entered in
+// Fusion under HCBS Eligibility, and acceptable proof uploaded to the Documents
+// tab under "EIN Tax Documents". Having the numbers is not the requirement.
+// Lanes below are ordered by how long they take to clear, not by severity —
+// Lane D is first because Missouri cannot issue a Tax ID until the IRS issues an
+// EIN, so it is the only one that cannot be parallelised.
+// ============================================================
+const TAX_DEADLINE_INTERNAL = '2026-08-15';
+const TAX_DEADLINE_DHSS     = '2026-08-31';
+
+// Proof accepted by HCBS Manual 3.25 Appendix 1. A W-9 is deliberately absent:
+// it is self-reported, not issued, and is the most common failed submission.
+const EIN_PROOF_DOCS = [
+  ['', 'None held'],
+  ['cp575',   'CP 575 letter'],
+  ['147c',    '147C letter'],
+  ['941',     'Form 941 (filed)'],
+  ['940',     'Form 940 (filed)'],
+  ['8109',    '8109 tax coupon'],
+  ['irsltr',  'IRS letter w/ name + number'],
+  ['irsother','Other IRS doc, preprinted'],
+];
+const MO_PROOF_DOCS = [
+  ['', 'None held'],
+  ['dornotice', 'MO Dept of Revenue notice'],
+  ['mo941',     'MO 941'],
+  ['mow3',      'MO W-3'],
+];
+const labelFor = (list, v) => (list.find(d => d[0] === (v || '')) || list[0])[1];
+
+const DAY_MS = 86400000;
+// daysUntil() is defined further down and already normalises today to midnight.
+
+// Everything the page needs to know about one consumer's tax standing.
+function taxStatus(c) {
+  const hasEin   = !!(c.ein || '').trim();
+  const hasMoId  = !!(c.moTaxId || '').trim();
+  const hasProof = !!(c.proofDocType || '').trim();
+  const uploaded = !!(c.proofUploaded || '').trim();
+  const inFusion = !!c.fusionEntered;
+  const exempt   = !!c.priorVendorProof;
+
+  // 90-day clock for a new participant, measured from the CDS start date.
+  const start = (c.cdsStartDate || '').trim();
+  const dueBy = start
+    ? new Date(new Date(start + 'T00:00:00').getTime() + 90 * DAY_MS).toISOString().slice(0, 10)
+    : '';
+
+  let lane, next;
+  if (exempt || (inFusion && uploaded)) {
+    lane = 'OK';  next = exempt ? 'Exempt — a prior vendor uploaded proof' : 'Nothing outstanding';
+  } else if (!hasEin) {
+    lane = 'D';   next = 'Apply for the EIN at irs.gov, then register the MO Tax ID on 2643A';
+  } else if (!hasProof) {
+    lane = 'C';   next = 'Call the IRS on 800-829-4933 and ask for a 147C letter, faxed while you hold';
+  } else if (!uploaded) {
+    lane = 'B';   next = 'Upload the ' + labelFor(EIN_PROOF_DOCS, c.proofDocType) + ' under EIN Tax Documents';
+  } else {
+    lane = 'A';   next = 'Type both numbers into Fusion under HCBS Eligibility and save';
+  }
+  // The Missouri number is required too, and is easy to forget once the federal
+  // side looks done.
+  if (lane !== 'D' && lane !== 'OK' && !hasMoId) {
+    next += ' · also missing the MO Tax ID (form 2643A)';
+  }
+  return { hasEin, hasMoId, hasProof, uploaded, inFusion, exempt, dueBy, lane, next };
+}
+
+const LANE_ORDER = { D: 0, C: 1, B: 2, A: 3, OK: 4 };
+const LANE_STYLE = {
+  D:  ['badge-red',   'D · no EIN'],
+  C:  ['badge-warn',  'C · IRS letter'],
+  B:  ['badge-blue',  'B · upload'],
+  A:  ['badge-blue',  'A · enter'],
+  OK: ['badge-green', 'compliant'],
+};
+
+function renderTaxCompliance() {
+  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive');
+  const rows = consumers.map(c => ({ c, s: taxStatus(c) }))
+    .sort((a, b) => (LANE_ORDER[a.s.lane] - LANE_ORDER[b.s.lane]) || a.c.name.localeCompare(b.c.name));
+
+  // ---- deadline banner ----
+  const dLeft = daysUntil(TAX_DEADLINE_INTERNAL);
+  const open  = rows.filter(r => r.s.lane !== 'OK').length;
+  const bEl = document.getElementById('taxDeadlineBanner');
+  if (bEl) {
+    const late = dLeft < 0;
+    bEl.innerHTML = !open && rows.length
+      ? '<div class="alert alert-success" style="margin-bottom:18px">✅ <strong>All active consumers are compliant.</strong> Reply to DHSS in writing that remediation is complete, and keep this page as your record.</div>'
+      : '<div class="alert ' + (late || dLeft <= 7 ? 'alert-warn' : 'alert-info') + '" style="margin-bottom:18px">' +
+        (late ? '⚠️ <strong>Internal target has passed.</strong> ' : '⏳ ') +
+        '<strong>' + Math.abs(dLeft) + ' day' + (Math.abs(dLeft) === 1 ? '' : 's') + '</strong> ' +
+        (late ? 'past the Aug 15 internal target' : 'to the Aug 15 internal target') +
+        ' · DHSS deadline Aug 31, then referral to MMAC · <strong>' + open + '</strong> consumer' +
+        (open === 1 ? '' : 's') + ' still outstanding</div>';
+  }
+
+  // ---- summary tiles ----
+  const count = f => rows.filter(f).length;
+  const tiles = [
+    ['Compliant',        count(r => r.s.lane === 'OK'),                    'var(--success)'],
+    ['No EIN yet',       count(r => r.s.lane === 'D'),                     'var(--danger)'],
+    ['Need IRS letter',  count(r => r.s.lane === 'C'),                     'var(--warn)'],
+    ['Ready to upload',  count(r => r.s.lane === 'B'),                     'var(--primary-light)'],
+    ['Missing MO Tax ID',count(r => !r.s.hasMoId && r.s.lane !== 'OK'),    'var(--warn)'],
+    ['Active consumers', rows.length,                                      'var(--primary)'],
+  ];
+  const tEl = document.getElementById('taxStatTiles');
+  if (tEl) tEl.innerHTML = tiles.map(([label, n, col]) =>
+    '<div class="card" style="padding:14px 18px;text-align:center">' +
+    '<div style="font-size:26px;font-weight:700;color:' + col + '">' + n + '</div>' +
+    '<div style="font-size:11.5px;color:var(--gray-600);font-weight:600;text-transform:uppercase;letter-spacing:.04em">' +
+    label + '</div></div>').join('');
+
+  // ---- worklist ----
+  const filter = (document.getElementById('taxFilterLane') || {}).value || '';
+  const shown = filter ? rows.filter(r => r.s.lane === filter) : rows;
+  const cEl = document.getElementById('taxCount');
+  if (cEl) cEl.textContent = shown.length + ' of ' + rows.length + ' shown';
+
+  const body = document.getElementById('taxComplianceBody');
+  if (!body) return;
+  if (!shown.length) {
+    body.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="empty-icon">🧾</div><p>' +
+      (rows.length ? 'No consumers in this lane.' : 'No active consumers yet.') + '</p></div></td></tr>';
+    return;
+  }
+
+  const yes = '<span class="badge badge-green">✓</span>';
+  const no  = '<span class="badge badge-red">missing</span>';
+  body.innerHTML = shown.map(({ c, s }) => {
+    const [cls, text] = LANE_STYLE[s.lane];
+    // The 90-day upload clock only governs NEW participants. Someone who started
+    // CDS long ago is not new, so their operative deadline is the Aug 31
+    // remediation date, not a 300-day-overdue figure that reads like a crisis.
+    let due = '<span style="color:var(--gray-600)">—</span>';
+    if (s.dueBy && s.lane !== 'OK') {
+      const d = daysUntil(s.dueBy);
+      if (d < -90) {
+        due = '<span style="color:var(--gray-600)" title="Started CDS long before this finding, so the 90-day new-participant rule no longer applies. Aug 31 is the deadline that matters.">established</span>';
+      } else if (d < 0) {
+        due = '<span style="color:var(--danger);font-weight:700">' + Math.abs(d) + 'd overdue</span>';
+      } else {
+        due = '<span style="color:' + (d <= 14 ? 'var(--warn)' : 'var(--gray-600)') + '">' + s.dueBy + '</span>';
+      }
+    }
+    return '<tr>' +
+      '<td><strong>' + c.name + '</strong>' + (c.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + c.dcn + '</div>' : '') + '</td>' +
+      '<td><span class="badge ' + cls + '">' + text + '</span></td>' +
+      '<td style="font-size:12px;max-width:270px">' + s.next + '</td>' +
+      '<td>' + (s.hasEin ? yes : no) + '</td>' +
+      '<td>' + (s.hasMoId ? yes : no) + '</td>' +
+      '<td style="font-size:12px">' + (s.hasProof ? labelFor(EIN_PROOF_DOCS, c.proofDocType) : '<span style="color:var(--gray-600)">none</span>') + '</td>' +
+      '<td style="font-size:12px">' + (s.uploaded ? c.proofUploaded : (s.exempt ? '<span style="font-size:11px">prior vendor</span>' : no)) + '</td>' +
+      '<td>' + (s.inFusion ? yes : no) + '</td>' +
+      '<td style="font-size:12px">' + due + '</td>' +
+      '<td><button class="btn btn-sm btn-outline" style="font-size:11px;white-space:nowrap" onclick="openTaxSetup(\'' + c.id + '\')">Open</button></td>' +
+      '</tr>';
+  }).join('');
+}
+
 // ============================================================
 // GHL CONTACT SYNC
 // Calls the ghl-sync edge function, which holds the GoHighLevel token
