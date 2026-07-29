@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consumer Tax Setup — Training &amp; Help | Caring Companions CDS</title>
+<script>
+  // Match the hub: slim down when embedded in a GoHighLevel iframe.
+  try { if (window.self !== window.top) document.documentElement.classList.add('embedded'); }
+  catch (e) { document.documentElement.classList.add('embedded'); }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary:#0e3860; --primary-light:#1a5e9b;
+    --accent:#54bdb8; --accent-light:#7ecfcb; --accent-dark:#3a9e99;
+    --warn:#b7770d; --warn-light:#f39c12; --warn-pale:#fdf3e0;
+    --danger:#922b21; --danger-light:#e74c3c; --danger-pale:#fdedec;
+    --success:#2a7d78; --success-light:#54bdb8; --success-pale:#d7f0ef;
+    --gray-100:#f4f6f9; --gray-200:#e8ecf0; --gray-300:#cdd4db;
+    --gray-600:#6c7a89; --gray-800:#2c3e50; --white:#fff;
+    --radius:8px; --shadow:0 2px 8px rgba(0,0,0,.1);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--gray-100); color:var(--gray-800); line-height:1.62;
+    -webkit-font-smoothing:antialiased; padding-bottom:80px;
+  }
+
+  /* ---------- header ---------- */
+  .header { background:var(--primary); color:#fff; padding:18px 24px; }
+  html.embedded .header { padding:14px 20px; }
+  .header-inner { max-width:940px; margin:0 auto; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .header h1 { font-size:20px; font-weight:700; letter-spacing:-.01em; }
+  .header .sub { font-size:12.5px; opacity:.82; margin-top:2px; }
+  .header .back {
+    margin-left:auto; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.4);
+    color:#fff; padding:7px 14px; border-radius:6px; font:600 12.5px Poppins,sans-serif;
+    cursor:pointer; text-decoration:none;
+  }
+  .header .back:hover { background:rgba(255,255,255,.24); }
+
+  /* ---------- progress rail ---------- */
+  .rail { background:#fff; border-bottom:1px solid var(--gray-200); position:sticky; top:0; z-index:40; }
+  .rail-inner { max-width:940px; margin:0 auto; padding:12px 24px; }
+  .rail-top { display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+  .rail-top label { font-size:12px; font-weight:600; color:var(--gray-600); }
+  select, input[type=text] {
+    font-family:inherit; font-size:13px; padding:7px 10px; border:1.5px solid var(--gray-300);
+    border-radius:6px; background:#fff; color:inherit;
+  }
+  .bar { height:6px; background:var(--gray-200); border-radius:99px; overflow:hidden; }
+  .bar span { display:block; height:100%; background:var(--accent); width:0; transition:width .35s ease; }
+  .bar-label { font-size:11.5px; color:var(--gray-600); margin-top:6px; font-weight:600; }
+
+  .steps-rail { display:flex; gap:6px; overflow-x:auto; padding:10px 0 2px; }
+  .pip {
+    flex:none; display:flex; align-items:center; gap:7px; padding:6px 11px; border-radius:99px;
+    border:1.5px solid var(--gray-300); background:#fff; cursor:pointer;
+    font:600 11.5px Poppins,sans-serif; color:var(--gray-600); white-space:nowrap;
+  }
+  .pip:hover { border-color:var(--accent); color:var(--primary); }
+  .pip.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .pip.done { border-color:var(--success); color:var(--success); }
+  .pip.done.active { background:var(--success); border-color:var(--success); color:#fff; }
+  .pip .tick { font-size:12px; }
+
+  /* ---------- layout ---------- */
+  .wrap { max-width:940px; margin:0 auto; padding:24px; }
+  .card {
+    background:#fff; border-radius:var(--radius); box-shadow:var(--shadow);
+    padding:22px 24px; margin-bottom:18px;
+  }
+  h2 { font-size:20px; font-weight:700; letter-spacing:-.01em; margin-bottom:4px; }
+  h3 { font-size:14px; font-weight:700; margin:18px 0 8px; }
+  h3:first-child { margin-top:0; }
+  p { margin-bottom:10px; }
+  .muted { color:var(--gray-600); font-size:13px; }
+  a { color:var(--primary-light); }
+
+  .track-tag {
+    display:inline-block; font:700 10.5px Poppins,sans-serif; letter-spacing:.06em;
+    text-transform:uppercase; padding:3px 9px; border-radius:99px; margin-bottom:8px;
+  }
+  .track-audit { background:var(--danger-pale); color:var(--danger); }
+  .track-payroll { background:var(--gray-200); color:var(--gray-600); }
+
+  .badges { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 16px; }
+  .badge {
+    font:600 11.5px Poppins,sans-serif; padding:4px 10px; border-radius:6px;
+    display:inline-flex; align-items:center; gap:5px;
+  }
+  .b-online { background:var(--success-pale); color:var(--success); }
+  .b-phone  { background:#e6edf4; color:var(--primary); }
+  .b-mail   { background:var(--warn-pale); color:var(--warn); }
+  .b-wet    { background:var(--danger-pale); color:var(--danger); }
+  .b-time   { background:var(--gray-200); color:var(--gray-600); }
+
+  ol.do { margin:0 0 12px 20px; }
+  ol.do li { margin-bottom:9px; padding-left:3px; }
+  ul.plain { margin:0 0 12px 18px; }
+  ul.plain li { margin-bottom:6px; }
+
+  .copyrow {
+    display:flex; align-items:center; gap:10px; background:var(--gray-100);
+    border-radius:6px; padding:9px 12px; margin-bottom:7px; flex-wrap:wrap;
+  }
+  .copyrow .k { font-size:11.5px; font-weight:700; color:var(--gray-600); min-width:104px; }
+  .copyrow .v { font-family:ui-monospace,Menlo,monospace; font-size:13px; flex:1; word-break:break-all; }
+  .copybtn {
+    background:#fff; border:1.5px solid var(--gray-300); border-radius:6px; padding:4px 11px;
+    font:600 11.5px Poppins,sans-serif; cursor:pointer; color:var(--primary);
+  }
+  .copybtn:hover { border-color:var(--accent); }
+
+  .gotcha {
+    background:var(--danger-pale); border-left:4px solid var(--danger);
+    border-radius:0 6px 6px 0; padding:11px 14px; font-size:13px; margin-bottom:12px;
+  }
+  .tip {
+    background:var(--success-pale); border-left:4px solid var(--accent);
+    border-radius:0 6px 6px 0; padding:11px 14px; font-size:13px; margin-bottom:12px;
+  }
+  .note {
+    background:var(--warn-pale); border-left:4px solid var(--warn-light);
+    border-radius:0 6px 6px 0; padding:11px 14px; font-size:13px; margin-bottom:12px;
+  }
+  .say {
+    border-left:3px solid var(--accent); padding:8px 0 8px 14px; margin:8px 0 12px;
+    font-size:13.5px; font-style:italic;
+  }
+
+  /* ---------- screenshot slot ---------- */
+  .shots { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); margin-bottom:10px; }
+  .shot { border:1px solid var(--gray-200); border-radius:6px; overflow:hidden; background:var(--gray-100); }
+  .shot img { width:100%; display:block; cursor:zoom-in; }
+  .shot .cap { font-size:11.5px; padding:6px 9px; display:flex; gap:8px; align-items:center; }
+  .shot .cap span { flex:1; color:var(--gray-600); }
+  .shot .cap button { background:none; border:none; color:var(--danger); cursor:pointer; font-size:11.5px; font-family:inherit; }
+  .dropzone {
+    border:2px dashed var(--gray-300); border-radius:6px; padding:16px; text-align:center;
+    font-size:12.5px; color:var(--gray-600); cursor:pointer; background:var(--gray-100);
+  }
+  .dropzone:hover { border-color:var(--accent); color:var(--primary); }
+
+  /* ---------- step footer ---------- */
+  .stepfoot {
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    border-top:1px solid var(--gray-200); margin-top:20px; padding-top:16px;
+  }
+  .btn {
+    font:600 13px Poppins,sans-serif; padding:9px 18px; border-radius:6px; cursor:pointer;
+    border:1.5px solid transparent; background:var(--accent); color:#fff;
+  }
+  .btn:hover { background:var(--accent-dark); }
+  .btn-outline { background:#fff; border-color:var(--gray-300); color:var(--primary); }
+  .btn-outline:hover { border-color:var(--accent); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .donebox {
+    display:flex; align-items:center; gap:9px; font-size:13px; font-weight:600;
+    background:var(--gray-100); padding:9px 14px; border-radius:6px; cursor:pointer;
+  }
+  .donebox input { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
+  .spacer { flex:1; }
+
+  /* ---------- diagram ---------- */
+  .diagram { width:100%; height:auto; margin:6px 0 14px; }
+  .diagram text { font-family:'Poppins',sans-serif; }
+
+  /* ---------- AI help ---------- */
+  .helpfab {
+    position:fixed; right:20px; bottom:20px; z-index:60;
+    background:var(--primary); color:#fff; border:none; border-radius:99px;
+    padding:13px 20px; font:600 13.5px Poppins,sans-serif; cursor:pointer;
+    box-shadow:0 4px 18px rgba(0,0,0,.28); display:flex; align-items:center; gap:8px;
+  }
+  .helpfab:hover { background:var(--primary-light); }
+  .helppanel {
+    position:fixed; right:20px; bottom:20px; z-index:61; width:min(420px,calc(100vw - 40px));
+    height:min(560px,calc(100vh - 40px)); background:#fff; border-radius:12px;
+    box-shadow:0 10px 40px rgba(0,0,0,.3); display:none; flex-direction:column; overflow:hidden;
+  }
+  .helppanel.open { display:flex; }
+  .helphead {
+    background:var(--primary); color:#fff; padding:13px 16px; display:flex; align-items:center; gap:10px;
+  }
+  .helphead b { font-size:14px; flex:1; }
+  .helphead button { background:none; border:none; color:#fff; font-size:20px; cursor:pointer; line-height:1; }
+  .helplog { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:11px; }
+  .msg { font-size:13.5px; padding:10px 13px; border-radius:10px; max-width:88%; white-space:pre-wrap; }
+  .msg.u { background:var(--primary); color:#fff; align-self:flex-end; border-bottom-right-radius:3px; }
+  .msg.a { background:var(--gray-100); align-self:flex-start; border-bottom-left-radius:3px; }
+  .msg.err { background:var(--danger-pale); color:var(--danger); align-self:flex-start; }
+  .helpsuggest { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 10px; }
+  .helpsuggest button {
+    font:500 11.5px Poppins,sans-serif; background:#fff; border:1.5px solid var(--gray-300);
+    border-radius:99px; padding:5px 11px; cursor:pointer; color:var(--primary); text-align:left;
+  }
+  .helpsuggest button:hover { border-color:var(--accent); }
+  .helpform { display:flex; gap:8px; padding:12px 14px; border-top:1px solid var(--gray-200); }
+  .helpform input { flex:1; }
+
+  .lightbox {
+    position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:80; display:none;
+    align-items:center; justify-content:center; padding:24px; cursor:zoom-out;
+  }
+  .lightbox.open { display:flex; }
+  .lightbox img { max-width:100%; max-height:100%; border-radius:6px; }
+
+  .authgate { max-width:420px; margin:60px auto; text-align:center; }
+
+  @media print {
+    .rail, .helpfab, .helppanel, .header .back, .stepfoot, .dropzone { display:none !important; }
+    body { background:#fff; padding:0; }
+    .card { box-shadow:none; border:1px solid #ddd; break-inside:avoid; }
+    .step { display:block !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <h1>Consumer Tax Setup</h1>
+      <div class="sub">How to get a consumer's EIN and Missouri Tax ID, and satisfy the DHSS audit</div>
+    </div>
+    <a class="back" href="/#taxcompliance">← Back to Tax &amp; EIN</a>
+  </div>
+</div>
+
+<div id="gate" class="authgate card" style="display:none">
+  <h2>Sign in first</h2>
+  <p class="muted">Open the CDS hub, sign in there, then come back to this page. This training reads your real
+     consumer records, so it needs your login.</p>
+  <p><a class="btn" style="display:inline-block;text-decoration:none" href="/">Open the hub</a></p>
+</div>
+
+<div id="app" style="display:none">
+
+  <div class="rail">
+    <div class="rail-inner">
+      <div class="rail-top">
+        <label for="consumerPick">Working on:</label>
+        <select id="consumerPick" onchange="pickConsumer()"></select>
+        <span class="muted" id="laneHint"></span>
+      </div>
+      <div class="bar"><span id="progBar"></span></div>
+      <div class="bar-label" id="progLabel"></div>
+      <div class="steps-rail" id="stepsRail"></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div id="stepHost"></div>
+  </div>
+</div>
+
+<button class="helpfab" id="helpFab" onclick="toggleHelp(true)">
+  <span>💬</span> Ask a question
+</button>
+
+<div class="helppanel" id="helpPanel">
+  <div class="helphead">
+    <span>💬</span><b>Tax setup help</b>
+    <button onclick="toggleHelp(false)" aria-label="Close">×</button>
+  </div>
+  <div class="helplog" id="helpLog"></div>
+  <div class="helpsuggest" id="helpSuggest"></div>
+  <form class="helpform" onsubmit="askHelp(event)">
+    <input type="text" id="helpInput" placeholder="Type your question…" autocomplete="off">
+    <button class="btn" type="submit" id="helpSend">Ask</button>
+  </form>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('open')"><img id="lightboxImg" alt=""></div>
+
+<script>
+// ============================================================
+// SETUP
+// Same Supabase project and same origin as the hub, so the sign-in already in
+// the browser carries over. No second login.
+// ============================================================
+const SUPABASE_URL      = 'https://siivpekcaryeyttszwav.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_iDJ00Ve4hw5iw2YtVmiulg__FmjShmO';
+const AGENCY_ID         = 'caring-companions-cds';
+const HELP_FN           = 'https://zngsgedlsxinbygwmxwn.supabase.co/functions/v1/tax-help';
+const SHOT_BUCKET       = 'ein-proof';   // screenshots live under a _training/ prefix
+
+let _db = null, _consumers = [], _current = null, _shots = {}, _stepIdx = 0;
+
+// ============================================================
+// THE STEPS
+// Two tracks, deliberately separated. Conflating them is why this feels
+// unmanageable: the audit needs two numbers and one document, while the payroll
+// forms are a different obligation on a different clock.
+//
+// `field` is the consumer record field that marks the step satisfied. The
+// training reads and writes the SAME fields the tracker uses, so completion is
+// never tracked in two places and cannot drift.
+// ============================================================
+const STEPS = [
+  {
+    id:'triage', track:'audit', pip:'Triage', title:'Work out what this consumer actually needs',
+    field:null,
+    badges:[['b-time','5 minutes']],
+    body:`
+      <p>Before doing anything, find out which of three situations you are in. Most people waste time here by
+      assuming every consumer needs the full set of forms. They do not.</p>
+      ${diagramTriage()}
+      <h3>Ask in this order</h3>
+      <ol class="do">
+        <li><b>Does Fusion already hold proof for them?</b> Participant → Documents tab → look under
+            <b>EIN Tax Documents</b>. A previous CDS vendor may have uploaded it, in which case you do not need
+            to upload anything at all. Just make sure both numbers are typed in (step&nbsp;5).</li>
+        <li><b>Do we know their Federal EIN?</b> Check Empeon and the consumer's file.
+            <span style="color:var(--danger)"><b>Careful:</b> if Empeon shows <code>12-3456789</code>, that is a
+            placeholder, not a real EIN. Treat it as no EIN.</span></li>
+        <li><b>Do we hold a document showing it?</b> A filed 941 or 940, a CP&nbsp;575, a 147C, or any IRS letter
+            with their legal name and number on it.</li>
+      </ol>
+      <div class="tip"><b>Shortcut worth checking first.</b> We are the 2678 agent, so we have been filing
+        <b>941s</b> for these consumers. Form 941 is on the accepted proof list. If you can pull a filed return,
+        the proof already exists and there is nothing to obtain.</div>
+      <div class="note"><b>One unresolved point.</b> The policy lists Form 941 as acceptable but also says
+        "computer printed forms are not acceptable". Those pull in opposite directions for a return we filed
+        ourselves. Get the answer in writing from <b>QIQA@health.mo.gov</b> before relying on it.</div>`,
+    copy:[['Audit questions','QIQA@health.mo.gov'],['Fusion logins','HCBS.Systems@health.mo.gov']]
+  },
+  {
+    id:'proof', track:'audit', pip:'Get proof', title:'Get proof of the Federal EIN',
+    field:'proofDocType',
+    badges:[['b-phone','Phone call'],['b-online','Often same day'],['b-time','20 min per consumer']],
+    body:`
+      <p>This is for a consumer who <b>has</b> an EIN but where we cannot find the paperwork. If they have no
+      EIN at all, skip to the next step instead.</p>
+      <div class="gotcha"><b>The CP 575 is issued once and never reissued.</b> If it is lost it is gone. The
+        replacement is a <b>147C letter</b>, and you get it by telephone. Do not spend days hunting for a
+        CP&nbsp;575 that will never arrive.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Call the IRS <b>Business and Specialty Tax Line</b> on <b>800-829-4933</b>, weekdays. Expect to hold.</li>
+        <li>Have ready: the consumer's legal name, home address, and SSN or EIN.</li>
+        <li>Tell them what you need:
+          <div class="say">I am the authorized agent under Form 2678 for this taxpayer, and I need a 147C letter
+          confirming their EIN. Can you fax it to me while I am on the line?</div></li>
+        <li><b>Ask for the fax while you are still on the call.</b> Waiting for post costs weeks.</li>
+        <li>Save the letter as a PDF, then attach it to the consumer in the hub so we keep our own copy.</li>
+      </ol>
+      <div class="gotcha"><b>They will refuse if we are not authorized.</b> The IRS will not release an EIN letter
+        without a <b>2678</b> or <b>8821</b> on file for that consumer. If you get refused for that reason, do not
+        argue on the phone. Note it and flag it, because that consumer needs the authorization filed first.</div>
+      <h3>What counts as proof</h3>
+      <ul class="plain">
+        <li><b>Federal:</b> CP&nbsp;575, 147C, Form 940, Form 941, 8109 coupon, an IRS letter showing the tax ID
+            and legal name, or any IRS document with the name and number <b>preprinted</b>.</li>
+        <li><b>Missouri:</b> a copy of the Department of Revenue notice, MO&nbsp;941, or MO&nbsp;W-3.</li>
+        <li><b>Never:</b> a W-9, or anything we typed or printed ourselves.</li>
+      </ul>`,
+    copy:[['IRS EIN letters','800-829-4933']]
+  },
+  {
+    id:'ein', track:'audit', pip:'Federal EIN', title:'Get a Federal EIN from scratch',
+    field:'ein',
+    badges:[['b-online','Online, instant'],['b-time','15 minutes'],['b-time','Weekdays only']],
+    body:`
+      <p>For a consumer with no EIN at all, including anyone showing Empeon's placeholder
+      <code>12-3456789</code>. This is the longest path, because Missouri cannot issue a Tax ID until the IRS
+      issues the EIN, so start these before anything easier.</p>
+      <div class="note"><b>The consumer is the employer.</b> This EIN belongs to them, not to Caring Companions,
+        and it travels with them if they move to another agency. Use <b>their</b> name, address and SSN
+        throughout, and list them as the responsible party.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Go to <b>irs.gov</b> → <b>Tools</b> → <b>Apply for an Employer ID Number (EIN)</b> → <b>Apply Online Now</b>.</li>
+        <li>The application is only open <b>weekdays, roughly 7am to 10pm Eastern</b>. It is not available at
+            weekends, and it times out after about 15 minutes of inactivity, so gather everything first.</li>
+        <li>Entity type: <b>Individual / Sole Proprietor</b>.</li>
+        <li>Reason for applying: <b>Hired employees</b>.</li>
+        <li>Enter the consumer's legal name, SSN and home address.</li>
+        <li>Work through to the end. The EIN is issued <b>immediately</b> on the final screen.</li>
+        <li><b>Save and print the confirmation before you close that window.</b></li>
+      </ol>
+      <div class="gotcha"><b>You cannot get back into that session.</b> If you close it without saving, the letter
+        is not retrievable online, and applying again creates a duplicate EIN for that person, which is its own
+        mess to unwind. Save the PDF first, then close.</div>
+      <div class="note"><b>Ask before you rely on the printout.</b> Whether the printed online confirmation is
+        acceptable to DHSS as proof, or whether they want the mailed CP&nbsp;575, is one of the two questions to put
+        to <b>QIQA@health.mo.gov</b>. If they want the CP&nbsp;575, there is a postal wait attached to every one
+        of these, which is the main reason to start them now.</div>`,
+    copy:[['Apply for an EIN','https://www.irs.gov/businesses/small-businesses-self-employed/apply-for-an-employer-identification-number-ein-online'],['Placeholder to watch for','12-3456789']]
+  },
+  {
+    id:'motax', track:'audit', pip:'MO Tax ID', title:'Register the Missouri Tax ID (form 2643A)',
+    field:'moTaxId',
+    badges:[['b-online','Online at dor.mo.gov'],['b-time','Needs the EIN first']],
+    body:`
+      <p>This registers the consumer with the Missouri Department of Revenue for state income tax withholding.
+      Ten of our eleven consumers are missing this, so it is the bulk of the work.</p>
+      <div class="note"><b>This cannot start until the federal EIN exists.</b> That dependency is the whole reason
+        the no-EIN consumers have to be started first.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Go to <b>dor.mo.gov</b> and register using form <b>2643A</b>. Online is faster than posting it.</li>
+        <li>Use the consumer's <b>EIN, SSN, legal name and home address</b>.</li>
+        <li>Business type: <b>Individual / household employer</b>.</li>
+        <li>Submit. Missouri returns the consumer's <b>withholding tax ID</b>.</li>
+        <li>Enter that number against the consumer in the hub.</li>
+        <li><b>Keep the notice they send back.</b> That notice is the accepted Missouri proof, so file it with the
+            consumer's documents and attach a copy in the hub.</li>
+      </ol>
+      <div class="tip"><b>One document can cover both.</b> If a single document shows the federal EIN
+        <em>and</em> the Missouri number, it satisfies both requirements and you do not need a second upload.</div>`,
+    copy:[['MO Dept of Revenue','https://dor.mo.gov'],['Registration questions','573-751-5860'],['Registration email','businesstaxregister@dor.mo.gov']]
+  },
+  {
+    id:'fusion', track:'audit', pip:'Enter in Fusion', title:'Type both numbers into Fusion',
+    field:'fusionEntered',
+    badges:[['b-online','In Fusion'],['b-time','2 minutes']],
+    body:`
+      <p>Half of what the audit checks. Quick, and easy to think you have done when you have not.</p>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Open the participant in <b>Fusion</b>.</li>
+        <li>Go to the <b>HCBS Eligibility</b> section on the participant page.</li>
+        <li>Enter the <b>Federal EIN</b> and the <b>Missouri Tax ID</b>. Both. One without the other is still a finding.</li>
+        <li>Save.</li>
+        <li>Read both numbers back against the document, digit by digit. A transposed digit passes a glance and
+            fails an audit.</li>
+        <li>Tick this step below, which records it against the consumer in the hub.</li>
+      </ol>
+      <div class="gotcha"><b>Entered but not uploaded is still a finding</b>, and so is uploaded but not entered.
+        The audit wants both halves on every participant.</div>`,
+    copy:[['Fusion login problems','HCBS.Systems@health.mo.gov']]
+  },
+  {
+    id:'upload', track:'audit', pip:'Upload in Fusion', title:'Upload the proof in Fusion',
+    field:'proofUploaded',
+    badges:[['b-online','In Fusion'],['b-time','5 minutes'],['b-time','90 days for new participants']],
+    body:`
+      <p>The other half. This is the step the finding was actually about.</p>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Save the document as a PDF. Name it so the folder reads correctly without opening anything:
+            <code>LASTNAME_FIRSTNAME_EIN-proof.pdf</code>.</li>
+        <li>In Fusion, open the participant and go to the <b>Documents</b> tab.</li>
+        <li>Add the attachment and choose <b>EIN Tax Documents</b> from the category dropdown.</li>
+        <li>Upload, then confirm it appears in the list.</li>
+        <li>Record the date below, and attach our own copy to the consumer in the hub.</li>
+      </ol>
+      <div class="gotcha"><b>The wrong category is not an upload.</b> If it is filed anywhere other than
+        <b>EIN Tax Documents</b>, the auditor will not find it and it counts as missing.</div>
+      <div class="note"><b>Deadline for a new participant:</b> proof uploaded within <b>90 days of the CDS start
+        date</b>. "New" means not yet authorized for CDS in their <em>current</em> case, so someone authorized in
+        a previous case still counts as new.</div>
+      <div class="tip"><b>Two ways to be finished early.</b> One document showing both numbers covers both. And
+        if a <b>previous CDS vendor</b> already uploaded proof to that case record, you do not need to upload
+        again at all.</div>`,
+    copy:[]
+  },
+  {
+    id:'irs8821', track:'payroll', pip:'IRS 8821', title:'IRS Form 8821 — Tax Information Authorization',
+    field:'irs8821',
+    badges:[['b-mail','Post or fax'],['b-wet','Wet signature'],['b-time','Not audited']],
+    body:`
+      <p>Authorizes Caring Companions to receive the consumer's IRS correspondence and to speak to the IRS about
+      them. Not part of the audit, but it is what makes step&nbsp;2 possible: without it the IRS will not release
+      a 147C letter to us.</p>
+      <div class="gotcha"><b>Wet signature.</b> An original signature may be required. Do not rely on e-sign for
+        this without confirming with the accountant first.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Complete Form 8821 with the consumer's <b>name and EIN</b>.</li>
+        <li>The <b>consumer signs</b> it.</li>
+        <li>Post or fax it to the IRS per the address on the form's own instructions.</li>
+        <li>Keep a copy in the consumer's file.</li>
+      </ol>`,
+    copy:[]
+  },
+  {
+    id:'irs2678', track:'payroll', pip:'IRS 2678', title:'IRS Form 2678 — Appointment of Agent',
+    field:'irs2678',
+    badges:[['b-mail','Post'],['b-wet','Wet signature'],['b-time','Approval takes weeks']],
+    body:`
+      <p>Designates Caring Companions as the agent authorized to handle the consumer's FICA and FUTA payroll
+      taxes. This is the form that makes us the filer of their 941s.</p>
+      <div class="gotcha"><b>Do not run payroll before the IRS approves it.</b> Approval can take several weeks,
+        and it is not optional. Both the consumer and Caring Companions sign, with original signatures.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Complete Form 2678 with the <b>consumer's EIN</b> and <b>Caring Companions' EIN</b>.</li>
+        <li>Both parties sign.</li>
+        <li>Post it to the IRS.</li>
+        <li>Wait for the approval letter before the first payroll run. File the letter.</li>
+      </ol>`,
+    copy:[]
+  },
+  {
+    id:'mo2827', track:'payroll', pip:'MO 2827', title:'MO Form 2827 — Missouri Power of Attorney',
+    field:'mo2827',
+    badges:[['b-mail','Submit to MO DOR'],['b-time','Not audited']],
+    body:`
+      <p>Lets us act for the consumer with the Missouri Department of Revenue on withholding matters, the state
+      counterpart to the 8821.</p>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Complete Form 2827 with the consumer's <b>MO Tax ID</b> and <b>EIN</b>.</li>
+        <li>The consumer signs.</li>
+        <li>Submit to the Missouri Department of Revenue.</li>
+        <li>Keep a copy in the consumer's file.</li>
+      </ol>`,
+    copy:[['MO DOR','573-751-5860']]
+  },
+  {
+    id:'des-signup', track:'payroll', pip:'DES vendor login', title:'One-time: our own DES reporting service signup',
+    field:null,
+    badges:[['b-online','uinteract.labor.mo.gov'],['b-time','Once for the agency, not per consumer']],
+    body:`
+      <div class="note"><b>Do this once for Caring Companions, before any consumer work.</b> Until the agency has a
+        reporting service login you cannot register a consumer, report wages, or view any consumer account. If
+        someone else has already done this, skip to the next step.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Go to <b>uinteract.labor.mo.gov</b> and click <b>CREATE ACCOUNT</b>.</li>
+        <li>Choose <b>"I am a Reporting Service (CDS Vendor, Third Party, Payroll Service)"</b>, then Next.</li>
+        <li>Reporting Service Type: <b>CDS Vendor</b>.</li>
+        <li>FEIN: the <b>agency's</b> federal tax ID, not a consumer's.</li>
+        <li>Reporting Service Name: the legal entity name as registered with the Missouri Secretary of State.</li>
+        <li>Mailing address: the business address. <b>All DES correspondence goes here</b>, so keep it current.</li>
+        <li>Fill in contact number, email, fax and contact person.</li>
+        <li>"Associated with another reporting service?" Only <b>Yes</b> if we use an outside payroll service
+            (ADP, Paychex, a CPA). Otherwise <b>No</b>.</li>
+      </ol>
+      <div class="gotcha"><b>This is not where consumers get registered.</b> The packet says so in capitals,
+        because people routinely confuse the two. This creates <em>our</em> login. Consumers come next.</div>
+      <div class="gotcha"><b>Never create a UInteract login for a consumer</b>, under any circumstances, and never
+        share our user ID or password outside the business.</div>
+      <div class="note"><b>If our business address changes</b> we must notify DES at <b>cdstax@labor.mo.gov</b>
+        <em>and</em> Missouri Medicaid Audit and Compliance. Until we do, correspondence keeps going to the old
+        address and we remain responsible for acting on it.</div>`,
+    copy:[['UInteract','https://uinteract.labor.mo.gov'],['CDS tax team','cdstax@labor.mo.gov']]
+  },
+  {
+    id:'des-register', track:'payroll', pip:'DES: register consumer', title:'Register a consumer with DES',
+    field:'desRegistered',
+    badges:[['b-online','In UInteract'],['b-wet','Wait for the $1,000 quarter'],['b-time','20 min per consumer']],
+    body:`
+      <div class="gotcha"><b>Timing rule, and it catches everyone.</b> A consumer cannot be registered until
+        <b>after they have issued a payroll</b> to an attendant <b>and</b> paid <b>$1,000 or more in a single
+        quarter</b>. Without that they cannot be given a liable account number, so trying earlier is wasted effort.
+        Also: <b>do not submit the Unemployment Tax Registration form.</b></div>
+      <div class="note"><b>Only the CDS vendor registers consumers.</b> Never a third party. And if we are unsure
+        whether a consumer was with a previous vendor, <b>try registering them in UInteract first</b> — if it
+        errors, then use the transferred-consumer form.</div>
+      <h3>A consumer new to CDS</h3>
+      <ol class="do">
+        <li>Sign in with the reporting service login. Click <b>Employer Registration → Register Employer</b>.</li>
+        <li>Enter <b>your</b> details as the person submitting, then Next. Everything after this is
+            <b>the consumer's</b> information.</li>
+        <li>General Information: the <b>consumer's</b> federal tax ID. Type of Organization:
+            <b>Individual Ownership</b>.</li>
+        <li>Entity Information: consumer's first name, middle initial, last name. Leave <b>DBA blank</b>.
+            "Has this business paid employees for work performed in Missouri?" <b>Yes</b>, then give the first
+            worker date, the date the consumer first had an attendant.</li>
+        <li>Answer <b>No</b> to: religious employer, federally recognized Indian tribe, paid UI in another state,
+            Lessor/PEO, leasing employees. Answer <b>Yes</b> to business locations in Missouri.</li>
+        <li>Business Location: number of Missouri employees = <b>the number of attendants</b>. Physical address =
+            the <b>consumer's home address</b>. Select the county they live in. Nature of business:
+            <b>"CDS Consumer"</b>.</li>
+        <li>Principal Business Activity, three dropdowns in order: <b>Health Care and Social Assistance</b> →
+            <b>Social Assistance</b> → <b>Services for the Elderly and Persons with Disabilities</b>.
+            Primary activity: <b>Yes</b>.</li>
+        <li>Contact Details: unemployment tax mailing address = the <b>consumer's home address</b>.
+            Telephone <code>000-000-0000</code> (the consumer is never contacted). Fax blank.</li>
+        <li>Owner details: the consumer's <b>SSN is required</b>, job title <b>Owner</b>, residential address =
+            their home address. Leave term begin/end, phone and email blank.</li>
+        <li>Wage History: gross wages paid to attendants for each quarter shown.
+            Employment History: number of attendants working each week.</li>
+        <li>Business Acquisition: <b>No</b>. Prior Registration: <b>No</b>. Upload Documents and Tax and Wage
+            Reports Received: both do not apply, click Continue.</li>
+        <li>Read the Statement of Acknowledgement, click <b>I accept</b>, then <b>Submit</b>.</li>
+        <li>Record the resulting account number (EAN) against the consumer in the hub.</li>
+      </ol>
+      <h3>A consumer transferred from another vendor</h3>
+      <ol class="do">
+        <li>Use the <b>Transferred Consumer Registration (MODES-5083)</b>.</li>
+        <li>Submit it only <b>after</b> the consumer has paid wages since coming to us. A future date cannot be
+            processed.</li>
+        <li>Required, or the form is returned unprocessed: our name, our FEIN, the consumer's FEIN, the consumer's
+            SSN, the first date they paid wages with us, and the <b>previous vendor's name</b>.</li>
+        <li>Not sure who the previous vendor was? <b>Check Fusion.</b></li>
+        <li><b>Email it to cdstax@labor.mo.gov.</b> Email only, not post or fax.</li>
+      </ol>
+      <div class="note">A transferred consumer may have <b>no</b> account at all if they never hit $1,000 in a
+        quarter with the previous vendor.</div>`,
+    copy:[['MODES-5083 (transfer form)','https://labor.mo.gov/media/22536/download'],['Submit transfers to','cdstax@labor.mo.gov'],['Nature of business','CDS Consumer'],['Consumer phone to enter','000-000-0000']]
+  },
+  {
+    id:'des-report', track:'payroll', pip:'DES: wages & payment', title:'Quarterly wage reports and payments',
+    field:null,
+    badges:[['b-online','In UInteract'],['b-time','Every quarter, per consumer']],
+    body:`
+      <h3>Filing a contribution and wage report</h3>
+      <ol class="do">
+        <li><b>Contribution and Wage Report → File Contribution and Wage Report</b>.</li>
+        <li>Enter the <b>consumer's</b> account number and Search. You will see their name, us as their vendor,
+            and any reports outstanding.</li>
+        <li><b>Select the oldest report first.</b> Continue.</li>
+        <li>Enter your details as the submitter. The address on the following page is the consumer's, not ours,
+            and nothing is posted there.</li>
+        <li>"Did you pay wages during the quarter?" Yes if they had an attendant that quarter, otherwise No.</li>
+        <li>Reporting Method: <b>Method A</b>. (Method B is only for approved bulk filers.)</li>
+        <li>Wage detail: an existing attendant is prefilled, so just enter wages. A new attendant needs
+            <b>SSN, name and gross wages for the quarter</b>. Use <b>Add Blank Rows</b> for more, then
+            <b>All Wages Complete/Next</b>.</li>
+        <li>Interrupted partway? <b>Save page</b> keeps what you have entered; <b>Save and Quit</b> lets you come
+            back later.</li>
+        <li>Accept the acknowledgement, verify, <b>Submit</b>, then print the confirmation for the file.</li>
+      </ol>
+      <div class="gotcha"><b>Wages paid to a parent who is their own child's attendant are never reportable</b> for
+        unemployment tax. Never report them, under any circumstances.</div>
+      <h3>Seeing what is due</h3>
+      <ul class="plain">
+        <li><b>Inquiry → Tax Inquiry → Employer Contribution and Wage Reports</b>, enter the consumer's EAN.</li>
+        <li><b>Current Account Balance</b>, then <b>Reports Due</b> at the bottom lists outstanding reports.</li>
+        <li>Money owed appears under <b>Debts</b>, by quarter.</li>
+        <li>A monthly statement means <b>something</b> is outstanding, money or reports. Read all of it.</li>
+      </ul>
+      <h3>Paying</h3>
+      <ol class="do">
+        <li><b>Payment Options → Online Payment</b>.</li>
+        <li>Your details as submitter, then the <b>consumer's</b> account number.</li>
+        <li>Verify the consumer's address, select the quarters being paid, choose the payment type, and submit.</li>
+      </ol>
+      <div class="gotcha"><b>A separate payment per consumer. Never combine them.</b> Deadlines:
+        Q1 <b>Apr 30</b> · Q2 <b>Jul 30</b> · Q3 <b>Oct 31</b> · Q4 <b>Jan 31</b>. Late penalty is 10% of the tax
+        or $100 per month, whichever is greater, capped at 20% or $200.</div>
+      <div class="gotcha"><b>Failing to report wages or pay contributions on any consumer account gets us reported
+        to MMAC</b> for non-compliance. So does DES being unable to reach us.</div>`,
+    copy:[['DES, general','573-751-1995 opt 1'],['CDS tax team','cdstax@labor.mo.gov'],['Penalties, debt (C. Matzke)','573-751-1867'],['Wage reporting (K. Riedmann)','573-751-1995 x4105'],['K. Riedmann email','kristi.riedmann@labor.mo.gov']]
+  },
+  {
+    id:'des-close', track:'payroll', pip:'DES: consumer leaves', title:'When a consumer stops using us',
+    field:null,
+    badges:[['b-online','In UInteract'],['b-time','Do it promptly']],
+    body:`
+      <p>Applies whenever a consumer leaves for any reason, including a PCCP transfer out to another agency, or
+      death.</p>
+      <div class="gotcha"><b>Use "Request to Close Account". Do NOT submit the Employer Change Request.</b> The
+        packet is explicit about this.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li><b>Account Maintenance → Request to Close Account</b>.</li>
+        <li>Enter the consumer's account number, Continue.</li>
+        <li>"Would you like to close this account?" <b>Yes</b>, Continue.</li>
+        <li>Your details as the submitter. "Have you sold your business?" <b>No</b>.
+            "Do you have employees working in Missouri?" <b>No</b>.</li>
+        <li>Last date of payroll: the last date wages were paid to an attendant.</li>
+        <li>Reason: only ever <b>Death of Owner</b> or <b>Other</b> with a brief explanation. If death, enter the
+            date of death as the last date employment occurred.</li>
+        <li>Remarks: explain in detail why they ceased using us.</li>
+      </ol>
+      <div class="note"><b>Using an outside bookkeeper or CPA?</b> They need an "Information Only" power of
+        attorney, <b>MODES-4444</b>, signed by both them and us and emailed to <b>cdstax@labor.mo.gov</b> only.
+        DES then creates their sub-user login. A POA is not needed if they file in bulk. If a payroll company
+        files without identifying us as the vendor, the account gets set up with all correspondence going to
+        <b>the consumer</b>, so check what they submit.</div>`,
+    copy:[['MODES-4444 (POA)','https://labor.mo.gov/sites/labor/files/pubs_forms/MODES-4444-AI.pdf'],['Email POAs to','cdstax@labor.mo.gov']]
+  }
+];
+
+// ============================================================
+// DIAGRAMS
+// Drawn from our own procedure. Deliberately NOT mock-ups of federal forms or
+// state websites: inventing a picture of a government screen would be worse than
+// having none. Real screen captures go in the upload slot on each step.
+// ============================================================
+function diagramTriage() {
+  return `
+  <svg class="diagram" viewBox="0 0 700 260" role="img" aria-label="Triage decision tree">
+    <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#6c7a89"/></marker></defs>
+    <g font-size="12" fill="#2c3e50">
+      <rect x="6" y="14" width="176" height="46" rx="6" fill="#e6edf4" stroke="#1a5e9b"/>
+      <text x="94" y="34" text-anchor="middle" font-weight="600">Proof already in</text>
+      <text x="94" y="50" text-anchor="middle" font-weight="600">Fusion?</text>
+
+      <rect x="240" y="6" width="200" height="40" rx="6" fill="#d7f0ef" stroke="#2a7d78"/>
+      <text x="340" y="24" text-anchor="middle" font-weight="600" fill="#2a7d78">Yes → nothing to obtain</text>
+      <text x="340" y="38" text-anchor="middle" fill="#2a7d78">just enter the numbers</text>
+      <line x1="182" y1="30" x2="236" y2="26" stroke="#6c7a89" marker-end="url(#ar)"/>
+
+      <rect x="6" y="104" width="176" height="46" rx="6" fill="#e6edf4" stroke="#1a5e9b"/>
+      <text x="94" y="124" text-anchor="middle" font-weight="600">Do we know their</text>
+      <text x="94" y="140" text-anchor="middle" font-weight="600">Federal EIN?</text>
+      <line x1="94" y1="60" x2="94" y2="100" stroke="#6c7a89" marker-end="url(#ar)"/>
+      <text x="102" y="82" font-size="11" fill="#6c7a89">No</text>
+
+      <rect x="240" y="96" width="200" height="40" rx="6" fill="#f8e7e2" stroke="#96412f"/>
+      <text x="340" y="114" text-anchor="middle" font-weight="600" fill="#96412f">No → apply for the EIN</text>
+      <text x="340" y="128" text-anchor="middle" fill="#96412f">longest path, start first</text>
+      <line x1="182" y1="122" x2="236" y2="116" stroke="#6c7a89" marker-end="url(#ar)"/>
+
+      <rect x="6" y="194" width="176" height="46" rx="6" fill="#e6edf4" stroke="#1a5e9b"/>
+      <text x="94" y="214" text-anchor="middle" font-weight="600">Do we hold a</text>
+      <text x="94" y="230" text-anchor="middle" font-weight="600">document for it?</text>
+      <line x1="94" y1="150" x2="94" y2="190" stroke="#6c7a89" marker-end="url(#ar)"/>
+      <text x="102" y="172" font-size="11" fill="#6c7a89">Yes</text>
+
+      <rect x="240" y="168" width="200" height="40" rx="6" fill="#f8efdc" stroke="#8d6314"/>
+      <text x="340" y="186" text-anchor="middle" font-weight="600" fill="#8d6314">No → call the IRS</text>
+      <text x="340" y="200" text-anchor="middle" fill="#8d6314">147C letter, often faxed same day</text>
+      <line x1="182" y1="212" x2="236" y2="196" stroke="#6c7a89" marker-end="url(#ar)"/>
+
+      <rect x="240" y="216" width="200" height="40" rx="6" fill="#d7f0ef" stroke="#2a7d78"/>
+      <text x="340" y="234" text-anchor="middle" font-weight="600" fill="#2a7d78">Yes → upload it</text>
+      <text x="340" y="248" text-anchor="middle" fill="#2a7d78">desk work, no waiting</text>
+      <line x1="182" y1="222" x2="236" y2="232" stroke="#6c7a89" marker-end="url(#ar)"/>
+
+      <rect x="472" y="96" width="222" height="76" rx="6" fill="#f4f6f9" stroke="#cdd4db"/>
+      <text x="583" y="118" text-anchor="middle" font-weight="600">Then, for everyone</text>
+      <text x="583" y="138" text-anchor="middle" font-size="11">1. Enter both numbers in Fusion</text>
+      <text x="583" y="154" text-anchor="middle" font-size="11">2. Upload proof under</text>
+      <text x="583" y="167" text-anchor="middle" font-size="11">&#8220;EIN Tax Documents&#8221;</text>
+      <line x1="444" y1="130" x2="468" y2="130" stroke="#6c7a89" marker-end="url(#ar)"/>
+    </g>
+  </svg>`;
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+(async function boot() {
+  _db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data: { session } } = await _db.auth.getSession();
+  if (!session) { document.getElementById('gate').style.display = 'block'; return; }
+  document.getElementById('app').style.display = 'block';
+
+  const { data } = await _db.from('agency_data')
+    .select('data_key, data_value').eq('agency_id', AGENCY_ID)
+    .in('data_key', ['consumers', 'taxTrainingShots']);
+  (data || []).forEach(r => {
+    if (r.data_key === 'consumers' && Array.isArray(r.data_value)) _consumers = r.data_value;
+    if (r.data_key === 'taxTrainingShots' && r.data_value) _shots = r.data_value;
+  });
+
+  const sel = document.getElementById('consumerPick');
+  sel.innerHTML = '<option value="">Just reading through (no consumer)</option>' +
+    _consumers.filter(c => (c.status || 'active') !== 'inactive')
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('');
+
+  // The bucket is private, so each screenshot needs a signed URL before it renders.
+  await signShots();
+  renderSuggestions();
+  pickConsumer();
+})();
+
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// ============================================================
+// STATE
+// A step counts as done when the consumer's own record says so, reading the very
+// same fields the Tax & EIN page uses. Nothing is tracked twice.
+// ============================================================
+function isDone(step) {
+  if (!_current || !step.field) return false;
+  const v = _current[step.field];
+  return typeof v === 'boolean' ? v : !!(v && String(v).trim());
+}
+
+function pickConsumer() {
+  const id = document.getElementById('consumerPick').value;
+  _current = _consumers.find(c => c.id === id) || null;
+  const hint = document.getElementById('laneHint');
+  if (!_current) {
+    hint.textContent = 'Pick a consumer to track progress against their record.';
+  } else {
+    const ein = !!(_current.ein || '').trim();
+    const mo  = !!(_current.moTaxId || '').trim();
+    hint.innerHTML = (ein ? '✓ has EIN' : '<b style="color:var(--danger)">no EIN</b>') + ' · ' +
+                     (mo ? '✓ has MO Tax ID' : '<b style="color:var(--danger)">no MO Tax ID</b>');
+  }
+  renderRail();
+  showStep(_stepIdx);
+}
+
+function renderRail() {
+  const done = STEPS.filter(isDone).length;
+  const pct = Math.round(done / STEPS.length * 100);
+  document.getElementById('progBar').style.width = pct + '%';
+  document.getElementById('progLabel').textContent = _current
+    ? done + ' of ' + STEPS.length + ' steps recorded for ' + _current.name + ' (' + pct + '%)'
+    : 'Reading mode. Pick a consumer above to record progress.';
+  document.getElementById('stepsRail').innerHTML = STEPS.map((s, i) =>
+    '<button class="pip' + (i === _stepIdx ? ' active' : '') + (isDone(s) ? ' done' : '') +
+    '" onclick="showStep(' + i + ')"><span class="tick">' + (isDone(s) ? '✓' : (i + 1)) + '</span>' +
+    esc(s.pip) + '</button>').join('');
+}
+
+function showStep(i) {
+  _stepIdx = Math.max(0, Math.min(STEPS.length - 1, i));
+  const s = STEPS[_stepIdx];
+  const done = isDone(s);
+  const shots = _shots[s.id] || [];
+
+  document.getElementById('stepHost').innerHTML =
+    '<div class="card step">' +
+      '<div class="track-tag ' + (s.track === 'audit' ? 'track-audit">Required for the DHSS audit' :
+                                 'track-payroll">Payroll setup · not audited') + '</div>' +
+      '<h2>' + esc(s.title) + '</h2>' +
+      '<div class="badges">' + s.badges.map(b => '<span class="badge ' + b[0] + '">' + esc(b[1]) + '</span>').join('') + '</div>' +
+      s.body +
+      (s.copy.length ? '<h3>Details you will need</h3>' + s.copy.map(c =>
+        '<div class="copyrow"><span class="k">' + esc(c[0]) + '</span><span class="v">' + esc(c[1]) + '</span>' +
+        '<button class="copybtn" onclick="copyVal(this,' + JSON.stringify(c[1]).replace(/"/g, '&quot;') + ')">Copy</button></div>').join('') : '') +
+      '<h3>Screenshots for this step</h3>' +
+      '<p class="muted">Add a real screen capture the first time you do this, and everyone after you sees it.</p>' +
+      (shots.length ? '<div class="shots">' + shots.map(sh =>
+          '<div class="shot"><img src="' + esc(sh.url) + '" alt="" onclick="zoom(this.src)">' +
+          '<div class="cap"><span>' + esc(sh.name) + '</span>' +
+          '<button onclick="removeShot(\'' + s.id + '\',\'' + esc(sh.path) + '\')">Remove</button></div></div>').join('') + '</div>' : '') +
+      '<div class="dropzone" onclick="document.getElementById(\'shotInput\').click()">' +
+        '📷 Click to add a screenshot of this step' +
+      '</div>' +
+      '<input type="file" id="shotInput" accept="image/png,image/jpeg,image/heic" style="display:none" ' +
+        'onchange="uploadShot(event,\'' + s.id + '\')">' +
+      '<div id="shotStatus" class="muted" style="margin-top:6px"></div>' +
+      '<div class="stepfoot">' +
+        '<button class="btn btn-outline" onclick="showStep(' + (_stepIdx - 1) + ')"' +
+          (_stepIdx === 0 ? ' disabled' : '') + '>← Back</button>' +
+        (s.field ? '<label class="donebox"><input type="checkbox"' + (done ? ' checked' : '') +
+            (_current ? '' : ' disabled') + ' onchange="toggleDone()">' +
+            (_current ? 'Done for ' + esc(_current.name) : 'Pick a consumer to tick this off') + '</label>'
+          : '<span class="muted">Nothing to record on this step.</span>') +
+        '<span class="spacer"></span>' +
+        '<button class="btn" onclick="showStep(' + (_stepIdx + 1) + ')"' +
+          (_stepIdx === STEPS.length - 1 ? ' disabled' : '') + '>Next step →</button>' +
+      '</div>' +
+    '</div>';
+  renderRail();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Writes to the same consumer field the tracker reads, so ticking here shows up
+// on the Tax & EIN page immediately. Date fields get today's date rather than a
+// boolean, matching what that page expects.
+async function toggleDone() {
+  const s = STEPS[_stepIdx];
+  if (!_current || !s.field) return;
+  const cur = _current[s.field];
+  const isDate = s.field === 'proofUploaded';
+  const isText = s.field === 'ein' || s.field === 'moTaxId' || s.field === 'proofDocType';
+
+  if (isText && !(cur && String(cur).trim())) {
+    alert('Enter the actual value on the Tax & EIN page for ' + _current.name +
+          ', rather than ticking it here. This step is marked done once the number or document is recorded.');
+    showStep(_stepIdx);
+    return;
+  }
+  _current[s.field] = isDate ? (cur ? '' : new Date().toISOString().slice(0, 10)) : !cur;
+
+  const { error } = await _db.from('agency_data')
+    .upsert({ agency_id: AGENCY_ID, data_key: 'consumers', data_value: _consumers },
+            { onConflict: 'agency_id,data_key' });
+  if (error) { alert('Could not save that: ' + error.message); return; }
+  showStep(_stepIdx);
+}
+
+function copyVal(btn, val) {
+  navigator.clipboard.writeText(val).then(() => {
+    const t = btn.textContent; btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = t; }, 1600);
+  });
+}
+
+function zoom(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+// ============================================================
+// SCREENSHOTS
+// Stored in the existing private 'ein-proof' bucket under a _training/ prefix,
+// so no new bucket or policies are needed. Displayed via signed URLs.
+// ============================================================
+async function uploadShot(event, stepId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('shotStatus');
+  status.textContent = 'Uploading ' + file.name + '…';
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = '_training/' + stepId + '/' + Date.now() + '.' + ext;
+    const { error } = await _db.storage.from(SHOT_BUCKET).upload(path, file, { upsert: false });
+    if (error) throw error;
+    _shots[stepId] = (_shots[stepId] || []).concat([{ path, name: file.name }]);
+    await saveShots();
+    await signShots();
+    showStep(_stepIdx);
+  } catch (e) {
+    status.textContent = 'Upload failed: ' + (e.message || 'unknown error');
+  } finally { event.target.value = ''; }
+}
+
+async function removeShot(stepId, path) {
+  if (!confirm('Remove this screenshot?')) return;
+  await _db.storage.from(SHOT_BUCKET).remove([path]);
+  _shots[stepId] = (_shots[stepId] || []).filter(s => s.path !== path);
+  await saveShots();
+  showStep(_stepIdx);
+}
+
+function saveShots() {
+  const bare = {};
+  Object.keys(_shots).forEach(k => { bare[k] = _shots[k].map(s => ({ path: s.path, name: s.name })); });
+  return _db.from('agency_data').upsert(
+    { agency_id: AGENCY_ID, data_key: 'taxTrainingShots', data_value: bare },
+    { onConflict: 'agency_id,data_key' });
+}
+
+// The bucket is private, so every image needs a signed URL before it can render.
+async function signShots() {
+  for (const k of Object.keys(_shots)) {
+    for (const s of _shots[k]) {
+      if (s.url) continue;
+      const { data } = await _db.storage.from(SHOT_BUCKET).createSignedUrl(s.path, 3600);
+      if (data) s.url = data.signedUrl;
+    }
+  }
+}
+
+// ============================================================
+// AI HELP
+// ============================================================
+const SUGGESTIONS = [
+  'Does a filed 941 count as proof of the EIN?',
+  'What do I say when I call the IRS for a 147C?',
+  'Empeon shows 12-3456789 for this consumer. What now?',
+  'Which forms does the audit actually require?',
+  'Can I do the DES registration yet?',
+  'What is not acceptable as proof?'
+];
+let _chat = [];
+
+function renderSuggestions() {
+  document.getElementById('helpSuggest').innerHTML = SUGGESTIONS.map(q =>
+    '<button onclick="quickAsk(' + JSON.stringify(q).replace(/"/g, '&quot;') + ')">' + esc(q) + '</button>').join('');
+}
+
+function toggleHelp(open) {
+  document.getElementById('helpPanel').classList.toggle('open', open);
+  document.getElementById('helpFab').style.display = open ? 'none' : 'flex';
+  if (open && !_chat.length) {
+    addMsg('a', "Ask me anything about the consumer tax setup or the DHSS audit. I know the procedure this " +
+                "training covers, including what counts as proof and what does not.\n\nI am not a tax adviser, " +
+                "so anything beyond this procedure should go to your accountant.");
+  }
+  if (open) document.getElementById('helpInput').focus();
+}
+
+function addMsg(role, text) {
+  const log = document.getElementById('helpLog');
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  d.textContent = text;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  return d;
+}
+
+function quickAsk(q) {
+  toggleHelp(true);
+  document.getElementById('helpInput').value = q;
+  askHelp(new Event('submit'));
+}
+
+async function askHelp(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const input = document.getElementById('helpInput');
+  const q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+  addMsg('u', q);
+  _chat.push({ role: 'user', content: q });
+  const send = document.getElementById('helpSend');
+  send.disabled = true;
+  const thinking = addMsg('a', 'Thinking…');
+
+  try {
+    const { data: { session } } = await _db.auth.getSession();
+    if (!session) throw new Error('Your session expired. Reload the page.');
+    // Give the assistant the consumer's situation so answers are specific.
+    const ctx = _current
+      ? '[Context: working on ' + _current.name + '. EIN ' + (_current.ein ? 'on file' : 'MISSING') +
+        ', MO Tax ID ' + (_current.moTaxId ? 'on file' : 'MISSING') +
+        ', currently on the step: ' + STEPS[_stepIdx].title + '.]\n'
+      : '';
+    const res = await fetch(HELP_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ messages: _chat.map((m, i) =>
+        i === _chat.length - 1 ? { role: m.role, content: ctx + m.content } : m) })
+    });
+    const body = await res.json().catch(() => ({}));
+    thinking.remove();
+    if (body.reply) {
+      addMsg('a', body.reply);
+      _chat.push({ role: 'assistant', content: body.reply });
+    } else {
+      addMsg('err', body.error || 'No answer came back. Try again shortly.');
+    }
+  } catch (err) {
+    thinking.remove();
+    addMsg('err', err.message || 'Something went wrong.');
+  } finally {
+    send.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
