@@ -8,15 +8,20 @@
   // Embedded mode: when this hub runs inside a GHL iframe, drop our own tab bar
   // if a specific page was deep-linked (e.g. hub.caringcds.com/#consumers), since
   // GHL's sidebar is already providing that navigation. Runs before first paint.
-  try {
-    if (window.self !== window.top) {
-      document.documentElement.classList.add('embedded');
-      if (location.hash.replace('#','')) document.documentElement.classList.add('focused');
-    }
-  } catch (e) { /* cross-origin access to window.top means we are framed */
-    document.documentElement.classList.add('embedded');
-    if (location.hash.replace('#','')) document.documentElement.classList.add('focused');
-  }
+  window.__applyEmbedFlags = function () {
+    var el = document.documentElement, framed;
+    try { framed = window.self !== window.top; }
+    catch (e) { framed = true; }   // cross-origin window.top means we are framed
+    if (!framed) return;
+    el.classList.add('embedded');
+    var target = location.hash.replace('#', '').trim().toLowerCase();
+    el.classList.toggle('focused', !!target);
+    // data-focus lets CSS drop sub-tabs that this particular link doesn't mean,
+    // e.g. the Leads link points at #pipeline, so Active Consumers is noise.
+    if (target) el.setAttribute('data-focus', target);
+    else el.removeAttribute('data-focus');
+  };
+  window.__applyEmbedFlags();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,8 +39,12 @@
     --warn-light: #f39c12;
     --danger: #922b21;
     --danger-light: #e74c3c;
-    --success: #1e8449;
-    --success-light: #27ae60;
+    /* "Success" is brand turquoise, not green — same token names so the ~55
+       existing usages follow automatically. Red still marks problems, so the
+       good/bad contrast survives. */
+    --success: #2a7d78;        /* Deep teal, readable as badge text */
+    --success-light: #54bdb8;  /* Brand teal */
+    --success-pale: #d7f0ef;   /* Pale teal badge/alert background */
     --gray-100: #f4f6f9;
     --gray-200: #e8ecf0;
     --gray-300: #cdd4db;
@@ -62,6 +71,11 @@
   /* Focused mode: deep-linked inside a GHL iframe. Hide our main tab bar (GHL's
      sidebar owns that navigation) but keep sub-navs, which have no equivalent there. */
   html.embedded.focused .tabs { display: none; }
+  /* Each sidebar link resolves to exactly one consumer view, so its sub-nav is
+     just noise: Leads means the pipeline, Consumers means active consumers.
+     Guides keeps its sub-nav, where all four tabs are still relevant. */
+  html.embedded.focused[data-focus="pipeline"]  #page-consumers .sub-nav,
+  html.embedded.focused[data-focus="consumers"] #page-consumers .sub-nav { display: none; }
 
   .sub-nav { display:flex; gap:0; border-bottom:2px solid var(--gray-200); margin-bottom:22px; }
   .sub-nav-tab { padding:9px 20px; font-size:13px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--gray-600); font-weight:500; transition:all 0.15s; white-space:nowrap; }
@@ -95,7 +109,7 @@
 
   /* BADGES */
   .badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; }
-  .badge-green { background: #d5f5e3; color: var(--success); }
+  .badge-green { background: var(--success-pale); color: var(--success); }
   .badge-warn { background: #fef9e7; color: var(--warn); }
   .badge-red { background: #fdedec; color: var(--danger); }
   .badge-blue { background: #ebf5fb; color: var(--primary-light); }
@@ -142,7 +156,7 @@
   .alert-warn { background: #fef9e7; border-left: 4px solid var(--warn-light); color: var(--warn); }
   .alert-danger { background: #fdedec; border-left: 4px solid var(--danger-light); color: var(--danger); }
   .alert-info { background: #ebf5fb; border-left: 4px solid var(--primary-light); color: var(--primary); }
-  .alert-success { background: #d5f5e3; border-left: 4px solid var(--success-light); color: var(--success); }
+  .alert-success { background: var(--success-pale); border-left: 4px solid var(--success-light); color: var(--success); }
 
   /* FORMS */
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
@@ -266,6 +280,7 @@
 <div class="tabs">
   <div class="tab active" onclick="showPage('dashboard')">📊 Dashboard</div>
   <div class="tab" onclick="showPage('consumers')">👥 Consumers</div>
+  <div class="tab" onclick="showPage('statesubmissions')">🏛️ State Submissions</div>
   <div class="tab" onclick="showPage('attendants')">🧑‍🤝‍🧑 Attendants</div>
   <div class="tab" onclick="showPage('evvcorrections')">📝 EVV Corrections</div>
   <div class="tab" onclick="showPage('automations')">🤖 Automations</div>
@@ -557,13 +572,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title"><span class="icon">🏛️</span> State Submission Tracker — Referrals &amp; PCCP Transfers Pending Authorization</div>
-      <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">These contacts have been submitted to DSDS/DHSS and are awaiting state authorization. Track submission dates and follow up every 1–2 weeks.</div>
-      <div id="stateSubmissionList">
-        <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
-      </div>
-    </div>
   </div>
 
   <!-- ── ACTIVE CONSUMERS SUB-SECTION ── -->
@@ -605,6 +613,20 @@
       </div>
     </div>
   </div><!-- end csub-active -->
+</div>
+
+<!-- ==================== STATE SUBMISSION TRACKER ==================== -->
+<div id="page-statesubmissions" class="page">
+  <div class="section-header">
+    <div class="section-title">🏛️ State Submission Tracker</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="icon">🏛️</span> Referrals &amp; PCCP Transfers Pending Authorization</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">These contacts have been submitted to DSDS/DHSS and are awaiting state authorization. Track submission dates and follow up every 1–2 weeks.</div>
+    <div id="stateSubmissionList">
+      <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
+    </div>
+  </div>
 </div>
 
 <!-- ==================== ATTENDANTS ==================== -->
@@ -1684,12 +1706,17 @@
     <div class="card-title"><span class="icon">🔄</span> GoHighLevel Contact Sync</div>
     <p style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
       Pushes everyone in this hub into the Caring Companions CDS GoHighLevel account as contacts, so you can
-      text, email and campaign them from there. Consumers get the <strong>consumer</strong> tag, attendants get
-      the <strong>attendant</strong> tag. This only ever adds and updates in GoHighLevel, it never deletes, and
-      it never changes anything in this hub. Safe to run as often as you like.
+      text, email and campaign them from there. Pipeline contacts get the <strong>lead</strong> tag, consumers get
+      <strong>consumer</strong>, attendants get <strong>attendant</strong>. This only ever adds and updates in
+      GoHighLevel, it never deletes, and it never changes anything in this hub. Safe to run as often as you like.
+    </p>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      Adding someone to the pipeline already tags them in GoHighLevel automatically. Use these buttons to catch up
+      anyone added before this was connected, or after editing a phone number or email.
     </p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn" id="ghlSyncBtn" onclick="syncToGhl()" style="font-size:13px">🔄 Sync Everyone Now</button>
+      <button class="btn btn-outline" onclick="syncToGhl('pipeline')" style="font-size:13px">Leads only</button>
       <button class="btn btn-outline" onclick="syncToGhl('consumers')" style="font-size:13px">Consumers only</button>
       <button class="btn btn-outline" onclick="syncToGhl('attendants')" style="font-size:13px">Attendants only</button>
     </div>
@@ -2487,7 +2514,7 @@
       <div style="font-size:11px;color:var(--gray-600);margin-top:4px">Pre-filled with your CDS sub-account ID.</div>
     </div>
 
-    <div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:16px;line-height:1.7">
+    <div style="background:#e2f4f3;border:1px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:16px;line-height:1.7">
       <strong>✅ How it works — no setup required in GHL:</strong><br>
       When you click Send Both Now, Claude uses the GHL API to: (1) create/find the attendant as a GHL contact, (2) send them an SMS from your Twilio number, (3) send them an email from intake@caringcds.com. All in one paste.
     </div>
@@ -3032,9 +3059,12 @@ let _store = {};    // In-memory cache
 function getData(key) {
   return Array.isArray(_store[key]) ? _store[key] : [];
 }
+// Returns the pending write, so callers that need the row to actually exist in
+// the database before they act on it (the GHL sync reads it back by id) can await
+// it. Everything else can keep ignoring the return value.
 function setData(key, val) {
   _store[key] = val;
-  _dbUpsert(key, val);
+  return _dbUpsert(key, val);
 }
 function getObj(key) {
   const v = _store[key];
@@ -3051,7 +3081,7 @@ function _dbUpsert(key, val) {
   // surrogate uuid we never send, so without this Supabase treats every write as a fresh
   // INSERT, which then trips the unique(agency_id, data_key) constraint. That made the
   // first save of a key succeed and every later save fail — silently losing edits.
-  _db.from('agency_data')
+  return _db.from('agency_data')
     .upsert({ agency_id: AGENCY_ID, data_key: key, data_value: val }, { onConflict: 'agency_id,data_key' })
     .then(({ error }) => {
       if (error) {
@@ -3226,10 +3256,11 @@ function importData(event) {
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
-const MAIN_TABS    = ['dashboard','consumers','attendants','evvcorrections','automations','guides','quarterly','financials'];
+const MAIN_TABS    = ['dashboard','consumers','statesubmissions','attendants','evvcorrections','automations','guides','quarterly','financials'];
 const PAGE_TO_TAB  = {
   dashboard:'dashboard',
   consumers:'consumers', pipeline:'consumers',
+  statesubmissions:'statesubmissions',
   attendants:'attendants',
   evvcorrections:'evvcorrections',
   automations:'automations',
@@ -3272,6 +3303,9 @@ function showPage(id) {
     renderConsumers();
     renderPipeline();
   }
+  // The state submission list is built by renderPipeline (it reads the same
+  // pipeline records), which finds the container by id wherever it now lives.
+  if (id === 'statesubmissions') renderPipeline();
 }
 
 function showConsumerTab(tab) {
@@ -3311,9 +3345,7 @@ function applyHashRoute() {
 // Keep focused mode in sync if the hash changes after load (GHL re-uses the iframe
 // when you click a different menu link, which fires hashchange rather than reloading).
 window.addEventListener('hashchange', () => {
-  if (document.documentElement.classList.contains('embedded')) {
-    document.documentElement.classList.toggle('focused', !!location.hash.replace('#', '').trim());
-  }
+  if (window.__applyEmbedFlags) window.__applyEmbedFlags();
   applyHashRoute();
 });
 
@@ -3407,7 +3439,7 @@ function renderConsumers() {
     const contactDetail = contacted && typeof contacted === 'object' ? contacted : null;
     const dhssFlag = contactDetail && contactDetail.dhssFlag;
     const contactBtn = contacted ?
-      `<button class="btn btn-sm" style="background:#d5f5e3;color:var(--success);border:1px solid #a9dfbf;cursor:pointer;position:relative" onclick="toggleContact('${c.id}')" title="${contactDetail ? 'Logged ' + contactDetail.date + ' via ' + contactDetail.method + (contactDetail.notes ? ' — ' + contactDetail.notes.substring(0,60) : '') : ''}">✓ Contacted${dhssFlag ? ' <span style=\'color:var(--danger)\'>⚠</span>' : ''}</button>` :
+      `<button class="btn btn-sm" style="background:var(--success-pale);color:var(--success);border:1px solid #a6dbd8;cursor:pointer;position:relative" onclick="toggleContact('${c.id}')" title="${contactDetail ? 'Logged ' + contactDetail.date + ' via ' + contactDetail.method + (contactDetail.notes ? ' — ' + contactDetail.notes.substring(0,60) : '') : ''}">✓ Contacted${dhssFlag ? ' <span style=\'color:var(--danger)\'>⚠</span>' : ''}</button>` :
       `<button class="btn btn-sm btn-danger" onclick="toggleContact('${c.id}')">📋 Log Contact</button>`;
 
     // Tax setup badge
@@ -3801,13 +3833,16 @@ function addPipelineContact() {
     onboardingSent: false, welcomeSent: false
   };
   pipeline.unshift(newContact);
-  setData('pipeline', pipeline);
+  const saved = setData('pipeline', pipeline);
   closeModal('addPipelineModal');
   ['pl_name','pl_phone','pl_email','pl_firstcontact','pl_followup','pl_statesubmit','pl_currentagency','pl_dcn','pl_hours','pl_notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pl_type').value = 'lead';
   document.getElementById('pl_stateFields').style.display = 'none';
   renderPipeline();
   updateDashboard();
+  // Tag them in GoHighLevel straight away — adding to the pipeline is the moment
+  // the lead exists. Runs in the background; a failure warns without blocking.
+  syncOneToGhl('pipeline', newId, name, saved);
   // Auto-trigger outreach based on type
   if (type === 'lead') {
     openOutreachModal('lead_welcome', newContact);
@@ -4126,7 +4161,7 @@ Confirm each step succeeded and report back.`;
 
   // Show success state in modal
   document.querySelector('#welcomeOutreachModal .modal-footer').innerHTML = `
-    <div style="background:#d5f5e3;border-radius:8px;padding:12px 16px;font-size:13px;width:100%;text-align:center">
+    <div style="background:var(--success-pale);border-radius:8px;padding:12px 16px;font-size:13px;width:100%;text-align:center">
       ✅ <strong>GHL send command copied to clipboard!</strong><br>
       <span style="font-size:12px;color:#333">Paste into this Claude chat — Claude will call the GoHighLevel API to send the email (from intake@caringcds.com) and text (from your GHL Twilio number).</span>
     </div>
@@ -4395,7 +4430,7 @@ Confirm each step succeeded.`
   logOutreach(type, data, config, 'sent');
 
   document.getElementById('uom_footer').innerHTML = `
-    <div style="background:#d5f5e3;border-radius:8px;padding:12px 16px;font-size:13px;width:100%;text-align:center">
+    <div style="background:var(--success-pale);border-radius:8px;padding:12px 16px;font-size:13px;width:100%;text-align:center">
       ✅ <strong>GHL send command copied!</strong><br>
       <span style="font-size:12px;color:#333">Paste into this Claude chat — Claude will call the GoHighLevel API to send email (from intake@caringcds.com) and SMS (from your GHL Twilio number).</span>
     </div>
@@ -4602,6 +4637,41 @@ function renderOutreachLog() {
 // Calls the ghl-sync edge function, which holds the GoHighLevel token
 // server-side. The token is never sent to or stored in the browser.
 // ============================================================
+// Fires when one person is added (a new lead). Waits for the hub's own write to
+// land first, because the function reads the record back from the database by id.
+async function syncOneToGhl(list, id, name, pendingWrite) {
+  try {
+    if (pendingWrite) await pendingWrite;
+    const { data: { session } } = await _db.auth.getSession();
+    if (!session) return;
+    const res = await fetch(SUPABASE_URL + '/functions/v1/ghl-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+      body: JSON.stringify({ only: list, id }),
+    });
+    const body = await res.json().catch(() => ({}));
+
+    if (body.configured === false) return;   // not connected yet; stay quiet
+    const r = (body.report || {})[list];
+    if (r && r.synced) { _ghlToast('✅ ' + name + ' tagged in GoHighLevel.'); return; }
+
+    const why = (r && ((r.skipped[0] || {}).skipped || (r.failed[0] || {}).error)) || body.error || 'unknown reason';
+    _ghlToast('⚠️ ' + name + ' was saved here, but not tagged in GoHighLevel — ' + why, true);
+  } catch (e) {
+    _ghlToast('⚠️ ' + name + ' was saved here, but not tagged in GoHighLevel — ' + e.message, true);
+  }
+}
+
+function _ghlToast(msg, warn) {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:99998;max-width:340px;' +
+    'font-family:Poppins,sans-serif;font-size:13px;padding:12px 16px;border-radius:10px;color:#fff;' +
+    'box-shadow:0 4px 18px rgba(0,0,0,0.25);background:' + (warn ? '#b3261e' : 'var(--accent)');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), warn ? 9000 : 4500);
+}
+
 async function syncToGhl(only) {
   const btn = document.getElementById('ghlSyncBtn');
   const out = document.getElementById('ghlSyncResult');
@@ -4640,7 +4710,7 @@ async function syncToGhl(only) {
 }
 
 function _ghlSyncReport(report) {
-  const LABEL = { consumers: 'Consumers', attendants: 'Attendants' };
+  const LABEL = { pipeline: 'Leads', consumers: 'Consumers', attendants: 'Attendants' };
   let html = '';
   Object.keys(report).forEach(key => {
     const r = report[key];
@@ -5255,7 +5325,7 @@ async function loadPendingSubmissions() {
           <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
             <span style="font-size:12px;background:#e8f4fd;color:#1a5276;padding:3px 10px;border-radius:12px;font-weight:600">📅 Visit: ${sub.visitdate || '—'}</span>
             <span style="font-size:12px;background:#eaf6f6;color:var(--primary);padding:3px 10px;border-radius:12px;font-weight:600">📆 Pay Period: ${getPayPeriod(sub.visitdate)}</span>
-            ${isSubmissionLate(sub.visitdate, sub.submitdate) ? '<span style="font-size:11px;background:#fdedec;color:var(--danger);padding:3px 10px;border-radius:12px;font-weight:700">⚠️ Submitted Late (after Saturday deadline)</span>' : '<span style="font-size:11px;background:#d5f5e3;color:var(--success);padding:3px 10px;border-radius:12px;font-weight:600">✓ On Time</span>'}
+            ${isSubmissionLate(sub.visitdate, sub.submitdate) ? '<span style="font-size:11px;background:#fdedec;color:var(--danger);padding:3px 10px;border-radius:12px;font-weight:700">⚠️ Submitted Late (after Saturday deadline)</span>' : '<span style="font-size:11px;background:var(--success-pale);color:var(--success);padding:3px 10px;border-radius:12px;font-weight:600">✓ On Time</span>'}
           </div>
           <div style="font-size:11px;color:var(--gray-600);margin-top:4px">Form submitted: ${submitted}</div>
         </div>
@@ -5578,7 +5648,7 @@ function updateDashboard() {
       taxAlert.innerHTML = `<div class="alert alert-danger">⚠️ <strong>Tax Setup Incomplete</strong> for ${taxIncomplete.length} consumer${taxIncomplete.length!==1?'s':''}: ${taxIncomplete.map(c=>'<strong>'+c.name+'</strong>').join(', ')} — EIN, IRS forms, MO registration, and/or DES may not be complete. <a href="#" onclick="showPage('consumers');return false" style="color:inherit;text-decoration:underline">Go to Consumers → Tax Setup column</a></div>`;
     } else if (consumers.length > 0) {
       taxAlert.style.display = 'block';
-      taxAlert.innerHTML = `<div class="alert" style="background:#d5f5e3;border-left:4px solid var(--success);color:var(--success)">✅ Tax setup complete for all active consumers.</div>`;
+      taxAlert.innerHTML = `<div class="alert" style="background:var(--success-pale);border-left:4px solid var(--success);color:var(--success)">✅ Tax setup complete for all active consumers.</div>`;
     } else {
       taxAlert.style.display = 'none';
     }
@@ -6101,7 +6171,7 @@ function renderQuarterlyReport() {
     const isPast = new Date(`${mk}-01`) <= new Date();
     missedByMonth[mk] = missed;
     totalMissed += missed.length;
-    missedHtml += `<div style="text-align:center;padding:16px;background:${missed.length > 0 && isPast ? '#fdedec' : '#d5f5e3'};border-radius:8px">
+    missedHtml += `<div style="text-align:center;padding:16px;background:${missed.length > 0 && isPast ? '#fdedec' : 'var(--success-pale)'};border-radius:8px">
       <div style="font-size:22px;font-weight:700;color:${missed.length > 0 && isPast ? 'var(--danger)' : 'var(--success)'}">${missed.length}</div>
       <div style="font-size:13px;font-weight:600;margin-top:4px">Month ${idx+1} (${label})</div>
       <div style="font-size:11px;color:var(--gray-600);margin-top:2px">${isPast ? 'missed contacts' : '(future)'}</div>
@@ -6395,7 +6465,7 @@ function renderFinancials() {
         <div style="font-size:12px;color:var(--gray-600)">per hour</div>
       </div>
     </div>
-    <div style="background:#d5f5e3;border-radius:6px;padding:14px;text-align:center;margin-bottom:12px">
+    <div style="background:var(--success-pale);border-radius:6px;padding:14px;text-align:center;margin-bottom:12px">
       <div style="font-size:11px;text-transform:uppercase;font-weight:700;color:var(--gray-600)">Gross Margin Per Hour</div>
       <div style="font-size:36px;font-weight:700;color:var(--success)">$${marginPerHr.toFixed(2)}</div>
       <div style="font-size:12px;color:var(--gray-600)">${marginPct}% · $${marginPerUnit.toFixed(4)} per 15-min unit</div>
