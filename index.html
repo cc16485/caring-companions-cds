@@ -2518,6 +2518,17 @@
       <strong>EIN Tax Documents</strong> category, or the auditor will not find it.
     </div>
 
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Our copy of the proof document</div>
+    <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
+      Keep the document here so the whole set is in one place if MMAC ever asks, and so a faxed 147C has somewhere to
+      live before it goes into Fusion. <strong>This is our file copy, not the state's.</strong> The audited upload still
+      has to be done in Fusion, then tick the box above.
+    </div>
+    <div id="tax_proof_files" style="margin-bottom:8px"></div>
+    <input type="file" id="tax_proof_upload" accept="application/pdf,image/jpeg,image/png,image/heic"
+           onchange="uploadProofFile(event)" style="font-size:12px">
+    <div id="tax_proof_status" style="font-size:11.5px;margin-top:6px"></div>
+
     <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Enrollment Packet (GoHighLevel)</div>
     <div class="form-row">
       <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
@@ -3782,6 +3793,8 @@ function openTaxSetup(cid) {
   document.getElementById('tax_proof_uploaded').value = c.proofUploaded || '';
   document.getElementById('tax_fusion_entered').checked = !!c.fusionEntered;
   document.getElementById('tax_prior_vendor').checked   = !!c.priorVendorProof;
+  renderProofFiles(c);
+  document.getElementById('tax_proof_status').innerHTML = '';
   openModal('taxSetupModal');
 }
 
@@ -4772,6 +4785,101 @@ function renderOutreachLog() {
 // OUTREACH SETTINGS (GoHighLevel)
 // ============================================================
 // ============================================================
+// PROOF DOCUMENT FILES  (private 'ein-proof' bucket)
+// Our own copy of each consumer's EIN verification, so the full set is in one
+// place for an audit and a faxed 147C has somewhere to live before it goes into
+// Fusion. Storing a file here is NOT the audited upload — that still happens in
+// Fusion, tracked separately by proofUploaded / fusionEntered.
+// ============================================================
+const PROOF_BUCKET = 'ein-proof';
+
+// DODD_CRYSTAL_EIN-proof.pdf — named so the bucket is readable without opening
+// anything, matching the naming the runbook asks staff to use.
+function proofFileName(consumerName, seq, ext) {
+  const parts = (consumerName || 'unknown').trim().split(/\s+/);
+  const last  = (parts.length > 1 ? parts[parts.length - 1] : parts[0]).toUpperCase();
+  const first = (parts.length > 1 ? parts[0] : '').toUpperCase();
+  const stem  = [last, first].filter(Boolean).join('_').replace(/[^A-Z_]/g, '');
+  return stem + '_EIN-proof' + (seq > 1 ? '-' + seq : '') + '.' + ext;
+}
+
+async function uploadProofFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const cid = document.getElementById('tax_consumer_id').value;
+  const status = document.getElementById('tax_proof_status');
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) return;
+
+  status.innerHTML = '<span style="color:var(--gray-600)">Uploading ' + file.name + '…</span>';
+  try {
+    const existing = Array.isArray(c.proofFiles) ? c.proofFiles : [];
+    const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+    const path = cid + '/' + proofFileName(c.name, existing.length + 1, ext);
+
+    const { error } = await _db.storage.from(PROOF_BUCKET).upload(path, file, { upsert: false });
+    if (error) throw error;
+
+    // Save straight away rather than waiting for the modal's Save button — the
+    // file is already in the bucket, so leaving the record unsaved would strand it.
+    c.proofFiles = existing.concat([{ path, name: file.name, at: new Date().toISOString().slice(0, 10) }]);
+    setData('consumers', consumers);
+    renderProofFiles(c);
+    renderTaxCompliance();
+    status.innerHTML = '<span style="color:var(--success)">✓ Saved as ' + path.split('/')[1] + '</span>';
+  } catch (e) {
+    const rls = /row-level security|violates/i.test(e.message || '');
+    status.innerHTML = '<span style="color:var(--danger)">Upload failed — ' + (e.message || 'unknown error') +
+      (rls ? '. The storage policies have not been run yet (storage_policies.sql).' : '') + '</span>';
+  } finally {
+    event.target.value = '';
+  }
+}
+
+function renderProofFiles(c) {
+  const el = document.getElementById('tax_proof_files');
+  if (!el) return;
+  const files = Array.isArray(c.proofFiles) ? c.proofFiles : [];
+  if (!files.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--gray-600)">No document held yet.</div>';
+    return;
+  }
+  el.innerHTML = files.map(f =>
+    '<div style="display:flex;align-items:center;gap:8px;background:var(--gray-100);border-radius:6px;' +
+    'padding:7px 10px;margin-bottom:5px;font-size:12px">' +
+    '<span>📎</span><span style="flex:1">' + f.name +
+    '<span style="color:var(--gray-600)"> · added ' + (f.at || '') + '</span></span>' +
+    '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' +
+      f.path.replace(/'/g, "\\'") + '\')">View</button>' +
+    '<button class="btn btn-sm btn-outline" style="font-size:11px;color:var(--danger)" onclick="removeProofFile(\'' +
+      f.path.replace(/'/g, "\\'") + '\')">Remove</button>' +
+    '</div>').join('');
+}
+
+// The bucket is private, so hand out a short-lived signed link rather than a
+// permanent public URL for a document carrying an EIN.
+async function openProofFile(path) {
+  const { data, error } = await _db.storage.from(PROOF_BUCKET).createSignedUrl(path, 120);
+  if (error || !data) { alert('Could not open that file: ' + ((error && error.message) || 'unknown error')); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function removeProofFile(path) {
+  if (!confirm('Remove this document from our records?\n\nThis deletes our file copy. It does not touch anything already uploaded to Fusion.')) return;
+  const cid = document.getElementById('tax_consumer_id').value;
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const { error } = await _db.storage.from(PROOF_BUCKET).remove([path]);
+  if (error) { alert('Could not remove that file: ' + error.message); return; }
+  c.proofFiles = (c.proofFiles || []).filter(f => f.path !== path);
+  setData('consumers', consumers);
+  renderProofFiles(c);
+  renderTaxCompliance();
+}
+
+// ============================================================
 // TAX & EIN COMPLIANCE
 // The DHSS finding turns on two things per consumer: both numbers entered in
 // Fusion under HCBS Eligibility, and acceptable proof uploaded to the Documents
@@ -4926,7 +5034,8 @@ function renderTaxCompliance() {
       '<td style="font-size:12px;max-width:270px">' + s.next + '</td>' +
       '<td>' + (s.hasEin ? yes : no) + '</td>' +
       '<td>' + (s.hasMoId ? yes : no) + '</td>' +
-      '<td style="font-size:12px">' + (s.hasProof ? labelFor(EIN_PROOF_DOCS, c.proofDocType) : '<span style="color:var(--gray-600)">none</span>') + '</td>' +
+      '<td style="font-size:12px">' + (s.hasProof ? labelFor(EIN_PROOF_DOCS, c.proofDocType) : '<span style="color:var(--gray-600)">none</span>') +
+        ((c.proofFiles || []).length ? '<div style="font-size:11px;color:var(--success)">📎 ' + c.proofFiles.length + ' on file</div>' : '') + '</td>' +
       '<td style="font-size:12px">' + (s.uploaded ? c.proofUploaded : (s.exempt ? '<span style="font-size:11px">prior vendor</span>' : no)) + '</td>' +
       '<td>' + (s.inFusion ? yes : no) + '</td>' +
       '<td style="font-size:12px">' + due + '</td>' +
