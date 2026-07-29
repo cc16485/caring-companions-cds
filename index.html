@@ -1679,6 +1679,23 @@
     </div>
   </div>
 
+  <!-- GHL CONTACT SYNC -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title"><span class="icon">🔄</span> GoHighLevel Contact Sync</div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      Pushes everyone in this hub into the Caring Companions CDS GoHighLevel account as contacts, so you can
+      text, email and campaign them from there. Consumers get the <strong>consumer</strong> tag, attendants get
+      the <strong>attendant</strong> tag. This only ever adds and updates in GoHighLevel, it never deletes, and
+      it never changes anything in this hub. Safe to run as often as you like.
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn" id="ghlSyncBtn" onclick="syncToGhl()" style="font-size:13px">🔄 Sync Everyone Now</button>
+      <button class="btn btn-outline" onclick="syncToGhl('consumers')" style="font-size:13px">Consumers only</button>
+      <button class="btn btn-outline" onclick="syncToGhl('attendants')" style="font-size:13px">Attendants only</button>
+    </div>
+    <div id="ghlSyncResult" style="font-size:13px"></div>
+  </div>
+
   <!-- PENDING OUTREACHES -->
   <div class="card" style="margin-bottom:20px">
     <div class="card-title">⚠️ Pending Outreaches</div>
@@ -4580,6 +4597,72 @@ function renderOutreachLog() {
 // ============================================================
 // OUTREACH SETTINGS (GoHighLevel)
 // ============================================================
+// ============================================================
+// GHL CONTACT SYNC
+// Calls the ghl-sync edge function, which holds the GoHighLevel token
+// server-side. The token is never sent to or stored in the browser.
+// ============================================================
+async function syncToGhl(only) {
+  const btn = document.getElementById('ghlSyncBtn');
+  const out = document.getElementById('ghlSyncResult');
+  const label = only ? only : 'everyone';
+  out.innerHTML = '<span style="color:var(--gray-600)">Syncing ' + label + ' to GoHighLevel…</span>';
+  if (btn) btn.disabled = true;
+
+  try {
+    const { data: { session } } = await _db.auth.getSession();
+    if (!session) throw new Error('Your session expired. Sign out and back in.');
+
+    const res = await fetch(SUPABASE_URL + '/functions/v1/ghl-sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + session.access_token,
+      },
+      body: JSON.stringify(only ? { only } : {}),
+    });
+    const body = await res.json().catch(() => ({}));
+
+    if (body.configured === false) {
+      out.innerHTML = '<div class="alert alert-warn" style="font-size:13px">⚙️ <strong>Not connected yet.</strong> ' +
+        'GoHighLevel needs a token before this can run. ' + (body.error || '') + '</div>';
+      return;
+    }
+    if (!res.ok || body.error) throw new Error(body.error || ('HTTP ' + res.status));
+
+    out.innerHTML = _ghlSyncReport(body.report || {});
+  } catch (e) {
+    out.innerHTML = '<div class="alert alert-warn" style="font-size:13px">⚠️ <strong>Sync failed.</strong> ' +
+      e.message + '</div>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _ghlSyncReport(report) {
+  const LABEL = { consumers: 'Consumers', attendants: 'Attendants' };
+  let html = '';
+  Object.keys(report).forEach(key => {
+    const r = report[key];
+    const problems = (r.skipped || []).concat(r.failed || []);
+    html += '<div style="padding:10px 12px;background:var(--gray-100);border-radius:8px;margin-bottom:8px">' +
+      '<strong>' + (LABEL[key] || key) + ':</strong> ' + r.synced + ' of ' + r.total + ' synced';
+    if (problems.length) {
+      html += '<div style="margin-top:8px;font-size:12px;color:var(--gray-600)">Not synced:<ul style="margin:4px 0 0 18px">' +
+        problems.map(p => '<li>' + p.name + ' — ' + (p.skipped || p.error) + '</li>').join('') +
+        '</ul></div>';
+    }
+    html += '</div>';
+  });
+  const anyProblem = Object.values(report).some(r => (r.skipped || []).length || (r.failed || []).length);
+  if (anyProblem) {
+    html += '<p style="font-size:12px;color:var(--gray-600)">Anyone listed as “no usable phone or email” just ' +
+      'needs a phone number or email address added here, then run the sync again. GoHighLevel needs one of the ' +
+      'two to know who a contact is.</p>';
+  }
+  return html || '<span style="color:var(--gray-600)">Nothing to sync yet.</span>';
+}
+
 function openOutreachSettings() {
   const s = getData('outreachSettings') || {};
   document.getElementById('or_api_key').value = s.apiKey || '';
