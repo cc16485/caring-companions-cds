@@ -3030,9 +3030,38 @@ function setObj(key, val) {
 
 function _dbUpsert(key, val) {
   if (!_db) return;
+  // onConflict MUST name the unique constraint's columns. The table's primary key is a
+  // surrogate uuid we never send, so without this Supabase treats every write as a fresh
+  // INSERT, which then trips the unique(agency_id, data_key) constraint. That made the
+  // first save of a key succeed and every later save fail — silently losing edits.
   _db.from('agency_data')
-    .upsert({ agency_id: AGENCY_ID, data_key: key, data_value: val })
-    .then(({ error }) => { if (error) console.error('Supabase write error:', key, error.message); });
+    .upsert({ agency_id: AGENCY_ID, data_key: key, data_value: val }, { onConflict: 'agency_id,data_key' })
+    .then(({ error }) => {
+      if (error) {
+        console.error('Supabase write error:', key, error.message);
+        _saveError('Could not save "' + key + '" — ' + error.message);
+      }
+    });
+}
+
+// A failed write used to be invisible: the change sat in memory, looked saved, then vanished
+// on the next reload. Never fail silently about data loss.
+function _saveError(msg) {
+  let el = document.getElementById('saveErrorBar');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'saveErrorBar';
+    el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b3261e;' +
+      'color:#fff;font-family:Poppins,sans-serif;font-size:13px;padding:12px 18px;' +
+      'box-shadow:0 -2px 12px rgba(0,0,0,0.3);display:flex;gap:12px;align-items:center';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<span style="font-size:16px">⚠️</span>' +
+    '<span style="flex:1"><strong>Not saved.</strong> ' + msg +
+    ' Your change is only on this screen and will be lost if you reload. Copy it somewhere safe.</span>' +
+    '<button onclick="this.parentElement.remove()" style="background:rgba(255,255,255,0.2);' +
+    'border:1px solid rgba(255,255,255,0.5);color:#fff;padding:5px 12px;border-radius:6px;' +
+    'font-family:inherit;font-size:12px;cursor:pointer">Dismiss</button>';
 }
 
 // ============================================================
@@ -3161,7 +3190,11 @@ function importData(event) {
           const [consumerId, ...qParts] = key.split('_');
           return { agency_id: AGENCY_ID, consumer_id: consumerId, quarter_key: qParts.join('_'), units: parseInt(units) || 0 };
         });
-        if (rows.length) await _db.from('delivered_units').upsert(rows);
+        if (rows.length) {
+          const { error } = await _db.from('delivered_units')
+            .upsert(rows, { onConflict: 'agency_id,consumer_id,quarter_key' });
+          if (error) throw new Error('Delivered units did not restore: ' + error.message);
+        }
       }
       alert('Restore complete.');
       location.reload();
@@ -6186,8 +6219,14 @@ function saveDeliveredUnits(key, value) {
   // Sync to Supabase
   if (_db) {
     _db.from('delivered_units')
-      .upsert({ agency_id: AGENCY_ID, consumer_id: consumerId, quarter_key: quarterKey, units })
-      .then(({ error }) => { if (error) console.error('Delivered units write error:', error.message); });
+      .upsert({ agency_id: AGENCY_ID, consumer_id: consumerId, quarter_key: quarterKey, units },
+              { onConflict: 'agency_id,consumer_id,quarter_key' })
+      .then(({ error }) => {
+        if (error) {
+          console.error('Delivered units write error:', error.message);
+          _saveError('Could not save delivered units — ' + error.message);
+        }
+      });
   }
 }
 
