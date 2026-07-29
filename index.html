@@ -3306,6 +3306,12 @@ function showPage(id) {
   if (id === 'pipeline') {
     document.getElementById('page-consumers').classList.add('active');
     showConsumerTab('pipeline');
+  } else if (id === 'consumers') {
+    // Must be explicit. GHL keeps one iframe and swaps the hash, so going
+    // Leads -> Consumers never reloads. Without this the pipeline sub-section
+    // stays on screen and Consumers shows the Leads content instead.
+    document.getElementById('page-consumers').classList.add('active');
+    showConsumerTab('active');
   } else if (id === 'calendar' || id === 'compliance' || id === 'onboarding' || id === 'reference') {
     document.getElementById('page-guides').classList.add('active');
     showGuideTab(id);
