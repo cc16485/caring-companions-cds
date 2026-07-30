@@ -164,31 +164,31 @@
       <div class="card-title">Your contact information</div>
       <div class="form-row">
         <div class="form-group" id="g_first">
-          <label>First name <span class="req">*</span></label>
+          <label for="first_name">First name <span class="req">*</span></label>
           <input type="text" id="first_name" autocomplete="given-name">
         </div>
         <div class="form-group" id="g_last">
-          <label>Last name <span class="req">*</span></label>
+          <label for="last_name">Last name <span class="req">*</span></label>
           <input type="text" id="last_name" autocomplete="family-name">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group" id="g_phone">
-          <label>Phone <span class="req">*</span></label>
+          <label for="phone">Phone <span class="req">*</span></label>
           <input type="tel" id="phone" autocomplete="tel" placeholder="(417) 555-0123">
         </div>
         <div class="form-group">
-          <label>Email</label>
+          <label for="email">Email</label>
           <input type="email" id="email" autocomplete="email" placeholder="Optional">
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>City or town you live in</label>
+          <label for="city">City or town you live in</label>
           <input type="text" id="city" autocomplete="address-level2">
         </div>
         <div class="form-group">
-          <label>ZIP code</label>
+          <label for="zip">ZIP code</label>
           <input type="text" id="zip" inputmode="numeric" maxlength="5" autocomplete="postal-code">
         </div>
       </div>
@@ -205,7 +205,7 @@
 
       <div class="form-row" style="margin-top:18px">
         <div class="form-group">
-          <label>How far are you willing to drive?</label>
+          <label for="max_miles">How far are you willing to drive?</label>
           <select id="max_miles">
             <option value="">Choose one</option>
             <option value="10">Up to 10 miles</option>
@@ -216,7 +216,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Do you have reliable transportation?</label>
+          <label for="hours_wanted">Do you have reliable transportation?</label>
           <div class="yesno" style="margin-top:2px">
             <label class="chip"><input type="radio" name="transport" value="yes"><span>Yes</span></label>
             <label class="chip"><input type="radio" name="transport" value="no"><span>No</span></label>
@@ -250,7 +250,7 @@
       <p class="card-hint">No experience is genuinely fine. Many of our best attendants started by caring for their own family.</p>
       <div class="form-row single">
         <div class="form-group">
-          <label>Caregiving experience</label>
+          <label for="experience">Caregiving experience</label>
           <select id="experience">
             <option value="">Choose one</option>
             <option>No experience, willing to learn</option>
@@ -270,13 +270,13 @@
 
       <div class="form-row single" style="margin-top:14px">
         <div class="form-group">
-          <label>Any other certifications or training</label>
+          <label for="cert_other">Any other certifications or training</label>
           <input type="text" id="cert_other" placeholder="Optional">
         </div>
       </div>
       <div class="form-row single">
         <div class="form-group">
-          <label>Anything else about your experience</label>
+          <label for="experience_notes">Anything else about your experience</label>
           <textarea id="experience_notes" placeholder="Optional. For example: I cared for my grandmother for three years, comfortable with transfers and dementia."></textarea>
         </div>
       </div>
@@ -286,13 +286,13 @@
       <div class="card-title">A few last questions</div>
       <div class="form-row single">
         <div class="form-group">
-          <label>Is there a consumer you already know you would like to work for?</label>
+          <label for="knows_consumer">Is there a consumer you already know you would like to work for?</label>
           <input type="text" id="knows_consumer" placeholder="Optional. Their name, if so.">
         </div>
       </div>
       <div class="form-row single">
         <div class="form-group">
-          <label>How did you hear about us?</label>
+          <label for="how_heard">How did you hear about us?</label>
           <select id="how_heard">
             <option value="">Choose one</option>
             <option>A current attendant told me</option>
@@ -307,7 +307,7 @@
       </div>
       <div class="form-row single">
         <div class="form-group">
-          <label>Anything you would like us to know</label>
+          <label for="applicant_notes">Anything you would like us to know</label>
           <textarea id="applicant_notes" placeholder="Optional"></textarea>
         </div>
       </div>
