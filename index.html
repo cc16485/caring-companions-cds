@@ -333,6 +333,8 @@
     <span id="dashDate" style="font-size:13px;color:var(--gray-600)"></span>
   </div>
 
+  <div id="dailyRoutine" style="margin-bottom:18px"></div>
+
   <div class="alert alert-warn">
     ⚠️ <strong>EVV Hard Launch Phase I — April 1, 2026:</strong> Claims validation is now active via Sandata EVV Aggregator. All visits must be documented via <strong>WellSky Personal Care</strong> (our EVV vendor). Claims without matching EVV data may be denied. EVV corrections must be submitted by <strong>Saturday 11:59 PM</strong> each week.
   </div>
@@ -8356,7 +8358,124 @@ function loadQuarterStatus() {
 // ============================================================
 // DASHBOARD UPDATE
 // ============================================================
+// ── THE MORNING ROUTINE ────────────────────────────────────────────────────
+// Samantha has to hand this agency to someone else. The hard part of that is
+// not any single screen, it is knowing what to do first. This is one prescribed
+// sequence, ordered by consequence: things the state can act on, then money,
+// then people waiting on a call. Work top to bottom and stop when it is clean.
+function renderDailyRoutine() {
+  const host = document.getElementById('dailyRoutine');
+  if (!host) return;
+
+  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const steps = [];
+
+  // 1. Anything the state can act on.
+  let einLate = 0, einSoon = 0, desDue = 0;
+  consumers.forEach(c => {
+    const st = taxStatus(c);
+    if (!(st.exempt || (st.inFusion && st.uploaded))) {
+      const k = einClock(c);
+      if (k.known && k.days < 0) einLate++; else if (k.known && k.days <= 21) einSoon++;
+    }
+    if (!c.desRegistered) { const d = desThreshold(c.name); if (d.known && d.crossed) desDue++; }
+  });
+  steps.push({
+    n: 1, title: 'Clear anything the state is waiting on',
+    items: [
+      einLate && { t: einLate + ' consumer' + (einLate !== 1 ? 's' : '') + ' past the 90-day EIN deadline', go: 'taxcompliance', bad: true },
+      einSoon && { t: einSoon + ' inside three weeks of it', go: 'taxcompliance' },
+      desDue  && { t: desDue + ' over $1,000 and not registered with DES', go: 'taxcompliance', bad: true }
+    ].filter(Boolean),
+    clear: 'Nothing outstanding with the state.'
+  });
+
+  // 2. Money already earned or about to be lost.
+  const { records } = getAuths();
+  const today = new Date();
+  const auths = Object.values(records);
+  const expired = auths.filter(a => a.planEnd && new Date(a.planEnd + 'T12:00:00') < today).length;
+  const expiring = auths.filter(a => {
+    if (!a.planEnd) return false;
+    const d = Math.round((new Date(a.planEnd + 'T12:00:00') - today) / 864e5);
+    return d >= 0 && d <= 60;
+  }).length;
+  const noAuth = consumers.filter(c => !auths.some(a =>
+    String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase())).length;
+  steps.push({
+    n: 2, title: 'Protect the money',
+    items: [
+      noAuth   && { t: noAuth + ' active consumer' + (noAuth !== 1 ? 's have' : ' has') + ' no authorization on file', go: 'authorizations', bad: true },
+      expired  && { t: expired + ' authorization' + (expired !== 1 ? 's' : '') + ' expired', go: 'authorizations', bad: true },
+      expiring && { t: expiring + ' expiring within 60 days', go: 'authorizations' }
+    ].filter(Boolean),
+    clear: 'Every consumer has a current authorization.'
+  });
+
+  // 3. The recurring duties that fail silently.
+  let visitsOverdue = 0, monthDue = 0;
+  consumers.forEach(c => {
+    const r = ongoingRequirements(c);
+    if (r.annual.overdue) visitsOverdue++;
+    if (!r.monthly.doneThisMonth) monthDue++;
+  });
+  steps.push({
+    n: 3, title: 'Keep the case files clean',
+    items: [
+      visitsOverdue && { t: visitsOverdue + ' annual face-to-face visit' + (visitsOverdue !== 1 ? 's' : '') + ' overdue', go: 'consumers', bad: true },
+      monthDue      && { t: monthDue + ' monthly contact' + (monthDue !== 1 ? 's' : '') + ' not yet logged this month', go: 'consumers' }
+    ].filter(Boolean),
+    clear: 'Contacts and visits are up to date.'
+  });
+
+  // 4. People waiting to hear from someone.
+  const pipeline = getData('pipeline');
+  const newWeb = pipeline.filter(p => p.fromWebsite && p.status === 'new').length;
+  const followDue = pipeline.filter(p => p.followup && p.followup <= new Date().toISOString().slice(0, 10)
+                                    && !PIPELINE_CLOSED_STATUSES.includes(p.status)).length;
+  steps.push({
+    n: 4, title: 'Call the people waiting',
+    items: [
+      newWeb    && { t: newWeb + ' new enquiry' + (newWeb !== 1 ? 'ies' : '') + ' from the website, never contacted', go: 'pipeline', bad: true },
+      followDue && { t: followDue + ' follow-up' + (followDue !== 1 ? 's' : '') + ' due today or overdue', go: 'pipeline' }
+    ].filter(Boolean),
+    clear: 'Nobody is waiting on a call.'
+  });
+
+  const totalOpen = steps.reduce((t, s) => t + s.items.length, 0);
+
+  host.innerHTML =
+    '<div class="card" style="border-left:4px solid var(--accent, #54bdb8)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px">' +
+        '<div style="font-size:16px;font-weight:700;color:var(--primary)">Do this first, every morning</div>' +
+        '<button class="btn btn-outline btn-sm" onclick="renderDailyRoutine()" style="font-size:11px">↻ Refresh</button>' +
+      '</div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:14px">' +
+        (totalOpen
+          ? 'Work down the list. Everything else can wait until it is clear.'
+          : 'Nothing outstanding. This is what a clear morning looks like.') +
+      '</div>' +
+      steps.map(st =>
+        '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--gray-200)">' +
+          '<span style="flex:none;width:26px;height:26px;border-radius:50%;background:' +
+            (st.items.length ? 'var(--primary)' : 'var(--gray-300)') + ';color:#fff;display:flex;' +
+            'align-items:center;justify-content:center;font-weight:700;font-size:12px">' + st.n + '</span>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:600;font-size:13.5px;margin-bottom:' + (st.items.length ? '6px' : '0') + '">' + st.title + '</div>' +
+            (st.items.length
+              ? st.items.map(i =>
+                  '<div style="font-size:12.5px;margin-bottom:3px;color:' + (i.bad ? 'var(--danger)' : 'var(--gray-800)') + '">' +
+                  '• ' + esc(i.t) + ' <a href="#" onclick="showPage(\'' + i.go + '\');return false" ' +
+                  'style="color:var(--primary);font-weight:600">open →</a></div>').join('')
+              : '<div style="font-size:12px;color:var(--success)">✓ ' + esc(st.clear) + '</div>') +
+          '</div>' +
+        '</div>').join('') +
+    '</div>';
+}
+
 function updateDashboard() {
+  // keep the morning list in step with everything else the dashboard shows
+  try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   const consumers = getData('consumers').filter(c => c.status !== 'inactive');
   const attendants = getData('attendants').filter(a => a.status !== 'inactive');
   const now = new Date();
