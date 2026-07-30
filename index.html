@@ -304,6 +304,7 @@
   <div class="tab" onclick="showPage('quarterly')">📋 Quarterly Report</div>
   <div class="tab" onclick="showPage('financials')">📈 Financials</div>
   <div class="tab" onclick="showPage('payroll')">💵 Payroll &amp; Wages</div>
+  <div class="tab" onclick="showPage('authorizations')">📑 Authorizations</div>
 </div>
 
 <div class="container">
@@ -642,6 +643,52 @@
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">These contacts have been submitted to DSDS/DHSS and are awaiting state authorization. Track submission dates and follow up every 1–2 weeks.</div>
     <div id="stateSubmissionList">
       <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== AUTHORIZATIONS ==================== -->
+<div id="page-authorizations" class="page">
+  <div class="section-header">
+    <div class="section-title">📑 Authorizations &amp; Units</div>
+    <button class="btn btn-outline" onclick="renderAuthorizations()" style="font-size:12px">↻ Refresh</button>
+  </div>
+
+  <div id="auth_alerts"></div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📤</span> Upload authorizations</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;line-height:1.6">
+      The DHSS <strong>Home &amp; Community Based Services Care Plan</strong> PDF, one per consumer. Select as many
+      as you like. Each one gives the authorization number, the plan period, the procedure code and the
+      <strong>authorized units for every month</strong>, which is what tells us whether services are being used or
+      quietly left on the table.
+    </div>
+    <input type="file" id="auth_files" accept=".pdf" multiple onchange="importAuthorizations(event)" style="font-size:12px">
+    <div id="auth_status" style="font-size:12.5px;margin-top:10px"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📊</span> Units authorized against units used</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <select id="auth_month" onchange="renderAuthorizations()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px"></select>
+      <span style="font-size:12px;color:var(--gray-600);margin-left:auto" id="auth_summary"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Consumer</th><th>Authorization</th><th>Plan period</th><th>Expires in</th>
+              <th>Units this month</th><th>Est. units billed</th><th>Used</th><th>What it means</th></tr>
+        </thead>
+        <tbody id="auth_body">
+          <tr><td colspan="8"><div class="empty"><div class="empty-icon">📑</div><p>No authorizations uploaded yet.</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:11.5px;color:var(--gray-600);margin-top:10px;line-height:1.6">
+      Units billed are <strong>estimated</strong> from invoice amounts divided by the unit rate, because the
+      receivables report gives money rather than units. Set the hourly rate under <strong>Edit Rates</strong> on the
+      Financials page; a unit is 15 minutes, so a quarter of the hourly figure.
     </div>
   </div>
 </div>
@@ -3552,7 +3599,7 @@ function importData(event) {
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
-const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials','payroll'];
+const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials','payroll','authorizations'];
 const PAGE_TO_TAB  = {
   dashboard:'dashboard',
   consumers:'consumers', pipeline:'consumers',
@@ -3564,7 +3611,8 @@ const PAGE_TO_TAB  = {
   guides:'guides', calendar:'guides', compliance:'guides', onboarding:'guides', reference:'guides',
   quarterly:'quarterly',
   financials:'financials',
-  payroll:'payroll'
+  payroll:'payroll',
+  authorizations:'authorizations'
 };
 
 function showPage(id) {
@@ -3612,6 +3660,7 @@ function showPage(id) {
   if (id === 'statesubmissions') renderPipeline();
   if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); }
   if (id === 'payroll') renderPayroll();
+  if (id === 'authorizations') renderAuthorizations();
 }
 
 function showConsumerTab(tab) {
@@ -5036,6 +5085,187 @@ function prLoadSheetJS() {
 }
 
 
+
+// ============================================================
+// AUTHORIZATIONS
+// The DHSS Home & Community Based Services Care Plan PDF. Gives the prior
+// authorization number, the plan period, the procedure code and the authorized
+// units month by month. The DCN on the document is the same number Empeon uses as
+// its job code, which is what ties an authorization to a consumer.
+//
+// Units billed have to be ESTIMATED: the WellSky receivables report gives money,
+// not units, so amount / unit rate is the best available. Labelled as such
+// everywhere it appears.
+// ============================================================
+const AUTH_UNIT_MINUTES = 15;
+
+function getAuths() {
+  const a = getObj('authorizations');
+  return { unitMinutes: a.unitMinutes || AUTH_UNIT_MINUTES, records: a.records || {} };
+}
+
+function parseAuthorizationPdf(text, fileName) {
+  const dcn = /DCN:?\s*(\d{6,10})/.exec(text);
+  const nameLine = /Participant Information:\s*([A-Z][A-Z '\-]+)/.exec(text);
+  const period = /Care Plan Information\s*(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/.exec(text);
+  const pa = /(\d{14,})/.exec(text);
+  const proc = /\b(T\d{4})\b/.exec(text);
+  const svc = /(PC\s*-\s*CDS)/i.exec(text);
+  const gen = /Date Generated:\s*(\d{2}\/\d{2}\/\d{4})/.exec(text);
+  if (!dcn && !nameLine) return { error: 'no DCN or participant name found; is this a Care Plan?' };
+
+  // Monthly rows: start, end, procedure code, units.
+  const rows = []; const re = /(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(T\d{4})\s*\n\s*(\d{1,5})/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    rows.push({ start: isoOf(m[1]), end: isoOf(m[2]), code: m[3], units: parseInt(m[4], 10) });
+  }
+  if (!rows.length) return { error: 'no monthly authorized-unit rows found' };
+  return {
+    name: nameLine ? titleCaseName(nameLine[1]) : '',
+    dcn: dcn ? dcn[1] : '',
+    priorAuth: pa ? pa[1] : '',
+    serviceType: svc ? svc[1].replace(/\s+/g, ' ') : '',
+    procedureCode: proc ? proc[1] : (rows[0] && rows[0].code) || '',
+    planStart: period ? isoOf(period[1]) : rows[0].start,
+    planEnd: period ? isoOf(period[2]) : rows[rows.length - 1].end,
+    generated: gen ? isoOf(gen[1]) : '',
+    months: rows, source: fileName
+  };
+}
+const isoOf = us => { const p = us.split('/'); return p[2] + '-' + p[0] + '-' + p[1]; };
+const titleCaseName = s => s.trim().toLowerCase().split(/\s+/)
+  .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+async function importAuthorizations(event) {
+  const files = [...event.target.files];
+  const status = document.getElementById('auth_status');
+  if (!files.length) return;
+  status.innerHTML = '<span style="color:var(--gray-600)">Loading the PDF reader…</span>';
+  try { await prLoadPdfJs(); }
+  catch (e) { status.innerHTML = '<span style="color:var(--danger)">' + e.message + '</span>'; return; }
+
+  const store = getAuths();
+  const consumers = getData('consumers');
+  let ok = 0; const bad = []; const unmatched = [];
+  for (let i = 0; i < files.length; i++) {
+    status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + (i + 1) + ' of ' + files.length + '…</span>';
+    let r;
+    try { r = parseAuthorizationPdf(await pdfText(files[i]), files[i].name); }
+    catch (e) { bad.push(files[i].name + ' (' + e.message + ')'); continue; }
+    if (r.error) { bad.push(files[i].name + ' (' + r.error + ')'); continue; }
+    // Match on DCN first, which is exact; fall back to the name on the document.
+    const hit = consumers.find(c => (c.dcn || '').replace(/^0+/, '') === (r.dcn || '').replace(/^0+/, '')) ||
+                consumers.find(c => prNorm(c.name) === prNorm(r.name));
+    if (hit) r.consumer = hit.name; else unmatched.push(r.name || r.dcn || files[i].name);
+    store.records[(r.dcn || r.name).toUpperCase()] = r;
+    ok++;
+  }
+  setObj('authorizations', { loadedAt: new Date().toISOString().slice(0, 10),
+                            unitMinutes: store.unitMinutes, records: store.records });
+  status.innerHTML = '<span style="color:var(--success)">✓ ' + ok + ' authorization' + (ok === 1 ? '' : 's') +
+    ' imported.</span>' +
+    (unmatched.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>' +
+      unmatched.length + ' could not be matched to a consumer</strong> by DCN or name: ' +
+      unmatched.map(esc).join(', ') + '. Check the DCN on the consumer record.</div>' : '') +
+    (bad.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>Skipped ' +
+      bad.length + ':</strong> ' + bad.map(esc).join('; ') + '</div>' : '');
+  event.target.value = '';
+  renderAuthorizations();
+}
+
+function renderAuthorizations() {
+  const { unitMinutes, records } = getAuths();
+  const list = Object.values(records);
+  const consumers = getData('consumers');
+  const bl = getBilling();
+  const rates = (typeof getRates === 'function') ? getRates() : { billing: 0 };
+  const perUnit = (rates.billing || 0) * (unitMinutes / 60);   // 15 min = a quarter of the hourly rate
+
+  // Month picker across every month any authorization covers.
+  const months = [...new Set(list.flatMap(a => a.months.map(m => m.start.slice(0, 7))))].sort().reverse();
+  const sel = document.getElementById('auth_month');
+  const want = sel.value && months.includes(sel.value) ? sel.value : (months[0] || '');
+  sel.innerHTML = months.length
+    ? months.map(m => '<option value="' + m + '"' + (m === want ? ' selected' : '') + '>' + m + '</option>').join('')
+    : '<option value="">No authorizations yet</option>';
+
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const billedFor = (name, month) => bl.entries
+    .filter(e => prNorm(e.consumer) === prNorm(name) && e.period === month)
+    .reduce((s, e) => s + e.amount, 0);
+
+  const rows = list.map(a => {
+    const mo = a.months.find(m => m.start.slice(0, 7) === want);
+    const dollars = a.consumer ? billedFor(a.consumer, want) : 0;
+    const usedUnits = perUnit > 0 ? dollars / perUnit : 0;
+    const daysLeft = Math.round((new Date(a.planEnd + 'T12:00:00') - today) / 864e5);
+    const pct = mo && mo.units ? Math.round(usedUnits / mo.units * 100) : null;
+    return { a, mo, dollars, usedUnits, daysLeft, pct };
+  }).sort((x, y) => x.daysLeft - y.daysLeft);
+
+  // ── alerts ──
+  const expiring = rows.filter(r => r.daysLeft >= 0 && r.daysLeft <= 60);
+  const expired = rows.filter(r => r.daysLeft < 0);
+  const over = rows.filter(r => r.pct !== null && r.pct > 100);
+  let alerts = '';
+  if (expired.length) {
+    alerts += '<div class="alert" style="margin-bottom:12px;background:var(--danger-pale);border-left:4px solid var(--danger);color:var(--danger)">' +
+      '⛔ <strong>' + expired.length + ' authorization' + (expired.length === 1 ? ' has' : 's have') + ' expired:</strong> ' +
+      expired.map(r => esc(r.a.consumer || r.a.name) + ' (' + r.a.planEnd + ')').join(', ') +
+      '. Services delivered after the end date are not covered, so this is unpaid work until it is renewed.</div>';
+  }
+  if (expiring.length) {
+    alerts += '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + expiring.length +
+      ' authorization' + (expiring.length === 1 ? '' : 's') + ' expiring within 60 days:</strong> ' +
+      expiring.map(r => esc(r.a.consumer || r.a.name) + ' in ' + r.daysLeft + ' days').join(', ') +
+      '. Reassessment takes time, so start now rather than at the end date.</div>';
+  }
+  if (over.length) {
+    alerts += '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + over.length +
+      ' over the authorized units for ' + want + ':</strong> ' +
+      over.map(r => esc(r.a.consumer || r.a.name) + ' at ' + r.pct + '%').join(', ') +
+      '. Billing above the authorization is a recoupment risk, not extra revenue.</div>';
+  }
+  document.getElementById('auth_alerts').innerHTML = alerts;
+
+  const body = document.getElementById('auth_body');
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">📑</div>' +
+      '<p>No authorizations uploaded yet.</p></div></td></tr>';
+    document.getElementById('auth_summary').textContent = '';
+    return;
+  }
+  const authTotal = rows.reduce((s, r) => s + (r.mo ? r.mo.units : 0), 0);
+  const usedTotal = rows.reduce((s, r) => s + r.usedUnits, 0);
+  document.getElementById('auth_summary').textContent =
+    rows.length + ' authorization' + (rows.length === 1 ? '' : 's') + ' · ' +
+      authTotal.toLocaleString() + ' units authorized in ' + want +
+    (perUnit > 0 ? ' · about ' + Math.round(usedTotal).toLocaleString() + ' used' : ' · set a rate to estimate usage');
+
+  body.innerHTML = rows.map(r => {
+    const name = r.a.consumer || r.a.name || '(unmatched)';
+    let meaning, col = 'var(--gray-600)';
+    if (r.daysLeft < 0) { meaning = 'Expired. Renew before delivering more.'; col = 'var(--danger)'; }
+    else if (r.pct === null) meaning = 'No units authorized for this month.';
+    else if (r.pct > 100) { meaning = 'Over the authorization. Recoupment risk.'; col = 'var(--danger)'; }
+    else if (r.pct < 60) { meaning = 'Well under. Unused units are lost at month end.'; col = 'var(--warn)'; }
+    else if (r.pct < 85) { meaning = 'A little under. Room to deliver more.'; col = 'var(--warn)'; }
+    else { meaning = 'On track.'; col = 'var(--success)'; }
+    return '<tr>' +
+      '<td><strong>' + esc(name) + '</strong>' + (r.a.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(r.a.dcn) + '</div>' : '') + '</td>' +
+      '<td style="font-size:11.5px">' + esc(r.a.priorAuth || '—') +
+        (r.a.procedureCode ? '<div style="color:var(--gray-600)">' + esc(r.a.procedureCode) + '</div>' : '') + '</td>' +
+      '<td style="font-size:12px">' + esc(r.a.planStart) + '<div style="color:var(--gray-600)">to ' + esc(r.a.planEnd) + '</div></td>' +
+      '<td style="font-size:12px;font-weight:700;color:' + (r.daysLeft < 0 ? 'var(--danger)' : (r.daysLeft <= 60 ? 'var(--warn)' : 'var(--gray-600)')) + '">' +
+        (r.daysLeft < 0 ? Math.abs(r.daysLeft) + 'd ago' : r.daysLeft + 'd') + '</td>' +
+      '<td class="mono" style="font-size:12px">' + (r.mo ? r.mo.units.toLocaleString() : '—') + '</td>' +
+      '<td class="mono" style="font-size:12px">' + (perUnit > 0 && r.dollars ? Math.round(r.usedUnits).toLocaleString() : '<span style="color:var(--gray-600)">—</span>') + '</td>' +
+      '<td style="font-weight:700;color:' + col + ';font-size:12px">' + (r.pct === null ? '—' : r.pct + '%') + '</td>' +
+      '<td style="font-size:12px">' + meaning + '</td>' +
+      '</tr>';
+  }).join('');
+}
 
 // ============================================================
 // EMPEON PDF IMPORT
