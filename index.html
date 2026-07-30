@@ -656,37 +656,6 @@
   <div id="payrollAlerts"></div>
 
   <div class="card" style="margin-bottom:18px">
-    <div class="card-title"><span class="icon">📤</span> Upload a month of payroll</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
-      One export per month is enough. Three per quarter is plenty to catch the <strong>$1,000 threshold</strong>
-      before a DES registration is due, and it gives us real wage figures for the quarterly reports and for actual
-      margin instead of estimates.
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Which month is this?</label><input type="month" id="pr_period"></div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <input type="file" id="pr_file" accept=".csv,.xlsx,.xls" style="font-size:12px;margin-top:20px" onchange="prFileChosen(event)">
-      </div>
-    </div>
-    <div id="pr_mapper" style="display:none">
-      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:10px 0 6px">
-        Which column is which? Set this once and it is remembered for next month.
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Consumer (the employer)</label><select id="pr_col_consumer"></select></div>
-        <div class="form-group"><label>Attendant</label><select id="pr_col_attendant"></select></div>
-        <div class="form-group"><label>Gross wages</label><select id="pr_col_gross"></select></div>
-      </div>
-      <button class="btn" onclick="importPayroll()" style="font-size:13px">Import this month</button>
-    </div>
-    <div id="pr_status" style="font-size:12.5px;margin-top:10px"></div>
-    <div style="font-size:11.5px;color:var(--gray-600);margin-top:10px;line-height:1.6">
-      <strong>Social security numbers are deliberately not imported.</strong> DES asks for them at filing time, so
-      take them from Empeon then rather than keeping a copy of every attendant's SSN in this hub.
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="icon">📄</span> Upload Empeon PDFs (Check Register &amp; Payroll Summary)</div>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;line-height:1.6">
       In Empeon: <strong>Reports → File Room</strong>, download the <strong>Check Register</strong> and the
@@ -5001,7 +4970,6 @@ function esc(s) {
 const DES_THRESHOLD = 1000;
 const QUARTER_DEADLINE = { 1: 'Apr 30', 2: 'Jul 30', 3: 'Oct 31', 4: 'Jan 31 (next year)' };
 
-let _prParsed = null;   // { headers:[], rows:[{}] } waiting on a column mapping
 let _blParsed = null;
 
 const prQuarterOf = period => {           // '2026-07' -> { year:2026, q:3, key:'2026-Q3' }
@@ -5051,95 +5019,7 @@ function prLoadSheetJS() {
   });
 }
 
-async function prFileChosen(event) {
-  const file = event.target.files[0];
-  const status = document.getElementById('pr_status');
-  if (!file) return;
-  status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + file.name + '…</span>';
-  try {
-    let grid;
-    if (/\.csv$/i.test(file.name)) {
-      grid = prParseCSV(await file.text());
-    } else {
-      await prLoadSheetJS();
-      const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      grid = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false });
-    }
-    if (!grid || grid.length < 2) throw new Error('That file has no rows I can read.');
 
-    const headers = grid[0].map((h, i) => (String(h || '').trim() || 'Column ' + (i + 1)));
-    const rows = grid.slice(1).map(r => {
-      const o = {}; headers.forEach((h, i) => { o[h] = r[i]; }); return o;
-    });
-    _prParsed = { headers, rows, fileName: file.name };
-
-    // Pre-select using last month's mapping, else guess from the header names.
-    const saved = getObj('payrollMapping');
-    const guess = (want, fallbacks) => {
-      if (saved[want] && headers.includes(saved[want])) return saved[want];
-      const hit = headers.find(h => fallbacks.some(f => prNorm(h).includes(f)));
-      return hit || headers[0];
-    };
-    const fill = (id, sel) => {
-      document.getElementById(id).innerHTML = headers.map(h =>
-        '<option value="' + h.replace(/"/g, '&quot;') + '"' + (h === sel ? ' selected' : '') + '>' + h + '</option>').join('');
-    };
-    fill('pr_col_consumer',  guess('consumer',  ['consumer', 'employer', 'client', 'name']));
-    fill('pr_col_attendant', guess('attendant', ['attendant', 'caregiver', 'employee', 'worker']));
-    fill('pr_col_gross',     guess('gross',     ['gross', 'wages', 'pay', 'amount', 'total']));
-
-    document.getElementById('pr_mapper').style.display = 'block';
-    status.innerHTML = '<span style="color:var(--success)">Read ' + rows.length + ' rows. Check the columns below, then import.</span>';
-  } catch (e) {
-    status.innerHTML = '<span style="color:var(--danger)">' + (e.message || 'Could not read that file') + '</span>';
-  }
-}
-
-function importPayroll() {
-  const period = document.getElementById('pr_period').value;
-  const status = document.getElementById('pr_status');
-  if (!period) { status.innerHTML = '<span style="color:var(--danger)">Pick which month this covers first.</span>'; return; }
-  if (!_prParsed) return;
-
-  const cCol = document.getElementById('pr_col_consumer').value;
-  const aCol = document.getElementById('pr_col_attendant').value;
-  const gCol = document.getElementById('pr_col_gross').value;
-  setObj('payrollMapping', { consumer: cCol, attendant: aCol, gross: gCol });
-
-  const consumers = getData('consumers');
-  const byName = {};
-  consumers.forEach(c => { byName[prNorm(c.name)] = c; });
-
-  const entries = [], unmatched = {};
-  _prParsed.rows.forEach(r => {
-    const cname = String(r[cCol] == null ? '' : r[cCol]).trim();
-    const aname = String(r[aCol] == null ? '' : r[aCol]).trim();
-    const gross = prMoney(r[gCol]);
-    if (!cname || !gross) return;
-    const match = byName[prNorm(cname)];
-    if (!match) unmatched[cname] = (unmatched[cname] || 0) + gross;
-    entries.push({ period, consumerId: match ? match.id : '', consumer: cname, attendant: aname, gross });
-  });
-
-  const pr = getPayroll();
-  // Re-importing the same month replaces it rather than doubling the figures.
-  pr.entries = pr.entries.filter(e => e.period !== period).concat(entries);
-  pr.uploads = pr.uploads.filter(u => u.period !== period).concat([{
-    period, at: new Date().toISOString().slice(0, 10), file: _prParsed.fileName, rows: entries.length
-  }]);
-  setObj('payroll', pr);
-
-  const names = Object.keys(unmatched);
-  status.innerHTML = '<span style="color:var(--success)">✓ Imported ' + entries.length + ' rows for ' + period + '.</span>' +
-    (names.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>' +
-      names.length + ' name' + (names.length === 1 ? '' : 's') + ' did not match a consumer</strong> and are not ' +
-      'counted towards any threshold: ' + names.map(n => esc(n) + ' (' + prFmt(unmatched[n]) + ')').join(', ') +
-      '. Either the spelling differs from the consumer record, or they are not set up as a consumer yet.</div>' : '');
-  document.getElementById('pr_mapper').style.display = 'none';
-  document.getElementById('pr_file').value = '';
-  _prParsed = null;
-  renderPayroll();
-}
 
 // ============================================================
 // EMPEON PDF IMPORT
@@ -5448,26 +5328,35 @@ function renderPayrollGaps() {
   const haveReg = new Set(regs.map(r => key(r.checkDate)));
   const all = [...new Set([...haveSum, ...haveReg])].sort();
 
-  // Expected weekly cheque dates from the earliest upload to today.
-  const first = new Date(all[0] + 'T00:00:00');
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const expected = [];
-  for (let d = new Date(first); d <= today; d.setDate(d.getDate() + 7)) {
-    expected.push(new Date(d).toISOString().slice(0, 10));
+  // Look at the actual spacing between consecutive payrolls rather than assuming a
+  // fixed weekday. The cheque day drifts around holidays (27 Jun 2025 was a Friday,
+  // 3 Jul a Thursday), so a rigid 7-day cycle reports dozens of false gaps.
+  const DAY = 864e5;
+  const gaps = [];
+  for (let i = 1; i < all.length; i++) {
+    const days = Math.round((new Date(all[i] + 'T12:00:00') - new Date(all[i - 1] + 'T12:00:00')) / DAY);
+    if (days >= 11) gaps.push({ after: all[i - 1], before: all[i], days, missed: Math.round(days / 7) - 1 });
   }
-  const missingWeeks = expected.filter(d => !haveSum.has(d) && !haveReg.has(d));
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const sinceLast = Math.round((today - new Date(all[all.length - 1] + 'T12:00:00')) / DAY);
   const regNoSum = all.filter(d => haveReg.has(d) && !haveSum.has(d));
   const sumNoReg = all.filter(d => haveSum.has(d) && !haveReg.has(d));
   const pretty = d => d.slice(5).replace('-', '/') + '/' + d.slice(0, 4);
 
   let html = '';
-  if (missingWeeks.length) {
+  if (gaps.length) {
+    const missed = gaps.reduce((s, g) => s + g.missed, 0);
     html += '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:8px">⚠️ <strong>' +
-      missingWeeks.length + ' week' + (missingWeeks.length === 1 ? '' : 's') + ' with nothing uploaded:</strong> ' +
-      missingWeeks.slice(0, 12).map(pretty).join(', ') +
-      (missingWeeks.length > 12 ? ' and ' + (missingWeeks.length - 12) + ' more' : '') +
-      '. Wages for those weeks are missing from every total on this page. Dates are estimated on a weekly cycle, ' +
-      'so a genuinely skipped payroll will show here too.</div>';
+      'Around ' + missed + ' payroll' + (missed === 1 ? '' : 's') + ' look' + (missed === 1 ? 's' : '') +
+      ' to be missing.</strong> There are unusually long gaps between these uploads: ' +
+      gaps.slice(0, 6).map(g => pretty(g.after) + ' to ' + pretty(g.before) + ' (' + g.days + ' days)').join(', ') +
+      (gaps.length > 6 ? ' and ' + (gaps.length - 6) + ' more' : '') +
+      '. Wages in those gaps are missing from every total here. If a payroll genuinely was not run, ignore this.</div>';
+  }
+  if (sinceLast >= 11) {
+    html += '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:8px">⚠️ <strong>Nothing uploaded for ' +
+      sinceLast + ' days.</strong> The most recent payroll here is ' + pretty(all[all.length - 1]) +
+      '. Anything since then is not counted.</div>';
   }
   if (regNoSum.length) {
     html += '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:8px">⚠️ <strong>' +
@@ -5513,7 +5402,19 @@ function renderPayroll() {
     ? quarters.map(q => '<option value="' + q + '"' + (q === want ? ' selected' : '') + '>' + q + '</option>').join('')
     : '<option value="">No quarters yet</option>';
 
-  const inQ = pr.entries.filter(e => prQuarterOf(e.period).key === want);
+  // Per-consumer wages come from the check registers, which carry attendant detail.
+  // The SUI-derived figures are only a fallback for quarters no register covers,
+  // and are never mixed into the same quarter, since that would double count.
+  // Register entries carry the consumer's name, not their id, so resolve it here
+  // or every row would render as unmatched and lose its DES status.
+  const idByName = {};
+  consumers.forEach(c => { idByName[prNorm(c.name)] = c.id; });
+  const awEntries = (getObj('attendantWages').entries || [])
+    .filter(e => prQuarterOf(e.period).key === want && e.gross)
+    .map(e => ({ ...e, consumerId: idByName[prNorm(e.consumer)] || '' }));
+  const suiEntries = pr.entries.filter(e => prQuarterOf(e.period).key === want);
+  const inQ = awEntries.length ? awEntries : suiEntries;
+  const inQSource = awEntries.length ? 'check registers' : (suiEntries.length ? 'SUI reports' : '');
 
   // ── per consumer for the quarter ──
   const roll = {};
@@ -5526,7 +5427,8 @@ function renderPayroll() {
   const rows = Object.values(roll).sort((a, b) => b.gross - a.gross);
 
   document.getElementById('pr_qsummary').textContent = rows.length
-    ? rows.length + ' consumers · ' + prFmt(rows.reduce((s, r) => s + r.gross, 0)) + ' gross'
+    ? rows.length + ' consumers · ' + prFmt(rows.reduce((s, r) => s + r.gross, 0)) + ' gross' +
+      (inQSource ? ' · from ' + inQSource : '')
     : '';
 
   // ── alerts: who just became registrable, and what is due ──
@@ -5587,7 +5489,7 @@ function renderPayroll() {
       atts.map(([n, g]) => '<div style="font-size:12.5px;display:flex;gap:10px"><span style="flex:1">' + esc(n) +
         '</span><span class="mono">' + prFmt(g) + '</span></div>').join('') +
       '</div>';
-  }).join('') : '<p style="font-size:13px;color:var(--gray-600)">Upload a month of payroll to see this.</p>';
+  }).join('') : '<p style="font-size:13px;color:var(--gray-600)">Upload a Check Register and its Payroll Summary to see this.</p>';
 
   // ── the actual bottom line: billed minus paid, for the same quarter ──
   const bl = getBilling();
