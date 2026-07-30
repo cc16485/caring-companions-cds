@@ -463,6 +463,31 @@ const STEPS = [
     copy:[]
   },
   {
+    id:'empeon', track:'payroll', pip:'Upload to Empeon', title:'Upload the tax info into Empeon',
+    field:'empeonUpdated',
+    badges:[['b-online','In Empeon'],['b-time','5 minutes'],['b-time','Do this last']],
+    body:`
+      <p>Empeon is what actually files the payroll returns, so it needs the same two numbers as Fusion. Getting
+      this wrong is not an audit finding, it is a filing problem.</p>
+      <div class="gotcha"><b>Do this last, after both numbers really exist.</b> Uploading before the EIN and MO Tax
+        ID are issued just means coming back and doing it again. The order is: get the EIN → register the MO Tax ID
+        → correct Empeon → enter and upload in Fusion.</div>
+      <h3>Do this</h3>
+      <ol class="do">
+        <li>Open the consumer in Empeon. Their ER code is on the Tax &amp; EIN page if you need it.</li>
+        <li>Set the <b>FEIN</b> to the consumer's real federal EIN.</li>
+        <li>Set the <b>State EIN</b> to their Missouri Tax ID.</li>
+        <li>Save, then tick this step so the hub records the date.</li>
+      </ol>
+      <div class="gotcha"><b>Watch for <code>12-3456789</code>.</b> That is a placeholder, not a real EIN, and
+        several consumers are carrying it. Any return filed under it went out with a fake employer number, which
+        also means <b>a filed 941 cannot be used as audit proof for those consumers</b> because it shows the wrong
+        number. Replace it as soon as the real EIN exists.</div>
+      <div class="tip">The <b>Three systems</b> table on the Tax &amp; EIN page shows what Empeon currently holds
+        against what we hold, so you can see exactly who still needs changing.</div>`,
+    copy:[['Placeholder to watch for','12-3456789']]
+  },
+  {
     id:'irs8821', track:'payroll', pip:'IRS 8821', title:'IRS Form 8821 — Tax Information Authorization',
     field:'irs8821',
     badges:[['b-mail','Post or fax'],['b-wet','Wet signature'],['b-time','Not audited']],
@@ -854,7 +879,7 @@ async function toggleDone() {
   const s = STEPS[_stepIdx];
   if (!_current || !s.field) return;
   const cur = _current[s.field];
-  const isDate = s.field === 'proofUploaded';
+  const isDate = s.field === 'proofUploaded' || s.field === 'empeonUpdated';
   const isText = s.field === 'ein' || s.field === 'moTaxId' || s.field === 'proofDocType';
 
   if (isText && !(cur && String(cur).trim())) {

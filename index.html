@@ -2560,6 +2560,17 @@
       <strong>EIN Tax Documents</strong> category, or the auditor will not find it.
     </div>
 
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">Empeon (payroll)</div>
+    <div class="form-row">
+      <div class="form-group"><label>Tax info uploaded into Empeon (date)</label><input type="date" id="tax_empeon_updated"></div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <div style="font-size:11.5px;color:var(--gray-600);line-height:1.55;margin-top:20px">
+          Do this <strong>last</strong>. Empeon needs the real EIN and MO Tax ID to exist first, so uploading before
+          they do means doing it twice.
+        </div>
+      </div>
+    </div>
+
     <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Our copy of the proof document</div>
     <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
       Keep the document here so the whole set is in one place if MMAC ever asks, and so a faxed 147C has somewhere to
@@ -3835,6 +3846,7 @@ function openTaxSetup(cid) {
   document.getElementById('tax_proof_uploaded').value = c.proofUploaded || '';
   document.getElementById('tax_fusion_entered').checked = !!c.fusionEntered;
   document.getElementById('tax_prior_vendor').checked   = !!c.priorVendorProof;
+  document.getElementById('tax_empeon_updated').value   = c.empeonUpdated || '';
   renderProofFiles(c);
   document.getElementById('tax_proof_status').innerHTML = '';
   openModal('taxSetupModal');
@@ -3861,6 +3873,7 @@ function saveTaxSetup() {
   c.proofUploaded    = document.getElementById('tax_proof_uploaded').value || '';
   c.fusionEntered    = document.getElementById('tax_fusion_entered').checked;
   c.priorVendorProof = document.getElementById('tax_prior_vendor').checked;
+  c.empeonUpdated    = document.getElementById('tax_empeon_updated').value || '';
   setData('consumers', consumers);
   closeModal('taxSetupModal');
   renderConsumers();
@@ -5006,6 +5019,13 @@ function empeonStatus(c) {
   const ourMo  = (c.moTaxId || '').trim();
   const needs = [];
 
+  // Once it has been uploaded, stop nagging. The stored Empeon values came from
+  // an export taken before the upload, so comparing against them would keep
+  // reporting differences that have already been fixed.
+  if ((c.empeonUpdated || '').trim()) {
+    return { needs: [], clean: true, placeholder: false, uploadedOn: c.empeonUpdated };
+  }
+
   if (theirs === EMPEON_PLACEHOLDER) {
     needs.push({ level: 'bad', text: 'Replace the placeholder FEIN' });
   } else if (theirs && ours && theirs !== ours) {
@@ -5063,7 +5083,9 @@ function renderEmpeon() {
         (c.moTaxId ? '<div style="font-size:11px;color:var(--gray-600)">MO ' + c.moTaxId + '</div>' : '') + '</td>' +
       '<td>' + (s.inFusion ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">no</span>') + '</td>' +
       '<td style="font-size:12px">' + (e.clean
-        ? '<span class="badge badge-green">nothing</span>'
+        ? (e.uploadedOn
+            ? '<span class="badge badge-green">✓ uploaded ' + e.uploadedOn + '</span>'
+            : '<span class="badge badge-green">nothing</span>')
         : e.needs.map(n => '<div style="margin-bottom:3px"><span class="badge ' + LEVEL[n.level] + '">' + n.text + '</span></div>').join('')) + '</td>' +
       '<td><button class="btn btn-sm btn-outline" style="font-size:11px;white-space:nowrap" onclick="openTaxSetup(\'' + c.id + '\')">Open</button></td>' +
       '</tr>';
