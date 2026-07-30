@@ -183,6 +183,22 @@
   }
   .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary-light); }
 
+
+  /* bulk contact grid */
+  .bc-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .bc-table th { position: sticky; top: 0; background: var(--gray-100); padding: 8px 4px;
+    font-size: 11px; font-weight: 700; color: var(--gray-600); white-space: nowrap; border-bottom: 1.5px solid var(--gray-200); }
+  .bc-table th.bc-name, .bc-table td.bc-name { position: sticky; left: 0; background: white; text-align: left;
+    padding: 8px 12px; font-weight: 600; white-space: nowrap; min-width: 170px; z-index: 1; }
+  .bc-table th.bc-name { background: var(--gray-100); z-index: 2; }
+  .bc-cell { width: 46px; height: 34px; text-align: center; border: 1px solid var(--gray-200); }
+  .bc-open { cursor: pointer; background: white; }
+  .bc-open:hover { background: var(--teal-pale, #eaf6f6); }
+  .bc-open.bc-on { background: var(--success, #27ae60); }
+  .bc-open.bc-on::after { content: "\2713"; color: white; font-weight: 700; }
+  .bc-done { background: var(--gray-100); color: var(--success, #27ae60); font-weight: 700; }
+  .bc-na { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f0f0f0 4px, #f0f0f0 8px); color: var(--gray-300); }
+
   /* MODAL */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; }
   .modal-overlay.open { display: flex; }
@@ -596,6 +612,7 @@
   <!-- ── ACTIVE CONSUMERS SUB-SECTION ── -->
   <div id="csub-active">
 
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-outline btn-sm" onclick="openBulkContacts()" style="font-size:12px">&#128197; Record completed monthly contacts</button></div>
   <div id="ongoingReqs" style="margin-bottom:18px"></div>
     <div class="section-header">
       <div class="section-title">Consumer Roster</div>
@@ -5548,6 +5565,161 @@ function logAnnualVisit(cid) {
   if (typeof renderProfile === 'function' && document.getElementById('page-profile').classList.contains('active')) renderProfile();
   renderConsumers();
   renderOngoingRequirements();
+}
+
+// ── BULK CONTACT BACKFILL ──────────────────────────────────────────────────
+// Entering a year of monthly contacts one modal at a time is punishing, so this
+// is a grid: consumers down, months across, click to mark a month contacted.
+//
+// Two deliberate choices about honesty in the record:
+//   1. Every row written here carries backfilled:true and the date it was
+//      actually typed. An auditor seeing a March contact entered in July should
+//      be able to see that, not be misled by it.
+//   2. The assessment answers (plan of care reviewed, health change, complaint)
+//      are left EMPTY, not defaulted to "no". Recording that a call happened is
+//      a fact Samantha can attest to; recording what was said in it is not
+//      something a bulk tool should invent.
+let _bulkContacts = {};   // { consumerId: Set(monthKey) }
+
+function openBulkContacts() {
+  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  if (!consumers.length) { alert('No active consumers.'); return; }
+
+  const today = new Date();
+  const months = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    months.push({ key: d.toISOString().slice(0, 7),
+                  label: d.toLocaleDateString('en-US', { month: 'short' }) + ' ' + String(d.getFullYear()).slice(2) });
+  }
+
+  _bulkContacts = {};
+  const rows = consumers.map(c => {
+    const startedKey = ((c.cdsStartDate || c.empeonStartDate || '').trim() || '').slice(0, 7);
+    const cells = months.map(m => {
+      const existing = c.contacts && c.contacts[m.key];
+      const before = startedKey && m.key < startedKey;
+      if (existing) return '<td class="bc-cell bc-done" title="Already logged">&#10003;</td>';
+      if (before)   return '<td class="bc-cell bc-na" title="Before they started with you">&middot;</td>';
+      return '<td class="bc-cell bc-open" data-c="' + c.id + '" data-m="' + m.key + '" title="Click if this contact happened"></td>';
+    }).join('');
+    return '<tr><td class="bc-name">' + esc(c.name) + '</td>' + cells + '</tr>';
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.id = 'bulkContactsModal';
+  overlay.innerHTML = '<div class="modal" style="max-width:1000px">' +
+    '<div class="modal-header"><div class="modal-title">Record completed monthly contacts</div>' +
+    '<button class="modal-close" onclick="closeBulkContacts()">&times;</button></div>' +
+
+    '<div class="alert alert-warn" style="font-size:12.5px">' +
+    '<strong>Only tick months where the contact actually happened.</strong> These become case-file records. ' +
+    'Each one is saved marked as entered today, and the plan-of-care, health and complaint answers are left blank ' +
+    'rather than assumed &mdash; open the month individually if you want to record what was discussed.</div>' +
+
+    '<div class="form-row">' +
+      '<div class="form-group"><label>Contact method for these</label>' +
+        '<select id="bc_method">' +
+          '<option value="phone">Phone call</option>' +
+          '<option value="in-person">In-person visit</option>' +
+          '<option value="video">Video call</option>' +
+          '<option value="text">Text message</option>' +
+        '</select></div>' +
+      '<div class="form-group"><label>Day of month to record</label>' +
+        '<select id="bc_day"><option value="15">15th (mid-month)</option><option value="1">1st</option><option value="28">28th</option></select></div>' +
+    '</div>' +
+
+    '<div style="overflow:auto;max-height:52vh;border:1px solid var(--gray-200);border-radius:8px">' +
+      '<table class="bc-table"><thead><tr><th class="bc-name">Consumer</th>' +
+      months.map(m => '<th>' + m.label + '</th>').join('') + '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    '</div>' +
+
+    '<div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">' +
+      '<button class="btn btn-outline btn-sm" onclick="bulkContactsAll(true)">Tick every open month</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="bulkContactsAll(false)">Clear</button>' +
+      '<span id="bc_count" style="font-size:12.5px;color:var(--gray-600)"></span>' +
+    '</div>' +
+
+    '<div class="modal-footer">' +
+      '<button class="btn btn-outline" onclick="closeBulkContacts()">Cancel</button>' +
+      '<button class="btn btn-primary" id="bc_save" onclick="saveBulkContacts()">Save</button>' +
+    '</div></div>';
+  document.body.appendChild(overlay);
+
+  overlay.querySelectorAll('.bc-open').forEach(td => {
+    td.addEventListener('click', () => {
+      const cid = td.dataset.c, mk = td.dataset.m;
+      _bulkContacts[cid] = _bulkContacts[cid] || new Set();
+      if (_bulkContacts[cid].has(mk)) { _bulkContacts[cid].delete(mk); td.classList.remove('bc-on'); }
+      else { _bulkContacts[cid].add(mk); td.classList.add('bc-on'); }
+      bulkContactsCount();
+    });
+  });
+  bulkContactsCount();
+}
+
+function bulkContactsAll(on) {
+  document.querySelectorAll('#bulkContactsModal .bc-open').forEach(td => {
+    const cid = td.dataset.c, mk = td.dataset.m;
+    _bulkContacts[cid] = _bulkContacts[cid] || new Set();
+    if (on) { _bulkContacts[cid].add(mk); td.classList.add('bc-on'); }
+    else { _bulkContacts[cid].delete(mk); td.classList.remove('bc-on'); }
+  });
+  bulkContactsCount();
+}
+
+function bulkContactsCount() {
+  const n = Object.values(_bulkContacts).reduce((s, set) => s + set.size, 0);
+  const el = document.getElementById('bc_count');
+  if (el) el.textContent = n ? n + ' month' + (n !== 1 ? 's' : '') + ' will be recorded' : 'Nothing selected yet';
+}
+
+function closeBulkContacts() {
+  const m = document.getElementById('bulkContactsModal');
+  if (m) m.remove();
+  _bulkContacts = {};
+}
+
+function saveBulkContacts() {
+  const total = Object.values(_bulkContacts).reduce((s, set) => s + set.size, 0);
+  if (!total) { alert('Nothing selected.'); return; }
+  const method = document.getElementById('bc_method').value;
+  const day = document.getElementById('bc_day').value.padStart(2, '0');
+  if (!confirm('Record ' + total + ' monthly contact' + (total !== 1 ? 's' : '') +
+      ' as completed?\n\nThese become case-file records. Only continue if these contacts genuinely took place.')) return;
+
+  const enteredOn = new Date().toISOString().slice(0, 10);
+  const consumers = getData('consumers');
+  let written = 0;
+  Object.entries(_bulkContacts).forEach(([cid, set]) => {
+    const c = consumers.find(x => x.id === cid);
+    if (!c) return;
+    if (!c.contacts) c.contacts = {};
+    set.forEach(mk => {
+      if (c.contacts[mk]) return;            // never overwrite a real, detailed log
+      c.contacts[mk] = {
+        date: mk + '-' + day,
+        method,
+        person: '',
+        // left blank on purpose — see the note on this function
+        poc: '', util: '', utilNotes: '', sat: '', satNotes: '',
+        health: '', healthNotes: '', circ: '', circNotes: '',
+        complaint: '', complaintNotes: '',
+        notes: 'Recorded in bulk on ' + enteredOn + '. Contact confirmed as completed; details not captured at entry.',
+        loggedAt: new Date().toISOString(),
+        backfilled: true,
+        dhssFlag: false
+      };
+      written++;
+    });
+  });
+  setData('consumers', consumers);
+  closeBulkContacts();
+  renderConsumers();
+  renderOngoingRequirements();
+  updateDashboard();
+  alert(written + ' monthly contact' + (written !== 1 ? 's' : '') + ' recorded.');
 }
 
 function renderProfile() {
