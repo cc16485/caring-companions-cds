@@ -5556,17 +5556,40 @@ function renderEmpeon() {
   const rows = consumers.map(c => ({ c, e: empeonStatus(c), s: taxStatus(c) }))
     .sort((a, b) => (a.e.clean - b.e.clean) || a.c.name.localeCompare(b.c.name));
 
+  // A real-looking EIN shared by two consumers is more dangerous than an obvious
+  // placeholder, because nothing about it looks wrong in any report.
+  const byEin = {};
+  consumers.forEach(c => {
+    const e = (c.empeonFein || c.ein || '').trim();
+    if (!e || e === EMPEON_PLACEHOLDER) return;
+    (byEin[e] = byEin[e] || []).push(c.name);
+  });
+  const collisions = Object.entries(byEin).filter(([, names]) => names.length > 1);
+
   const placeholders = rows.filter(r => r.e.placeholder);
   const alertEl = document.getElementById('empeonAlert');
   if (alertEl) {
-    alertEl.innerHTML = placeholders.length
-      ? '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + placeholders.length +
+    // Built as one string and assigned once, so a resolved problem actually
+    // disappears instead of lingering from the previous render.
+    let html = '';
+    collisions.forEach(([ein, names]) => {
+      html += '<div class="alert" style="margin-bottom:12px;background:var(--danger-pale);' +
+        'border-left:4px solid var(--danger);color:var(--danger)">' +
+        '⛔ <strong>The same EIN is recorded against ' + names.length + ' consumers: ' + esc(ein) + '</strong>, ' +
+        names.map(esc).join(' and ') + '. An EIN belongs to one person, so at least one of these is wrong. ' +
+        'Unlike a placeholder it looks perfectly valid in every report, which is why nothing has caught it. ' +
+        '<strong>Do not enter it in Fusion for either consumer</strong> until Empeon and the IRS have sorted out ' +
+        'whose it is.</div>';
+    });
+    if (placeholders.length) {
+      html += '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + placeholders.length +
         ' consumer' + (placeholders.length === 1 ? '' : 's') + ' carry the placeholder FEIN ' + EMPEON_PLACEHOLDER +
-        ' in Empeon:</strong> ' + placeholders.map(r => r.c.name).join(', ') +
+        ' in Empeon:</strong> ' + placeholders.map(r => esc(r.c.name)).join(', ') +
         '. That is a dummy number, so any payroll return filed for them went out under a fake employer number. ' +
         'Two consequences: Empeon has to be corrected once a real EIN exists, and <strong>a filed 941 cannot be ' +
-        'used as audit proof for these consumers</strong>, because it shows the wrong number.</div>'
-      : '';
+        'used as audit proof for these consumers</strong>, because it shows the wrong number.</div>';
+    }
+    alertEl.innerHTML = html;
   }
 
   const body = document.getElementById('empeonBody');
