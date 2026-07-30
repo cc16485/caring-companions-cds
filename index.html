@@ -305,6 +305,7 @@
   <div class="tab" onclick="showPage('financials')">📈 Financials</div>
   <div class="tab" onclick="showPage('payroll')">💵 Payroll &amp; Wages</div>
   <div class="tab" onclick="showPage('authorizations')">📑 Authorizations</div>
+  <div class="tab" onclick="showPage('backuppool')">🤝 Caregiver Pool</div>
 </div>
 
 <div class="container">
@@ -1740,7 +1741,7 @@
         <div>Samantha Troutman (Owner)</div>
         <div>📞 417-234-8494 | 866-863-5151</div>
         <div>📧 samantha@ccseniorhomecare.com</div>
-        <div style="margin-top:8px;font-size:12px;opacity:0.85"><strong>9 Service Counties:</strong><br>Christian · Dade · Douglas · Greene · Lawrence · Phelps · Polk · Taney · Webster</div>
+        <div style="margin-top:8px;font-size:12px;opacity:0.85"><strong>27 Service Counties:</strong><br>Barry · Barton · Benton · Camden · Cedar · Christian · Dade · Dallas · Douglas · Greene · Hickory · Jasper · Laclede · Lawrence · McDonald · Newton · Ozark · Phelps · Polk · Pulaski · St. Clair · Stone · Taney · Texas · Vernon · Webster · Wright</div>
       </div>
     </div>
   </div>
@@ -2123,6 +2124,82 @@
   <div class="card" style="margin-bottom:16px">
     <div class="card-title">🚀 Growth Opportunity</div>
     <div id="fin_growth"></div>
+  </div>
+</div>
+
+<!-- ==================== BACKUP ATTENDANT POOL ==================== -->
+<div id="page-backuppool" class="page">
+  <div class="section-header">
+    <div class="section-title">🤝 Caregiver Pool</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn btn-outline" onclick="renderBackupPool()" style="font-size:12px">↻ Refresh</button>
+      <button class="btn btn-primary" onclick="bpOpenAdd()" style="font-size:12px">+ Add a caregiver</button>
+    </div>
+  </div>
+
+  <div id="bp_alerts"></div>
+
+  <!-- share the sign-up link -->
+  <div class="card" style="margin-bottom:18px;border-left:4px solid var(--teal, #54bdb8)">
+    <div class="card-title"><span class="icon">🔗</span> The sign-up link to share</div>
+    <div style="font-size:12.5px;color:var(--gray-600);line-height:1.6;margin-bottom:10px">
+      Anyone who fills this in lands in the list below. Post it on Facebook, text it to an attendant who
+      knows someone, or hand it out. No login, works on a phone, and it never asks for a Social Security number.
+      <br><br>The public page is called <strong>"Join our caregiver list"</strong>, not a backup list, because these
+      people can be hired full time or part time as well as for fill-in cover. Calling it a backup list publicly
+      would put people off applying.
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="bp_link" readonly
+        style="flex:1;min-width:260px;border:1.5px solid var(--gray-300);border-radius:6px;padding:9px 11px;font-size:13px;font-family:inherit;background:var(--gray-100)">
+      <button class="btn btn-outline" onclick="bpCopyLink()" style="font-size:12px">📋 Copy</button>
+      <a class="btn btn-outline" id="bp_openlink" href="#" target="_blank" rel="noopener" style="font-size:12px;text-decoration:none">↗ Open</a>
+    </div>
+    <div id="bp_copied" style="font-size:12px;color:var(--success);margin-top:8px;display:none">✓ Copied</div>
+  </div>
+
+  <!-- counts -->
+  <div class="grid-4" id="bp_stats" style="margin-bottom:18px"></div>
+
+  <!-- coverage map: which counties have nobody -->
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">🗺️</span> Coverage by county</div>
+    <div style="font-size:12.5px;color:var(--gray-600);line-height:1.6;margin-bottom:12px">
+      How many people in the pool are willing to work each county, counting only those who are
+      <strong>cleared</strong> or further along. A county in red means that if an attendant there quits tomorrow,
+      you have nobody screened to call.
+    </div>
+    <div id="bp_coverage"></div>
+  </div>
+
+  <!-- the pool -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📋</span> The pool</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+      <div class="form-group" style="min-width:150px">
+        <label>County</label>
+        <select id="bp_filter_county" onchange="renderBackupPoolTable()"></select>
+      </div>
+      <div class="form-group" style="min-width:150px">
+        <label>Status</label>
+        <select id="bp_filter_status" onchange="renderBackupPoolTable()">
+          <option value="">All except archived</option>
+          <option value="new">New, not yet contacted</option>
+          <option value="contacted">Contacted</option>
+          <option value="screening">Screening in progress</option>
+          <option value="cleared">Cleared and available</option>
+          <option value="placed">Placed with a consumer</option>
+          <option value="unavailable">Unavailable for now</option>
+          <option value="declined">Declined</option>
+          <option value="__archived">Archived</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1;min-width:180px">
+        <label>Search name, city or phone</label>
+        <input type="text" id="bp_search" oninput="renderBackupPoolTable()" placeholder="Type to filter">
+      </div>
+    </div>
+    <div id="bp_table"></div>
   </div>
 </div>
 
@@ -2557,18 +2634,8 @@
     </div>
     <div class="form-row">
       <div class="form-group"><label>County</label>
-        <select id="c_county">
+        <select id="c_county" data-counties="all">
           <option value="">— Select County —</option>
-          <option>Christian</option>
-          <option>Dade</option>
-          <option>Douglas</option>
-          <option>Greene</option>
-          <option>Lawrence</option>
-          <option>Phelps</option>
-          <option>Polk</option>
-          <option>Taney</option>
-          <option>Webster</option>
-          <option value="Other">Other</option>
         </select>
       </div>
       <div class="form-group"><label>Phone</label><input type="text" id="c_phone" placeholder="Consumer phone"></div>
@@ -3033,12 +3100,8 @@
     </div>
     <div class="form-row">
       <div class="form-group"><label>County</label>
-        <select id="pl_county">
+        <select id="pl_county" data-counties="all">
           <option value="">— Select County —</option>
-          <option>Christian</option><option>Dade</option><option>Douglas</option>
-          <option>Greene</option><option>Lawrence</option><option>Phelps</option>
-          <option>Polk</option><option>Taney</option><option>Webster</option>
-          <option value="Other">Other</option>
         </select>
       </div>
       <div class="form-group"><label>Phone</label><input type="tel" id="pl_phone" placeholder="Best contact number"></div>
@@ -3634,7 +3697,7 @@ function importData(event) {
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
-const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials','payroll','authorizations'];
+const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials','payroll','authorizations','backuppool'];
 const PAGE_TO_TAB  = {
   dashboard:'dashboard',
   consumers:'consumers', pipeline:'consumers', profile:'consumers',
@@ -3647,7 +3710,8 @@ const PAGE_TO_TAB  = {
   quarterly:'quarterly',
   financials:'financials',
   payroll:'payroll',
-  authorizations:'authorizations'
+  authorizations:'authorizations',
+  backuppool:'backuppool'
 };
 
 function showPage(id) {
@@ -3696,6 +3760,7 @@ function showPage(id) {
   if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
+  if (id === 'backuppool') renderBackupPool();
   if (id === 'profile') renderProfile();
 }
 
@@ -8855,7 +8920,444 @@ function initApp() {
   applyHashRoute();
 }
 
-document.addEventListener('DOMContentLoaded', () => { initApp_boot(); });
+// ============================================================
+// BACKUP ATTENDANT POOL
+//
+// The pool lives in its own table (attendant_pool), not in the agency_data
+// blob, because the public sign-up page writes to it with the anon key and
+// must never be able to read anything back. See attendant_pool_schema.sql.
+// ============================================================
+
+// The 27 counties from caringcds.com/service-area. Ordered by where the
+// caseload actually is, not alphabetically, so the common picks are at the top.
+// The one place the public sign-up address is written down. If you point
+// findcdscaregivers.com at the sign-up page, change this line and nothing else.
+const BP_SIGNUP_URL = 'https://hub.caringcds.com/caregiver-list.html';
+
+const CDS_COUNTIES = [
+  'Greene','Christian','Jasper','Taney','Polk','Webster','Lawrence','Newton',
+  'Barry','Stone','Dade','Douglas','Dallas','Cedar','Hickory','Laclede',
+  'McDonald','Ozark','Wright','Texas','Phelps','Pulaski','Camden','Benton',
+  'St. Clair','Vernon','Barton'
+];
+
+const BP_STATUS = {
+  new:         { label: 'New',            color: '#2980b9', bg: '#e8f4fd' },
+  contacted:   { label: 'Contacted',      color: '#8e6a1f', bg: '#fdf6e3' },
+  screening:   { label: 'Screening',      color: '#8e6a1f', bg: '#fdf6e3' },
+  cleared:     { label: 'Cleared',        color: '#1e8449', bg: '#eafaf1' },
+  placed:      { label: 'Placed',         color: '#117a65', bg: '#e8f6f3' },
+  unavailable: { label: 'Unavailable',    color: '#7f8c8d', bg: '#f4f6f6' },
+  declined:    { label: 'Declined',       color: '#a93226', bg: '#fdedec' }
+};
+// Anyone at these statuses is someone you could actually call today.
+const BP_AVAILABLE = ['cleared', 'placed'];
+
+let _bpRows = [];
+
+// Fill every county dropdown marked data-counties="all" from the one list, so
+// the roster, the pipeline and this page can never disagree again.
+function bpFillCountySelects() {
+  document.querySelectorAll('select[data-counties="all"]').forEach(sel => {
+    if (sel.dataset.filled) return;
+    const alpha = [...CDS_COUNTIES].sort((a, b) => a.localeCompare(b));
+    sel.insertAdjacentHTML('beforeend',
+      alpha.map(c => `<option>${esc(c)}</option>`).join('') + '<option value="Other">Other</option>');
+    sel.dataset.filled = '1';
+  });
+}
+
+function bpCopyLink() {
+  const el = document.getElementById('bp_link');
+  el.select();
+  navigator.clipboard.writeText(el.value).then(() => {
+    const note = document.getElementById('bp_copied');
+    note.style.display = 'block';
+    setTimeout(() => { note.style.display = 'none'; }, 2200);
+  }).catch(() => {});
+}
+
+async function renderBackupPool() {
+  bpFillCountySelects();
+  document.getElementById('bp_link').value = BP_SIGNUP_URL;
+  document.getElementById('bp_openlink').href = BP_SIGNUP_URL;
+
+  const filt = document.getElementById('bp_filter_county');
+  if (!filt.dataset.filled) {
+    filt.innerHTML = '<option value="">All counties</option>'
+      + [...CDS_COUNTIES].sort((a, b) => a.localeCompare(b)).map(c => `<option>${esc(c)}</option>`).join('');
+    filt.dataset.filled = '1';
+  }
+
+  const table = document.getElementById('bp_table');
+  if (!_db) { table.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Database not connected.</p>'; return; }
+  table.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Loading…</p>';
+
+  const { data, error } = await _db.from('attendant_pool')
+    .select('*')
+    .eq('agency_id', AGENCY_ID)
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    // The commonest cause is the schema SQL not having been run yet. Say so
+    // rather than showing a bare Postgres string.
+    const missing = /attendant_pool/.test(error.message) && /schema cache|does not exist/i.test(error.message);
+    table.innerHTML = `<div class="alert alert-danger" style="font-size:13px">
+      ${missing
+        ? '<strong>The pool table does not exist yet.</strong><br>Run <code>attendant_pool_schema.sql</code> in the Supabase SQL editor, then hit Refresh.'
+        : 'Could not load the pool: ' + esc(error.message)}
+    </div>`;
+    document.getElementById('bp_stats').innerHTML = '';
+    document.getElementById('bp_coverage').innerHTML = '';
+    return;
+  }
+
+  _bpRows = data || [];
+  renderBackupPoolStats();
+  renderBackupPoolCoverage();
+  renderBackupPoolTable();
+}
+
+function renderBackupPoolStats() {
+  const live      = _bpRows.filter(r => !r.archived);
+  const brandNew  = live.filter(r => r.status === 'new');
+  const available = live.filter(r => BP_AVAILABLE.includes(r.status));
+  // Screening started but not finished is where people get forgotten.
+  const stalled   = live.filter(r => ['contacted','screening'].includes(r.status)
+                    && r.updated_at && (Date.now() - new Date(r.updated_at)) > 14 * 864e5);
+
+  document.getElementById('bp_stats').innerHTML = `
+    <div class="stat-card blue">
+      <div class="stat-label">In the pool</div>
+      <div class="stat-value">${live.length}</div>
+      <div class="stat-sub">not archived</div>
+    </div>
+    <div class="stat-card ${brandNew.length ? 'warn' : 'green'}">
+      <div class="stat-label">Never contacted</div>
+      <div class="stat-value">${brandNew.length}</div>
+      <div class="stat-sub">${brandNew.length ? 'waiting on a call' : 'all followed up'}</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Ready to call</div>
+      <div class="stat-value">${available.length}</div>
+      <div class="stat-sub">cleared or placed</div>
+    </div>
+    <div class="stat-card ${stalled.length ? 'red' : 'green'}">
+      <div class="stat-label">Stalled 14+ days</div>
+      <div class="stat-value">${stalled.length}</div>
+      <div class="stat-sub">mid-screening, gone quiet</div>
+    </div>`;
+
+  const alerts = document.getElementById('bp_alerts');
+  const bits = [];
+  if (brandNew.length) {
+    bits.push(`<div class="alert alert-warn">🔔 <strong>${brandNew.length} ${brandNew.length === 1 ? 'person has' : 'people have'} signed up and not been contacted.</strong>
+      Someone put their name forward and has heard nothing back.</div>`);
+  }
+  if (stalled.length) {
+    bits.push(`<div class="alert alert-danger">⏳ <strong>${stalled.length} stalled part-way through screening.</strong>
+      ${esc(stalled.map(r => r.first_name + ' ' + r.last_name).join(', '))} — no change in over two weeks.</div>`);
+  }
+  alerts.innerHTML = bits.join('');
+}
+
+function renderBackupPoolCoverage() {
+  // Only people you could genuinely call count as coverage.
+  const ready = _bpRows.filter(r => !r.archived && BP_AVAILABLE.includes(r.status));
+
+  // Which counties do we actually have consumers in? Those are the ones where a
+  // gap hurts. Everything else is nice-to-have.
+  const consumers   = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const withConsumers = new Set(consumers.map(c => (c.county || '').trim()).filter(Boolean));
+
+  const counts = {};
+  CDS_COUNTIES.forEach(c => counts[c] = 0);
+  ready.forEach(r => (Array.isArray(r.counties) ? r.counties : []).forEach(c => {
+    if (counts[c] !== undefined) counts[c]++;
+  }));
+
+  // Sort: counties where you have consumers first, then by who is thinnest.
+  const rows = CDS_COUNTIES.slice().sort((a, b) => {
+    const ha = withConsumers.has(a) ? 0 : 1, hb = withConsumers.has(b) ? 0 : 1;
+    if (ha !== hb) return ha - hb;
+    if (counts[a] !== counts[b]) return counts[a] - counts[b];
+    return a.localeCompare(b);
+  });
+
+  const chip = (c) => {
+    const n = counts[c], serving = withConsumers.has(c);
+    const bare = n === 0;
+    const bg   = bare ? (serving ? '#fdedec' : 'var(--gray-100)') : '#eafaf1';
+    const fg   = bare ? (serving ? '#a93226' : 'var(--gray-600)') : '#1e8449';
+    const bd   = bare ? (serving ? '#e74c3c' : 'var(--gray-300)') : '#27ae60';
+    return `<div style="border:1.5px solid ${bd};background:${bg};color:${fg};border-radius:6px;padding:7px 10px;font-size:12px;display:flex;justify-content:space-between;gap:8px;align-items:center">
+      <span style="font-weight:${serving ? '700' : '500'}">${esc(c)}${serving ? ' ●' : ''}</span>
+      <span style="font-weight:700;font-variant-numeric:tabular-nums">${n}</span>
+    </div>`;
+  };
+
+  const gaps = rows.filter(c => withConsumers.has(c) && counts[c] === 0);
+
+  document.getElementById('bp_coverage').innerHTML =
+    (gaps.length
+      ? `<div class="alert alert-danger" style="font-size:13px;margin-bottom:12px">⚠️ <strong>No screened backup in ${gaps.length}
+          ${gaps.length === 1 ? 'county' : 'counties'} where you have active consumers:</strong> ${esc(gaps.join(', '))}.
+          If an attendant there quits, there is nobody to call.</div>`
+      : (withConsumers.size
+          ? `<div class="alert alert-success" style="font-size:13px;margin-bottom:12px">✅ Every county with an active consumer has at least one screened backup.</div>`
+          : ''))
+    + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px">${rows.map(chip).join('')}</div>
+       <div style="font-size:11.5px;color:var(--gray-600);margin-top:11px">● marks a county where you currently have an active consumer.</div>`;
+}
+
+function renderBackupPoolTable() {
+  const county = document.getElementById('bp_filter_county').value;
+  const status = document.getElementById('bp_filter_status').value;
+  const q      = (document.getElementById('bp_search').value || '').trim().toLowerCase();
+
+  let rows = _bpRows.slice();
+  rows = status === '__archived' ? rows.filter(r => r.archived) : rows.filter(r => !r.archived);
+  if (status && status !== '__archived') rows = rows.filter(r => r.status === status);
+  if (county) rows = rows.filter(r => Array.isArray(r.counties) && r.counties.includes(county));
+  if (q) rows = rows.filter(r => [r.first_name, r.last_name, r.city, r.phone, r.email]
+    .filter(Boolean).join(' ').toLowerCase().includes(q));
+
+  const el = document.getElementById('bp_table');
+  if (!rows.length) {
+    el.innerHTML = `<p style="font-size:13px;color:var(--gray-600)">${
+      _bpRows.length
+        ? 'Nobody matches those filters.'
+        : 'Nobody in the pool yet. Share the sign-up link above, or add someone by hand.'}</p>`;
+    return;
+  }
+
+  const dash = '—';
+  el.innerHTML = `<div style="overflow-x:auto"><table>
+    <thead><tr>
+      <th>Name</th><th>Contact</th><th>Counties</th><th>Availability</th>
+      <th>Experience</th><th>Screening</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const st  = BP_STATUS[r.status] || BP_STATUS.new;
+      const cts = Array.isArray(r.counties) ? r.counties : [];
+      const av  = Array.isArray(r.availability) ? r.availability : [];
+      const clr = (label, val, date) => {
+        if (!val) return `<div style="font-size:11px;color:var(--gray-600)">${label}: not started</div>`;
+        const ok = val === 'clear';
+        return `<div style="font-size:11px;color:${ok ? '#1e8449' : val === 'hit' ? '#a93226' : '#8e6a1f'};font-weight:600">
+          ${label}: ${esc(val)}${date ? ' · ' + esc(date) : ''}</div>`;
+      };
+      const certs = [r.cert_cpr && 'CPR', r.cert_cna && 'Licensed'].filter(Boolean).join(', ');
+      return `<tr>
+        <td>
+          <div style="font-weight:700">${esc(r.first_name)} ${esc(r.last_name)}</div>
+          <div style="font-size:11px;color:var(--gray-600)">${esc(r.city || dash)}${r.zip ? ' ' + esc(r.zip) : ''}</div>
+          ${r.worked_here_before ? '<div style="font-size:10.5px;color:#117a65;font-weight:700;margin-top:2px">↩ worked here before</div>' : ''}
+          ${r.knows_consumer ? `<div style="font-size:10.5px;color:#8e6a1f;margin-top:2px">knows ${esc(r.knows_consumer)}</div>` : ''}
+        </td>
+        <td style="font-size:12px">
+          <a href="tel:${esc((r.phone || '').replace(/\D/g, ''))}" style="color:var(--primary);font-weight:600">${esc(r.phone || dash)}</a>
+          ${r.email ? `<div style="font-size:11px;color:var(--gray-600);word-break:break-all">${esc(r.email)}</div>` : ''}
+          ${r.max_miles ? `<div style="font-size:11px;color:var(--gray-600)">drives ${r.max_miles >= 100 ? 'any distance' : 'up to ' + r.max_miles + ' mi'}</div>` : ''}
+          ${r.has_transport === false ? '<div style="font-size:11px;color:#a93226;font-weight:600">no transport</div>' : ''}
+        </td>
+        <td style="font-size:11.5px">${cts.length ? esc(cts.join(', ')) : dash}</td>
+        <td style="font-size:11.5px">${av.length ? esc(av.join(', ')) : dash}
+          ${r.hours_wanted ? `<div style="color:var(--gray-600);margin-top:2px">${esc(r.hours_wanted)}</div>` : ''}</td>
+        <td style="font-size:11.5px">${esc(r.experience || dash)}
+          ${certs ? `<div style="color:#117a65;font-weight:600;margin-top:2px">${esc(certs)}</div>` : ''}</td>
+        <td>${clr('FCSR', r.fcsr_status, r.fcsr_date)}${clr('EDL', r.edl_status, r.edl_date)}</td>
+        <td>
+          <span class="badge" style="background:${st.bg};color:${st.color};font-weight:700">${st.label}</span>
+          ${r.placed_with ? `<div style="font-size:10.5px;color:var(--gray-600);margin-top:3px">→ ${esc(r.placed_with)}</div>` : ''}
+          ${r.last_contacted ? `<div style="font-size:10.5px;color:var(--gray-600);margin-top:3px">called ${esc(r.last_contacted)}</div>` : ''}
+        </td>
+        <td><button class="btn btn-outline btn-sm" onclick="bpOpenEdit('${r.id}')" style="font-size:11px">Open</button></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>
+    <div style="font-size:12px;color:var(--gray-600);margin-top:10px">Showing ${rows.length} of ${_bpRows.filter(r => !r.archived).length} in the pool.</div>`;
+}
+
+// ── Add / edit ──────────────────────────────────────────────────────────────
+function bpOpenAdd() { bpOpenModal(null); }
+function bpOpenEdit(id) { bpOpenModal(_bpRows.find(r => String(r.id) === String(id)) || null); }
+
+function bpOpenModal(row) {
+  const isNew = !row;
+  const r = row || {};
+  const cts = Array.isArray(r.counties) ? r.counties : [];
+  const av  = Array.isArray(r.availability) ? r.availability : [];
+  const sel = (v, x) => v === x ? ' selected' : '';
+
+  const body = `
+    <div class="form-row">
+      <div class="form-group"><label>First name</label><input type="text" id="bp_first" value="${esc(r.first_name || '')}"></div>
+      <div class="form-group"><label>Last name</label><input type="text" id="bp_last" value="${esc(r.last_name || '')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Phone</label><input type="tel" id="bp_phone" value="${esc(r.phone || '')}"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="bp_email" value="${esc(r.email || '')}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>City</label><input type="text" id="bp_city" value="${esc(r.city || '')}"></div>
+      <div class="form-group"><label>ZIP</label><input type="text" id="bp_zip" value="${esc(r.zip || '')}"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Counties they will work</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+        ${[...CDS_COUNTIES].sort((a, b) => a.localeCompare(b)).map((c, i) => `
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px;border:1.5px solid var(--gray-300);border-radius:14px;padding:4px 10px;cursor:pointer">
+            <input type="checkbox" class="bp_cty" value="${esc(c)}"${cts.includes(c) ? ' checked' : ''} style="accent-color:var(--primary)">${esc(c)}
+          </label>`).join('')}
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Availability</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+        ${['Weekday mornings','Weekday afternoons','Weekday evenings','Saturdays','Sundays','Overnights','Live-in','Short notice / emergencies','Flexible'].map(a => `
+          <label style="font-size:12px;display:flex;align-items:center;gap:4px;border:1.5px solid var(--gray-300);border-radius:14px;padding:4px 10px;cursor:pointer">
+            <input type="checkbox" class="bp_av" value="${esc(a)}"${av.includes(a) ? ' checked' : ''} style="accent-color:var(--primary)">${esc(a)}
+          </label>`).join('')}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Experience</label><input type="text" id="bp_exp" value="${esc(r.experience || '')}"></div>
+      <div class="form-group"><label>Hours wanted</label><input type="text" id="bp_hours" value="${esc(r.hours_wanted || '')}"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>Their notes</label>
+      <textarea id="bp_anotes" style="min-height:56px">${esc(r.experience_notes || r.applicant_notes || '')}</textarea></div>
+
+    <div style="border-top:2px solid var(--gray-200);margin:16px 0 14px;padding-top:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Your side</div>
+      <div class="form-row">
+        <div class="form-group"><label>Status</label>
+          <select id="bp_status">
+            ${Object.entries(BP_STATUS).map(([k, v]) => `<option value="${k}"${sel(r.status || 'new', k)}>${v.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Last contacted</label><input type="date" id="bp_lastcontact" value="${esc(r.last_contacted || '')}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>FCSR (Family Care Safety Registry)</label>
+          <select id="bp_fcsr">
+            <option value="">Not started</option>
+            <option value="pending"${sel(r.fcsr_status, 'pending')}>Submitted, waiting</option>
+            <option value="clear"${sel(r.fcsr_status, 'clear')}>Clear</option>
+            <option value="hit"${sel(r.fcsr_status, 'hit')}>Findings — cannot work</option>
+          </select>
+        </div>
+        <div class="form-group"><label>FCSR date</label><input type="date" id="bp_fcsr_date" value="${esc(r.fcsr_date || '')}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>EDL (Employee Disqualification List)</label>
+          <select id="bp_edl">
+            <option value="">Not started</option>
+            <option value="pending"${sel(r.edl_status, 'pending')}>Checking</option>
+            <option value="clear"${sel(r.edl_status, 'clear')}>Clear</option>
+            <option value="hit"${sel(r.edl_status, 'hit')}>Listed — cannot work</option>
+          </select>
+        </div>
+        <div class="form-group"><label>EDL date</label><input type="date" id="bp_edl_date" value="${esc(r.edl_date || '')}"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px"><label>Placed with which consumer</label>
+        <input type="text" id="bp_placed" value="${esc(r.placed_with || '')}" placeholder="Leave blank unless placed"></div>
+      <div class="form-group" style="margin-bottom:12px"><label>Staff notes</label>
+        <textarea id="bp_snotes" style="min-height:70px">${esc(r.staff_notes || '')}</textarea></div>
+      ${isNew ? '' : `<label style="font-size:12.5px;display:flex;gap:8px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="bp_archived"${r.archived ? ' checked' : ''} style="accent-color:var(--primary)">
+        Archive — hide from the pool without deleting</label>`}
+    </div>`;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay open';
+  overlay.id = 'bpModal';
+  overlay.innerHTML = `<div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title">🤝 ${isNew ? 'Add a caregiver to the pool' : esc((r.first_name || '') + ' ' + (r.last_name || ''))}</div>
+      <button class="modal-close" onclick="bpCloseModal()">×</button>
+    </div>
+    <div id="bp_modal_err" class="alert alert-danger" style="font-size:13px;display:none"></div>
+    ${body}
+    <div class="modal-footer">
+      ${isNew ? '' : `<button class="btn btn-outline" onclick="bpDelete('${r.id}')" style="color:var(--danger);border-color:var(--danger)">Delete</button>`}
+      <button class="btn btn-outline" onclick="bpCloseModal()">Cancel</button>
+      <button class="btn btn-primary" id="bp_save" onclick="bpSave(${isNew ? 'null' : `'${r.id}'`})">${isNew ? 'Add to pool' : 'Save changes'}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function bpCloseModal() {
+  const m = document.getElementById('bpModal');
+  if (m) m.remove();
+}
+
+async function bpSave(id) {
+  const err  = document.getElementById('bp_modal_err');
+  const btn  = document.getElementById('bp_save');
+  const gv   = (i) => (document.getElementById(i).value || '').trim() || null;
+  const pick = (cls) => [...document.querySelectorAll('.' + cls + ':checked')].map(e => e.value);
+
+  if (!gv('bp_first') || !gv('bp_last') || !gv('bp_phone')) {
+    err.textContent = 'A first name, last name and phone number are needed.';
+    err.style.display = 'block';
+    return;
+  }
+  err.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const row = {
+    agency_id:        AGENCY_ID,
+    first_name:       gv('bp_first'),
+    last_name:        gv('bp_last'),
+    phone:            gv('bp_phone'),
+    email:            gv('bp_email'),
+    city:             gv('bp_city'),
+    zip:              gv('bp_zip'),
+    counties:         pick('bp_cty'),
+    availability:     pick('bp_av'),
+    experience:       gv('bp_exp'),
+    hours_wanted:     gv('bp_hours'),
+    experience_notes: gv('bp_anotes'),
+    status:           gv('bp_status') || 'new',
+    last_contacted:   gv('bp_lastcontact'),
+    fcsr_status:      gv('bp_fcsr'),
+    fcsr_date:        gv('bp_fcsr_date'),
+    edl_status:       gv('bp_edl'),
+    edl_date:         gv('bp_edl_date'),
+    placed_with:      gv('bp_placed'),
+    staff_notes:      gv('bp_snotes')
+  };
+  const arch = document.getElementById('bp_archived');
+  if (arch) row.archived = arch.checked;
+
+  const res = id
+    ? await _db.from('attendant_pool').update(row).eq('id', id)
+    : await _db.from('attendant_pool').insert({ ...row, source: 'staff' });
+
+  if (res.error) {
+    btn.disabled = false;
+    btn.textContent = id ? 'Save changes' : 'Add to pool';
+    err.textContent = 'Could not save: ' + res.error.message;
+    err.style.display = 'block';
+    return;
+  }
+  bpCloseModal();
+  renderBackupPool();
+}
+
+async function bpDelete(id) {
+  const r = _bpRows.find(x => String(x.id) === String(id));
+  const who = r ? r.first_name + ' ' + r.last_name : 'this person';
+  if (!confirm('Delete ' + who + ' from the backup pool for good?\n\nIf you only want them out of the way, tick Archive instead — that keeps the record.')) return;
+  const { error } = await _db.from('attendant_pool').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  bpCloseModal();
+  renderBackupPool();
+}
+
+document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
 </body>
 </html>
