@@ -672,6 +672,7 @@
   <div class="section-header">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <button class="btn btn-outline" id="prof_back" onclick="showPage(_profileFrom || 'consumers')" style="font-size:12px">← Back</button>
+      <button class="btn btn-outline" id="prof_binder" style="font-size:12px">📑 Audit Binder</button>
       <select id="prof_pick" onchange="openProfile(this.value)" style="font-size:13px;padding:6px 10px;border:1.5px solid var(--gray-300);border-radius:6px"></select>
     </div>
     <button class="btn btn-outline" onclick="renderProfile()" style="font-size:12px">↻ Refresh</button>
@@ -5722,6 +5723,179 @@ function saveBulkContacts() {
   alert(written + ' monthly contact' + (written !== 1 ? 's' : '') + ' recorded.');
 }
 
+// ── AUDIT BINDER ───────────────────────────────────────────────────────────
+// 19 CSR 15-8.400(5)(H) lists what a consumer's case file must contain. When
+// DHSS or MMAC asks, that evidence currently lives across six tabs and has to
+// be assembled by hand under time pressure.
+//
+// The section that matters most is the last one: what is MISSING. A binder that
+// only shows what you have is comforting and useless. This one states the gaps
+// in the same terms the regulation does, so they surface before an auditor
+// finds them rather than after.
+function openAuditBinder(cid) {
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) { alert('Consumer not found.'); return; }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const defFrom = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
+  const from = prompt('Binder covers FROM (YYYY-MM-DD):', defFrom);
+  if (!from) return;
+  const to = prompt('…TO (YYYY-MM-DD):', today);
+  if (!to) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) { alert('Please use YYYY-MM-DD.'); return; }
+  buildAuditBinder(c, from, to);
+}
+
+function buildAuditBinder(c, from, to) {
+  const st  = taxStatus(c);
+  const req = ongoingRequirements(c);
+  const clk = einClock(c);
+  const des = desThreshold(c.name);
+  const { records } = getAuths();
+  const inRange = d => d && d >= from && d <= to;
+
+  // ── authorizations overlapping the window ──
+  const auths = Object.values(records).filter(a =>
+    (a.consumer || a.name) &&
+    String(a.consumer || a.name).toUpperCase() === String(c.name).toUpperCase() &&
+    !(a.planEnd < from || a.planStart > to));
+
+  // ── monthly contacts in the window ──
+  const contacts = Object.entries(c.contacts || {})
+    .filter(([, l]) => l && inRange(l.date))
+    .sort((a, b) => (a[1].date || '').localeCompare(b[1].date || ''));
+
+  // ── annual visits in the window ──
+  const visits = (req.annual.visits || []).filter(v => inRange(v.date));
+
+  // ── attendants who served them ──
+  const attendants = getData('attendants').filter(a =>
+    (a.consumer || '').toUpperCase() === String(c.name).toUpperCase());
+
+  // ── complaints in the window ──
+  const complaints = getData('complaints').filter(x =>
+    inRange(x.date) && (!x.consumer || String(x.consumer).toUpperCase() === String(c.name).toUpperCase()));
+
+  // ── THE GAPS. Worded the way the regulation words them. ──
+  const gaps = [];
+  if (!st.hasEin)                       gaps.push('(H)1 — no Federal EIN recorded');
+  if (!st.hasMoId)                      gaps.push('(H)1 — no Missouri Tax ID recorded');
+  if (!st.inFusion && !st.exempt)       gaps.push('(H)1 — both numbers not entered in Fusion HCBS Eligibility');
+  if (!st.uploaded && !st.exempt)       gaps.push('(H)1 — acceptable proof not uploaded under EIN Tax Documents');
+  if (clk.known && clk.days < 0 && !(st.exempt || (st.inFusion && st.uploaded)))
+                                        gaps.push('(H)1 — 90-day upload deadline passed ' + Math.abs(clk.days) + ' days ago');
+  if (!auths.length)                    gaps.push('(H)2 — no service authorization on file covering this period');
+  if (!visits.length)                   gaps.push('(5)(F) — no annual FACE-TO-FACE visit recorded in this period');
+  if (req.monthly.missed)               gaps.push('(5)(F) — ' + req.monthly.missed + ' month(s) with no case-management contact in the last year');
+  if (!c.desRegistered && des.known && des.crossed)
+                                        gaps.push('DES — passed $1,000 in ' + des.crossed + ' and still not registered in UInteract');
+  const thin = contacts.filter(([, l]) => l.backfilled).length;
+  if (thin)                             gaps.push('(5)(F) — ' + thin + ' contact record(s) hold no detail of what was discussed');
+
+  const row = (k, v) => '<tr><th>' + k + '</th><td>' + (v || '<span class="none">not recorded</span>') + '</td></tr>';
+  const esc2 = x => esc(x == null ? '' : String(x));
+
+  const html =
+'<!DOCTYPE html><html><head><meta charset="utf-8"><title>Audit Binder — ' + esc2(c.name) + '</title><style>' +
+'@page{margin:18mm}' +
+'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;line-height:1.5;color:#1f2933;max-width:900px;margin:0 auto;padding:24px}' +
+'h1{font-size:21px;margin:0 0 4px;color:#0e3860}h2{font-size:14px;margin:26px 0 8px;color:#0e3860;border-bottom:2px solid #54bdb8;padding-bottom:5px;page-break-after:avoid}' +
+'.sub{color:#5a6570;margin-bottom:18px;font-size:12px}' +
+'table{border-collapse:collapse;width:100%;margin-bottom:8px;page-break-inside:avoid}' +
+'th,td{border:1px solid #dcdcdc;padding:6px 9px;text-align:left;vertical-align:top}' +
+'th{background:#f4f6f8;font-weight:600;width:210px}' +
+'thead th{width:auto;background:#eef2f5}' +
+'.none{color:#a33;font-style:italic}' +
+'.gap{background:#fdf0ec;border:1.5px solid #d98060;border-radius:6px;padding:14px 16px;margin-bottom:14px}' +
+'.gap h2{border:0;margin-top:0;color:#a33}.gap li{margin-bottom:4px}' +
+'.ok{background:#eafaf1;border:1.5px solid #27ae60;border-radius:6px;padding:14px 16px;margin-bottom:14px;color:#1e6b42}' +
+'.foot{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;color:#5a6570;font-size:10.5px}' +
+'@media print{.noprint{display:none}}' +
+'</style></head><body>' +
+
+'<div class="noprint" style="background:#0e3860;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
+  '<span>Use your browser’s Print dialog and choose <strong>Save as PDF</strong>.</span>' +
+  '<button onclick="window.print()" style="background:#54bdb8;color:#08343a;border:0;border-radius:6px;padding:9px 18px;font-weight:700;cursor:pointer">Print / Save as PDF</button>' +
+'</div>' +
+
+'<h1>Audit Binder — ' + esc2(c.name) + '</h1>' +
+'<div class="sub">Period ' + esc2(from) + ' to ' + esc2(to) + ' · compiled ' + esc2(new Date().toLocaleString('en-US')) +
+' · Caring Companions Consumer Directed Services, LLC</div>' +
+
+(gaps.length
+  ? '<div class="gap"><h2>Gaps in this file</h2><ul>' + gaps.map(g => '<li>' + esc2(g) + '</li>').join('') + '</ul>' +
+    '<div style="margin-top:8px;font-size:11px">Listed against 19 CSR 15-8.400 so each one can be closed before it is found.</div></div>'
+  : '<div class="ok"><strong>No gaps found against 19 CSR 15-8.400(5)(H) or the monitoring requirements for this period.</strong></div>') +
+
+'<h2>1. Consumer</h2><table>' +
+row('Name', esc2(c.name)) + row('DCN / Medicaid ID', esc2(c.dcn)) + row('County', esc2(c.county)) +
+row('Phone', esc2(c.phone)) + row('Email', esc2(c.email)) + row('CDS start date', esc2(c.cdsStartDate)) +
+row('Status', esc2(c.status)) + '</table>' +
+
+'<h2>2. Employer tax setup — (H)1</h2><table>' +
+row('Federal EIN', esc2(c.ein)) + row('Missouri Tax ID', esc2(c.moTaxId)) +
+row('Entered in Fusion', st.inFusion ? 'Yes — HCBS Eligibility' : '') +
+row('Proof document', esc2(c.proofDocType)) +
+row('Proof uploaded', esc2(c.proofUploaded)) +
+row('90-day deadline', clk.known ? esc2(clk.due) + (clk.days < 0 ? ' (passed ' + Math.abs(clk.days) + ' days ago)' : ' (' + clk.days + ' days remaining)') : '') +
+row('DES / unemployment', c.desRegistered ? 'Registered' + (c.desEan ? ' — EAN ' + esc2(c.desEan) : '')
+    : (des.known && des.crossed ? 'NOT registered — passed $1,000 in ' + esc2(des.crossed) : 'Not registered — threshold not yet met')) +
+'</table>' +
+
+'<h2>3. Service authorizations — (H)2</h2>' +
+(auths.length
+  ? '<table><thead><tr><th>Period</th><th>Procedure</th><th>Months</th><th>Source</th></tr></thead><tbody>' +
+    auths.map(a => '<tr><td>' + esc2(a.planStart) + ' to ' + esc2(a.planEnd) + '</td><td>' +
+      esc2(a.proc || a.procCode || '') + '</td><td>' + (a.months ? a.months.length : 0) + '</td><td>' +
+      esc2(a.source || '') + '</td></tr>').join('') + '</tbody></table>'
+  : '<p class="none">No authorization on file covering this period.</p>') +
+
+'<h2>4. Monthly case-management contacts — (5)(F)</h2>' +
+(contacts.length
+  ? '<table><thead><tr><th>Date</th><th>Method</th><th>Plan of care</th><th>Health change</th><th>Complaint</th><th>Notes</th></tr></thead><tbody>' +
+    contacts.map(([, l]) => '<tr><td>' + esc2(l.date) + '</td><td>' + esc2(l.method) + '</td><td>' +
+      (l.poc ? esc2(l.poc) : '<span class="none">—</span>') + '</td><td>' +
+      (l.health ? esc2(l.health) : '<span class="none">—</span>') + '</td><td>' +
+      (l.complaint ? esc2(l.complaint) : '<span class="none">—</span>') + '</td><td>' +
+      esc2((l.notes || '').slice(0, 120)) + '</td></tr>').join('') + '</tbody></table>' +
+    '<div style="font-size:11px;color:#5a6570">' + contacts.length + ' contact(s) in period.</div>'
+  : '<p class="none">No contacts recorded in this period.</p>') +
+
+'<h2>5. Annual face-to-face visits — (5)(F)</h2>' +
+(visits.length
+  ? '<table><thead><tr><th>Date</th><th>Made by</th><th>Findings</th></tr></thead><tbody>' +
+    visits.map(v => '<tr><td>' + esc2(v.date) + '</td><td>' + (v.by ? esc2(v.by) : '<span class="none">not recorded</span>') +
+      '</td><td>' + esc2(v.notes || '') + '</td></tr>').join('') + '</tbody></table>'
+  : '<p class="none">No face-to-face visit recorded in this period. Phone and video do not satisfy the requirement.</p>') +
+
+'<h2>6. Attendants</h2>' +
+(attendants.length
+  ? '<table><thead><tr><th>Name</th><th>FCSR</th><th>EDL</th><th>LEIE / OIG</th></tr></thead><tbody>' +
+    attendants.map(a => '<tr><td>' + esc2(a.name) + '</td><td>' + (a.fcsrDate ? esc2(a.fcsrDate) : '<span class="none">—</span>') +
+      '</td><td>' + (a.edlDate ? esc2(a.edlDate) : '<span class="none">—</span>') +
+      '</td><td>' + (a.leieDate ? esc2(a.leieDate) : '<span class="none">—</span>') + '</td></tr>').join('') + '</tbody></table>'
+  : '<p class="none">No attendant linked to this consumer.</p>') +
+
+'<h2>7. Complaints and incidents</h2>' +
+(complaints.length
+  ? '<table><thead><tr><th>Date</th><th>Category</th><th>Reported by</th><th>Detail</th></tr></thead><tbody>' +
+    complaints.map(x => '<tr><td>' + esc2(x.date) + '</td><td>' + esc2(COMPLAINT_CATEGORIES[x.category] || x.category) +
+      '</td><td>' + esc2(COMPLAINT_REPORTERS[x.reporter] || x.reporter) + '</td><td>' +
+      esc2((x.description || x.notes || '').slice(0, 160)) + '</td></tr>').join('') + '</tbody></table>'
+  : '<p>None recorded in this period.</p>') +
+
+'<div class="foot">Compiled from the Caring Companions CDS hub on ' + esc2(new Date().toISOString().slice(0, 10)) +
+'. This packet reflects what is recorded in the hub; it is not a substitute for the signed originals held in the consumer’s file. ' +
+'Sections are labelled against 19 CSR 15-8.400(5)(H) and the monitoring duties in (5)(F).</div>' +
+'</body></html>';
+
+  const w = window.open('', '_blank');
+  if (!w) { alert('Your browser blocked the pop-up. Allow pop-ups for this site and try again.'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
 function renderProfile() {
   const host = document.getElementById('prof_body');
   const pick = document.getElementById('prof_pick');
@@ -5732,6 +5906,8 @@ function renderProfile() {
   if (!_profileId || !consumers.some(c => c.id === _profileId)) _profileId = consumers[0].id;
   pick.innerHTML = consumers.map(c =>
     '<option value="' + c.id + '"' + (c.id === _profileId ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('');
+  const binderBtn = document.getElementById('prof_binder');
+  if (binderBtn) binderBtn.onclick = () => openAuditBinder(_profileId);
   const backBtn = document.getElementById('prof_back');
   if (backBtn) backBtn.textContent = '← ' + (PROFILE_BACK_LABEL[_profileFrom] || 'Back');
 
