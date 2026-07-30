@@ -5114,23 +5114,41 @@ function parseAuthorizationPdf(text, fileName) {
   const gen = /Date Generated:\s*(\d{2}\/\d{2}\/\d{4})/.exec(text);
   if (!dcn && !nameLine) return { error: 'no DCN or participant name found; is this a Care Plan?' };
 
-  // Monthly rows: start, end, procedure code, units.
+  // Three layouts exist in practice and all three appear in real files:
+  //  "monthly"          current form, a row per month with a T-code and units
+  //  "flat"             older "Prior Authorization Care Plan #N", one units/month figure
+  //  "units-not-stated" current form but with Authorized Units printed as N/A,
+  //                     so only the period is known
   const rows = []; const re = /(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(T\d{4})\s*\n\s*(\d{1,5})/g;
   let m;
   while ((m = re.exec(text)) !== null) {
     rows.push({ start: isoOf(m[1]), end: isoOf(m[2]), code: m[3], units: parseInt(m[4], 10) });
   }
-  if (!rows.length) return { error: 'no monthly authorized-unit rows found' };
+  let format = 'monthly';
+  if (!rows.length) {
+    const old = /(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{2,5})\s*\n/.exec(text);
+    if (old && /Total/.test(text) && /Units/.test(text)) {
+      rows.push({ start: isoOf(old[1]), end: isoOf(old[2]), code: 'T1019', units: parseInt(old[3], 10) });
+      format = 'flat';
+    }
+  }
+  // Fall back to the PC - CDS service line for the period when units are N/A.
+  const svcPer = /PC\s*-\s*CDS\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})/.exec(text);
+  if (!rows.length && !period && !svcPer) return { error: 'no authorized units and no plan period found' };
+  if (!rows.length) format = 'units-not-stated';
+
+  const startRaw = period ? period[1] : (svcPer ? svcPer[1] : null);
+  const endRaw = period ? period[2] : (svcPer ? svcPer[2] : null);
   return {
     name: nameLine ? titleCaseName(nameLine[1]) : '',
     dcn: dcn ? dcn[1] : '',
     priorAuth: pa ? pa[1] : '',
     serviceType: svc ? svc[1].replace(/\s+/g, ' ') : '',
-    procedureCode: proc ? proc[1] : (rows[0] && rows[0].code) || '',
-    planStart: period ? isoOf(period[1]) : rows[0].start,
-    planEnd: period ? isoOf(period[2]) : rows[rows.length - 1].end,
+    procedureCode: proc ? proc[1] : ((rows[0] && rows[0].code) || 'T1019'),
+    planStart: startRaw ? isoOf(startRaw) : rows[0].start,
+    planEnd: endRaw ? isoOf(endRaw) : rows[rows.length - 1].end,
     generated: gen ? isoOf(gen[1]) : '',
-    months: rows, source: fileName
+    format, months: rows, source: fileName
   };
 }
 const isoOf = us => { const p = us.split('/'); return p[2] + '-' + p[0] + '-' + p[1]; };
@@ -5183,9 +5201,25 @@ function renderAuthorizations() {
   const perUnit = (rates.billing || 0) * (unitMinutes / 60);   // 15 min = a quarter of the hourly rate
 
   // Month picker across every month any authorization covers.
-  const months = [...new Set(list.flatMap(a => a.months.map(m => m.start.slice(0, 7))))].sort().reverse();
+  // Include every month each plan spans, not just months with an explicit row, so
+  // flat and units-not-stated authorizations are selectable too.
+  const monthSet = new Set();
+  list.forEach(a => {
+    a.months.forEach(m => monthSet.add(m.start.slice(0, 7)));
+    const [ys, ms] = a.planStart.split('-').map(Number);
+    const [ye, me] = a.planEnd.split('-').map(Number);
+    for (let y = ys, mm = ms; y < ye || (y === ye && mm <= me); mm === 12 ? (mm = 1, y++) : mm++) {
+      monthSet.add(y + '-' + String(mm).padStart(2, '0'));
+    }
+  });
+  const months = [...monthSet].sort().reverse();
   const sel = document.getElementById('auth_month');
-  const want = sel.value && months.includes(sel.value) ? sel.value : (months[0] || '');
+  // Default to this month, which is what anyone actually wants to see, rather than
+  // the furthest future month any plan happens to reach.
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const want = sel.value && months.includes(sel.value)
+    ? sel.value
+    : (months.includes(thisMonth) ? thisMonth : (months[0] || ''));
   sel.innerHTML = months.length
     ? months.map(m => '<option value="' + m + '"' + (m === want ? ' selected' : '') + '>' + m + '</option>').join('')
     : '<option value="">No authorizations yet</option>';
@@ -5195,13 +5229,39 @@ function renderAuthorizations() {
     .filter(e => prNorm(e.consumer) === prNorm(name) && e.period === month)
     .reduce((s, e) => s + e.amount, 0);
 
+  // Invoices are dated when raised, not when the work happened, and this agency
+  // bills in catch-up batches: June 2026 had none at all, then 35 invoices landed
+  // across two days in July totalling nearly 3x a normal month. Comparing that
+  // month against a single month's authorized units produces nonsense like "252%
+  // over". So detect a catch-up month and withhold the percentage rather than
+  // report a false overage.
+  const byMonth = {};
+  bl.entries.forEach(e => { byMonth[e.period] = (byMonth[e.period] || 0) + e.amount; });
+  const totals = Object.values(byMonth).sort((a, b) => a - b);
+  const median = totals.length ? totals[Math.floor(totals.length / 2)] : 0;
+  const prevOf = mth => {
+    const [y, m] = mth.split('-').map(Number);
+    return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0');
+  };
+  const isCatchUp = !!want && median > 0 &&
+    ((byMonth[want] || 0) > median * 1.75 || !(byMonth[prevOf(want)] > 0));
+
   const rows = list.map(a => {
-    const mo = a.months.find(m => m.start.slice(0, 7) === want);
+    // A "flat" authorization states one figure for the whole period rather than a
+    // row per month, so it applies to every month inside the plan dates.
+    const inPeriod = want && want >= a.planStart.slice(0, 7) && want <= a.planEnd.slice(0, 7);
+    let mo = a.months.find(m => m.start.slice(0, 7) === want);
+    if (!mo && a.format === 'flat' && inPeriod && a.months.length) mo = a.months[0];
     const dollars = a.consumer ? billedFor(a.consumer, want) : 0;
     const usedUnits = perUnit > 0 ? dollars / perUnit : 0;
     const daysLeft = Math.round((new Date(a.planEnd + 'T12:00:00') - today) / 864e5);
-    const pct = mo && mo.units ? Math.round(usedUnits / mo.units * 100) : null;
-    return { a, mo, dollars, usedUnits, daysLeft, pct };
+    const pct = (mo && mo.units && !isCatchUp) ? Math.round(usedUnits / mo.units * 100) : null;
+    // Everything invoiced after the plan end date. This is the number that matters
+    // on an expired authorization: work already done that may not be covered.
+    const afterEnd = a.consumer ? bl.entries
+      .filter(e => prNorm(e.consumer) === prNorm(a.consumer) && e.period > a.planEnd.slice(0, 7))
+      .reduce((s, e) => s + e.amount, 0) : 0;
+    return { a, mo, dollars, usedUnits, daysLeft, pct, afterEnd };
   }).sort((x, y) => x.daysLeft - y.daysLeft);
 
   // ── alerts ──
@@ -5210,10 +5270,17 @@ function renderAuthorizations() {
   const over = rows.filter(r => r.pct !== null && r.pct > 100);
   let alerts = '';
   if (expired.length) {
+    const exposure = expired.reduce((s, r) => s + r.afterEnd, 0);
     alerts += '<div class="alert" style="margin-bottom:12px;background:var(--danger-pale);border-left:4px solid var(--danger);color:var(--danger)">' +
-      '⛔ <strong>' + expired.length + ' authorization' + (expired.length === 1 ? ' has' : 's have') + ' expired:</strong> ' +
-      expired.map(r => esc(r.a.consumer || r.a.name) + ' (' + r.a.planEnd + ')').join(', ') +
-      '. Services delivered after the end date are not covered, so this is unpaid work until it is renewed.</div>';
+      '⛔ <strong>' + expired.length + ' authorization' + (expired.length === 1 ? ' has' : 's have') +
+      ' expired:</strong> ' +
+      expired.map(r => esc(r.a.consumer || r.a.name) + ' on ' + r.a.planEnd +
+        (r.afterEnd > 0 ? ' (<strong>' + prFmt(r.afterEnd) + '</strong> billed since)' : '')).join(', ') + '.' +
+      (exposure > 0
+        ? ' <strong>' + prFmt(exposure) + ' has been invoiced after these end dates.</strong> If a renewal exists, ' +
+          'upload it and this clears. If not, that work may not be covered.'
+        : ' Renew before delivering more, since work after the end date is not covered.') +
+      '</div>';
   }
   if (expiring.length) {
     alerts += '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + expiring.length +
@@ -5226,6 +5293,12 @@ function renderAuthorizations() {
       ' over the authorized units for ' + want + ':</strong> ' +
       over.map(r => esc(r.a.consumer || r.a.name) + ' at ' + r.pct + '%').join(', ') +
       '. Billing above the authorization is a recoupment risk, not extra revenue.</div>';
+  }
+  if (isCatchUp) {
+    alerts += '<div class="alert alert-info" style="margin-bottom:12px">ℹ️ <strong>Usage percentages are hidden for ' +
+      want + '.</strong> Invoices are dated when they were raised, and this month\'s billing covers more than one ' +
+      'month of service, so comparing it against a single month of authorized units would report overages that are ' +
+      'not real. Expiry dates above are unaffected. Pick a month with steady invoicing to see usage.</div>';
   }
   document.getElementById('auth_alerts').innerHTML = alerts;
 
@@ -5246,8 +5319,15 @@ function renderAuthorizations() {
   body.innerHTML = rows.map(r => {
     const name = r.a.consumer || r.a.name || '(unmatched)';
     let meaning, col = 'var(--gray-600)';
-    if (r.daysLeft < 0) { meaning = 'Expired. Renew before delivering more.'; col = 'var(--danger)'; }
-    else if (r.pct === null) meaning = 'No units authorized for this month.';
+    if (r.daysLeft < 0) {
+      meaning = r.afterEnd > 0
+        ? 'Expired, and ' + prFmt(r.afterEnd) + ' billed since. Find the renewal.'
+        : 'Expired. Renew before delivering more.';
+      col = 'var(--danger)';
+    }
+    else if (r.a.format === 'units-not-stated') meaning = 'This authorization prints no unit figures, so usage cannot be checked.';
+    else if (isCatchUp && r.mo) meaning = 'Cannot judge this month: invoices here cover more than one month of service.';
+    else if (r.pct === null) meaning = 'Outside the plan period, or no units for this month.';
     else if (r.pct > 100) { meaning = 'Over the authorization. Recoupment risk.'; col = 'var(--danger)'; }
     else if (r.pct < 60) { meaning = 'Well under. Unused units are lost at month end.'; col = 'var(--warn)'; }
     else if (r.pct < 85) { meaning = 'A little under. Room to deliver more.'; col = 'var(--warn)'; }
