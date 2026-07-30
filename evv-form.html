@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EVV Correction Form — Caring Companions CDS</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0e3860">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EVV Form">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -113,6 +120,28 @@
 <!-- FORM -->
 <div id="formPage">
 <div class="container">
+
+<!-- Save-to-phone + the standard. Shown first, deliberately: the goal is that this
+     form is needed rarely, so the expectation is set before the fields. -->
+<div id="saveBar" style="background:#0e3860;color:#fff;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;line-height:1.6">
+  <div style="font-weight:700;margin-bottom:6px">📌 Save this form to your phone</div>
+  <div style="opacity:.92">Add it to your home screen once and it is one tap whenever you need it. You will not have to hunt for the link again.</div>
+  <div id="saveHow" style="margin-top:10px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px 12px"></div>
+  <button id="installBtn" style="display:none;margin-top:10px;background:#54bdb8;color:#0e3860;border:none;border-radius:8px;padding:9px 16px;font:700 13px Poppins,sans-serif;cursor:pointer">Add to home screen</button>
+</div>
+
+<div style="background:#fdf6e3;border-left:4px solid #b7770d;border-radius:0 8px 8px 0;padding:13px 16px;margin-bottom:18px;font-size:13.5px;line-height:1.65">
+  <div style="font-weight:700;color:#8d6314;margin-bottom:4px">Before you fill this in</div>
+  Our goal is that <strong>95% or more of visits are clocked in and out correctly the first time</strong>, with no manual
+  change from us. This form exists for the rare occasion something genuinely goes wrong: a dead phone, no signal, a
+  forgotten clock-out.
+  <div style="margin-top:8px">
+    Missouri Medicaid treats a high rate of manual corrections as a possible <strong>fraud indicator</strong>, and every
+    correction is looked at individually in an audit. So please use this when you need it, and not as a normal way to
+    record your time. If you are filling this in most weeks, call us instead and we will work out what is going wrong
+    with the app.
+  </div>
+</div>
   <div class="page-title" style="margin-top:4px">EVV Manual Correction</div>
   <div class="page-sub">Complete all sections. Both the attendant and consumer must sign before submitting.</div>
 
@@ -502,6 +531,37 @@ function resetForm() {
   document.getElementById('formPage').style.display   = 'block';
   window.scrollTo(0, 0);
 }
+</script>
+
+<script>
+// Save-to-phone helper. iOS gives no install prompt at all, so it needs plain
+// instructions; Chrome and Edge fire beforeinstallprompt and can do it in one tap.
+(function () {
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var how = document.getElementById('saveHow');
+  var bar = document.getElementById('saveBar');
+  if (!how || !bar) return;
+  if (standalone) { bar.style.display = 'none'; return; }   // already installed
+  if (isIOS) {
+    how.innerHTML = '<strong>On iPhone or iPad:</strong> tap the Share button at the bottom of Safari ' +
+      '(the square with an arrow), scroll down, then tap <strong>Add to Home Screen</strong>.';
+  } else if (isAndroid) {
+    how.innerHTML = '<strong>On Android:</strong> tap the three dots in the top right of Chrome, then tap ' +
+      '<strong>Add to Home screen</strong>.';
+  } else {
+    how.innerHTML = '<strong>On a computer:</strong> bookmark this page, or use the install icon in the address bar. ' +
+      'On your phone it can be added to the home screen.';
+  }
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault(); deferred = e;
+    var b = document.getElementById('installBtn');
+    if (b) { b.style.display = 'inline-block'; b.onclick = function () { deferred.prompt(); }; }
+  });
+})();
 </script>
 </body>
 </html>

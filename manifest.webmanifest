@@ -1,0 +1,14 @@
+{
+  "name": "EVV Correction Form — Caring Companions CDS",
+  "short_name": "EVV Form",
+  "description": "Submit a correction when a clock-in or clock-out was missed or wrong.",
+  "start_url": "/evv-form.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0e3860",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
