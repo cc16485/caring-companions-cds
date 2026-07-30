@@ -1994,7 +1994,23 @@
     </div>
   </div>
 
-  <!-- TOP KPIs -->
+  <!-- ACTUALS, from the uploaded billing and payroll -->
+  <div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent)">
+    <div class="card-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span><span class="icon">💵</span> Actual results</span>
+      <select id="fin_actuals_period" onchange="renderFinancialActuals()"
+              style="font-size:12px;padding:4px 8px;border:1.5px solid var(--gray-300);border-radius:6px;font-weight:400"></select>
+      <span style="margin-left:auto;font-size:11.5px;font-weight:400;color:var(--gray-600)" id="fin_actuals_src"></span>
+    </div>
+    <div id="fin_actuals_msg"></div>
+    <div class="grid-4" id="fin_actuals_kpi" style="margin-bottom:14px"></div>
+    <div id="fin_actuals_table"></div>
+  </div>
+
+  <!-- TOP KPIs (projected) -->
+  <div style="font-size:12px;font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
+    Projected from authorised hours &amp; rates
+  </div>
   <div id="fin_kpi_row" class="grid-4" style="margin-bottom:16px"></div>
 
   <!-- BREAK-EVEN & MARGIN ANALYSIS -->
@@ -7728,7 +7744,114 @@ function copyQuarterlySummary() {
 // ============================================================
 // FINANCIAL DASHBOARD
 // ============================================================
+// ============================================================
+// FINANCIAL DASHBOARD — ACTUALS
+// Everything else on this page projects from authorised hours × rates. This block
+// reports what was actually billed and actually paid, from the uploaded WellSky
+// receivables and Empeon payroll.
+//
+// Wages come from the weekly Payroll Summary totals for the agency figure, and
+// from the check registers for the per-consumer split. Those are different
+// granularities on purpose: only the registers know which consumer an attendant
+// worked for, and only the summaries cover every week.
+// ============================================================
+function renderFinancialActuals() {
+  const bl = getBilling();
+  const runs = getObj('payrollTotals').runs || [];
+  const aw = getObj('attendantWages').entries || [];
+  const consumers = getData('consumers');
+
+  const sel = document.getElementById('fin_actuals_period');
+  if (!sel) return;
+  const quarters = [...new Set(
+    bl.entries.map(e => e.period).concat(runs.map(r => r.period)).map(p => prQuarterOf(p).key)
+  )].sort().reverse();
+
+  if (!bl.entries.length && !runs.length) {
+    document.getElementById('fin_actuals_msg').innerHTML =
+      '<p style="font-size:13px;color:var(--gray-600)">Nothing uploaded yet. Add a WellSky receivables report and ' +
+      'the Empeon payroll PDFs on the <strong>Payroll &amp; Wages</strong> page and real figures appear here.</p>';
+    document.getElementById('fin_actuals_kpi').innerHTML = '';
+    document.getElementById('fin_actuals_table').innerHTML = '';
+    sel.innerHTML = '<option value="">No data</option>';
+    return;
+  }
+
+  const want = sel.value && (sel.value === 'ALL' || quarters.includes(sel.value)) ? sel.value : 'ALL';
+  sel.innerHTML = '<option value="ALL"' + (want === 'ALL' ? ' selected' : '') + '>Everything to date</option>' +
+    quarters.map(q => '<option value="' + q + '"' + (q === want ? ' selected' : '') + '>' + q + '</option>').join('');
+
+  const inScope = p => want === 'ALL' || prQuarterOf(p).key === want;
+  const billed = bl.entries.filter(e => inScope(e.period));
+  const paidRuns = runs.filter(r => inScope(r.period));
+  const revenue = billed.reduce((s, e) => s + e.amount, 0);
+  const wages = paidRuns.reduce((s, r) => s + (r.gross || 0), 0);
+  const margin = revenue - wages;
+  const pct = revenue ? Math.round(margin / revenue * 100) : 0;
+
+  // Invoice-date timing distorts single quarters badly; across everything it washes out.
+  document.getElementById('fin_actuals_msg').innerHTML = (want !== 'ALL' && (pct < 5 || pct > 45))
+    ? '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:12px">⚠️ <strong>' + pct +
+      '% is a timing effect, not performance.</strong> Invoices are counted on the date they were raised and work is ' +
+      'often billed in the next quarter. Pick <em>Everything to date</em> for a figure you can rely on.</div>'
+    : '';
+  document.getElementById('fin_actuals_src').textContent =
+    billed.length + ' invoices · ' + paidRuns.length + ' payroll runs';
+
+  const fmt = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  document.getElementById('fin_actuals_kpi').innerHTML = [
+    ['💰 Billed', fmt(revenue), 'WellSky invoices', 'blue'],
+    ['👷 Wages paid', fmt(wages), paidRuns.length + ' payrolls', 'warn'],
+    ['📊 Gross margin', fmt(margin), pct + '% of billed', margin > 0 ? 'green' : 'red'],
+    ['🧾 Avg per payroll', paidRuns.length ? fmt(wages / paidRuns.length) : '—', 'wage cost per run', 'blue']
+  ].map(k =>
+    '<div class="stat-card ' + k[3] + '"><div class="stat-label">' + k[0] + '</div>' +
+    '<div class="stat-value">' + k[1] + '</div><div class="stat-sub">' + k[2] + '</div></div>').join('');
+
+  // Per consumer: revenue from invoices, wages from the registers. Only shown where
+  // both sides exist, since one side alone reads as a total loss.
+  const rev = {}, cost = {};
+  billed.forEach(e => { rev[prNorm(e.consumer)] = (rev[prNorm(e.consumer)] || 0) + e.amount; });
+  aw.filter(e => inScope(e.period) && e.gross)
+    .forEach(e => { cost[prNorm(e.consumer)] = (cost[prNorm(e.consumer)] || 0) + e.gross; });
+
+  const rowsC = consumers.map(c => {
+    const k = prNorm(c.name);
+    return { name: c.name, rev: rev[k] || 0, cost: cost[k] || 0 };
+  }).filter(r => r.rev > 0 || r.cost > 0)
+    .sort((a, b) => (b.rev - b.cost) - (a.rev - a.cost));
+
+  const both = rowsC.filter(r => r.rev > 0 && r.cost > 0);
+  // While any attendant is unlinked, some consumer's wages are missing, so their
+  // margin reads better than it is. Linda Boyd showing 72% is this, not a good month.
+  const unmappedTotal = Object.values(getObj('attendantWages').unmapped || {})
+    .reduce((s, u) => s + (u.net || 0), 0);
+  document.getElementById('fin_actuals_table').innerHTML =
+    (unmappedTotal > 0
+      ? '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:10px">⚠️ <strong>Per-consumer margins ' +
+        'below are flattering.</strong> ' + fmt(unmappedTotal) + ' of attendant pay is not yet linked to a consumer, ' +
+        'so somebody\'s wages are missing and their margin looks better than it is. Link the attendants on the ' +
+        '<strong>Payroll &amp; Wages</strong> page and these figures become reliable. The totals above are unaffected.</div>'
+      : '') +
+    '<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-bottom:8px">By consumer' +
+    (both.length < rowsC.length ? ' — margin shown only where both billing and wages are present' : '') + '</div>' +
+    '<div class="table-wrap"><table><thead><tr><th>Consumer</th><th>Billed</th><th>Wages</th>' +
+    '<th>Margin</th><th>%</th></tr></thead><tbody>' +
+    rowsC.map(r => {
+      const ok = r.rev > 0 && r.cost > 0;
+      const m = r.rev - r.cost, p = r.rev ? Math.round(m / r.rev * 100) : 0;
+      return '<tr><td><strong>' + esc(r.name) + '</strong></td>' +
+        '<td class="mono" style="font-size:12px">' + (r.rev ? fmt(r.rev) : '—') + '</td>' +
+        '<td class="mono" style="font-size:12px">' + (r.cost ? fmt(r.cost) : '<span style="color:var(--gray-600)">no wage detail</span>') + '</td>' +
+        '<td class="mono" style="font-size:12px;font-weight:700;color:' +
+          (!ok ? 'var(--gray-600)' : (m > 0 ? 'var(--success)' : 'var(--danger)')) + '">' +
+          (ok ? fmt(m) : '—') + '</td>' +
+        '<td style="font-size:12px">' + (ok ? p + '%' : '—') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
 function renderFinancials() {
+  renderFinancialActuals();
   const consumers = getData('consumers').filter(c => c.status !== 'inactive');
   const rates = getRates();
   const WEEKS_PER_MONTH = 4.33;
