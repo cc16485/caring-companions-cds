@@ -9442,6 +9442,11 @@ function copyQuarterlySummary() {
 // granularities on purpose: only the registers know which consumer an attendant
 // worked for, and only the summaries cover every week.
 // ============================================================
+// The theoretical maximum margin. $20.60 in, $15.00 out is 27%; the older
+// $14.00 wage gives 32%. 35% leaves headroom for rate variation between service
+// types while still catching the impossible ones.
+const MARGIN_CEILING_PCT = 35;
+
 function renderFinancialActuals() {
   const bl = getBilling();
   const runs = getObj('payrollTotals').runs || [];
@@ -9527,14 +9532,31 @@ function renderFinancialActuals() {
     rowsC.map(r => {
       const ok = r.rev > 0 && r.cost > 0;
       const m = r.rev - r.cost, p = r.rev ? Math.round(m / r.rev * 100) : 0;
-      return '<tr><td><strong>' + esc(r.name) + '</strong></td>' +
+      // The program pays a fixed rate and the wage comes out of it, so there is a
+      // hard ceiling on what any margin can be. At $20.60 in and $15.00 out that
+      // is 27%; even at the old $14.00 wage it is 32%. Anything above that is not
+      // a profitable consumer, it is missing wage data — and reading it as
+      // profit is exactly the wrong conclusion to draw.
+      const impossible = ok && p > MARGIN_CEILING_PCT;
+      const pctCell = !ok ? '—'
+        : (impossible
+            ? '<span title="Above the maximum this program allows. Wages for this consumer are incomplete." ' +
+              'style="color:var(--danger);font-weight:700">' + p + '% ⚠</span>'
+            : p + '%');
+      return '<tr' + (impossible ? ' style="background:#fdf6e3"' : '') + '><td><strong>' + esc(r.name) + '</strong></td>' +
         '<td class="mono" style="font-size:12px">' + (r.rev ? fmt(r.rev) : '—') + '</td>' +
         '<td class="mono" style="font-size:12px">' + (r.cost ? fmt(r.cost) : '<span style="color:var(--gray-600)">no wage detail</span>') + '</td>' +
         '<td class="mono" style="font-size:12px;font-weight:700;color:' +
-          (!ok ? 'var(--gray-600)' : (m > 0 ? 'var(--success)' : 'var(--danger)')) + '">' +
+          (!ok ? 'var(--gray-600)' : (impossible ? 'var(--gray-600)' : (m > 0 ? 'var(--success)' : 'var(--danger)'))) + '">' +
           (ok ? fmt(m) : '—') + '</td>' +
-        '<td style="font-size:12px">' + (ok ? p + '%' : '—') + '</td></tr>';
-    }).join('') + '</tbody></table></div>';
+        '<td style="font-size:12px">' + pctCell + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    (rowsC.some(r => r.rev > 0 && r.cost > 0 && Math.round((r.rev - r.cost) / r.rev * 100) > MARGIN_CEILING_PCT)
+      ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>The highlighted rows show a margin this program cannot produce.</strong> ' +
+        'The state pays a fixed rate and the attendant wage comes out of it, so the most any consumer can return is about ' +
+        MARGIN_CEILING_PCT + '%. A figure above that means wages for that consumer are not fully linked, not that they are unusually profitable. ' +
+        'Link them on the Payroll &amp; Wages page and the number becomes real.</div>'
+      : '');
 }
 
 function renderFinancials() {
