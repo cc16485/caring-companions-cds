@@ -647,6 +647,18 @@
   </div>
 </div>
 
+<!-- ==================== CONSUMER PROFILE ==================== -->
+<div id="page-profile" class="page">
+  <div class="section-header">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="showPage('consumers')" style="font-size:12px">← Consumers</button>
+      <select id="prof_pick" onchange="openProfile(this.value)" style="font-size:13px;padding:6px 10px;border:1.5px solid var(--gray-300);border-radius:6px"></select>
+    </div>
+    <button class="btn btn-outline" onclick="renderProfile()" style="font-size:12px">↻ Refresh</button>
+  </div>
+  <div id="prof_body"></div>
+</div>
+
 <!-- ==================== AUTHORIZATIONS ==================== -->
 <div id="page-authorizations" class="page">
   <div class="section-header">
@@ -3625,7 +3637,7 @@ function importData(event) {
 const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials','payroll','authorizations'];
 const PAGE_TO_TAB  = {
   dashboard:'dashboard',
-  consumers:'consumers', pipeline:'consumers',
+  consumers:'consumers', pipeline:'consumers', profile:'consumers',
   statesubmissions:'statesubmissions',
   taxcompliance:'taxcompliance',
   attendants:'attendants',
@@ -3684,6 +3696,7 @@ function showPage(id) {
   if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
+  if (id === 'profile') renderProfile();
 }
 
 function showConsumerTab(tab) {
@@ -5110,6 +5123,181 @@ function prLoadSheetJS() {
 
 
 // ============================================================
+// CONSUMER PROFILE
+// Everything about one person in one place. The list pages answer "who needs
+// action"; this answers "what is the state of this one consumer". It reads the same
+// records every other page reads, so nothing is duplicated and nothing can drift.
+//
+// Reached by clicking a name anywhere, and mapped to the Consumers tab rather than
+// getting its own, since the tab bar is already full.
+// ============================================================
+let _profileId = null;
+
+function openProfile(id) {
+  if (!id) return;
+  _profileId = id;
+  showPage('profile');
+}
+
+// One chip per obligation. Green means done, red means outstanding, amber means
+// it cannot be judged yet. Colour is never the only signal: each chip says why.
+function profChip(label, state, detail) {
+  const map = { ok: ['badge-green', '✓'], bad: ['badge-red', '✕'], warn: ['badge-warn', '!'], na: ['badge-gray', '–'] };
+  const [cls, mark] = map[state] || map.na;
+  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--gray-100);' +
+    'border-radius:8px;font-size:12.5px">' +
+    '<span class="badge ' + cls + '" style="min-width:20px;text-align:center">' + mark + '</span>' +
+    '<span style="flex:1"><strong>' + esc(label) + '</strong>' +
+    (detail ? '<div style="color:var(--gray-600);font-size:11.5px">' + detail + '</div>' : '') + '</span></div>';
+}
+
+function renderProfile() {
+  const host = document.getElementById('prof_body');
+  const pick = document.getElementById('prof_pick');
+  if (!host || !pick) return;
+  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive')
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!consumers.length) { host.innerHTML = '<div class="card"><p>No active consumers.</p></div>'; return; }
+  if (!_profileId || !consumers.some(c => c.id === _profileId)) _profileId = consumers[0].id;
+  pick.innerHTML = consumers.map(c =>
+    '<option value="' + c.id + '"' + (c.id === _profileId ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('');
+
+  const c = consumers.find(x => x.id === _profileId);
+  const s = taxStatus(c);
+  const e = empeonStatus(c);
+  const auths = getAuths();
+  const auth = Object.values(auths.records).find(a => prNorm(a.consumer || '') === prNorm(c.name));
+  const plan = getObj('carePlans')[c.id];
+  const bl = getBilling();
+  const aw = getObj('attendantWages').entries || [];
+  const rates = (typeof getRates === 'function') ? getRates() : { billing: 0 };
+  const perUnit = (rates.billing || 0) / 4;
+
+  const myInv = bl.entries.filter(x => prNorm(x.consumer) === prNorm(c.name));
+  const billed = myInv.reduce((t, x) => t + x.amount, 0);
+  const myWages = aw.filter(x => prNorm(x.consumer) === prNorm(c.name) && x.gross);
+  const wages = myWages.reduce((t, x) => t + x.gross, 0);
+  const margin = billed - wages;
+  const attendants = [...new Set(myWages.map(x => x.attendant))];
+
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const daysLeft = auth ? Math.round((new Date(auth.planEnd + 'T12:00:00') - today) / 864e5) : null;
+  const authUnits = auth && auth.months.length ? Math.max(...auth.months.map(m => m.units)) : null;
+  const fmt = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+  // ── the obligation strip ──
+  const chips = [
+    profChip('Federal EIN', s.hasEin ? 'ok' : 'bad',
+      s.hasEin ? esc(c.ein) : (e.placeholder ? 'Empeon holds the placeholder ' + EMPEON_PLACEHOLDER : 'none on file')),
+    profChip('Missouri Tax ID', s.hasMoId ? 'ok' : 'bad', s.hasMoId ? esc(c.moTaxId) : 'needs form 2643A'),
+    profChip('Entered in Fusion', s.inFusion ? 'ok' : 'bad', s.inFusion ? 'HCBS Eligibility' : 'both numbers required'),
+    profChip('Proof uploaded', s.uploaded ? 'ok' : (s.exempt ? 'ok' : 'bad'),
+      s.exempt ? 'a prior vendor uploaded it' : (s.uploaded ? 'on ' + esc(c.proofUploaded) : 'EIN Tax Documents')),
+    profChip('Authorization', !auth ? 'bad' : (daysLeft < 0 ? 'bad' : (daysLeft <= 60 ? 'warn' : 'ok')),
+      !auth ? 'nothing on file' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'expires in ' + daysLeft + ' days')),
+    profChip('Care plan', plan ? 'ok' : 'warn', plan ? plan.monthlyUnits + ' units a month' : 'no calendar on file'),
+    profChip('DES registered', c.desRegistered ? 'ok' : 'warn',
+      c.desRegistered ? esc(c.desEan || 'registered') : 'only after $1,000 in a quarter'),
+    profChip('Empeon correct', e.clean ? 'ok' : 'bad',
+      e.clean ? (c.empeonUpdated ? 'updated ' + esc(c.empeonUpdated) : 'matches our record') : e.needs.map(n => n.text).join('; ')),
+    profChip('Monthly contact', c.contacts && Object.keys(c.contacts).length ? 'ok' : 'warn',
+      'required at least monthly'),
+    profChip('Annual home visit', c.homeVisitDate ? 'ok' : 'warn', c.homeVisitDate ? esc(c.homeVisitDate) : 'not recorded')
+  ].join('');
+
+  const outstanding = [
+    !s.hasEin && 'a federal EIN', !s.hasMoId && 'a Missouri Tax ID',
+    !s.inFusion && 'entering both numbers in Fusion', !(s.uploaded || s.exempt) && 'proof uploaded to Fusion',
+    !auth && 'an authorization', auth && daysLeft < 0 && 'a renewed authorization',
+    !e.clean && 'Empeon corrected'
+  ].filter(Boolean);
+
+  host.innerHTML =
+    // header
+    '<div class="card" style="margin-bottom:16px">' +
+      '<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">' +
+        '<div style="flex:1;min-width:240px">' +
+          '<div style="font-size:22px;font-weight:700;color:var(--primary)">' + esc(c.name) + '</div>' +
+          '<div style="font-size:12.5px;color:var(--gray-600);margin-top:4px">' +
+            (c.dcn ? 'DCN ' + esc(c.dcn) : 'no DCN') +
+            (c.county ? ' · ' + esc(c.county) + ' County' : '') +
+            (c.phone ? ' · ' + esc(c.phone) : '') +
+            (c.email ? ' · ' + esc(c.email) : '') +
+          '</div>' +
+          (c.empeonStartDate ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:3px">Empeon start ' +
+            esc(c.empeonStartDate) + (c.empeonErCode ? ' · job code ' + esc(c.empeonErCode) : '') + '</div>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn btn-outline" style="font-size:12px" onclick="openTaxSetup(\'' + c.id + '\')">Tax setup</button>' +
+          '<button class="btn btn-outline" style="font-size:12px" onclick="openCarePlan(\'' + c.id + '\')">Care plan</button>' +
+        '</div>' +
+      '</div>' +
+      (outstanding.length
+        ? '<div class="alert alert-warn" style="margin-top:14px;font-size:12.5px">⚠️ <strong>Outstanding:</strong> ' +
+          outstanding.join(', ') + '.</div>'
+        : '<div class="alert alert-success" style="margin-top:14px;font-size:12.5px">✅ <strong>Nothing outstanding</strong> ' +
+          'on the tax, Fusion and authorization requirements.</div>') +
+    '</div>' +
+
+    // obligations
+    '<div class="card" style="margin-bottom:16px">' +
+      '<div class="card-title"><span class="icon">✅</span> Where this consumer stands</div>' +
+      '<div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">' + chips + '</div>' +
+    '</div>' +
+
+    // money
+    '<div class="card" style="margin-bottom:16px">' +
+      '<div class="card-title"><span class="icon">💵</span> Money, everything to date</div>' +
+      '<div class="grid-4" style="margin-bottom:12px">' +
+        '<div class="stat-card blue"><div class="stat-label">💰 Billed</div><div class="stat-value">' + fmt(billed) +
+          '</div><div class="stat-sub">' + myInv.length + ' invoices</div></div>' +
+        '<div class="stat-card warn"><div class="stat-label">👷 Wages</div><div class="stat-value">' +
+          (wages ? fmt(wages) : '—') + '</div><div class="stat-sub">' +
+          (wages ? attendants.length + ' attendant' + (attendants.length === 1 ? '' : 's') : 'no wage detail') + '</div></div>' +
+        '<div class="stat-card ' + (margin > 0 ? 'green' : 'red') + '"><div class="stat-label">📊 Margin</div>' +
+          '<div class="stat-value">' + (wages ? fmt(margin) : '—') + '</div><div class="stat-sub">' +
+          (wages && billed ? Math.round(margin / billed * 100) + '% of billed' : 'needs both sides') + '</div></div>' +
+        '<div class="stat-card blue"><div class="stat-label">📑 Units/month</div><div class="stat-value">' +
+          (authUnits === null ? '—' : authUnits) + '</div><div class="stat-sub">' +
+          (plan ? 'plan says ' + plan.monthlyUnits : 'authorized') + '</div></div>' +
+      '</div>' +
+      (attendants.length ? '<div style="font-size:12.5px"><strong>Attendants:</strong> ' +
+        attendants.map(esc).join(', ') + '</div>' : '') +
+      // A single consumer's margin swings on when their invoices happened to be
+      // raised, so a negative figure here is usually billing lag rather than a loss.
+      // The agency-wide figure is the trustworthy one.
+      (wages && billed && (margin < 0 || margin / billed > 0.6)
+        ? '<div class="alert alert-warn" style="margin-top:12px;font-size:12.5px">⚠️ <strong>Treat this margin with ' +
+          'care.</strong> Invoices are counted on the date they were raised, and for one consumer that timing swings ' +
+          'the figure hard. Work not yet invoiced shows as a loss. Compare against the agency margin on the ' +
+          'Financials page before drawing a conclusion about this consumer.</div>'
+        : '') +
+    '</div>' +
+
+    // authorization detail
+    '<div class="card" style="margin-bottom:16px">' +
+      '<div class="card-title"><span class="icon">📑</span> Authorization</div>' +
+      (auth
+        ? '<div style="font-size:12.5px;line-height:1.9">' +
+          '<strong>Prior authorization</strong> ' + esc(auth.priorAuth || '—') +
+          ' · <strong>code</strong> ' + esc(auth.procedureCode || '—') +
+          '<br><strong>Period</strong> ' + esc(auth.planStart) + ' to ' + esc(auth.planEnd) +
+          ' · <strong>' + (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : daysLeft + ' days left') + '</strong>' +
+          (auth.format === 'units-not-stated' ? '<br><em>This authorization prints no unit figures.</em>' : '') +
+          (plan && authUnits !== null && plan.monthlyUnits !== authUnits
+            ? '<br><span style="color:var(--warn)"><strong>Plan and authorization disagree:</strong> the calendar totals ' +
+              plan.monthlyUnits + ' units a month against ' + authUnits + ' authorized.</span>' : '') +
+          '</div>'
+        : '<p style="font-size:13px;color:var(--danger)"><strong>No authorization on file.</strong> Nothing currently ' +
+          'authorises this service.</p>') +
+    '</div>' +
+
+    // notes
+    (c.notes ? '<div class="card"><div class="card-title"><span class="icon">📝</span> Notes</div>' +
+      '<div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap">' + esc(c.notes) + '</div></div>' : '');
+}
+
+// ============================================================
 // CARE PLANNING CALENDARS
 // The state's CDS Scheduling Worksheet. The workbook is stored untouched, because
 // that is the format DHSS expects back, and the numbers are also read out so the
@@ -6361,7 +6549,7 @@ function renderEmpeon() {
   body.innerHTML = rows.map(({ c, e, s }) => {
     const ph = (c.empeonFein || '').trim() === EMPEON_PLACEHOLDER;
     return '<tr>' +
-      '<td><strong>' + c.name + '</strong></td>' +
+      '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a></td>' +
       '<td style="font-size:12px;color:var(--gray-600)">' + (c.empeonErCode || '—') + '</td>' +
       '<td style="font-size:12px">' + (ph
         ? '<span class="badge badge-red">' + EMPEON_PLACEHOLDER + '</span>'
@@ -6460,7 +6648,7 @@ function renderTaxCompliance() {
       }
     }
     return '<tr>' +
-      '<td><strong>' + c.name + '</strong>' + (c.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + c.dcn + '</div>' : '') + '</td>' +
+      '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a>' + (c.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(c.dcn) + '</div>' : '') + '</td>' +
       '<td><span class="badge ' + cls + '">' + text + '</span></td>' +
       '<td style="font-size:12px;max-width:270px">' + s.next + '</td>' +
       '<td>' + (s.hasEin ? yes : no) + '</td>' +
