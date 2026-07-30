@@ -677,6 +677,24 @@
   </div>
 
   <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📄</span> Upload Empeon PDFs (Check Register &amp; Payroll Summary)</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;line-height:1.6">
+      In Empeon: <strong>Reports → File Room</strong>, download the <strong>Check Register</strong> and the
+      <strong>Payroll Summary</strong> for each payroll, then drop them here. Select as many as you like at once.
+      I work out which report each file is from its own heading, so they can be mixed together, and re-uploading the
+      same payroll replaces it rather than double counting.
+    </div>
+    <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:10px;line-height:1.6">
+      The <strong>Check Register</strong> gives each attendant's pay and their employee id, which is what links them
+      to a consumer. The <strong>Payroll Summary</strong> gives the run's gross, which is needed because registers
+      show net and DES wants gross. Upload both for a payroll and the gross figures are far better.
+    </div>
+    <input type="file" id="pdf_files" accept=".pdf" multiple onchange="importEmpeonPdfs(event)" style="font-size:12px">
+    <div id="pdf_status" style="font-size:12.5px;margin-top:10px"></div>
+    <div id="pdf_unmapped" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="icon">📥</span> Upload a month of billing (WellSky)</div>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
       The revenue side. Payroll above is what we paid out; this is what was billed. Together they give the real
@@ -5112,6 +5130,162 @@ function importPayroll() {
   renderPayroll();
 }
 
+// ============================================================
+// EMPEON PDF IMPORT
+// Empeon's File Room only offers PDF, so these are parsed in the browser.
+// Two report types, told apart by their own heading:
+//   Check Register  — one row per attendant: net pay + employee id. The employee
+//                     id is the only thing linking an attendant to a consumer.
+//   Payroll Summary — agency totals for the run, including gross. Needed because
+//                     registers carry net and DES asks for gross.
+// The row patterns below were checked against 57 real registers and 58 summaries:
+// every register's parsed row count matched the "N Items" total it prints itself.
+// ============================================================
+const PDFJS_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+const PDFJS_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+function prLoadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = PDFJS_URL;
+    s.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; res(); };
+    s.onerror = () => rej(new Error('Could not load the PDF reader'));
+    document.head.appendChild(s);
+  });
+}
+
+async function pdfText(file) {
+  const buf = await file.arrayBuffer();
+  const doc = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  let out = '';
+  for (let p = 1; p <= doc.numPages; p++) {
+    const tc = await (await doc.getPage(p)).getTextContent();
+    out += tc.items.map(i => i.str).join('\n') + '\n';
+  }
+  return out;
+}
+
+// net appears three times per row (check, dir dep, net amount); take the last.
+const REG_ROW = /([\d,]+\.\d{2})\s*\n\s*([\d,]+\.\d{2})\s*\n\s*([\d,]+\.\d{2})\s*\n\s*([A-Z][A-Za-z'\-]+,\s*[A-Za-z'\-. ]+?)\s*\n\s*(\d{1,4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\w+)\s*\n\s*(\d+)/g;
+
+function parseEmpeonPdf(text, fileName) {
+  const chk = /Check Date:\s*(\d{2}\/\d{2}\/\d{4})/.exec(text);
+  const per = /Pay Period:\s*(\d{2}\/\d{2}\/\d{4})\s*to\s*(\d{2}\/\d{2}\/\d{4})/.exec(text);
+  const proc = /Process:\s*(\d+)/.exec(text);
+  if (!chk) return { error: 'no Check Date found, so this does not look like an Empeon payroll report' };
+  const [mm, , yy] = chk[1].split('/');
+  const base = {
+    file: fileName, checkDate: chk[1], period: yy + '-' + mm,
+    payStart: per ? per[1] : '', payEnd: per ? per[2] : '',
+    process: proc ? proc[1] : ''
+  };
+
+  if (/Check Register/i.test(text)) {
+    const checks = []; let m;
+    REG_ROW.lastIndex = 0;
+    while ((m = REG_ROW.exec(text)) !== null) {
+      checks.push({ name: m[4].replace(/\s+/g, ' ').trim(), eeId: parseInt(m[5], 10),
+                    net: parseFloat(m[3].replace(/,/g, '')), check: m[8] });
+    }
+    const items = /(\d+)\s*Items/.exec(text);
+    const expected = items ? parseInt(items[1], 10) : -1;
+    return { kind: 'register', ...base, checks, expected,
+             mismatch: expected >= 0 && expected !== checks.length };
+  }
+  if (/Payroll Summary/i.test(text)) {
+    const wag = /Federal Income Tax\s*\n\s*([\d,]+\.\d{2})/.exec(text);
+    const net = /Payroll Checks\s*\n\s*([\d,]+\.\d{2})/.exec(text);
+    if (!wag) return { error: 'could not find the gross wage figure' };
+    return { kind: 'summary', ...base,
+             gross: parseFloat(wag[1].replace(/,/g, '')),
+             net: net ? parseFloat(net[1].replace(/,/g, '')) : 0 };
+  }
+  return { error: 'not a Check Register or Payroll Summary' };
+}
+
+async function importEmpeonPdfs(event) {
+  const files = [...event.target.files];
+  const status = document.getElementById('pdf_status');
+  if (!files.length) return;
+  status.innerHTML = '<span style="color:var(--gray-600)">Loading the PDF reader…</span>';
+  try { await prLoadPdfJs(); }
+  catch (e) { status.innerHTML = '<span style="color:var(--danger)">' + e.message + '</span>'; return; }
+
+  const totals = getObj('payrollTotals');
+  const runs = Array.isArray(totals.runs) ? totals.runs.slice() : [];
+  const aw = getObj('attendantWages');
+  const regs = Array.isArray(aw.registers) ? aw.registers.slice() : [];
+
+  let okReg = 0, okSum = 0, bad = [], mismatches = [];
+  for (let i = 0; i < files.length; i++) {
+    status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + (i + 1) + ' of ' + files.length +
+                       ': ' + esc(files[i].name) + '…</span>';
+    let r;
+    try { r = parseEmpeonPdf(await pdfText(files[i]), files[i].name); }
+    catch (e) { bad.push(files[i].name + ' (' + e.message + ')'); continue; }
+    if (r.error) { bad.push(files[i].name + ' (' + r.error + ')'); continue; }
+    if (r.mismatch) mismatches.push(r.file);
+    if (r.kind === 'summary') {
+      const k = r.process || r.checkDate;
+      const at = runs.findIndex(x => (x.process || x.checkDate) === k);
+      if (at >= 0) runs[at] = r; else runs.push(r);
+      okSum++;
+    } else {
+      const k = r.process || r.checkDate;
+      const at = regs.findIndex(x => (x.process || x.checkDate) === k);
+      if (at >= 0) regs[at] = r; else regs.push(r);
+      okReg++;
+    }
+  }
+  runs.sort((a, b) => a.checkDate.split('/').reverse().join().localeCompare(b.checkDate.split('/').reverse().join()));
+
+  setObj('payrollTotals', { source: 'Empeon Payroll Summary PDFs', loadedAt: new Date().toISOString().slice(0, 10), runs });
+  rebuildAttendantWages(regs, runs);
+
+  status.innerHTML = '<span style="color:var(--success)">✓ ' + okReg + ' check register' +
+    (okReg === 1 ? '' : 's') + ' and ' + okSum + ' payroll summar' + (okSum === 1 ? 'y' : 'ies') + ' imported.</span>' +
+    (mismatches.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>' +
+      mismatches.length + ' register' + (mismatches.length === 1 ? '' : 's') + ' did not match their own printed ' +
+      'row count</strong>, so some rows may not have been read: ' + mismatches.map(esc).join(', ') +
+      '. Send these to me and I will look at the layout.</div>' : '') +
+    (bad.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>Skipped ' +
+      bad.length + ':</strong> ' + bad.map(esc).join('; ') + '</div>' : '');
+  event.target.value = '';
+  renderPayroll();
+}
+
+// Turns registers into per-consumer, per-attendant wages. Gross is estimated by
+// scaling each cheque by its own run's gross/net ratio: exact in aggregate,
+// approximate per attendant, because FICA is proportional but withholding is not.
+function rebuildAttendantWages(regs, runs) {
+  const map = getObj('eeToConsumer');
+  const byProc = {};
+  runs.forEach(r => { byProc[r.process || r.checkDate] = r; });
+  const entries = []; const unmapped = {};
+  regs.forEach(reg => {
+    const sum = byProc[reg.process || reg.checkDate];
+    const netTotal = reg.checks.reduce((s, c) => s + c.net, 0);
+    const ratio = (sum && sum.gross && netTotal) ? sum.gross / netTotal : null;
+    reg.checks.forEach(c => {
+      const who = map[String(c.eeId)];
+      if (!who) {
+        unmapped[c.eeId] = unmapped[c.eeId] || { name: c.name, net: 0 };
+        unmapped[c.eeId].net += c.net;
+        return;
+      }
+      entries.push({ period: reg.period, consumer: who, attendant: c.name, eeId: c.eeId,
+                     net: c.net, gross: ratio ? Math.round(c.net * ratio * 100) / 100 : null });
+    });
+  });
+  setObj('attendantWages', {
+    source: 'Empeon Check Register PDFs, joined to consumers by employee id',
+    loadedAt: new Date().toISOString().slice(0, 10),
+    note: 'Gross is estimated from each run\'s gross/net ratio. Verify against Empeon before filing with DES.',
+    registers: regs, entries, unmapped
+  });
+}
+
 function getBilling() {
   const b = getObj('billing');
   return { uploads: Array.isArray(b.uploads) ? b.uploads : [], entries: Array.isArray(b.entries) ? b.entries : [] };
@@ -5202,7 +5376,48 @@ function importBilling() {
   renderPayroll();
 }
 
+// Attendants whose employee id is not yet tied to a consumer. Their pay is real
+// and must not vanish, so it is listed here with a picker rather than dropped.
+function renderUnmappedAttendants() {
+  const el = document.getElementById('pdf_unmapped');
+  if (!el) return;
+  const aw = getObj('attendantWages');
+  const un = aw.unmapped || {};
+  const ids = Object.keys(un);
+  if (!ids.length) { el.innerHTML = ''; return; }
+  const opts = getData('consumers').filter(c => (c.status || 'active') !== 'inactive')
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('');
+  const total = ids.reduce((s, i) => s + un[i].net, 0);
+  el.innerHTML = '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:10px">⚠️ <strong>' +
+    ids.length + ' attendant' + (ids.length === 1 ? ' is' : 's are') + ' not linked to a consumer</strong>, so ' +
+    prFmt(total) + ' of pay is not counted towards any consumer or any threshold. Pick who each one worked for.' +
+    '</div>' +
+    ids.sort((a, b) => un[b].net - un[a].net).map(id =>
+      '<div style="display:flex;gap:10px;align-items:center;background:var(--gray-100);border-radius:6px;' +
+      'padding:8px 12px;margin-bottom:5px;font-size:12.5px">' +
+      '<span style="flex:1"><strong>' + esc(un[id].name) + '</strong>' +
+      '<span style="color:var(--gray-600)"> · employee ' + esc(id) + ' · ' + prFmt(un[id].net) + ' net</span></span>' +
+      '<select id="map_ee_' + esc(id) + '" style="font-size:12px"><option value="">Choose consumer…</option>' +
+      opts + '</select>' +
+      '<button class="btn btn-sm" style="font-size:11px" onclick="assignEe(\'' + esc(id) + '\')">Link</button>' +
+      '</div>').join('');
+}
+
+function assignEe(eeId) {
+  const sel = document.getElementById('map_ee_' + eeId);
+  const who = sel && sel.value;
+  if (!who) return;
+  const map = getObj('eeToConsumer');
+  map[String(eeId)] = who;
+  setObj('eeToConsumer', map);
+  const aw = getObj('attendantWages');
+  rebuildAttendantWages(aw.registers || [], (getObj('payrollTotals').runs || []));
+  renderPayroll();
+}
+
 function renderPayroll() {
+  renderUnmappedAttendants();
   const pr = getPayroll();
   const consumers = getData('consumers');
   const byId = {}; consumers.forEach(c => { byId[c.id] = c; });
