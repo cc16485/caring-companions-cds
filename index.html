@@ -3711,10 +3711,18 @@ const PAGE_TO_TAB  = {
   financials:'financials',
   payroll:'payroll',
   authorizations:'authorizations',
-  backuppool:'backuppool'
+  // Two spellings on purpose. The internal page id stayed `backuppool`, but the
+  // feature is called Caregiver Pool, so the GHL menu link can read
+  // #caregiverpool and not contradict the tab it lands on.
+  backuppool:'backuppool', caregiverpool:'backuppool'
 };
 
+// Menu-link spellings that are not themselves page ids. Resolved before anything
+// else, so the rest of showPage only ever sees a real page id.
+const PAGE_ALIASES = { caregiverpool: 'backuppool' };
+
 function showPage(id) {
+  if (PAGE_ALIASES[id]) id = PAGE_ALIASES[id];
   // Hide all .page divs
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   // Unhighlight all tabs
@@ -8932,7 +8940,7 @@ function initApp() {
 // caseload actually is, not alphabetically, so the common picks are at the top.
 // The one place the public sign-up address is written down. If you point
 // findcdscaregivers.com at the sign-up page, change this line and nothing else.
-const BP_SIGNUP_URL = 'https://hub.caringcds.com/caregiver-list.html';
+const BP_SIGNUP_URL = 'https://hub.caringcds.com/caregiver-list';
 
 const CDS_COUNTIES = [
   'Greene','Christian','Jasper','Taney','Polk','Webster','Lawrence','Newton',
