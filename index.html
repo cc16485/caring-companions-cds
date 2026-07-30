@@ -651,7 +651,7 @@
 <div id="page-profile" class="page">
   <div class="section-header">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <button class="btn btn-outline" onclick="showPage('consumers')" style="font-size:12px">← Consumers</button>
+      <button class="btn btn-outline" id="prof_back" onclick="showPage(_profileFrom || 'consumers')" style="font-size:12px">← Back</button>
       <select id="prof_pick" onchange="openProfile(this.value)" style="font-size:13px;padding:6px 10px;border:1.5px solid var(--gray-300);border-radius:6px"></select>
     </div>
     <button class="btn btn-outline" onclick="renderProfile()" style="font-size:12px">↻ Refresh</button>
@@ -3847,7 +3847,7 @@ function renderConsumers() {
     }
 
     return `<tr>
-      <td><strong>${c.name}</strong>${c.notes ? '<div style="font-size:11px;color:var(--gray-600)">' + c.notes + '</div>' : ''}</td>
+      <td><a href="javascript:void(0)" onclick="openProfile('${c.id}')" style="font-weight:700;color:var(--primary-light);text-decoration:none;cursor:pointer">${c.name}</a>${c.notes ? '<div style="font-size:11px;color:var(--gray-600)">' + c.notes + '</div>' : ''}</td>
       <td>${c.dcn || '—'}</td>
       <td>${c.county || '—'}</td>
       <td style="font-size:12px">${c.consumer || '—'}</td>
@@ -5132,12 +5132,23 @@ function prLoadSheetJS() {
 // getting its own, since the tab bar is already full.
 // ============================================================
 let _profileId = null;
+let _profileFrom = 'consumers';   // so Back returns where you actually came from
 
 function openProfile(id) {
   if (!id) return;
+  const cur = document.querySelector('.page.active');
+  if (cur && cur.id && cur.id !== 'page-profile') {
+    _profileFrom = cur.id.replace(/^page-/, '');
+  }
   _profileId = id;
   showPage('profile');
 }
+
+const PROFILE_BACK_LABEL = {
+  consumers: 'Consumers', taxcompliance: 'Tax & EIN', payroll: 'Payroll & Wages',
+  authorizations: 'Authorizations', dashboard: 'Dashboard', statesubmissions: 'State Submissions',
+  financials: 'Financials'
+};
 
 // One chip per obligation. Green means done, red means outstanding, amber means
 // it cannot be judged yet. Colour is never the only signal: each chip says why.
@@ -5161,6 +5172,8 @@ function renderProfile() {
   if (!_profileId || !consumers.some(c => c.id === _profileId)) _profileId = consumers[0].id;
   pick.innerHTML = consumers.map(c =>
     '<option value="' + c.id + '"' + (c.id === _profileId ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('');
+  const backBtn = document.getElementById('prof_back');
+  if (backBtn) backBtn.textContent = '← ' + (PROFILE_BACK_LABEL[_profileFrom] || 'Back');
 
   const c = consumers.find(x => x.id === _profileId);
   const s = taxStatus(c);
@@ -5725,7 +5738,12 @@ function renderAuthorizations() {
     else if (r.pct < 85) { meaning = 'A little under. Room to deliver more.'; col = 'var(--warn)'; }
     else { meaning = 'On track.'; col = 'var(--success)'; }
     return '<tr>' +
-      '<td><strong>' + esc(name) + '</strong>' + (r.a.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(r.a.dcn) + '</div>' : '') + '</td>' +
+      '<td>' + (function () {
+          const cc = consumers.find(x => prNorm(x.name) === prNorm(r.a.consumer || ''));
+          return cc
+            ? '<a href="javascript:void(0)" onclick="openProfile(\'' + cc.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none;cursor:pointer">' + esc(name) + '</a>'
+            : '<strong>' + esc(name) + '</strong>';
+        })() + (r.a.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(r.a.dcn) + '</div>' : '') + '</td>' +
       '<td style="font-size:11.5px">' + esc(r.a.priorAuth || '—') +
         (r.a.procedureCode ? '<div style="color:var(--gray-600)">' + esc(r.a.procedureCode) + '</div>' : '') + '</td>' +
       '<td style="font-size:12px">' + esc(r.a.planStart) + '<div style="color:var(--gray-600)">to ' + esc(r.a.planEnd) + '</div></td>' +
@@ -6184,7 +6202,9 @@ function renderPayroll() {
       else if (!met && reg) meaning = 'Registered already. Report the wages even though they are under $1,000.';
       else meaning = 'Under $1,000, so DES cannot issue an account yet. Nothing to do.';
       return '<tr>' +
-        '<td><strong>' + esc(r.name) + '</strong>' + (c ? '' : ' <span class="badge badge-red">unmatched</span>') + '</td>' +
+        '<td>' + (c
+            ? '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none;cursor:pointer">' + esc(r.name) + '</a>'
+            : '<strong>' + esc(r.name) + '</strong> <span class="badge badge-red">unmatched</span>') + '</td>' +
         '<td class="mono" style="font-size:12px">' + prFmt(r.gross) + '</td>' +
         '<td>' + (met ? '<span class="badge badge-green">passed</span>'
                       : '<span class="badge badge-gray">' + prFmt(DES_THRESHOLD - r.gross) + ' to go</span>') + '</td>' +
