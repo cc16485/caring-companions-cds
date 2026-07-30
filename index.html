@@ -641,7 +641,7 @@
     <div class="section-title">🧾 Tax &amp; EIN Compliance</div>
     <div style="display:flex;gap:8px">
       <a class="btn btn-primary" href="tax-training.html" style="font-size:12px;text-decoration:none;display:inline-flex;align-items:center">🎓 Training &amp; Help</a>
-      <button class="btn btn-outline" onclick="renderTaxCompliance()" style="font-size:12px">↻ Refresh</button>
+      <button class="btn btn-outline" onclick="renderTaxCompliance();renderEmpeon()" style="font-size:12px">↻ Refresh</button>
     </div>
   </div>
 
@@ -692,6 +692,31 @@
         </thead>
         <tbody id="taxComplianceBody">
           <tr><td colspan="10"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">🔀</span> Three systems — where each number lives</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      The same two numbers have to be right in three places, and they are maintained separately.
+      <strong>Empeon</strong> uses them to file payroll returns, <strong>Fusion</strong> is what DHSS audits, and
+      this hub is our own record. A number can be correct in one and wrong in another, which is exactly how the
+      placeholder EINs went unnoticed.
+    </div>
+    <div id="empeonAlert"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Consumer</th><th>ER code</th>
+            <th>Empeon FEIN</th><th>Empeon State EIN</th>
+            <th>Our record</th><th>In Fusion</th><th>Empeon needs</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="empeonBody">
+          <tr><td colspan="8"><div class="empty"><div class="empty-icon">🔀</div><p>No consumers yet.</p></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -3452,7 +3477,7 @@ function showPage(id) {
   // The state submission list is built by renderPipeline (it reads the same
   // pipeline records), which finds the container by id wherever it now lives.
   if (id === 'statesubmissions') renderPipeline();
-  if (id === 'taxcompliance') renderTaxCompliance();
+  if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); }
 }
 
 function showConsumerTab(tab) {
@@ -3840,6 +3865,7 @@ function saveTaxSetup() {
   closeModal('taxSetupModal');
   renderConsumers();
   renderTaxCompliance();
+  renderEmpeon();
   updateDashboard();
 }
 
@@ -4964,6 +4990,84 @@ function taxStatus(c) {
     next += ' · also missing the MO Tax ID (form 2643A)';
   }
   return { hasEin, hasMoId, hasProof, uploaded, inFusion, exempt, dueBy, lane, next };
+}
+
+// Empeon carries this as a stand-in FEIN on some consumers. It is the textbook
+// dummy EIN, not an assigned number, so any payroll return filed under it went
+// out with a fake employer number on it.
+const EMPEON_PLACEHOLDER = '12-3456789';
+
+// What still has to change in Empeon for this consumer. Deliberately separate
+// from the audit lanes: Empeon is payroll, Fusion is what DHSS checks.
+function empeonStatus(c) {
+  const ours   = (c.ein || '').trim();
+  const theirs = (c.empeonFein || '').trim();
+  const theirMo= (c.empeonStateEin || '').trim();
+  const ourMo  = (c.moTaxId || '').trim();
+  const needs = [];
+
+  if (theirs === EMPEON_PLACEHOLDER) {
+    needs.push({ level: 'bad', text: 'Replace the placeholder FEIN' });
+  } else if (theirs && ours && theirs !== ours) {
+    needs.push({ level: 'bad', text: 'FEIN disagrees with our record' });
+  } else if (!theirs) {
+    needs.push({ level: 'warn', text: 'No FEIN in Empeon' });
+  }
+
+  if (!theirMo) {
+    needs.push(ourMo
+      ? { level: 'warn', text: 'Add the MO Tax ID we hold' }
+      : { level: 'info', text: 'MO Tax ID once Missouri issues it' });
+  } else if (ourMo && theirMo !== ourMo) {
+    needs.push({ level: 'bad', text: 'MO Tax ID disagrees with our record' });
+  }
+
+  return { needs, clean: !needs.length, placeholder: theirs === EMPEON_PLACEHOLDER };
+}
+
+function renderEmpeon() {
+  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive');
+  const rows = consumers.map(c => ({ c, e: empeonStatus(c), s: taxStatus(c) }))
+    .sort((a, b) => (a.e.clean - b.e.clean) || a.c.name.localeCompare(b.c.name));
+
+  const placeholders = rows.filter(r => r.e.placeholder);
+  const alertEl = document.getElementById('empeonAlert');
+  if (alertEl) {
+    alertEl.innerHTML = placeholders.length
+      ? '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + placeholders.length +
+        ' consumer' + (placeholders.length === 1 ? '' : 's') + ' carry the placeholder FEIN ' + EMPEON_PLACEHOLDER +
+        ' in Empeon:</strong> ' + placeholders.map(r => r.c.name).join(', ') +
+        '. That is a dummy number, so any payroll return filed for them went out under a fake employer number. ' +
+        'Two consequences: Empeon has to be corrected once a real EIN exists, and <strong>a filed 941 cannot be ' +
+        'used as audit proof for these consumers</strong>, because it shows the wrong number.</div>'
+      : '';
+  }
+
+  const body = document.getElementById('empeonBody');
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🔀</div><p>No consumers yet.</p></div></td></tr>';
+    return;
+  }
+  const LEVEL = { bad: 'badge-red', warn: 'badge-warn', info: 'badge-blue' };
+  body.innerHTML = rows.map(({ c, e, s }) => {
+    const ph = (c.empeonFein || '').trim() === EMPEON_PLACEHOLDER;
+    return '<tr>' +
+      '<td><strong>' + c.name + '</strong></td>' +
+      '<td style="font-size:12px;color:var(--gray-600)">' + (c.empeonErCode || '—') + '</td>' +
+      '<td style="font-size:12px">' + (ph
+        ? '<span class="badge badge-red">' + EMPEON_PLACEHOLDER + '</span>'
+        : (c.empeonFein || '<span style="color:var(--gray-600)">—</span>')) + '</td>' +
+      '<td style="font-size:12px">' + (c.empeonStateEin || '<span style="color:var(--gray-600)">—</span>') + '</td>' +
+      '<td style="font-size:12px">' + (c.ein || '<span style="color:var(--gray-600)">no EIN</span>') +
+        (c.moTaxId ? '<div style="font-size:11px;color:var(--gray-600)">MO ' + c.moTaxId + '</div>' : '') + '</td>' +
+      '<td>' + (s.inFusion ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">no</span>') + '</td>' +
+      '<td style="font-size:12px">' + (e.clean
+        ? '<span class="badge badge-green">nothing</span>'
+        : e.needs.map(n => '<div style="margin-bottom:3px"><span class="badge ' + LEVEL[n.level] + '">' + n.text + '</span></div>').join('')) + '</td>' +
+      '<td><button class="btn btn-sm btn-outline" style="font-size:11px;white-space:nowrap" onclick="openTaxSetup(\'' + c.id + '\')">Open</button></td>' +
+      '</tr>';
+  }).join('');
 }
 
 const LANE_ORDER = { D: 0, C: 1, B: 2, A: 3, OK: 4 };
