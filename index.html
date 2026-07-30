@@ -5208,7 +5208,17 @@ function renderPayroll() {
   const byId = {}; consumers.forEach(c => { byId[c.id] = c; });
 
   // ── quarter picker ──
-  const quarters = [...new Set(pr.entries.map(e => prQuarterOf(e.period).key))].sort().reverse();
+  // Offer every quarter any source knows about, not just the ones with
+  // per-consumer wage data, otherwise quarters with billing and weekly payroll
+  // silently disappear from the dropdown.
+  const _bl0 = getBilling();
+  const _tot0 = getObj('payrollTotals');
+  const quarters = [...new Set(
+    pr.entries.map(e => e.period)
+      .concat(_bl0.entries.map(e => e.period))
+      .concat((Array.isArray(_tot0.runs) ? _tot0.runs : []).map(r => r.period))
+      .map(p => prQuarterOf(p).key)
+  )].sort().reverse();
   const sel = document.getElementById('pr_quarter');
   const want = sel.value && quarters.includes(sel.value) ? sel.value : quarters[0] || '';
   sel.innerHTML = quarters.length
@@ -5295,7 +5305,22 @@ function renderPayroll() {
   const bl = getBilling();
   const blInQ = bl.entries.filter(e => prQuarterOf(e.period).key === want);
   const revenue = blInQ.reduce((s, e) => s + e.amount, 0);
-  const labor   = rows.reduce((s, r) => s + r.gross, 0);
+
+  // Two sources of labour cost, at different granularities:
+  //   payrollTotals — every weekly payroll run, agency-wide. Complete, but has no
+  //                   per-consumer breakdown at all, so useless for the threshold.
+  //   payroll       — per consumer, but only the quarters where a SUI report exists,
+  //                   and SUI reports taxable wages, which are capped.
+  // Prefer the weekly runs for the money question, since they cover every quarter.
+  const totals = getObj('payrollTotals');
+  const runsInQ = (Array.isArray(totals.runs) ? totals.runs : [])
+    .filter(r => prQuarterOf(r.period).key === want);
+  const weeklyLabor = runsInQ.reduce((s, r) => s + (r.gross || 0), 0);
+  const suiLabor    = rows.reduce((s, r) => s + r.gross, 0);
+  const labor       = weeklyLabor || suiLabor;
+  const laborSource = weeklyLabor
+    ? runsInQ.length + ' weekly payroll runs'
+    : (suiLabor ? 'SUI taxable wages' : 'no payroll loaded');
   const margin  = revenue - labor;
   const marginPct = revenue ? Math.round(margin / revenue * 100) : 0;
   const haveBoth = revenue > 0 && labor > 0;
@@ -5303,8 +5328,7 @@ function renderPayroll() {
   document.getElementById('pr_actuals').innerHTML = [
     ['Billed (WellSky)', revenue ? prFmt(revenue) : '—',
       revenue ? blInQ.length + ' billing rows' : 'upload a billing report', 'var(--primary)'],
-    ['Wages paid (Empeon)', labor ? prFmt(labor) : '—',
-      labor ? rows.length + ' consumers' : 'upload a payroll report', 'var(--warn)'],
+    ['Wages paid (Empeon)', labor ? prFmt(labor) : '—', laborSource, 'var(--warn)'],
     ['Actual margin', haveBoth ? prFmt(margin) : '—',
       haveBoth ? marginPct + '% of billed, for ' + want : 'needs both reports for this quarter',
       !haveBoth ? 'var(--gray-600)' : (margin > 0 ? 'var(--success)' : 'var(--danger)')]
@@ -5343,7 +5367,22 @@ function renderPayroll() {
       ups.slice().sort((a, b) => a.period.localeCompare(b.period))
         .map(u => u.period + ' (' + u.rows + ')').join(' · ') + '</div>' : '';
   document.getElementById('pr_uploads').innerHTML =
-    upLine('Payroll uploaded', pr.uploads) + upLine('Billing uploaded', bl.uploads);
+    // A wildly negative or wildly high quarter is nearly always invoice timing,
+    // not performance. Saying so prevents a panic over a "loss" quarter.
+    (haveBoth && (marginPct < 5 || marginPct > 45)
+      ? '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:10px">⚠️ <strong>' + marginPct +
+        '% is almost certainly an invoicing timing effect, not the real margin.</strong> Billing is counted on the ' +
+        'date each invoice was raised, and work is often invoiced in the following quarter. Read this quarter ' +
+        'together with the next one before drawing any conclusion.</div>' : '') +
+    (runsInQ.length ? '<div style="font-size:11.5px;color:var(--gray-600);line-height:1.6;margin-bottom:8px">' +
+      '<strong>On the wage figure:</strong> taken from the weekly payroll summaries, which are agency totals with ' +
+      'no per-consumer breakdown, so they cannot feed the $1,000 threshold above. Where a SUI report also exists ' +
+      'the two differ by around 1%, because runs straddle quarter ends and off-cycle cheques sit outside the ' +
+      'weekly runs. Treat the margin as close, not exact.</div>' : '') +
+    upLine('Per-consumer wages (SUI reports)', pr.uploads) + upLine('Billing uploaded', bl.uploads) +
+    (Array.isArray(totals.runs) && totals.runs.length
+      ? '<div style="font-size:12px;color:var(--gray-600)">Weekly payroll runs loaded: ' + totals.runs.length +
+        ' (' + totals.runs[0].checkDate + ' to ' + totals.runs[totals.runs.length - 1].checkDate + ')</div>' : '');
 }
 
 // ============================================================
