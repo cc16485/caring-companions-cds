@@ -68,9 +68,9 @@
      overflow a narrow window or a GHL iframe, and without this the last ones are
      simply clipped and unreachable. */
   .tabs {
-    background: var(--primary); display: flex; gap: 2px; padding: 0 24px;
-    overflow-x: auto; scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,.35) transparent;
+    /* Six sections fit, so this no longer needs to scroll sideways. Kept as a
+       wrap so a narrow phone stacks them rather than hiding the last ones. */
+    background: var(--primary); display: flex; gap: 2px; padding: 0 24px; flex-wrap: wrap;
   }
   .tabs::-webkit-scrollbar { height: 6px; }
   .tabs::-webkit-scrollbar-track { background: transparent; }
@@ -199,6 +199,20 @@
   .bc-done { background: var(--gray-100); color: var(--success, #27ae60); font-weight: 700; }
   .bc-na { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f0f0f0 4px, #f0f0f0 8px); color: var(--gray-300); }
 
+
+  /* Section sub-navigation. Sits under the six main tabs and changes with them,
+     so a section's pages are visibly siblings instead of thirteen equals. */
+  .section-nav { display: flex; gap: 4px; flex-wrap: wrap; padding: 10px 24px 0;
+    background: var(--gray-100); border-bottom: 1px solid var(--gray-200); }
+  .section-nav:empty { display: none; }
+  .section-nav button { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    background: transparent; border: 0; border-bottom: 2.5px solid transparent;
+    color: var(--gray-600); padding: 8px 14px 9px; border-radius: 6px 6px 0 0; }
+  .section-nav button:hover { color: var(--primary); background: rgba(0,0,0,.03); }
+  .section-nav button.on { color: var(--primary); border-bottom-color: var(--primary); background: white; }
+  /* The old per-page sub-navs are superseded by the one above. */
+  .sub-nav { display: none !important; }
+
   /* MODAL */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; }
   .modal-overlay.open { display: flex; }
@@ -264,7 +278,7 @@
   @media (max-width: 768px) {
     .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
     .form-row { grid-template-columns: 1fr; }
-    .tabs { overflow-x: auto; }
+    .tabs { overflow-x: visible; }
     .tab { padding: 10px 14px; font-size: 13px; }
   }
 </style>
@@ -308,21 +322,8 @@
   </div>
 </div>
 
-<div class="tabs">
-  <div class="tab active" onclick="showPage('dashboard')">📊 Dashboard</div>
-  <div class="tab" onclick="showPage('consumers')">👥 Consumers</div>
-  <div class="tab" onclick="showPage('statesubmissions')">🏛️ State Submissions</div>
-  <div class="tab" onclick="showPage('taxcompliance')">🧾 Tax &amp; EIN</div>
-  <div class="tab" onclick="showPage('attendants')">🧑‍🤝‍🧑 Attendants</div>
-  <div class="tab" onclick="showPage('evvcorrections')">📝 EVV Corrections</div>
-  <div class="tab" onclick="showPage('automations')">🤖 Automations</div>
-  <div class="tab" onclick="showPage('guides')">📚 Guides</div>
-  <div class="tab" onclick="showPage('quarterly')">📋 Quarterly Report</div>
-  <div class="tab" onclick="showPage('financials')">📈 Financials</div>
-  <div class="tab" onclick="showPage('payroll')">💵 Payroll &amp; Wages</div>
-  <div class="tab" onclick="showPage('authorizations')">📑 Authorizations</div>
-  <div class="tab" onclick="showPage('backuppool')">🤝 Caregiver Pool</div>
-</div>
+<div class="tabs" id="mainTabs"></div>
+<div class="section-nav" id="sectionNav"></div>
 
 <div class="container">
 
@@ -3721,32 +3722,82 @@ function importData(event) {
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
-const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials','payroll','authorizations','backuppool'];
-const PAGE_TO_TAB  = {
-  dashboard:'dashboard',
-  consumers:'consumers', pipeline:'consumers', profile:'consumers',
-  statesubmissions:'statesubmissions',
-  taxcompliance:'taxcompliance',
-  attendants:'attendants',
-  evvcorrections:'evvcorrections',
-  automations:'automations',
-  guides:'guides', calendar:'guides', compliance:'guides', onboarding:'guides', reference:'guides',
-  quarterly:'quarterly',
-  financials:'financials',
-  payroll:'payroll',
-  authorizations:'authorizations',
-  // Two spellings on purpose. The internal page id stayed `backuppool`, but the
-  // feature is called Caregiver Pool, so the GHL menu link can read
-  // #caregiverpool and not contradict the tab it lands on.
-  backuppool:'backuppool', caregiverpool:'backuppool'
+// ── NAVIGATION ─────────────────────────────────────────────────────────────
+// Six sections following the CDS lifecycle, rather than thirteen equals in a bar
+// that scrolled sideways. Every page div stays exactly where it is; only the
+// navigation layer changed, so nothing that referenced a page id had to move.
+const SECTIONS = [
+  { id: 'dashboard',  label: '📊 Dashboard',   tabs: [] },
+  { id: 'leads',      label: '🔮 Leads',       tabs: [
+      { page: 'pipeline',         label: 'Pipeline' },
+      { page: 'statesubmissions', label: 'State Submissions' } ] },
+  { id: 'consumers',  label: '👥 Consumers',   tabs: [
+      { page: 'consumers',      label: 'Active Consumers' },
+      { page: 'taxcompliance',  label: 'Tax & EIN' },
+      { page: 'authorizations', label: 'Authorizations' },
+      { page: 'profile',        label: 'Consumer Profile' } ] },
+  { id: 'attendants', label: '🧑‍🤝‍🧑 Attendants',  tabs: [
+      { page: 'attendants',     label: 'Roster' },
+      { page: 'backuppool',     label: 'Caregiver Pool' },
+      { page: 'evvcorrections', label: 'EVV Corrections' } ] },
+  { id: 'money',      label: '💵 Money',       tabs: [
+      { page: 'payroll',    label: 'Payroll & Wages' },
+      { page: 'financials', label: 'Financials' },
+      { page: 'quarterly',  label: 'Quarterly Report' } ] },
+  { id: 'guides',     label: '📚 Guides',      tabs: [
+      { page: 'onboarding',  label: 'Onboarding' },
+      { page: 'compliance',  label: 'Compliance' },
+      { page: 'calendar',    label: 'Calendar' },
+      { page: 'reference',   label: 'Reference' },
+      { page: 'automations', label: 'Automations' } ] }
+];
+
+// page id -> section id. Built from SECTIONS so the two can never drift.
+const PAGE_TO_SECTION = (() => {
+  const m = { dashboard: 'dashboard' };
+  SECTIONS.forEach(sec => sec.tabs.forEach(t => { m[t.page] = sec.id; }));
+  // aliases: old hashes that are live GHL menu links, plus section ids used bare
+  m.guides = 'guides';
+  m.leads = 'leads';
+  m.money = 'money';
+  m.caregiverpool = 'attendants';
+  return m;
+})();
+
+// Landing page when a section is opened by name rather than a specific page.
+const SECTION_DEFAULT = { dashboard: 'dashboard', leads: 'pipeline', consumers: 'consumers',
+                          attendants: 'attendants', money: 'payroll', guides: 'onboarding' };
+
+// Spellings that are not themselves page ids, kept because they are live links.
+const PAGE_ALIASES = {
+  caregiverpool: 'backuppool',
+  // Bare #guides used to land on the section with no sub-tab lit. Resolve it to
+  // the first guide so the strip always shows where you are.
+  guides: 'onboarding'
 };
 
-// Menu-link spellings that are not themselves page ids. Resolved before anything
-// else, so the rest of showPage only ever sees a real page id.
-const PAGE_ALIASES = { caregiverpool: 'backuppool' };
+function renderMainTabs(activeSection) {
+  const bar = document.getElementById('mainTabs');
+  if (!bar) return;
+  bar.innerHTML = SECTIONS.map(sec =>
+    '<div class="tab' + (sec.id === activeSection ? ' active' : '') +
+    '" onclick="showPage(\'' + (SECTION_DEFAULT[sec.id] || sec.id) + '\')">' + sec.label + '</div>').join('');
+}
+
+function renderSectionNav(activeSection, activePage) {
+  const nav = document.getElementById('sectionNav');
+  if (!nav) return;
+  const sec = SECTIONS.find(x => x.id === activeSection);
+  if (!sec || !sec.tabs.length) { nav.innerHTML = ''; return; }
+  nav.innerHTML = sec.tabs.map(t =>
+    '<button class="' + (t.page === activePage ? 'on' : '') +
+    '" onclick="showPage(\'' + t.page + '\')">' + esc(t.label) + '</button>').join('');
+}
 
 function showPage(id) {
   if (PAGE_ALIASES[id]) id = PAGE_ALIASES[id];
+  // A bare section name (#leads, #money) opens that section's first page.
+  if (SECTION_DEFAULT[id] && !document.getElementById('page-' + id)) id = SECTION_DEFAULT[id];
   // Hide all .page divs
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   // Unhighlight all tabs
@@ -3773,10 +3824,11 @@ function showPage(id) {
     if (pageEl) pageEl.classList.add('active');
   }
 
-  // Highlight the correct main tab
-  const mainKey = PAGE_TO_TAB[id] || id;
-  const tabIdx  = MAIN_TABS.indexOf(mainKey);
-  if (tabIdx >= 0) document.querySelectorAll('.tab')[tabIdx].classList.add('active');
+  // Highlight by section id, not by position. The old code indexed into the tab
+  // bar by array position, which silently broke the moment a tab was added.
+  const section = PAGE_TO_SECTION[id] || 'dashboard';
+  renderMainTabs(section);
+  renderSectionNav(section, id);
 
   if (id === 'dashboard') updateDashboard();
   if (id === 'automations') renderAutomations();
@@ -3824,13 +3876,19 @@ function showGuideTab(tab) {
 
 // ============================================================
 // HASH DEEP LINKS
-// Lets GHL custom menu links point straight at one page, e.g.
-// hub.caringcds.com/#consumers. Any key of PAGE_TO_TAB is a valid target,
-// so #pipeline and the guide sub-tabs (#compliance, #reference, ...) work too.
+// Every one of these is a live GoHighLevel custom menu link. They must keep
+// working through the six-section restructure, so the hub can change first and
+// the GHL sidebar be simplified later, calmly, rather than as a prerequisite.
+// A hash is valid if it names a page, a section, or an alias.
 // ============================================================
+function isKnownHash(t) {
+  return !!(PAGE_TO_SECTION[t] || PAGE_ALIASES[t] || SECTION_DEFAULT[t] ||
+            document.getElementById('page-' + t));
+}
+
 function applyHashRoute() {
   const target = location.hash.replace('#', '').trim().toLowerCase();
-  if (!target || !PAGE_TO_TAB[target]) return false;
+  if (!target || !isKnownHash(target)) return false;
   showPage(target);
   return true;
 }
