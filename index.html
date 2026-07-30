@@ -3761,6 +3761,10 @@ function showPage(id) {
   if (id === 'consumers' || id === 'pipeline') {
     renderConsumers();
     renderPipeline();
+    // Pull in anything that arrived from the websites since last time, then
+    // redraw. Deliberately after the first render so the page is never blank
+    // while it waits on the network.
+    if (id === 'pipeline') importWebsiteLeads().then(n => { if (n) { renderPipeline(); updateDashboard(); } });
   }
   // The state submission list is built by renderPipeline (it reads the same
   // pipeline records), which finds the container by id wherever it now lives.
@@ -4385,6 +4389,64 @@ function closePipelineContact(id) {
   updateDashboard();
 }
 
+// ── WEBSITE ENQUIRIES → LEADS PAGE ─────────────────────────────────────────
+// Forms on caringcds.com and findcdscaregivers.com write to the site_leads
+// table, which the Leads page knew nothing about, so web enquiries never
+// appeared here. This pulls anything new into the pipeline automatically.
+//
+// siteLeadId is what stops duplicates: a row is imported once and never again,
+// no matter how often the page is opened.
+async function importWebsiteLeads() {
+  if (!_db) return 0;
+
+  const pipeline = getData('pipeline');
+  const already  = new Set(pipeline.map(p => p.siteLeadId).filter(Boolean));
+
+  const { data, error } = await _db.from('site_leads')
+    .select('*')
+    .eq('agency_id', AGENCY_ID)
+    .eq('archived', false)
+    .order('submitted_at', { ascending: false });
+
+  if (error || !data || !data.length) return 0;
+
+  const fresh = data.filter(r => !already.has(r.id));
+  if (!fresh.length) return 0;
+
+  fresh.forEach(r => {
+    const name = [r.first_name, r.last_name].filter(Boolean).join(' ').trim()
+              || (r.full_name || '').trim() || 'Website enquiry';
+
+    // Everything they told us, kept as the opening note so whoever calls has it.
+    const detail = [
+      r.who_needs_care ? 'Who needs care: ' + r.who_needs_care : '',
+      r.has_medicaid   ? 'Medicaid: ' + r.has_medicaid : '',
+      r.message        ? 'They said: ' + r.message : ''
+    ].filter(Boolean).join('\n');
+
+    pipeline.unshift({
+      id: 'web-' + r.id,
+      siteLeadId: r.id,
+      name,
+      type: 'lead',
+      county: r.county || '',
+      phone: r.phone || '',
+      email: r.email || '',
+      firstContact: (r.submitted_at || '').split('T')[0],
+      source: r.source ? 'Website — ' + r.source : 'Website',
+      status: 'new',
+      followup: '', stateSubmit: '', currentAgency: '', dcn: '', hours: '',
+      notes: detail ? [{ date: (r.submitted_at || '').split('T')[0], text: detail }] : [],
+      addedAt: r.submitted_at || new Date().toISOString(),
+      fromWebsite: true,
+      onboardingSent: false, welcomeSent: false
+    });
+  });
+
+  await setData('pipeline', pipeline);
+  return fresh.length;
+}
+
 function renderPipeline() {
   const pipeline = getData('pipeline');
   const now = new Date();
@@ -4493,7 +4555,7 @@ function renderPipeline() {
             <div class="day" style="font-size:16px">${daysSince!==null?daysSince+'d':'NEW'}</div>
           </div>
           <div class="deadline-info">
-            <div class="title">${p.name} ${p.county?'— '+p.county:''}</div>
+            <div class="title">${p.name} ${p.county?'— '+p.county:''}${p.fromWebsite?' <span style="font-size:10.5px;font-weight:700;background:var(--teal-pale,#eaf6f6);color:var(--primary);border:1px solid var(--teal,#54bdb8);border-radius:11px;padding:2px 8px;vertical-align:middle">FROM WEBSITE</span>':''}</div>
             <div class="desc">${p.phone||''} ${p.stateSubmit?'· Submitted: '+p.stateSubmit:''} ${p.dcn?'· DCN: '+p.dcn:''} ${p.hours?'· '+p.hours+' hrs/wk':''} ${p.currentAgency?'· From: '+p.currentAgency:''}</div>
             <div class="desc" style="margin-top:2px">Follow-up: ${p.followup||'Not set'}</div>
           </div>
