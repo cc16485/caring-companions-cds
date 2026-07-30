@@ -595,6 +595,8 @@
 
   <!-- ── ACTIVE CONSUMERS SUB-SECTION ── -->
   <div id="csub-active">
+
+  <div id="ongoingReqs" style="margin-bottom:18px"></div>
     <div class="section-header">
       <div class="section-title">Consumer Roster</div>
       <button class="btn btn-primary" onclick="openModal('addConsumerModal')">+ Add Consumer</button>
@@ -3762,6 +3764,7 @@ function showPage(id) {
   if (id === 'financials') renderFinancials();
   if (id === 'consumers' || id === 'pipeline') {
     renderConsumers();
+    renderOngoingRequirements();
     renderPipeline();
     // Pull in anything that arrived from the websites since last time, then
     // redraw. Deliberately after the first render so the page is never blank
@@ -3786,7 +3789,7 @@ function showConsumerTab(tab) {
   document.getElementById('csub-tab-pipeline').classList.toggle('active', tab === 'pipeline');
   document.getElementById('csub-tab-active').classList.toggle('active',   tab === 'active');
   if (tab === 'pipeline') renderPipeline();
-  if (tab === 'active') renderConsumers();
+  if (tab === 'active') { renderConsumers(); renderOngoingRequirements(); }
 }
 
 function showGuideTab(tab) {
@@ -3932,7 +3935,13 @@ function renderConsumers() {
       <td style="font-size:12px">${c.consumer || '—'}</td>
       <td>${c.hours || '—'} hrs</td>
       <td>${contactBtn}</td>
-      <td><button class="btn btn-sm btn-outline" onclick="logHomeVisit('${c.id}')" style="font-size:11px">${c.homeVisitDate ? '✓ ' + c.homeVisitDate : 'Log Visit'}</button></td>
+      <td>${(function(){
+        const r = ongoingRequirements(c).annual;
+        const label = r.overdue ? '⚠ ' + Math.abs(r.days) + 'd over'
+                    : (r.lastVisit ? '✓ ' + r.lastVisit.date : 'Log Visit');
+        const style = r.overdue ? 'font-size:11px;border-color:var(--danger);color:var(--danger)' : 'font-size:11px';
+        return '<button class="btn btn-sm btn-outline" onclick="logAnnualVisit(\'' + c.id + '\')" style="' + style + '">' + label + '</button>';
+      })()}</td>
       <td><button class="btn btn-sm btn-outline" onclick="toggleBackup('${c.id}')" style="font-size:11px">${backupBadge}</button></td>
       <td>${trainedBadge}</td>
       <td><button class="btn btn-sm btn-outline" onclick="openTaxSetup('${c.id}')" style="font-size:11px">${taxBadge}</button></td>
@@ -5414,6 +5423,133 @@ function renderComplianceClocks() {
   host.innerHTML = html;
 }
 
+// ── ONGOING REQUIREMENTS ───────────────────────────────────────────────────
+// 19 CSR 15-8.400(5)(F): case management contact at least MONTHLY, plus at
+// least one ANNUAL FACE-TO-FACE visit within 365 days of the original
+// authorized care plan and annually after that. Phone and video do not count
+// for the annual one. Both have to be evidenced in the consumer's case file.
+//
+// Monthly contact was already tracked month by month. The annual visit was a
+// single date with nothing watching it, which is the easier of the two to lose
+// — it comes round once a year and nothing nags.
+function ongoingRequirements(c) {
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const iso = d => d.toISOString().slice(0, 10);
+  const monthKey = d => d.toISOString().slice(0, 7);
+
+  // ── monthly contact ──
+  const contacts = (c.contacts && typeof c.contacts === 'object') ? c.contacts : {};
+  const months = Object.keys(contacts).sort();
+  const thisMonth = monthKey(today);
+  const doneThisMonth = !!contacts[thisMonth];
+  // How many of the last 12 months were actually logged? That is the number an
+  // auditor asks for, not "when did you last speak to them".
+  // Only count months the consumer was actually with us. Someone who started
+  // last month has not "missed" the eleven before it, and a false count is how
+  // a real alert gets ignored.
+  const startedKey = ((c.cdsStartDate || c.empeonStartDate || '').trim() || '').slice(0, 7);
+  const last12 = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const k = monthKey(d);
+    if (startedKey && k < startedKey) continue;
+    last12.push({ month: k, done: !!contacts[k], log: contacts[k] || null });
+  }
+  const missed = last12.filter(m => !m.done && m.month < thisMonth).length;
+
+  // ── annual face-to-face ──
+  // Anchor on the last visit if there is one, otherwise on when they started,
+  // because the first visit is due within 365 days of the care plan.
+  const visits = Array.isArray(c.homeVisits) ? c.homeVisits.slice()
+               : (c.homeVisitDate ? [{ date: c.homeVisitDate, by: '', notes: '' }] : []);
+  visits.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const lastVisit = visits[0] || null;
+  const anchor = (lastVisit && lastVisit.date) || (c.cdsStartDate || '').trim() || (c.empeonStartDate || '').trim();
+
+  let visitDue = null, visitDays = null;
+  if (anchor) {
+    const d = new Date(anchor + 'T12:00:00');
+    d.setDate(d.getDate() + 365);
+    visitDue = iso(d);
+    visitDays = Math.round((d - today) / 864e5);
+  }
+
+  return {
+    monthly: { doneThisMonth, thisMonth, last12, missed, everLogged: months.length },
+    annual:  { visits, lastVisit, anchor, due: visitDue, days: visitDays,
+               overdue: visitDays !== null && visitDays < 0,
+               soon: visitDays !== null && visitDays >= 0 && visitDays <= 45,
+               known: !!anchor }
+  };
+}
+
+// Agency-wide view of the two recurring duties. Both are case-file evidence,
+// and both fail silently: nobody notices a missed month until an auditor counts
+// them, and the annual visit comes round once a year with nothing to prompt it.
+function renderOngoingRequirements() {
+  const host = document.getElementById('ongoingReqs');
+  if (!host) return;
+  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  if (!consumers.length) { host.innerHTML = ''; return; }
+
+  const visitOverdue = [], visitSoon = [], monthDue = [], chronic = [];
+  consumers.forEach(c => {
+    const r = ongoingRequirements(c);
+    if (r.annual.overdue) visitOverdue.push({ c, r });
+    else if (r.annual.soon) visitSoon.push({ c, r });
+    if (!r.monthly.doneThisMonth) monthDue.push({ c, r });
+    if (r.monthly.missed >= 2) chronic.push({ c, r });
+  });
+  visitOverdue.sort((a, b) => a.r.annual.days - b.r.annual.days);
+
+  let html = '';
+  if (visitOverdue.length) {
+    html += '<div class="alert alert-danger" style="font-size:13px"><strong>🏠 Annual face-to-face visit overdue for ' +
+      visitOverdue.length + ':</strong><br>' +
+      visitOverdue.map(x => esc(x.c.name) + ' — ' + Math.abs(x.r.annual.days) + ' days past (was due ' + x.r.annual.due + ')').join('<br>') +
+      '<div style="margin-top:8px;font-size:12px">Must be in person. Phone and video do not satisfy 19 CSR 15-8.400(5)(F).</div></div>';
+  }
+  if (chronic.length) {
+    html += '<div class="alert alert-danger" style="font-size:13px"><strong>📞 Missed monthly contacts in the last year:</strong> ' +
+      chronic.map(x => esc(x.c.name) + ' (' + x.r.monthly.missed + ')').join(', ') +
+      '<div style="margin-top:6px;font-size:12px">An auditor counts the months, not the last call.</div></div>';
+  }
+  if (visitSoon.length) {
+    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Annual visit due within 45 days:</strong> ' +
+      visitSoon.map(x => esc(x.c.name) + ' (' + x.r.annual.days + ' days)').join(', ') + '</div>';
+  }
+  if (monthDue.length) {
+    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Monthly contact not yet logged this month for ' +
+      monthDue.length + ':</strong> ' + monthDue.map(x => esc(x.c.name)).join(', ') + '</div>';
+  }
+  if (!html) {
+    html = '<div class="alert alert-success" style="font-size:13px">✅ Every active consumer has this month\'s contact logged and no annual visit is overdue.</div>';
+  }
+  host.innerHTML = html;
+}
+
+// Log an annual visit properly: a date alone is not evidence, the file needs to
+// show who went and what was found.
+function logAnnualVisit(cid) {
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const date = prompt('Date of the face-to-face visit (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+  if (!date) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('Please use YYYY-MM-DD.'); return; }
+  const by = prompt('Who made the visit? (their name goes in the case file)', '') || '';
+  const notes = prompt('What was found? (service delivery, quality of care)', '') || '';
+  if (!Array.isArray(c.homeVisits)) {
+    c.homeVisits = c.homeVisitDate ? [{ date: c.homeVisitDate, by: '', notes: '' }] : [];
+  }
+  c.homeVisits.push({ date, by, notes, loggedAt: new Date().toISOString() });
+  c.homeVisitDate = date;   // keep the old field in step for anything still reading it
+  setData('consumers', consumers);
+  if (typeof renderProfile === 'function' && document.getElementById('page-profile').classList.contains('active')) renderProfile();
+  renderConsumers();
+  renderOngoingRequirements();
+}
+
 function renderProfile() {
   const host = document.getElementById('prof_body');
   const pick = document.getElementById('prof_pick');
@@ -5472,9 +5608,22 @@ function renderProfile() {
     })(),
     profChip('Empeon correct', e.clean ? 'ok' : 'bad',
       e.clean ? (c.empeonUpdated ? 'updated ' + esc(c.empeonUpdated) : 'matches our record') : e.needs.map(n => n.text).join('; ')),
-    profChip('Monthly contact', c.contacts && Object.keys(c.contacts).length ? 'ok' : 'warn',
-      'required at least monthly'),
-    profChip('Annual home visit', c.homeVisitDate ? 'ok' : 'warn', c.homeVisitDate ? esc(c.homeVisitDate) : 'not recorded'),
+    (function () {
+      const m = ongoingRequirements(c).monthly;
+      if (m.doneThisMonth) return profChip('Monthly contact', 'ok',
+        'done this month' + (m.missed ? ' · ' + m.missed + ' missed in the last year' : ''));
+      return profChip('Monthly contact', m.missed >= 2 ? 'bad' : 'warn',
+        'not yet this month' + (m.missed ? ' · ' + m.missed + ' missed in the last year' : ''));
+    })(),
+    (function () {
+      const r = ongoingRequirements(c).annual;
+      if (!r.known) return profChip('Annual face-to-face', 'warn', 'no start date to measure from');
+      if (r.overdue) return profChip('Annual face-to-face', 'bad',
+        'OVERDUE by ' + Math.abs(r.days) + ' days — was due ' + r.due);
+      if (r.soon) return profChip('Annual face-to-face', 'warn', 'due in ' + r.days + ' days (' + r.due + ')');
+      return profChip('Annual face-to-face', 'ok',
+        (r.lastVisit ? 'last ' + esc(r.lastVisit.date) + ', ' : '') + 'next due ' + r.due);
+    })(),
     (function () {
       const k = einClock(c);
       if (s.exempt || (s.inFusion && s.uploaded)) return profChip('90-day EIN clock', 'ok', 'satisfied');
