@@ -1,12 +1,12 @@
 -- ============================================================================
--- CDS Hub — Backup Attendant Pool
+-- CDS Hub — Caregiver Pool
 --
 -- Run this ENTIRE file as ONE query in:
 --   https://supabase.com/dashboard/project/siivpekcaryeyttszwav/sql/new
 --
 -- Creates the table behind two things:
---   1. backup-attendant.html — the public sign-up page anyone can fill in
---   2. the Backup Pool tab in the hub — where your team screens and matches them
+--   1. caregiver-list.html — the public "Join our caregiver list" sign-up page
+--   2. the Caregiver Pool tab in the hub — where your team screens and matches them
 --
 -- The applicant fills in the top block. Your staff own the bottom block
 -- (status, FCSR, EDL, notes). Applicants can never read or change anything,
