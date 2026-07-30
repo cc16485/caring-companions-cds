@@ -669,6 +669,29 @@
   </div>
 
   <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">🗓️</span> Care planning calendars</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;line-height:1.6">
+      The state's <strong>CDS Scheduling Worksheet</strong> (the Care Planning Calendar spreadsheet). The file is kept
+      exactly as it is, because that is the format the state expects back. The minutes and units are also read out of
+      it so the plan can be checked against what was actually authorized.
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Which consumer is this for?</label>
+        <select id="cp_consumer"></select>
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <input type="file" id="cp_file" accept=".xlsx,.xls" style="font-size:12px;margin-top:20px" onchange="importCarePlan(event)">
+      </div>
+    </div>
+    <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:10px">
+      The worksheet does not contain the consumer's name anywhere inside it, only in the filename, so pick them above.
+    </div>
+    <div id="cp_status" style="font-size:12.5px;margin-bottom:10px"></div>
+    <div id="cp_table"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="icon">📊</span> Units authorized against units used</div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
       <select id="auth_month" onchange="renderAuthorizations()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px"></select>
@@ -5087,6 +5110,158 @@ function prLoadSheetJS() {
 
 
 // ============================================================
+// CARE PLANNING CALENDARS
+// The state's CDS Scheduling Worksheet. The workbook is stored untouched, because
+// that is the format DHSS expects back, and the numbers are also read out so the
+// plan can be compared against the authorization.
+//
+// Cells are located by their LABELS, never by row number: the template shifts
+// between consumers as tasks are added or removed, and hard-coded rows would read
+// the wrong figures silently.
+// ============================================================
+const CP_BUCKET = 'ein-proof';   // reuses the existing private bucket and policies
+
+function parseCarePlanGrid(grid) {
+  // grid: array of rows, each an array of cell values, from the Weekly Schedule sheet.
+  const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+  const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : null; };
+
+  // Find the header row, which carries "Times Per Week" and the day names.
+  let hdr = -1, colTimes = -1, colWeekly = -1, colMonthly = -1, colTask = -1;
+  for (let r = 0; r < grid.length && hdr < 0; r++) {
+    (grid[r] || []).forEach((c, i) => {
+      const s = norm(c);
+      if (s.includes('times per week')) { hdr = r; colTimes = i; }
+      if (s.includes('weekly total')) colWeekly = i;
+      if (s.includes('monthly') && s.includes('total')) colMonthly = i;
+      if (s.includes('enter tasks') || s === 'scheduling new way') colTask = i;
+    });
+  }
+  if (hdr < 0) return { error: 'this does not look like a CDS Scheduling Worksheet' };
+  if (colTask < 0) colTask = Math.max(0, colTimes - 1);
+
+  // The totals row is labelled "Minutes Per Day".
+  let totalRow = -1;
+  for (let r = hdr; r < grid.length; r++) {
+    if ((grid[r] || []).some(c => norm(c).includes('minutes per day'))) { totalRow = r; break; }
+  }
+  const tasks = [];
+  for (let r = hdr + 1; r < (totalRow < 0 ? grid.length : totalRow); r++) {
+    const row = grid[r] || [];
+    const name = String(row[colTask] == null ? '' : row[colTask]).trim();
+    if (!name || name.startsWith('↓')) continue;
+    const wk = colWeekly >= 0 ? num(row[colWeekly]) : null;
+    const mo = colMonthly >= 0 ? num(row[colMonthly]) : null;
+    if (!wk && !mo) continue;
+    tasks.push({ task: name, timesPerWeek: num(row[colTimes]), weeklyMinutes: wk || 0, monthlyUnits: mo || 0 });
+  }
+  const tr = totalRow >= 0 ? (grid[totalRow] || []) : [];
+  const weeklyMinutes = (colWeekly >= 0 ? num(tr[colWeekly]) : null) ||
+    tasks.reduce((s, t) => s + t.weeklyMinutes, 0);
+  const monthlyUnits = (colMonthly >= 0 ? num(tr[colMonthly]) : null) ||
+    tasks.reduce((s, t) => s + t.monthlyUnits, 0);
+  if (!weeklyMinutes && !monthlyUnits) return { error: 'no weekly or monthly totals found' };
+  return { weeklyMinutes, monthlyUnits, tasks };
+}
+
+async function importCarePlan(event) {
+  const file = event.target.files[0];
+  const status = document.getElementById('cp_status');
+  const cid = document.getElementById('cp_consumer').value;
+  if (!file) return;
+  if (!cid) { status.innerHTML = '<span style="color:var(--danger)">Pick the consumer first.</span>'; event.target.value = ''; return; }
+  const c = getData('consumers').find(x => x.id === cid);
+  status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + esc(file.name) + '…</span>';
+  try {
+    await prLoadSheetJS();
+    const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    // The worksheet is normally the first sheet, but prefer one named for the schedule.
+    const shName = wb.SheetNames.find(n => /weekly|schedule/i.test(n)) || wb.SheetNames[0];
+    const grid = window.XLSX.utils.sheet_to_json(wb.Sheets[shName], { header: 1, blankrows: false, defval: null });
+    const parsed = parseCarePlanGrid(grid);
+    if (parsed.error) throw new Error(parsed.error);
+
+    // Keep the workbook itself: it is what the state expects back.
+    const path = '_careplans/' + cid + '/' + (c ? c.name.replace(/[^A-Za-z]/g, '_') : cid) + '_care-plan.' +
+                 (file.name.split('.').pop() || 'xlsx').toLowerCase();
+    const up = await _db.storage.from(CP_BUCKET).upload(path, file, { upsert: true });
+    const plans = getObj('carePlans');
+    plans[cid] = { consumer: c ? c.name : '', file: file.name, path: up.error ? '' : path,
+                   uploadedAt: new Date().toISOString().slice(0, 10),
+                   weeklyMinutes: parsed.weeklyMinutes, monthlyUnits: parsed.monthlyUnits, tasks: parsed.tasks };
+    setObj('carePlans', plans);
+    status.innerHTML = '<span style="color:var(--success)">✓ ' + esc(c ? c.name : 'Saved') + ': ' +
+      parsed.weeklyMinutes + ' minutes a week, ' + parsed.monthlyUnits + ' units a month, ' +
+      parsed.tasks.length + ' tasks.</span>' +
+      (up.error ? '<div class="alert alert-warn" style="margin-top:8px;font-size:12px">The figures were saved but the ' +
+        'file itself was not: ' + esc(up.error.message) + '</div>' : '');
+    renderAuthorizations();
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--danger)">' + esc(e.message || 'Could not read that file') + '</span>';
+  } finally { event.target.value = ''; }
+}
+
+// Plan against authorization. A plan that totals less than the authorization is
+// units granted but never scheduled, which is revenue quietly left behind.
+function renderCarePlans() {
+  const el = document.getElementById('cp_table');
+  const sel = document.getElementById('cp_consumer');
+  if (!el || !sel) return;
+  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive')
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!sel.options.length) {
+    sel.innerHTML = '<option value="">Choose a consumer…</option>' +
+      consumers.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('');
+  }
+  const plans = getObj('carePlans');
+  const { records } = getAuths();
+  const byDcn = {};
+  Object.values(records).forEach(a => { if (a.consumer) byDcn[prNorm(a.consumer)] = a; });
+
+  // Roster-driven, same reason as the authorizations table: a consumer with no
+  // care plan must be visible here, not absent.
+  const withPlan = consumers.filter(c => plans[c.id]);
+  const noPlan = consumers.filter(c => !plans[c.id]);
+  const missingNote = noPlan.length
+    ? '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:10px">⚠️ <strong>' + noPlan.length +
+      ' active consumer' + (noPlan.length === 1 ? ' has' : 's have') + ' no care planning calendar on file:</strong> ' +
+      noPlan.map(c => esc(c.name)).join(', ') + '.</div>'
+    : '';
+  if (!withPlan.length) {
+    el.innerHTML = missingNote +
+      '<p style="font-size:13px;color:var(--gray-600)">No care planning calendars uploaded yet.</p>';
+    return;
+  }
+
+  el.innerHTML = missingNote +
+    '<div class="table-wrap"><table><thead><tr><th>Consumer</th><th>Planned per week</th>' +
+    '<th>Planned units/mo</th><th>Authorized units/mo</th><th>Difference</th><th>Tasks</th><th></th></tr></thead><tbody>' +
+    withPlan.map(cc => {
+      const id = cc.id;
+      const p = plans[id];
+      const a = byDcn[prNorm(p.consumer)];
+      // Compare against the largest monthly figure, which is a full 31-day month.
+      const auth = a && a.months.length ? Math.max(...a.months.map(m => m.units)) : null;
+      const diff = auth !== null ? p.monthlyUnits - auth : null;
+      let note = '', col = 'var(--gray-600)';
+      if (auth === null) note = a ? 'authorization states no units' : 'no authorization on file';
+      else if (diff === 0) { note = 'matches'; col = 'var(--success)'; }
+      else if (diff < 0) { note = Math.abs(diff) + ' units/mo authorized but not scheduled'; col = 'var(--warn)'; }
+      else { note = diff + ' units/mo planned above the authorization'; col = 'var(--danger)'; }
+      return '<tr><td><strong>' + esc(p.consumer || '?') + '</strong>' +
+        '<div style="font-size:11px;color:var(--gray-600)">' + esc(p.file) + '</div></td>' +
+        '<td class="mono" style="font-size:12px">' + p.weeklyMinutes + ' min<div style="color:var(--gray-600)">' +
+          (p.weeklyMinutes / 60).toFixed(1) + ' hrs</div></td>' +
+        '<td class="mono" style="font-size:12px">' + p.monthlyUnits + '</td>' +
+        '<td class="mono" style="font-size:12px">' + (auth === null ? '—' : auth) + '</td>' +
+        '<td style="font-size:12px;font-weight:700;color:' + col + '">' + esc(note) + '</td>' +
+        '<td style="font-size:12px">' + p.tasks.length + '</td>' +
+        '<td>' + (p.path ? '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' +
+          esc(p.path) + '\')">Open</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+// ============================================================
 // AUTHORIZATIONS
 // The DHSS Home & Community Based Services Care Plan PDF. Gives the prior
 // authorization number, the plan period, the procedure code and the authorized
@@ -5193,6 +5368,7 @@ async function importAuthorizations(event) {
 }
 
 function renderAuthorizations() {
+  renderCarePlans();
   const { unitMinutes, records } = getAuths();
   const list = Object.values(records);
   const consumers = getData('consumers');
@@ -5246,7 +5422,19 @@ function renderAuthorizations() {
   const isCatchUp = !!want && median > 0 &&
     ((byMonth[want] || 0) > median * 1.75 || !(byMonth[prevOf(want)] > 0));
 
-  const rows = list.map(a => {
+  // Driven by the CONSUMER ROSTER, not by the uploaded documents. Otherwise a
+  // consumer with no authorization is invisible on the page whose entire job is to
+  // notice that, which is exactly how someone falls through the cracks.
+  const byConsumer = {};
+  list.forEach(a => { if (a.consumer) byConsumer[prNorm(a.consumer)] = a; });
+  const active = consumers.filter(c => (c.status || 'active') !== 'inactive');
+  const missing = active.filter(c => !byConsumer[prNorm(c.name)]);
+  const orphans = list.filter(a => !a.consumer);   // documents that matched nobody
+
+  const rows = active.map(c => byConsumer[prNorm(c.name)])
+    .filter(Boolean)
+    .concat(orphans)
+    .map(a => {
     // A "flat" authorization states one figure for the whole period rather than a
     // row per month, so it applies to every month inside the plan dates.
     const inPeriod = want && want >= a.planStart.slice(0, 7) && want <= a.planEnd.slice(0, 7);
@@ -5293,6 +5481,22 @@ function renderAuthorizations() {
       ' over the authorized units for ' + want + ':</strong> ' +
       over.map(r => esc(r.a.consumer || r.a.name) + ' at ' + r.pct + '%').join(', ') +
       '. Billing above the authorization is a recoupment risk, not extra revenue.</div>';
+  }
+  // The consumers with NOTHING on file. Listed first, because a missing
+  // authorization is a bigger problem than an expiring one.
+  if (missing.length) {
+    alerts = '<div class="alert" style="margin-bottom:12px;background:var(--danger-pale);' +
+      'border-left:4px solid var(--danger);color:var(--danger)">⛔ <strong>' + missing.length +
+      ' active consumer' + (missing.length === 1 ? ' has' : 's have') + ' NO authorization on file:</strong> ' +
+      missing.map(c => esc(c.name)).join(', ') +
+      '. Without one there is nothing authorising the service, so upload theirs or confirm they should still be active.' +
+      '</div>' + alerts;
+  }
+  if (orphans.length) {
+    alerts += '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + orphans.length +
+      ' authorization' + (orphans.length === 1 ? '' : 's') + ' could not be matched to a consumer:</strong> ' +
+      orphans.map(a => esc(a.name || a.dcn || a.source)).join(', ') +
+      '. Check the DCN on the consumer record so it lines up.</div>';
   }
   if (isCatchUp) {
     alerts += '<div class="alert alert-info" style="margin-bottom:12px">ℹ️ <strong>Usage percentages are hidden for ' +
