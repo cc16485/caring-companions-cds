@@ -293,6 +293,7 @@
   <div class="tab" onclick="showPage('guides')">📚 Guides</div>
   <div class="tab" onclick="showPage('quarterly')">📋 Quarterly Report</div>
   <div class="tab" onclick="showPage('financials')">📈 Financials</div>
+  <div class="tab" onclick="showPage('payroll')">💵 Payroll &amp; Wages</div>
 </div>
 
 <div class="container">
@@ -632,6 +633,112 @@
     <div id="stateSubmissionList">
       <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
     </div>
+  </div>
+</div>
+
+<!-- ==================== PAYROLL & WAGES ==================== -->
+<div id="page-payroll" class="page">
+  <div class="section-header">
+    <div class="section-title">💵 Payroll &amp; Wages</div>
+    <button class="btn btn-outline" onclick="renderPayroll()" style="font-size:12px">↻ Refresh</button>
+  </div>
+
+  <div id="payrollAlerts"></div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📤</span> Upload a month of payroll</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      One export per month is enough. Three per quarter is plenty to catch the <strong>$1,000 threshold</strong>
+      before a DES registration is due, and it gives us real wage figures for the quarterly reports and for actual
+      margin instead of estimates.
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Which month is this?</label><input type="month" id="pr_period"></div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <input type="file" id="pr_file" accept=".csv,.xlsx,.xls" style="font-size:12px;margin-top:20px" onchange="prFileChosen(event)">
+      </div>
+    </div>
+    <div id="pr_mapper" style="display:none">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:10px 0 6px">
+        Which column is which? Set this once and it is remembered for next month.
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Consumer (the employer)</label><select id="pr_col_consumer"></select></div>
+        <div class="form-group"><label>Attendant</label><select id="pr_col_attendant"></select></div>
+        <div class="form-group"><label>Gross wages</label><select id="pr_col_gross"></select></div>
+      </div>
+      <button class="btn" onclick="importPayroll()" style="font-size:13px">Import this month</button>
+    </div>
+    <div id="pr_status" style="font-size:12.5px;margin-top:10px"></div>
+    <div style="font-size:11.5px;color:var(--gray-600);margin-top:10px;line-height:1.6">
+      <strong>Social security numbers are deliberately not imported.</strong> DES asks for them at filing time, so
+      take them from Empeon then rather than keeping a copy of every attendant's SSN in this hub.
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📥</span> Upload a month of billing (WellSky)</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      The revenue side. Payroll above is what we paid out; this is what was billed. Together they give the real
+      margin per consumer instead of a projection.
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Which month is this?</label><input type="month" id="bl_period"></div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <input type="file" id="bl_file" accept=".csv,.xlsx,.xls" style="font-size:12px;margin-top:20px" onchange="blFileChosen(event)">
+      </div>
+    </div>
+    <div id="bl_mapper" style="display:none">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:10px 0 6px">
+        Which column is which? Remembered for next month.
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Consumer</label><select id="bl_col_consumer"></select></div>
+        <div class="form-group"><label>Amount billed</label><select id="bl_col_amount"></select></div>
+        <div class="form-group"><label>Units or hours <span style="font-weight:400;color:var(--gray-600)">(optional)</span></label><select id="bl_col_units"></select></div>
+      </div>
+      <button class="btn" onclick="importBilling()" style="font-size:13px">Import this month</button>
+    </div>
+    <div id="bl_status" style="font-size:12.5px;margin-top:10px"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📊</span> Wages by consumer and quarter</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <select id="pr_quarter" onchange="renderPayroll()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px"></select>
+      <span style="font-size:12px;color:var(--gray-600);margin-left:auto" id="pr_qsummary"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Consumer</th><th>Gross wages</th><th>$1,000 threshold</th>
+            <th>DES registered</th><th>Attendants</th><th>What this means</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="pr_body">
+          <tr><td colspan="7"><div class="empty"><div class="empty-icon">💵</div><p>No payroll uploaded yet.</p></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">🧾</span> Ready for the DES quarterly report</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px">
+      Per consumer, the attendants and gross wages for the selected quarter, in the order UInteract asks for them.
+      Add each attendant's SSN from Empeon as you key it in.
+    </div>
+    <div id="pr_desblock"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">📈</span> Actual against estimate</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px">
+      The Financials page projects from authorized hours. This is what was really paid.
+    </div>
+    <div class="grid-3" id="pr_actuals"></div>
+    <div id="pr_uploads" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -3431,7 +3538,7 @@ function importData(event) {
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
-const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials'];
+const MAIN_TABS    = ['dashboard','consumers','statesubmissions','taxcompliance','attendants','evvcorrections','automations','guides','quarterly','financials','payroll'];
 const PAGE_TO_TAB  = {
   dashboard:'dashboard',
   consumers:'consumers', pipeline:'consumers',
@@ -3442,7 +3549,8 @@ const PAGE_TO_TAB  = {
   automations:'automations',
   guides:'guides', calendar:'guides', compliance:'guides', onboarding:'guides', reference:'guides',
   quarterly:'quarterly',
-  financials:'financials'
+  financials:'financials',
+  payroll:'payroll'
 };
 
 function showPage(id) {
@@ -3489,6 +3597,7 @@ function showPage(id) {
   // pipeline records), which finds the container by id wherever it now lives.
   if (id === 'statesubmissions') renderPipeline();
   if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); }
+  if (id === 'payroll') renderPayroll();
 }
 
 function showConsumerTab(tab) {
@@ -4840,6 +4949,403 @@ function renderOutreachLog() {
 // ============================================================
 // OUTREACH SETTINGS (GoHighLevel)
 // ============================================================
+// ============================================================
+// PAYROLL & WAGES
+// One payroll export a month, mapped to columns once. Exists mainly to watch the
+// DES threshold: a consumer cannot be registered until they have paid $1,000+ in
+// a single quarter, and nothing was watching for that. Also supplies the real
+// numbers for the quarterly DES report and for actual margin, since the
+// Financials page only ever projects from authorized hours.
+//
+// Attendant SSNs are deliberately NOT imported. DES wants them at filing time,
+// which is a reason to read them from Empeon then, not to keep a copy of every
+// attendant's SSN in a JSON blob any signed-in user can read.
+// ============================================================
+// Names arriving from an uploaded spreadsheet are outside data, so escape them
+// before they go anywhere near innerHTML.
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+const DES_THRESHOLD = 1000;
+const QUARTER_DEADLINE = { 1: 'Apr 30', 2: 'Jul 30', 3: 'Oct 31', 4: 'Jan 31 (next year)' };
+
+let _prParsed = null;   // { headers:[], rows:[{}] } waiting on a column mapping
+let _blParsed = null;
+
+const prQuarterOf = period => {           // '2026-07' -> { year:2026, q:3, key:'2026-Q3' }
+  const [y, m] = period.split('-').map(Number);
+  const q = Math.floor((m - 1) / 3) + 1;
+  return { year: y, q, key: y + '-Q' + q };
+};
+const prNorm = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+const prMoney = v => {
+  const n = parseFloat((v == null ? '' : String(v)).replace(/[$,\s]/g, ''));
+  return isFinite(n) ? n : 0;
+};
+const prFmt = n => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function getPayroll() {
+  const p = getObj('payroll');
+  return { uploads: Array.isArray(p.uploads) ? p.uploads : [], entries: Array.isArray(p.entries) ? p.entries : [] };
+}
+
+// Minimal CSV reader that copes with quoted fields containing commas.
+function prParseCSV(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') q = false;
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch !== '\r') cell += ch;
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => (c || '').trim()));
+}
+
+// SheetJS is only fetched if an actual spreadsheet is dropped, so a CSV upload
+// costs no extra download.
+function prLoadSheetJS() {
+  if (window.XLSX) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload = res; s.onerror = () => rej(new Error('Could not load the spreadsheet reader'));
+    document.head.appendChild(s);
+  });
+}
+
+async function prFileChosen(event) {
+  const file = event.target.files[0];
+  const status = document.getElementById('pr_status');
+  if (!file) return;
+  status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + file.name + '…</span>';
+  try {
+    let grid;
+    if (/\.csv$/i.test(file.name)) {
+      grid = prParseCSV(await file.text());
+    } else {
+      await prLoadSheetJS();
+      const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      grid = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false });
+    }
+    if (!grid || grid.length < 2) throw new Error('That file has no rows I can read.');
+
+    const headers = grid[0].map((h, i) => (String(h || '').trim() || 'Column ' + (i + 1)));
+    const rows = grid.slice(1).map(r => {
+      const o = {}; headers.forEach((h, i) => { o[h] = r[i]; }); return o;
+    });
+    _prParsed = { headers, rows, fileName: file.name };
+
+    // Pre-select using last month's mapping, else guess from the header names.
+    const saved = getObj('payrollMapping');
+    const guess = (want, fallbacks) => {
+      if (saved[want] && headers.includes(saved[want])) return saved[want];
+      const hit = headers.find(h => fallbacks.some(f => prNorm(h).includes(f)));
+      return hit || headers[0];
+    };
+    const fill = (id, sel) => {
+      document.getElementById(id).innerHTML = headers.map(h =>
+        '<option value="' + h.replace(/"/g, '&quot;') + '"' + (h === sel ? ' selected' : '') + '>' + h + '</option>').join('');
+    };
+    fill('pr_col_consumer',  guess('consumer',  ['consumer', 'employer', 'client', 'name']));
+    fill('pr_col_attendant', guess('attendant', ['attendant', 'caregiver', 'employee', 'worker']));
+    fill('pr_col_gross',     guess('gross',     ['gross', 'wages', 'pay', 'amount', 'total']));
+
+    document.getElementById('pr_mapper').style.display = 'block';
+    status.innerHTML = '<span style="color:var(--success)">Read ' + rows.length + ' rows. Check the columns below, then import.</span>';
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--danger)">' + (e.message || 'Could not read that file') + '</span>';
+  }
+}
+
+function importPayroll() {
+  const period = document.getElementById('pr_period').value;
+  const status = document.getElementById('pr_status');
+  if (!period) { status.innerHTML = '<span style="color:var(--danger)">Pick which month this covers first.</span>'; return; }
+  if (!_prParsed) return;
+
+  const cCol = document.getElementById('pr_col_consumer').value;
+  const aCol = document.getElementById('pr_col_attendant').value;
+  const gCol = document.getElementById('pr_col_gross').value;
+  setObj('payrollMapping', { consumer: cCol, attendant: aCol, gross: gCol });
+
+  const consumers = getData('consumers');
+  const byName = {};
+  consumers.forEach(c => { byName[prNorm(c.name)] = c; });
+
+  const entries = [], unmatched = {};
+  _prParsed.rows.forEach(r => {
+    const cname = String(r[cCol] == null ? '' : r[cCol]).trim();
+    const aname = String(r[aCol] == null ? '' : r[aCol]).trim();
+    const gross = prMoney(r[gCol]);
+    if (!cname || !gross) return;
+    const match = byName[prNorm(cname)];
+    if (!match) unmatched[cname] = (unmatched[cname] || 0) + gross;
+    entries.push({ period, consumerId: match ? match.id : '', consumer: cname, attendant: aname, gross });
+  });
+
+  const pr = getPayroll();
+  // Re-importing the same month replaces it rather than doubling the figures.
+  pr.entries = pr.entries.filter(e => e.period !== period).concat(entries);
+  pr.uploads = pr.uploads.filter(u => u.period !== period).concat([{
+    period, at: new Date().toISOString().slice(0, 10), file: _prParsed.fileName, rows: entries.length
+  }]);
+  setObj('payroll', pr);
+
+  const names = Object.keys(unmatched);
+  status.innerHTML = '<span style="color:var(--success)">✓ Imported ' + entries.length + ' rows for ' + period + '.</span>' +
+    (names.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>' +
+      names.length + ' name' + (names.length === 1 ? '' : 's') + ' did not match a consumer</strong> and are not ' +
+      'counted towards any threshold: ' + names.map(n => esc(n) + ' (' + prFmt(unmatched[n]) + ')').join(', ') +
+      '. Either the spelling differs from the consumer record, or they are not set up as a consumer yet.</div>' : '');
+  document.getElementById('pr_mapper').style.display = 'none';
+  document.getElementById('pr_file').value = '';
+  _prParsed = null;
+  renderPayroll();
+}
+
+function getBilling() {
+  const b = getObj('billing');
+  return { uploads: Array.isArray(b.uploads) ? b.uploads : [], entries: Array.isArray(b.entries) ? b.entries : [] };
+}
+
+// Same two-step as payroll: read the file, then confirm which column is which.
+// Kept separate rather than generalised because the two reports come from
+// different systems and will drift apart in shape over time.
+async function blFileChosen(event) {
+  const file = event.target.files[0];
+  const status = document.getElementById('bl_status');
+  if (!file) return;
+  status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + file.name + '…</span>';
+  try {
+    let grid;
+    if (/\.csv$/i.test(file.name)) {
+      grid = prParseCSV(await file.text());
+    } else {
+      await prLoadSheetJS();
+      const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      grid = window.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, blankrows: false });
+    }
+    if (!grid || grid.length < 2) throw new Error('That file has no rows I can read.');
+    const headers = grid[0].map((h, i) => (String(h || '').trim() || 'Column ' + (i + 1)));
+    const rows = grid.slice(1).map(r => { const o = {}; headers.forEach((h, i) => { o[h] = r[i]; }); return o; });
+    _blParsed = { headers, rows, fileName: file.name };
+
+    const saved = getObj('billingMapping');
+    const guess = (want, fallbacks) => {
+      if (saved[want] && headers.includes(saved[want])) return saved[want];
+      return headers.find(h => fallbacks.some(f => prNorm(h).includes(f))) || headers[0];
+    };
+    const fill = (id, sel, allowNone) => {
+      document.getElementById(id).innerHTML = (allowNone ? '<option value="">(none)</option>' : '') +
+        headers.map(h => '<option value="' + h.replace(/"/g, '&quot;') + '"' + (h === sel ? ' selected' : '') + '>' + h + '</option>').join('');
+    };
+    fill('bl_col_consumer', guess('consumer', ['consumer', 'client', 'patient', 'name']));
+    fill('bl_col_amount',   guess('amount',   ['amount', 'billed', 'charge', 'total', 'revenue', 'paid']));
+    fill('bl_col_units',    guess('units',    ['unit', 'hour', 'qty', 'quantity']), true);
+
+    document.getElementById('bl_mapper').style.display = 'block';
+    status.innerHTML = '<span style="color:var(--success)">Read ' + rows.length + ' rows. Check the columns, then import.</span>';
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--danger)">' + (e.message || 'Could not read that file') + '</span>';
+  }
+}
+
+function importBilling() {
+  const period = document.getElementById('bl_period').value;
+  const status = document.getElementById('bl_status');
+  if (!period) { status.innerHTML = '<span style="color:var(--danger)">Pick which month this covers first.</span>'; return; }
+  if (!_blParsed) return;
+
+  const cCol = document.getElementById('bl_col_consumer').value;
+  const aCol = document.getElementById('bl_col_amount').value;
+  const uCol = document.getElementById('bl_col_units').value;
+  setObj('billingMapping', { consumer: cCol, amount: aCol, units: uCol });
+
+  const byName = {};
+  getData('consumers').forEach(c => { byName[prNorm(c.name)] = c; });
+
+  const entries = [], unmatched = {};
+  _blParsed.rows.forEach(r => {
+    const cname = String(r[cCol] == null ? '' : r[cCol]).trim();
+    const amount = prMoney(r[aCol]);
+    if (!cname || !amount) return;
+    const units = uCol ? prMoney(r[uCol]) : 0;
+    const match = byName[prNorm(cname)];
+    if (!match) unmatched[cname] = (unmatched[cname] || 0) + amount;
+    entries.push({ period, consumerId: match ? match.id : '', consumer: cname, amount, units });
+  });
+
+  const bl = getBilling();
+  bl.entries = bl.entries.filter(e => e.period !== period).concat(entries);
+  bl.uploads = bl.uploads.filter(u => u.period !== period).concat([{
+    period, at: new Date().toISOString().slice(0, 10), file: _blParsed.fileName, rows: entries.length
+  }]);
+  setObj('billing', bl);
+
+  const names = Object.keys(unmatched);
+  status.innerHTML = '<span style="color:var(--success)">✓ Imported ' + entries.length + ' rows for ' + period + '.</span>' +
+    (names.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>' +
+      names.length + ' name' + (names.length === 1 ? '' : 's') + ' did not match a consumer:</strong> ' +
+      names.map(n => esc(n) + ' (' + prFmt(unmatched[n]) + ')').join(', ') + '</div>' : '');
+  document.getElementById('bl_mapper').style.display = 'none';
+  document.getElementById('bl_file').value = '';
+  _blParsed = null;
+  renderPayroll();
+}
+
+function renderPayroll() {
+  const pr = getPayroll();
+  const consumers = getData('consumers');
+  const byId = {}; consumers.forEach(c => { byId[c.id] = c; });
+
+  // ── quarter picker ──
+  const quarters = [...new Set(pr.entries.map(e => prQuarterOf(e.period).key))].sort().reverse();
+  const sel = document.getElementById('pr_quarter');
+  const want = sel.value && quarters.includes(sel.value) ? sel.value : quarters[0] || '';
+  sel.innerHTML = quarters.length
+    ? quarters.map(q => '<option value="' + q + '"' + (q === want ? ' selected' : '') + '>' + q + '</option>').join('')
+    : '<option value="">No quarters yet</option>';
+
+  const inQ = pr.entries.filter(e => prQuarterOf(e.period).key === want);
+
+  // ── per consumer for the quarter ──
+  const roll = {};
+  inQ.forEach(e => {
+    const k = e.consumerId || ('~' + e.consumer);
+    if (!roll[k]) roll[k] = { name: e.consumer, id: e.consumerId, gross: 0, attendants: {} };
+    roll[k].gross += e.gross;
+    if (e.attendant) roll[k].attendants[e.attendant] = (roll[k].attendants[e.attendant] || 0) + e.gross;
+  });
+  const rows = Object.values(roll).sort((a, b) => b.gross - a.gross);
+
+  document.getElementById('pr_qsummary').textContent = rows.length
+    ? rows.length + ' consumers · ' + prFmt(rows.reduce((s, r) => s + r.gross, 0)) + ' gross'
+    : '';
+
+  // ── alerts: who just became registrable, and what is due ──
+  const newlyEligible = rows.filter(r => r.gross >= DES_THRESHOLD && r.id && !byId[r.id].desRegistered);
+  const alertEl = document.getElementById('payrollAlerts');
+  let alerts = '';
+  if (newlyEligible.length) {
+    alerts += '<div class="alert alert-warn" style="margin-bottom:14px">⚠️ <strong>' + newlyEligible.length +
+      ' consumer' + (newlyEligible.length === 1 ? ' has' : 's have') + ' passed $1,000 in ' + want +
+      ' and can now be registered with DES:</strong> ' + newlyEligible.map(r => esc(r.name)).join(', ') +
+      '. DES will not issue an account number before this point, so this is the moment to register them.</div>';
+  }
+  if (want) {
+    const [yy, qq] = want.split('-Q').map(Number);
+    alerts += '<div class="alert alert-info" style="margin-bottom:14px">🗓️ <strong>' + want +
+      '</strong> contribution and wage report is due <strong>' + QUARTER_DEADLINE[qq] + '</strong>. ' +
+      'Late is 10% of the tax or $100 a month, whichever is greater.</div>';
+  }
+  alertEl.innerHTML = alerts;
+
+  // ── table ──
+  const body = document.getElementById('pr_body');
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">💵</div><p>' +
+      (pr.entries.length ? 'Nothing in this quarter.' : 'No payroll uploaded yet.') + '</p></div></td></tr>';
+  } else {
+    body.innerHTML = rows.map(r => {
+      const c = r.id ? byId[r.id] : null;
+      const met = r.gross >= DES_THRESHOLD;
+      const reg = c && c.desRegistered;
+      let meaning;
+      if (!c) meaning = 'Not matched to a consumer record, so nothing is tracked for them.';
+      else if (met && !reg) meaning = '<strong style="color:var(--warn)">Register with DES now.</strong> They have crossed the threshold.';
+      else if (met && reg) meaning = 'Registered. File the quarterly wage report for them.';
+      else if (!met && reg) meaning = 'Registered already. Report the wages even though they are under $1,000.';
+      else meaning = 'Under $1,000, so DES cannot issue an account yet. Nothing to do.';
+      return '<tr>' +
+        '<td><strong>' + esc(r.name) + '</strong>' + (c ? '' : ' <span class="badge badge-red">unmatched</span>') + '</td>' +
+        '<td class="mono" style="font-size:12px">' + prFmt(r.gross) + '</td>' +
+        '<td>' + (met ? '<span class="badge badge-green">passed</span>'
+                      : '<span class="badge badge-gray">' + prFmt(DES_THRESHOLD - r.gross) + ' to go</span>') + '</td>' +
+        '<td>' + (reg ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">no</span>') + '</td>' +
+        '<td style="font-size:12px">' + Object.keys(r.attendants).length + '</td>' +
+        '<td style="font-size:12px">' + meaning + '</td>' +
+        '<td>' + (c ? '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openTaxSetup(\'' + c.id + '\')">Open</button>' : '') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  // ── DES filing block ──
+  const des = document.getElementById('pr_desblock');
+  des.innerHTML = rows.length ? rows.map(r => {
+    const atts = Object.entries(r.attendants).sort((a, b) => b[1] - a[1]);
+    return '<div style="background:var(--gray-100);border-radius:8px;padding:12px 14px;margin-bottom:10px">' +
+      '<div style="font-weight:700;font-size:13px;margin-bottom:6px">' + esc(r.name) +
+      (r.id && byId[r.id].desEan ? ' <span style="font-weight:400;color:var(--gray-600)">· EAN ' + esc(byId[r.id].desEan) + '</span>' : '') +
+      ' <span style="font-weight:400;color:var(--gray-600)">· ' + prFmt(r.gross) + ' total</span></div>' +
+      atts.map(([n, g]) => '<div style="font-size:12.5px;display:flex;gap:10px"><span style="flex:1">' + esc(n) +
+        '</span><span class="mono">' + prFmt(g) + '</span></div>').join('') +
+      '</div>';
+  }).join('') : '<p style="font-size:13px;color:var(--gray-600)">Upload a month of payroll to see this.</p>';
+
+  // ── the actual bottom line: billed minus paid, for the same quarter ──
+  const bl = getBilling();
+  const blInQ = bl.entries.filter(e => prQuarterOf(e.period).key === want);
+  const revenue = blInQ.reduce((s, e) => s + e.amount, 0);
+  const labor   = rows.reduce((s, r) => s + r.gross, 0);
+  const margin  = revenue - labor;
+  const marginPct = revenue ? Math.round(margin / revenue * 100) : 0;
+  const haveBoth = revenue > 0 && labor > 0;
+
+  document.getElementById('pr_actuals').innerHTML = [
+    ['Billed (WellSky)', revenue ? prFmt(revenue) : '—',
+      revenue ? blInQ.length + ' billing rows' : 'upload a billing report', 'var(--primary)'],
+    ['Wages paid (Empeon)', labor ? prFmt(labor) : '—',
+      labor ? rows.length + ' consumers' : 'upload a payroll report', 'var(--warn)'],
+    ['Actual margin', haveBoth ? prFmt(margin) : '—',
+      haveBoth ? marginPct + '% of billed, for ' + want : 'needs both reports for this quarter',
+      !haveBoth ? 'var(--gray-600)' : (margin > 0 ? 'var(--success)' : 'var(--danger)')]
+  ].map(([l, v, s, col]) =>
+    '<div class="card" style="padding:14px 18px;text-align:center">' +
+    '<div style="font-size:22px;font-weight:700;color:' + col + '">' + v + '</div>' +
+    '<div style="font-size:11.5px;color:var(--gray-600);font-weight:600;text-transform:uppercase;letter-spacing:.04em">' + l + '</div>' +
+    '<div style="font-size:11px;color:var(--gray-600);margin-top:3px">' + s + '</div></div>').join('');
+
+  // Per-consumer margin, but only where both sides are present. Showing a margin
+  // from one side alone would read as a loss on every consumer.
+  if (haveBoth) {
+    const revById = {};
+    blInQ.forEach(e => { const k = e.consumerId || ('~' + e.consumer); revById[k] = (revById[k] || 0) + e.amount; });
+    const perC = rows.map(r => {
+      const k = r.id || ('~' + r.name);
+      return { name: r.name, rev: revById[k] || 0, cost: r.gross };
+    }).filter(x => x.rev > 0).sort((a, b) => (a.rev - a.cost) - (b.rev - b.cost));
+    if (perC.length) {
+      document.getElementById('pr_actuals').insertAdjacentHTML('afterend',
+        '<div style="margin-top:14px"><div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-bottom:8px">' +
+        'Margin per consumer, worst first</div>' + perC.map(x => {
+          const m = x.rev - x.cost, p = Math.round(m / x.rev * 100);
+          return '<div style="display:flex;gap:10px;font-size:12.5px;padding:6px 10px;background:var(--gray-100);' +
+            'border-radius:6px;margin-bottom:4px"><span style="flex:1">' + esc(x.name) + '</span>' +
+            '<span class="mono" style="color:var(--gray-600)">' + prFmt(x.rev) + ' in</span>' +
+            '<span class="mono" style="color:var(--gray-600)">' + prFmt(x.cost) + ' out</span>' +
+            '<span class="mono" style="font-weight:700;color:' + (m > 0 ? 'var(--success)' : 'var(--danger)') + '">' +
+            prFmt(m) + ' (' + p + '%)</span></div>';
+        }).join('') + '</div>');
+    }
+  }
+
+  const upLine = (label, ups) => ups.length
+    ? '<div style="font-size:12px;color:var(--gray-600)">' + label + ': ' +
+      ups.slice().sort((a, b) => a.period.localeCompare(b.period))
+        .map(u => u.period + ' (' + u.rows + ')').join(' · ') + '</div>' : '';
+  document.getElementById('pr_uploads').innerHTML =
+    upLine('Payroll uploaded', pr.uploads) + upLine('Billing uploaded', bl.uploads);
+}
+
 // ============================================================
 // PROOF DOCUMENT FILES  (private 'ein-proof' bucket)
 // Our own copy of each consumer's EIN verification, so the full set is in one
