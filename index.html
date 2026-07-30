@@ -6247,6 +6247,18 @@ function renderAuthorizations() {
   const expiring = rows.filter(r => r.daysLeft >= 0 && r.daysLeft <= 60);
   const expired = rows.filter(r => r.daysLeft < 0);
   const over = rows.filter(r => r.pct !== null && r.pct > 100);
+  // Under-use is the expensive one and nothing was watching it. Units the state
+  // authorised and we did not deliver are two problems at once: the consumer was
+  // assessed as needing that care and is not getting it, and the margin on those
+  // hours is never earned. pct is already null on catch-up months, so the
+  // invoicing artefact cannot create a false alarm here.
+  const under = rows.filter(r => r.pct !== null && r.pct < 70)
+    .map(r => {
+      const unusedUnits = Math.max(0, (r.mo && r.mo.units ? r.mo.units : 0) - r.usedUnits);
+      return { ...r, unusedUnits, unusedDollars: unusedUnits * perUnit };
+    })
+    .filter(r => r.unusedUnits > 0)
+    .sort((a, b) => b.unusedDollars - a.unusedDollars);
   let alerts = '';
   if (expired.length) {
     const exposure = expired.reduce((s, r) => s + r.afterEnd, 0);
@@ -6272,6 +6284,16 @@ function renderAuthorizations() {
       ' over the authorized units for ' + want + ':</strong> ' +
       over.map(r => esc(r.a.consumer || r.a.name) + ' at ' + r.pct + '%').join(', ') +
       '. Billing above the authorization is a recoupment risk, not extra revenue.</div>';
+  }
+  if (under.length) {
+    const lost = under.reduce((t, r) => t + r.unusedDollars, 0);
+    alerts += '<div class="alert alert-warn" style="margin-bottom:12px">📉 <strong>' + under.length +
+      ' consumer' + (under.length === 1 ? ' is' : 's are') + ' using well under their authorized units in ' + want + ':</strong><br>' +
+      under.map(r => esc(r.a.consumer || r.a.name) + ' at ' + r.pct + '% — ' +
+        Math.round(r.unusedUnits) + ' units not delivered (' + prFmt(r.unusedDollars) + ')').join('<br>') +
+      '<div style="margin-top:8px">That is <strong>' + prFmt(lost) + '</strong> of authorized care not provided this month. ' +
+      'The consumer was assessed as needing those hours, so a persistent gap is a service issue as well as unbilled revenue. ' +
+      'Common causes: an attendant left, someone was in hospital, or shifts are being missed.</div></div>';
   }
   // The consumers with NOTHING on file. Listed first, because a missing
   // authorization is a bigger problem than an expiring one.
