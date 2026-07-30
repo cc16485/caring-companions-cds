@@ -64,7 +64,17 @@
   .header-badge { background: rgba(255,255,255,0.2); border-radius: 20px; padding: 4px 12px; font-size: 12px; }
 
   /* TABS */
-  .tabs { background: var(--primary); display: flex; gap: 2px; padding: 0 24px; }
+  /* Scrolls at every width, not just on mobile. There are now enough tabs to
+     overflow a narrow window or a GHL iframe, and without this the last ones are
+     simply clipped and unreachable. */
+  .tabs {
+    background: var(--primary); display: flex; gap: 2px; padding: 0 24px;
+    overflow-x: auto; scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,.35) transparent;
+  }
+  .tabs::-webkit-scrollbar { height: 6px; }
+  .tabs::-webkit-scrollbar-track { background: transparent; }
+  .tabs::-webkit-scrollbar-thumb { background: rgba(255,255,255,.35); border-radius: 99px; }
   .tab { padding: 10px 20px; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 14px; font-weight: 500; border-bottom: 3px solid transparent; transition: all 0.2s; white-space: nowrap; }
   .tab:hover { color: white; background: rgba(255,255,255,0.1); }
   .tab.active { color: white; border-bottom-color: var(--accent-light); }
