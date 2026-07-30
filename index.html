@@ -827,6 +827,8 @@
 <div id="page-taxcompliance" class="page">
   <div class="section-header">
     <div class="section-title">🧾 Tax &amp; EIN Compliance</div>
+
+  <div id="complianceClocks" style="margin-bottom:18px"></div>
     <div style="display:flex;gap:8px">
       <a class="btn btn-primary" href="tax-training.html" style="font-size:12px;text-decoration:none;display:inline-flex;align-items:center">🎓 Training &amp; Help</a>
       <button class="btn btn-outline" onclick="renderTaxCompliance();renderEmpeon()" style="font-size:12px">↻ Refresh</button>
@@ -3769,7 +3771,7 @@ function showPage(id) {
   // The state submission list is built by renderPipeline (it reads the same
   // pipeline records), which finds the container by id wherever it now lives.
   if (id === 'statesubmissions') renderPipeline();
-  if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); }
+  if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); renderComplianceClocks(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'backuppool') renderBackupPool();
@@ -5297,6 +5299,121 @@ function profChip(label, state, detail) {
     (detail ? '<div style="color:var(--gray-600);font-size:11.5px">' + detail + '</div>' : '') + '</span></div>';
 }
 
+// ── DES / UNEMPLOYMENT: THE $1,000 QUARTERLY THRESHOLD ─────────────────────
+// Missouri will not issue a consumer an unemployment account number until that
+// consumer has actually paid $1,000 in wages within a single calendar quarter.
+// Register too early and DES refuses; notice too late and the quarterly wage
+// report is filed late, at 10% or $100 a month up to 20% or $200.
+//
+// Nobody should be watching for that by hand. We already hold every check
+// register, so the hub can work it out: bucket each consumer's attendant wages
+// by calendar quarter and say who has crossed and who is close.
+function desThreshold(consumerName) {
+  const entries = (getObj('attendantWages').entries || [])
+    .filter(e => e.consumer === consumerName);
+  if (!entries.length) return { known: false };
+
+  // Bucket by the calendar quarter the pay period falls in. The period reads
+  // like "07/19/2026 - 07/25/2026"; the start date decides the quarter.
+  const byQuarter = {};
+  let estimated = false;
+  entries.forEach(e => {
+    const first = String(e.period || '').split('-')[0].trim();
+    const parts = first.split('/');
+    if (parts.length < 3) return;
+    const y = +parts[2], m = +parts[0];
+    if (!y || !m) return;
+    const q = 'Q' + (Math.floor((m - 1) / 3) + 1) + ' ' + y;
+    // Gross is what DES counts. It is derived from each run's gross/net ratio,
+    // so fall back to net and say so rather than silently under-reporting.
+    const amt = (e.gross != null) ? e.gross : (estimated = true, e.net || 0);
+    byQuarter[q] = (byQuarter[q] || 0) + amt;
+  });
+
+  const order = Object.keys(byQuarter).sort((a, b) => {
+    const [qa, ya] = a.split(' '), [qb, yb] = b.split(' ');
+    return (+ya - +yb) || (+qa.slice(1) - +qb.slice(1));
+  });
+  if (!order.length) return { known: false };
+
+  const crossed = order.find(q => byQuarter[q] >= 1000);
+  const latest  = order[order.length - 1];
+
+  return {
+    known: true, estimated, byQuarter, quarters: order,
+    crossed: crossed || null,
+    crossedAmount: crossed ? byQuarter[crossed] : 0,
+    latestQuarter: latest,
+    latestAmount: byQuarter[latest],
+    shortfall: crossed ? 0 : Math.max(0, 1000 - byQuarter[latest])
+  };
+}
+
+// The 90-day EIN clock, expressed the way someone acting on it needs it.
+function einClock(c) {
+  const start = (c.cdsStartDate || '').trim();
+  if (!start) return { known: false };
+  const due = new Date(new Date(start + 'T12:00:00').getTime() + 90 * 864e5);
+  const days = Math.round((due - new Date()) / 864e5);
+  return { known: true, due: due.toISOString().slice(0, 10), days };
+}
+
+// Agency-wide: who has crossed $1,000 and is still not registered with DES, and
+// whose 90-day EIN clock is running out. Both are silent, dated failures — the
+// kind that only surface when the state writes to you.
+function renderComplianceClocks() {
+  const host = document.getElementById('complianceClocks');
+  if (!host) return;
+  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+
+  const desDue = [], desClose = [], einDue = [];
+  consumers.forEach(c => {
+    const st = taxStatus(c);
+    if (!c.desRegistered) {
+      const d = desThreshold(c.name);
+      if (d.known && d.crossed) desDue.push({ c, d });
+      else if (d.known && d.shortfall <= 250) desClose.push({ c, d });
+    }
+    if (!(st.exempt || (st.inFusion && st.uploaded))) {
+      const k = einClock(c);
+      if (k.known && k.days <= 21) einDue.push({ c, k });
+    }
+  });
+  einDue.sort((a, b) => a.k.days - b.k.days);
+
+  if (!desDue.length && !desClose.length && !einDue.length) {
+    host.innerHTML = '<div class="alert alert-success" style="font-size:13px">✅ No consumer is over the $1,000 DES threshold unregistered, and no 90-day EIN clock is inside three weeks.</div>';
+    return;
+  }
+
+  let html = '';
+  if (einDue.length) {
+    html += '<div class="alert alert-danger" style="font-size:13px"><strong>⏳ 90-day EIN clock running out for ' +
+      einDue.length + ' consumer' + (einDue.length !== 1 ? 's' : '') + ':</strong><br>' +
+      einDue.map(x => esc(x.c.name) + ' — ' +
+        (x.k.days < 0 ? '<strong>overdue by ' + Math.abs(x.k.days) + ' days</strong>' : x.k.days + ' days left') +
+        ' (due ' + x.k.due + ')').join('<br>') + '</div>';
+  }
+  if (desDue.length) {
+    html += '<div class="alert alert-danger" style="font-size:13px"><strong>💵 Register these consumers in UInteract now — they have passed $1,000 in a quarter:</strong><br>' +
+      desDue.map(x => esc(x.c.name) + ' — $' +
+        x.d.crossedAmount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) +
+        ' in ' + x.d.crossed).join('<br>') +
+      '<div style="margin-top:8px;font-size:12px">DES will not issue an account number before $1,000 is actually paid, and the quarterly wage report is late at 10% or $100 a month once it is. ' +
+      '<a href="https://uinteract.labor.mo.gov" target="_blank" style="color:inherit;text-decoration:underline">uinteract.labor.mo.gov</a></div></div>';
+  }
+  if (desClose.length) {
+    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Approaching $1,000 this quarter:</strong> ' +
+      desClose.map(x => esc(x.c.name) + ' ($' + x.d.shortfall.toFixed(2) + ' to go)').join(', ') +
+      '. Do not register yet — DES will refuse before the threshold is actually crossed.</div>';
+  }
+  const anyEstimated = consumers.some(c => { const d = desThreshold(c.name); return d.known && d.estimated; });
+  if (anyEstimated) {
+    html += '<div style="font-size:11.5px;color:var(--gray-600);margin-top:2px">Some totals fall back to net pay where a run\'s gross could not be derived, so the real figure is higher. Verify in Empeon before filing.</div>';
+  }
+  host.innerHTML = html;
+}
+
 function renderProfile() {
   const host = document.getElementById('prof_body');
   const pick = document.getElementById('prof_pick');
@@ -5344,20 +5461,37 @@ function renderProfile() {
     profChip('Authorization', !auth ? 'bad' : (daysLeft < 0 ? 'bad' : (daysLeft <= 60 ? 'warn' : 'ok')),
       !auth ? 'nothing on file' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'expires in ' + daysLeft + ' days')),
     profChip('Care plan', plan ? 'ok' : 'warn', plan ? plan.monthlyUnits + ' units a month' : 'no calendar on file'),
-    profChip('DES registered', c.desRegistered ? 'ok' : 'warn',
-      c.desRegistered ? esc(c.desEan || 'registered') : 'only after $1,000 in a quarter'),
+    (function () {
+      const d = desThreshold(c.name);
+      if (c.desRegistered) return profChip('DES registered', 'ok', esc(c.desEan || 'registered'));
+      if (!d.known)   return profChip('DES registered', 'warn', 'no payroll loaded yet');
+      if (d.crossed)  return profChip('DES registered', 'bad',
+        'REGISTER NOW — passed $1,000 in ' + d.crossed + ' ($' + d.crossedAmount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) + ')');
+      return profChip('DES registered', 'warn',
+        'not yet — $' + d.latestAmount.toFixed(2) + ' in ' + d.latestQuarter + ', $' + d.shortfall.toFixed(2) + ' to go');
+    })(),
     profChip('Empeon correct', e.clean ? 'ok' : 'bad',
       e.clean ? (c.empeonUpdated ? 'updated ' + esc(c.empeonUpdated) : 'matches our record') : e.needs.map(n => n.text).join('; ')),
     profChip('Monthly contact', c.contacts && Object.keys(c.contacts).length ? 'ok' : 'warn',
       'required at least monthly'),
-    profChip('Annual home visit', c.homeVisitDate ? 'ok' : 'warn', c.homeVisitDate ? esc(c.homeVisitDate) : 'not recorded')
+    profChip('Annual home visit', c.homeVisitDate ? 'ok' : 'warn', c.homeVisitDate ? esc(c.homeVisitDate) : 'not recorded'),
+    (function () {
+      const k = einClock(c);
+      if (s.exempt || (s.inFusion && s.uploaded)) return profChip('90-day EIN clock', 'ok', 'satisfied');
+      if (!k.known) return profChip('90-day EIN clock', 'warn', 'no CDS start date on file');
+      if (k.days < 0)  return profChip('90-day EIN clock', 'bad',  'overdue by ' + Math.abs(k.days) + ' days (was ' + k.due + ')');
+      if (k.days <= 21) return profChip('90-day EIN clock', 'bad',  k.days + ' days left — due ' + k.due);
+      return profChip('90-day EIN clock', 'warn', k.days + ' days left — due ' + k.due);
+    })()
   ].join('');
 
   const outstanding = [
     !s.hasEin && 'a federal EIN', !s.hasMoId && 'a Missouri Tax ID',
     !s.inFusion && 'entering both numbers in Fusion', !(s.uploaded || s.exempt) && 'proof uploaded to Fusion',
     !auth && 'an authorization', auth && daysLeft < 0 && 'a renewed authorization',
-    !e.clean && 'Empeon corrected'
+    !e.clean && 'Empeon corrected',
+    (function () { const d = desThreshold(c.name);
+      return (!c.desRegistered && d.known && d.crossed) ? 'DES registration (passed $1,000 in ' + d.crossed + ')' : ''; })()
   ].filter(Boolean);
 
   host.innerHTML =
