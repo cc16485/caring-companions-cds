@@ -692,6 +692,7 @@
     <input type="file" id="pdf_files" accept=".pdf" multiple onchange="importEmpeonPdfs(event)" style="font-size:12px">
     <div id="pdf_status" style="font-size:12.5px;margin-top:10px"></div>
     <div id="pdf_unmapped" style="margin-top:12px"></div>
+    <div id="pdf_gaps" style="margin-top:12px"></div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
@@ -5416,8 +5417,70 @@ function assignEe(eeId) {
   renderPayroll();
 }
 
+// Payroll runs weekly, so a skipped upload leaves a hole that is invisible unless
+// something looks for it. Two things can go wrong and both understate wages:
+// a whole week never uploaded, and a register uploaded without its summary (which
+// leaves those attendants with no gross figure at all).
+function renderPayrollGaps() {
+  const el = document.getElementById('pdf_gaps');
+  if (!el) return;
+  const runs = (getObj('payrollTotals').runs || []).slice();
+  const regs = (getObj('attendantWages').registers || []).slice();
+  if (!runs.length && !regs.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--gray-600)">Nothing uploaded yet. Start with the most ' +
+      'recent payroll: its Check Register and its Payroll Summary.</div>';
+    return;
+  }
+  const toDate = s => { const p = s.split('/'); return new Date(+p[2], +p[0] - 1, +p[1]); };
+  const key = s => toDate(s).toISOString().slice(0, 10);
+
+  const haveSum = new Set(runs.map(r => key(r.checkDate)));
+  const haveReg = new Set(regs.map(r => key(r.checkDate)));
+  const all = [...new Set([...haveSum, ...haveReg])].sort();
+
+  // Expected weekly cheque dates from the earliest upload to today.
+  const first = new Date(all[0] + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const expected = [];
+  for (let d = new Date(first); d <= today; d.setDate(d.getDate() + 7)) {
+    expected.push(new Date(d).toISOString().slice(0, 10));
+  }
+  const missingWeeks = expected.filter(d => !haveSum.has(d) && !haveReg.has(d));
+  const regNoSum = all.filter(d => haveReg.has(d) && !haveSum.has(d));
+  const sumNoReg = all.filter(d => haveSum.has(d) && !haveReg.has(d));
+  const pretty = d => d.slice(5).replace('-', '/') + '/' + d.slice(0, 4);
+
+  let html = '';
+  if (missingWeeks.length) {
+    html += '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:8px">⚠️ <strong>' +
+      missingWeeks.length + ' week' + (missingWeeks.length === 1 ? '' : 's') + ' with nothing uploaded:</strong> ' +
+      missingWeeks.slice(0, 12).map(pretty).join(', ') +
+      (missingWeeks.length > 12 ? ' and ' + (missingWeeks.length - 12) + ' more' : '') +
+      '. Wages for those weeks are missing from every total on this page. Dates are estimated on a weekly cycle, ' +
+      'so a genuinely skipped payroll will show here too.</div>';
+  }
+  if (regNoSum.length) {
+    html += '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:8px">⚠️ <strong>' +
+      regNoSum.length + ' payroll' + (regNoSum.length === 1 ? '' : 's') + ' missing the Payroll Summary:</strong> ' +
+      regNoSum.map(pretty).join(', ') + '. Those attendants have net pay but <strong>no gross figure</strong>, so ' +
+      'they are left out of the DES wage list. Upload the matching Payroll Summary to fix it.</div>';
+  }
+  if (sumNoReg.length) {
+    html += '<div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">' + sumNoReg.length +
+      ' payroll' + (sumNoReg.length === 1 ? ' has' : 's have') + ' a summary but no Check Register (' +
+      sumNoReg.map(pretty).join(', ') + '). Agency totals are counted, but there is no per-attendant detail.</div>';
+  }
+  if (!html) {
+    html = '<div class="alert alert-success" style="font-size:12.5px">✅ <strong>Complete.</strong> ' +
+      runs.length + ' payroll summaries and ' + regs.length + ' check registers, every week accounted for from ' +
+      pretty(all[0]) + ' to ' + pretty(all[all.length - 1]) + '.</div>';
+  }
+  el.innerHTML = html;
+}
+
 function renderPayroll() {
   renderUnmappedAttendants();
+  renderPayrollGaps();
   const pr = getPayroll();
   const consumers = getData('consumers');
   const byId = {}; consumers.forEach(c => { byId[c.id] = c; });
