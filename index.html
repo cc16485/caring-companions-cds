@@ -45,11 +45,11 @@
     --success: #2a7d78;        /* Deep teal, readable as badge text */
     --success-light: #54bdb8;  /* Brand teal */
     --success-pale: #d7f0ef;   /* Pale teal badge/alert background */
-    --gray-100: #f4f6f9;
-    --gray-200: #e8ecf0;
-    --gray-300: #cdd4db;
-    --gray-600: #6c7a89;
-    --gray-800: #2c3e50;
+    --gray-100: #FAF9F6;
+    --gray-200: #F3EDE3;
+    --gray-300: #E8E2D8;
+    --gray-600: #8A7F70;
+    --gray-800: #3A342C;
     --white: #ffffff;
     --shadow: 0 2px 8px rgba(0,0,0,0.1);
     --radius: 8px;
@@ -5859,20 +5859,90 @@ function buildAuditBinder(c, from, to) {
   const html =
 '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Audit Binder — ' + esc2(c.name) + '</title><style>' +
 '@page{margin:18mm}' +
-'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;line-height:1.5;color:#1f2933;max-width:900px;margin:0 auto;padding:24px}' +
+'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;line-height:1.5;color:#3A342C;max-width:900px;margin:0 auto;padding:24px}' +
 'h1{font-size:21px;margin:0 0 4px;color:#0e3860}h2{font-size:14px;margin:26px 0 8px;color:#0e3860;border-bottom:2px solid #54bdb8;padding-bottom:5px;page-break-after:avoid}' +
-'.sub{color:#5a6570;margin-bottom:18px;font-size:12px}' +
+'.sub{color:#6E6559;margin-bottom:18px;font-size:12px}' +
 'table{border-collapse:collapse;width:100%;margin-bottom:8px;page-break-inside:avoid}' +
 'th,td{border:1px solid #dcdcdc;padding:6px 9px;text-align:left;vertical-align:top}' +
-'th{background:#f4f6f8;font-weight:600;width:210px}' +
-'thead th{width:auto;background:#eef2f5}' +
+'th{background:#FAF9F6;font-weight:600;width:210px}' +
+'thead th{width:auto;background:#F3EDE3}' +
 '.none{color:#a33;font-style:italic}' +
 '.gap{background:#fdf0ec;border:1.5px solid #d98060;border-radius:6px;padding:14px 16px;margin-bottom:14px}' +
 '.gap h2{border:0;margin-top:0;color:#a33}.gap li{margin-bottom:4px}' +
 '.ok{background:#eafaf1;border:1.5px solid #27ae60;border-radius:6px;padding:14px 16px;margin-bottom:14px;color:#1e6b42}' +
-'.foot{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;color:#5a6570;font-size:10.5px}' +
+'.foot{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;color:#6E6559;font-size:10.5px}' +
 '@media print{.noprint{display:none}}' +
-'</style></head><body>' +
+'
+/* ── Filing-cabinet tabs ──────────────────────────────────────────────────
+   Every tab is manila. The chosen one comes forward: taller, page-coloured,
+   with a shadow above it and a -1px seal to the content below. The rest sit
+   back in a darker manila so the drawer reads as full rather than empty. */
+.section-nav {
+  background:#0D365F !important;
+  padding:9px 14px 0 !important;
+  gap:3px !important;
+  align-items:flex-end !important;
+  border-bottom:0 !important;
+  border-radius:0 !important;
+}
+.section-nav button {
+  background:#E5DCCB !important;              /* manila, sitting back */
+  color:rgba(13,54,95,.72) !important;
+  border:0 !important;
+  border-radius:10px 10px 0 0 !important;
+  padding:7px 16px 8px !important;
+  font-size:13px !important;
+  font-weight:600 !important;
+  box-shadow:inset 0 -3px 6px -3px rgba(0,0,0,.22) !important;   /* recessed */
+  transition:background .12s ease, padding .12s ease !important;
+}
+.section-nav button:hover {
+  background:#F0E9DC !important;
+  color:#0D365F !important;
+}
+.section-nav button.on {
+  background:#FAF9F6 !important;              /* same as the page = pulled forward */
+  color:#0D365F !important;
+  font-weight:800 !important;
+  padding-top:11px !important;                /* taller than its neighbours */
+  padding-bottom:9px !important;
+  margin-bottom:-1px !important;              /* seals to the content below */
+  box-shadow:0 -3px 8px -2px rgba(0,0,0,.28) !important;         /* lifted */
+  position:relative !important;
+  z-index:2 !important;
+}
+
+/* Group tabs: same manila folders, a size larger. Hierarchy comes from scale
+   and position, not from being a different kind of object. */
+.tabs {
+  background:#0D365F !important;
+  align-items:flex-end !important;
+  border-bottom:0 !important;
+  padding:12px 14px 0 !important;
+  gap:3px !important;
+  flex-wrap:wrap !important;
+}
+.tabs .tab {
+  background:#E5DCCB !important;
+  color:rgba(13,54,95,.72) !important;
+  border:0 !important;
+  border-radius:11px 11px 0 0 !important;
+  padding:8px 18px 9px !important;
+  font-weight:700 !important;
+  box-shadow:inset 0 -3px 6px -3px rgba(0,0,0,.22) !important;
+}
+.tabs .tab:hover { background:#F0E9DC !important; color:#0D365F !important; }
+.tabs .tab.active {
+  background:#FAF9F6 !important;
+  color:#0D365F !important;
+  font-weight:800 !important;
+  padding-top:12px !important;
+  margin-bottom:-1px !important;
+  box-shadow:0 -3px 8px -2px rgba(0,0,0,.28) !important;
+  position:relative !important;
+  z-index:2 !important;
+}
+</style></head><body>' +
 
 '<div class="noprint" style="background:#0e3860;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
   '<span>Use your browser’s Print dialog and choose <strong>Save as PDF</strong>.</span>' +
