@@ -281,6 +281,78 @@
     .tabs { overflow-x: visible; }
     .tab { padding: 10px 14px; font-size: 13px; }
   }
+
+/* ── Filing-cabinet tabs ──────────────────────────────────────────────────
+   Every tab is manila. The chosen one comes forward: taller, page-coloured,
+   with a shadow above it and a -1px seal to the content below. The rest sit
+   back in a darker manila so the drawer reads as full rather than empty. */
+.section-nav {
+  background:#0D365F !important;
+  padding:9px 14px 0 !important;
+  gap:3px !important;
+  align-items:flex-end !important;
+  border-bottom:0 !important;
+  border-radius:0 !important;
+}
+.section-nav button {
+  background:#E5DCCB !important;              /* manila, sitting back */
+  color:rgba(13,54,95,.72) !important;
+  border:0 !important;
+  border-radius:10px 10px 0 0 !important;
+  padding:7px 16px 8px !important;
+  font-size:13px !important;
+  font-weight:600 !important;
+  box-shadow:inset 0 -3px 6px -3px rgba(0,0,0,.22) !important;   /* recessed */
+  transition:background .12s ease, padding .12s ease !important;
+}
+.section-nav button:hover {
+  background:#F0E9DC !important;
+  color:#0D365F !important;
+}
+.section-nav button.on {
+  background:#FAF9F6 !important;              /* same as the page = pulled forward */
+  color:#0D365F !important;
+  font-weight:800 !important;
+  padding-top:11px !important;                /* taller than its neighbours */
+  padding-bottom:9px !important;
+  margin-bottom:-1px !important;              /* seals to the content below */
+  box-shadow:0 -3px 8px -2px rgba(0,0,0,.28) !important;         /* lifted */
+  position:relative !important;
+  z-index:2 !important;
+}
+
+
+/* Group tabs: same manila folders, a size larger. Hierarchy comes from scale
+   and position, not from being a different kind of object. */
+.tabs {
+  background:#0D365F !important;
+  align-items:flex-end !important;
+  border-bottom:0 !important;
+  padding:12px 14px 0 !important;
+  gap:3px !important;
+  flex-wrap:wrap !important;
+}
+.tabs .tab {
+  background:#E5DCCB !important;
+  color:rgba(13,54,95,.72) !important;
+  border:0 !important;
+  border-radius:11px 11px 0 0 !important;
+  padding:8px 18px 9px !important;
+  font-weight:700 !important;
+  box-shadow:inset 0 -3px 6px -3px rgba(0,0,0,.22) !important;
+}
+.tabs .tab:hover { background:#F0E9DC !important; color:#0D365F !important; }
+.tabs .tab.active {
+  background:#FAF9F6 !important;
+  color:#0D365F !important;
+  font-weight:800 !important;
+  padding-top:12px !important;
+  margin-bottom:-1px !important;
+  box-shadow:0 -3px 8px -2px rgba(0,0,0,.28) !important;
+  position:relative !important;
+  z-index:2 !important;
+}
+
 </style>
 </head>
 <body>
@@ -2064,11 +2136,11 @@
   <div class="card" style="margin-bottom:20px">
     <div class="card-title">🕐 Scheduled Automations</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
-      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
+      <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
         <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:4px">📱 Friday EVV Reminder</div>
         <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Runs every <strong>Friday at 9 AM</strong><br>Reminds you to send EVV deadline alert to all active attendants</div>
       </div>
-      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
+      <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
         <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:4px">📋 Care Plan Digest</div>
         <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Runs every <strong>Monday at 8 AM</strong><br>Reminds you to review consumers with expiring care plans</div>
       </div>
@@ -2936,14 +3008,14 @@
       <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">📧 Email</div>
       <div style="font-size:11px;color:var(--gray-600);margin-bottom:4px">From: <strong>intake@caringcds.com</strong> &nbsp;·&nbsp; To: <strong id="uom_email_to"></strong></div>
       <div style="font-size:11px;color:var(--gray-600);margin-bottom:6px">Subject: <strong id="uom_email_subject"></strong></div>
-      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7;max-height:200px;overflow-y:auto" id="uom_email_body"></div>
+      <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7;max-height:200px;overflow-y:auto" id="uom_email_body"></div>
     </div>
 
     <!-- SMS DRAFT -->
     <div id="uom_sms_section" style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">💬 SMS</div>
       <div style="font-size:11px;color:var(--gray-600);margin-bottom:4px">To: <strong id="uom_sms_to"></strong></div>
-      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7" id="uom_sms_body"></div>
+      <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7" id="uom_sms_body"></div>
     </div>
 
     <div id="uom_no_contact" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px">
@@ -3013,14 +3085,14 @@
     <div style="margin-bottom:14px">
       <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">📧 Welcome Email</div>
       <div style="font-size:11px;color:var(--gray-600);margin-bottom:4px">From: <strong>intake@caringcds.com</strong> &nbsp;·&nbsp; To: <strong id="wo_email_display"></strong></div>
-      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7;max-height:220px;overflow-y:auto" id="wo_email_preview"></div>
+      <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7;max-height:220px;overflow-y:auto" id="wo_email_preview"></div>
     </div>
 
     <!-- TEXT DRAFT -->
     <div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">💬 Welcome Text</div>
       <div style="font-size:11px;color:var(--gray-600);margin-bottom:4px">To: <strong id="wo_phone_display"></strong></div>
-      <div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7" id="wo_text_preview"></div>
+      <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px;font-size:12px;line-height:1.7" id="wo_text_preview"></div>
     </div>
 
     <div id="wo_no_contact" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:12px">
@@ -3382,7 +3454,7 @@ VISIT DATE: 2026-06-27
 ...
 --- END ---"></textarea>
     </div>
-    <div id="import_preview" style="display:none;background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px">
+    <div id="import_preview" style="display:none;background:#FAF9F6;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px">
       <div style="font-weight:700;color:var(--success);margin-bottom:6px">✅ Parsed — review before saving:</div>
       <div id="import_preview_content"></div>
     </div>
@@ -3453,7 +3525,7 @@ VISIT DATE: 2026-06-27
       <div style="font-size:12px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">📅 WellSky Daily Schedule</div>
       <div style="font-size:11px;color:var(--gray-600);margin-bottom:8px">Based on tasks above. Enter these hours in WellSky for the consumer's calendar. If attendant starts at a set time (e.g., 8:00 AM), end time = start + hours shown.</div>
       <div id="cpScheduleGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px"></div>
-      <div style="background:#f8f9fa;border-radius:8px;padding:10px 12px;font-size:12px" id="cpMonthlyUnits"></div>
+      <div style="background:#FAF9F6;border-radius:8px;padding:10px 12px;font-size:12px" id="cpMonthlyUnits"></div>
     </div>
 
     <div class="form-group">
@@ -5210,7 +5282,7 @@ function renderQuickSendGrid() {
   grid.innerHTML = cards.map((card, idx) => {
     const selectId = `qs_select_${idx}`;
     if (card.entityType === 'bulk') {
-      return `<div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px">
+      return `<div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px">
         <div style="font-size:20px">${card.icon}</div>
         <div style="font-size:12px;font-weight:700;color:var(--text)">${card.title}</div>
         <div style="font-size:11px;color:var(--gray-600);flex:1">${card.desc}</div>
@@ -5220,7 +5292,7 @@ function renderQuickSendGrid() {
     const options = card.items.length
       ? card.items.map(it => `<option value="${it.id}">${it.name}</option>`).join('')
       : `<option value="">— No active records —</option>`;
-    return `<div style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px">
+    return `<div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px">
       <div style="font-size:20px">${card.icon}</div>
       <div style="font-size:12px;font-weight:700;color:var(--text)">${card.title}</div>
       <div style="font-size:11px;color:var(--gray-600);flex:1">${card.desc}</div>
@@ -5872,77 +5944,7 @@ function buildAuditBinder(c, from, to) {
 '.ok{background:#eafaf1;border:1.5px solid #27ae60;border-radius:6px;padding:14px 16px;margin-bottom:14px;color:#1e6b42}' +
 '.foot{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;color:#6E6559;font-size:10.5px}' +
 '@media print{.noprint{display:none}}' +
-'
-/* ── Filing-cabinet tabs ──────────────────────────────────────────────────
-   Every tab is manila. The chosen one comes forward: taller, page-coloured,
-   with a shadow above it and a -1px seal to the content below. The rest sit
-   back in a darker manila so the drawer reads as full rather than empty. */
-.section-nav {
-  background:#0D365F !important;
-  padding:9px 14px 0 !important;
-  gap:3px !important;
-  align-items:flex-end !important;
-  border-bottom:0 !important;
-  border-radius:0 !important;
-}
-.section-nav button {
-  background:#E5DCCB !important;              /* manila, sitting back */
-  color:rgba(13,54,95,.72) !important;
-  border:0 !important;
-  border-radius:10px 10px 0 0 !important;
-  padding:7px 16px 8px !important;
-  font-size:13px !important;
-  font-weight:600 !important;
-  box-shadow:inset 0 -3px 6px -3px rgba(0,0,0,.22) !important;   /* recessed */
-  transition:background .12s ease, padding .12s ease !important;
-}
-.section-nav button:hover {
-  background:#F0E9DC !important;
-  color:#0D365F !important;
-}
-.section-nav button.on {
-  background:#FAF9F6 !important;              /* same as the page = pulled forward */
-  color:#0D365F !important;
-  font-weight:800 !important;
-  padding-top:11px !important;                /* taller than its neighbours */
-  padding-bottom:9px !important;
-  margin-bottom:-1px !important;              /* seals to the content below */
-  box-shadow:0 -3px 8px -2px rgba(0,0,0,.28) !important;         /* lifted */
-  position:relative !important;
-  z-index:2 !important;
-}
-
-/* Group tabs: same manila folders, a size larger. Hierarchy comes from scale
-   and position, not from being a different kind of object. */
-.tabs {
-  background:#0D365F !important;
-  align-items:flex-end !important;
-  border-bottom:0 !important;
-  padding:12px 14px 0 !important;
-  gap:3px !important;
-  flex-wrap:wrap !important;
-}
-.tabs .tab {
-  background:#E5DCCB !important;
-  color:rgba(13,54,95,.72) !important;
-  border:0 !important;
-  border-radius:11px 11px 0 0 !important;
-  padding:8px 18px 9px !important;
-  font-weight:700 !important;
-  box-shadow:inset 0 -3px 6px -3px rgba(0,0,0,.22) !important;
-}
-.tabs .tab:hover { background:#F0E9DC !important; color:#0D365F !important; }
-.tabs .tab.active {
-  background:#FAF9F6 !important;
-  color:#0D365F !important;
-  font-weight:800 !important;
-  padding-top:12px !important;
-  margin-bottom:-1px !important;
-  box-shadow:0 -3px 8px -2px rgba(0,0,0,.28) !important;
-  position:relative !important;
-  z-index:2 !important;
-}
-</style></head><body>' +
+'</style></head><body>' +
 
 '<div class="noprint" style="background:#0e3860;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
   '<span>Use your browser’s Print dialog and choose <strong>Save as PDF</strong>.</span>' +
@@ -5989,7 +5991,7 @@ row('DES / unemployment', c.desRegistered ? 'Registered' + (c.desEan ? ' — EAN
       (l.health ? esc2(l.health) : '<span class="none">—</span>') + '</td><td>' +
       (l.complaint ? esc2(l.complaint) : '<span class="none">—</span>') + '</td><td>' +
       esc2((l.notes || '').slice(0, 120)) + '</td></tr>').join('') + '</tbody></table>' +
-    '<div style="font-size:11px;color:#5a6570">' + contacts.length + ' contact(s) in period.</div>'
+    '<div style="font-size:11px;color:#6E6559">' + contacts.length + ' contact(s) in period.</div>'
   : '<p class="none">No contacts recorded in this period.</p>') +
 
 '<h2>5. Annual face-to-face visits — (5)(F)</h2>' +
@@ -7807,15 +7809,15 @@ function previewImport() {
   document.getElementById('import_preview_content').innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <tr><td style="padding:3px 8px;color:#666;width:140px">Attendant</td><td style="padding:3px 8px;font-weight:600">${d.attendant} ${d.phone?'('+d.phone+')':''}</td></tr>
-      <tr style="background:#f8f9fa"><td style="padding:3px 8px;color:#666">Consumer</td><td style="padding:3px 8px;font-weight:600">${d.consumer}</td></tr>
+      <tr style="background:#FAF9F6"><td style="padding:3px 8px;color:#666">Consumer</td><td style="padding:3px 8px;font-weight:600">${d.consumer}</td></tr>
       <tr><td style="padding:3px 8px;color:#666">Visit Date</td><td style="padding:3px 8px">${d.visitdate}</td></tr>
-      <tr style="background:#f8f9fa"><td style="padding:3px 8px;color:#666">Submitted</td><td style="padding:3px 8px">${d.submitdate || 'Today'}</td></tr>
+      <tr style="background:#FAF9F6"><td style="padding:3px 8px;color:#666">Submitted</td><td style="padding:3px 8px">${d.submitdate || 'Today'}</td></tr>
       <tr><td style="padding:3px 8px;color:#666">Original In</td><td style="padding:3px 8px">${fmt(d.origIn)}</td></tr>
-      <tr style="background:#f8f9fa"><td style="padding:3px 8px;color:#666">Original Out</td><td style="padding:3px 8px">${fmt(d.origOut)}</td></tr>
+      <tr style="background:#FAF9F6"><td style="padding:3px 8px;color:#666">Original Out</td><td style="padding:3px 8px">${fmt(d.origOut)}</td></tr>
       <tr><td style="padding:3px 8px;color:#666;font-weight:600;color:#0e3860">Correct In ✓</td><td style="padding:3px 8px;font-weight:700;color:#0e3860">${fmt(d.newIn)}</td></tr>
-      <tr style="background:#f8f9fa"><td style="padding:3px 8px;font-weight:600;color:#0e3860">Correct Out ✓</td><td style="padding:3px 8px;font-weight:700;color:#0e3860">${fmt(d.newOut)}</td></tr>
+      <tr style="background:#FAF9F6"><td style="padding:3px 8px;font-weight:600;color:#0e3860">Correct Out ✓</td><td style="padding:3px 8px;font-weight:700;color:#0e3860">${fmt(d.newOut)}</td></tr>
       <tr><td style="padding:3px 8px;color:#666">Reason</td><td style="padding:3px 8px">${d.reason}</td></tr>
-      <tr style="background:#f8f9fa"><td style="padding:3px 8px;color:#666">Notes</td><td style="padding:3px 8px">${d.notes||'—'}</td></tr>
+      <tr style="background:#FAF9F6"><td style="padding:3px 8px;color:#666">Notes</td><td style="padding:3px 8px">${d.notes||'—'}</td></tr>
     </table>`;
   document.getElementById('import_preview').style.display = 'block';
   document.getElementById('confirmImportBtn').style.display = 'inline-flex';
@@ -7981,7 +7983,7 @@ function calcCpSchedule() {
     const timeStr = hrs > 0 ? `${hrs}h ${remMin > 0 ? remMin+'m' : ''}` : `${mins}m`;
     const units = Math.ceil(mins/15);
     const active = mins > 0;
-    return `<div style="background:${active?'#f0faf9':'#f8f9fa'};border:${active?'2px solid var(--accent)':'1.5px solid #ddd'};border-radius:8px;padding:8px 6px;text-align:center">
+    return `<div style="background:${active?'#f0faf9':'#FAF9F6'};border:${active?'2px solid var(--accent)':'1.5px solid #ddd'};border-radius:8px;padding:8px 6px;text-align:center">
       <div style="font-size:10px;font-weight:700;color:${active?'var(--navy)':'#aaa'};text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">${dayShort[i]}</div>
       ${active ? `
         <div style="font-size:16px;font-weight:800;color:var(--navy)">${timeStr}</div>
@@ -8287,7 +8289,7 @@ async function loadPendingSubmissions() {
       ? `<div style="margin-top:6px"><div style="font-size:10px;color:var(--gray-600);margin-bottom:2px">${label}</div><img src="${sig}" style="max-width:160px;border:1px solid var(--gray-300);border-radius:4px"></div>`
       : '';
 
-    return `<div style="border:1.5px solid var(--gray-200);border-radius:8px;padding:14px;margin-bottom:12px;background:#fafbfc">
+    return `<div style="border:1.5px solid var(--gray-200);border-radius:8px;padding:14px;margin-bottom:12px;background:#FAF9F6">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
         <div>
           <div style="font-weight:700;font-size:14px">${sub.attendant} &nbsp;→&nbsp; ${sub.consumer}</div>
