@@ -702,7 +702,7 @@
             </tr>
           </thead>
           <tbody id="pipelineTableBody">
-            <tr><td colspan="9"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts yet.<br>Click "+ Add to Pipeline" to get started.</p></div></td></tr>
+            <tr><td colspan="8"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts yet.<br>Click "+ Add to Pipeline" to get started.</p></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -992,13 +992,13 @@
       <table>
         <thead>
           <tr>
-            <th>Consumer</th><th>Lane</th>
-            <th>Fed EIN</th><th>MO Tax ID</th><th>Proof held</th>
-            <th>Uploaded</th><th>In Fusion</th><th>90-day due</th><th></th>
+            <th>Consumer</th>
+            <th>Federal EIN</th><th>MO Tax ID</th><th>DES / UInteract</th>
+            <th>Proof held</th><th>In Fusion</th><th>Proof uploaded</th><th></th>
           </tr>
         </thead>
         <tbody id="taxComplianceBody">
-          <tr><td colspan="9"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
+          <tr><td colspan="8"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -4745,7 +4745,7 @@ function renderPipeline() {
   const tbody = document.getElementById('pipelineTableBody');
   if (!tbody) return;
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts match this filter.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts match this filter.</p></div></td></tr>';
   } else {
     tbody.innerHTML = filtered.map(p => {
       const typeColor = p.type==='lead' ? 'badge-blue' : p.type==='referral' ? 'badge-green' : 'badge-warn';
@@ -8247,39 +8247,69 @@ function renderTaxCompliance() {
   const body = document.getElementById('taxComplianceBody');
   if (!body) return;
   if (!shown.length) {
-    body.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="empty-icon">🧾</div><p>' +
+    body.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🧾</div><p>' +
       (rows.length ? 'No consumers in this lane.' : 'No active consumers yet.') + '</p></div></td></tr>';
     return;
   }
 
   const yes = '<span class="badge badge-green">✓</span>';
   const no  = '<span class="badge badge-red">missing</span>';
+
+  // Showing the number itself rather than a tick. A column of ticks is exactly
+  // what let one EIN sit on two consumers, and a placeholder sit on seven, for
+  // long enough to become a finding: both look correct as a tick.
+  const einCounts = {};
+  rows.forEach(({ c }) => {
+    const e = (c.ein || '').trim();
+    if (e) einCounts[e] = (einCounts[e] || 0) + 1;
+  });
+  const number = (val, dupes) => {
+    const v = (val || '').trim();
+    if (!v) return no;
+    const bad = v === EMPEON_PLACEHOLDER ? 'placeholder, not a real EIN'
+              : (dupes && einCounts[v] > 1) ? 'also on ' + (einCounts[v] - 1) + ' other consumer' +
+                  (einCounts[v] > 2 ? 's' : '') : '';
+    return '<span style="font-variant-numeric:tabular-nums;font-size:12px' +
+      (bad ? ';color:var(--danger);font-weight:700' : '') + '">' + esc(v) + '</span>' +
+      (bad ? '<div style="font-size:10.5px;color:var(--danger)">⛔ ' + bad + '</div>' : '');
+  };
+
+  // DES is the one place "missing" would be wrong: the state will not issue an
+  // account until the consumer has paid $1,000 in a quarter, so anyone under
+  // that is not behind, they are not yet eligible.
+  const desCell = (c) => {
+    const ean = (c.desEan || '').trim();
+    if (ean) return '<span style="font-variant-numeric:tabular-nums;font-size:12px">' + esc(ean) + '</span>';
+    if (c.desRegistered) return yes;
+    const d = desThreshold(c.name);
+    if (d.known && d.crossed) return '<span class="badge badge-warn">register now</span>';
+    if (d.known) return '<span style="color:var(--gray-600);font-size:12px" title="Under the $1,000 quarterly ' +
+      'threshold, so DES will not issue an account yet">not yet due</span>';
+    return '<span style="color:var(--gray-600)">—</span>';
+  };
+
   body.innerHTML = shown.map(({ c, s }) => {
-    const [cls, text] = LANE_STYLE[s.lane];
-    // The 90-day upload clock only governs NEW participants. Someone who started
-    // CDS long ago is not new, so their operative deadline is the Aug 31
-    // remediation date, not a 300-day-overdue figure that reads like a crisis.
-    let due = '<span style="color:var(--gray-600)">—</span>';
+    // The 90-day clock is a warning, not a column: it was empty on every row.
+    // It only governs genuinely new participants, so it appears under the name
+    // when it is actually running.
+    let clock = '';
     if (s.dueBy && s.lane !== 'OK') {
       const d = daysUntil(s.dueBy);
-      if (d < -90) {
-        due = '<span style="color:var(--gray-600)" title="Started CDS long before this finding, so the 90-day new-participant rule no longer applies. Aug 31 is the deadline that matters.">established</span>';
-      } else if (d < 0) {
-        due = '<span style="color:var(--danger);font-weight:700">' + Math.abs(d) + 'd overdue</span>';
-      } else {
-        due = '<span style="color:' + (d <= 14 ? 'var(--warn)' : 'var(--gray-600)') + '">' + s.dueBy + '</span>';
-      }
+      if (d < 0 && d >= -90) clock = '<div style="font-size:11px;color:var(--danger);font-weight:700">90-day upload ' +
+        Math.abs(d) + 'd overdue</div>';
+      else if (d >= 0 && d <= 21) clock = '<div style="font-size:11px;color:var(--warn)">90-day upload due ' +
+        s.dueBy + '</div>';
     }
     return '<tr>' +
-      '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a>' + (c.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(c.dcn) + '</div>' : '') + '</td>' +
-      '<td><span class="badge ' + cls + '">' + text + '</span></td>' +
-      '<td>' + (s.hasEin ? yes : no) + '</td>' +
-      '<td>' + (s.hasMoId ? yes : no) + '</td>' +
+      '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a>' +
+        (c.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(c.dcn) + '</div>' : '') + clock + '</td>' +
+      '<td>' + number(c.ein, true) + '</td>' +
+      '<td>' + number(c.moTaxId, false) + '</td>' +
+      '<td>' + desCell(c) + '</td>' +
       '<td style="font-size:12px">' + (s.hasProof ? labelFor(EIN_PROOF_DOCS, c.proofDocType) : '<span style="color:var(--gray-600)">none</span>') +
         ((c.proofFiles || []).length ? '<div style="font-size:11px;color:var(--success)">📎 ' + c.proofFiles.length + ' on file</div>' : '') + '</td>' +
-      '<td style="font-size:12px">' + (s.uploaded ? c.proofUploaded : (s.exempt ? '<span style="font-size:11px">prior vendor</span>' : no)) + '</td>' +
       '<td>' + (s.inFusion ? yes : no) + '</td>' +
-      '<td style="font-size:12px">' + due + '</td>' +
+      '<td style="font-size:12px">' + (s.uploaded ? c.proofUploaded : (s.exempt ? '<span style="font-size:11px">prior vendor</span>' : no)) + '</td>' +
       '<td><button class="btn btn-sm btn-outline" style="font-size:11px;white-space:nowrap" onclick="openTaxSetup(\'' + c.id + '\')">Open</button></td>' +
       '</tr>';
   }).join('');
