@@ -702,7 +702,7 @@
             </tr>
           </thead>
           <tbody id="pipelineTableBody">
-            <tr><td colspan="10"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts yet.<br>Click "+ Add to Pipeline" to get started.</p></div></td></tr>
+            <tr><td colspan="9"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts yet.<br>Click "+ Add to Pipeline" to get started.</p></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -956,30 +956,26 @@
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:18px;border-left:4px solid var(--accent)">
-    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1;min-width:240px">
-        <div style="font-weight:700;font-size:14px;margin-bottom:3px">New to this, or training someone?</div>
-        <div style="font-size:12.5px;color:var(--gray-600)">
-          Step-by-step walkthrough for every part of consumer tax setup, with the exact fields to enter, what needs a
-          wet signature, what gets faxed, screenshots from the state's own vendor packet, and a help assistant that
-          answers questions about any of it.
-        </div>
-      </div>
-      <a class="btn btn-primary" href="tax-training.html" style="text-decoration:none;white-space:nowrap">Open the training →</a>
-    </div>
-  </div>
 
   <div id="taxDeadlineBanner"></div>
 
-  <div class="grid-3" style="margin-bottom:18px" id="taxStatTiles"></div>
+  <!-- The two things on this page that cannot be fixed by working faster: an EIN
+       on two people, and payroll filed under a placeholder. They used to sit below
+       a sixteen-row table. -->
+  <div id="empeonAlert"></div>
+
+  <!-- Sixteen consumers are not sixteen problems; they are two batches. Each card
+       is one action, done once, with the people it applies to. -->
+  <div id="taxBatches" style="margin-bottom:18px"></div>
+
+  <div id="taxStatTiles" style="margin-bottom:14px"></div>
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="icon">📋</span> Remediation Worklist</div>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
       What DHSS audits is two things per consumer: both numbers typed into Fusion under <strong>HCBS Eligibility</strong>,
       and acceptable proof uploaded to the <strong>Documents</strong> tab under <strong>EIN Tax Documents</strong>.
-      Sorted hardest first, because those are the only ones that can still run out of time.
+      Sorted hardest first. What to do is on the batch cards above; this is the detail behind them.
     </div>
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
       <select id="taxFilterLane" onchange="renderTaxCompliance()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
@@ -996,13 +992,13 @@
       <table>
         <thead>
           <tr>
-            <th>Consumer</th><th>Lane</th><th>What to do next</th>
+            <th>Consumer</th><th>Lane</th>
             <th>Fed EIN</th><th>MO Tax ID</th><th>Proof held</th>
             <th>Uploaded</th><th>In Fusion</th><th>90-day due</th><th></th>
           </tr>
         </thead>
         <tbody id="taxComplianceBody">
-          <tr><td colspan="10"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
+          <tr><td colspan="9"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -1016,7 +1012,6 @@
       this hub is our own record. A number can be correct in one and wrong in another, which is exactly how the
       placeholder EINs went unnoticed.
     </div>
-    <div id="empeonAlert"></div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -1044,6 +1039,20 @@
       <strong>Entered but not uploaded, or uploaded but not entered, is still a finding.</strong> Both halves are required.<br>
       <span style="color:var(--gray-600)">Two free passes: a single document showing <strong>both</strong> numbers covers both, and
       no upload is needed at all where a <strong>previous CDS vendor</strong> already uploaded proof to that case record.</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px;border-left:4px solid var(--accent)">
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:240px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:3px">New to this, or training someone?</div>
+        <div style="font-size:12.5px;color:var(--gray-600)">
+          Step-by-step walkthrough for every part of consumer tax setup, with the exact fields to enter, what needs a
+          wet signature, what gets faxed, screenshots from the state's own vendor packet, and a help assistant that
+          answers questions about any of it.
+        </div>
+      </div>
+      <a class="btn btn-primary" href="tax-training.html" style="text-decoration:none;white-space:nowrap">Open the training →</a>
     </div>
   </div>
 </div>
@@ -4736,7 +4745,7 @@ function renderPipeline() {
   const tbody = document.getElementById('pipelineTableBody');
   if (!tbody) return;
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts match this filter.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts match this filter.</p></div></td></tr>';
   } else {
     tbody.innerHTML = filtered.map(p => {
       const typeColor = p.type==='lead' ? 'badge-blue' : p.type==='referral' ? 'badge-green' : 'badge-warn';
@@ -5622,7 +5631,12 @@ function renderComplianceClocks() {
   einDue.sort((a, b) => a.k.days - b.k.days);
 
   if (!desDue.length && !desClose.length && !einDue.length) {
-    host.innerHTML = '<div class="alert alert-success" style="font-size:13px">✅ No consumer is over the $1,000 DES threshold unregistered, and no 90-day EIN clock is inside three weeks.</div>';
+    // Deliberately narrow wording. This checks two dated clocks and nothing else,
+    // and it used to read as an all-clear at the top of a page showing nobody
+    // compliant with eleven days to go.
+    host.innerHTML = '<div class="alert alert-info" style="font-size:13px">⏱ <strong>Clocks clear.</strong> ' +
+      'No consumer is over the $1,000 DES threshold unregistered, and no 90-day EIN clock is inside three weeks. ' +
+      'This says nothing about the remediation work below.</div>';
     return;
   }
 
@@ -8134,6 +8148,64 @@ const LANE_STYLE = {
   OK: ['badge-green', 'compliant'],
 };
 
+// ============================================================
+// WORK BATCHES
+// Sixteen consumers behind on tax setup are not sixteen problems. They are two
+// jobs: a run of EIN applications, and a run of identical phone calls. Grouping
+// by the action turns an audit list into two sittings, which is the difference
+// between finishing before Aug 31 and not.
+//
+// Each card carries the one thing to do, the link or number that does it, and
+// the people it applies to. Clicking a name opens that consumer's tax setup.
+// ============================================================
+const TAX_BATCHES = [
+  { lane: 'D', title: 'Apply for these EINs', colour: 'var(--danger)',
+    action: 'Apply online at the IRS. Each one takes minutes and the EIN is issued on the spot. ' +
+            'Use the download button on the last screen, not print.',
+    link: { href: 'https://www.irs.gov/businesses/small-businesses-self-employed/apply-for-an-employer-identification-number-ein-online',
+            label: 'Apply for an EIN online' } },
+  { lane: 'C', title: 'Call the IRS for these 147C letters', colour: 'var(--warn)',
+    action: 'One call, 800-829-4933, Mon-Fri 7am-7pm. Ask for a 147C and they will fax it while you hold. ' +
+            'Have the consumer available: without their 8821 on file the IRS will want them on the line.',
+    link: { href: 'tel:8008294933', label: 'Call 800-829-4933' } },
+  { lane: 'B', title: 'Upload proof into Fusion', colour: 'var(--primary-light)',
+    action: 'The document is already held. Participant record, Documents tab, category EIN Tax Documents. ' +
+            'This is the step DHSS audits.' },
+  { lane: 'A', title: 'Type both numbers into Fusion', colour: 'var(--primary-light)',
+    action: 'Participant page, HCBS Eligibility section. Both the federal EIN and the Missouri Tax ID.' },
+];
+
+function renderTaxBatches(rows) {
+  const el = document.getElementById('taxBatches');
+  if (!el) return;
+  const cards = TAX_BATCHES.map(b => {
+    const people = rows.filter(r => r.s.lane === b.lane);
+    if (!people.length) return '';
+    // Said once here rather than repeated on every row of the table below.
+    const alsoMo = people.filter(r => !r.s.hasMoId).length;
+    return '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + b.colour + '">' +
+      '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">' +
+        '<div style="font-weight:700;font-size:14px">' + b.title + '</div>' +
+        '<div style="font-size:12px;color:var(--gray-600)">' + people.length + ' consumer' +
+          (people.length === 1 ? '' : 's') + '</div></div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);line-height:1.6;margin-bottom:8px">' + b.action +
+        (alsoMo ? ' <strong>' + alsoMo + ' of these also still need the Missouri Tax ID</strong> (form 2643A), ' +
+          'which cannot be applied for until the EIN exists.' : '') + '</div>' +
+      (b.link ? '<a class="btn btn-primary btn-sm" href="' + b.link.href + '"' +
+        (b.link.href.indexOf('http') === 0 ? ' target="_blank" rel="noopener"' : '') +
+        ' style="text-decoration:none;font-size:12px;margin-bottom:8px;display:inline-block">' +
+        b.link.label + '</a>' : '') +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+        people.map(r => '<button type="button" class="tax-chip" style="cursor:pointer" ' +
+          'title="Open tax setup" onclick="openTaxSetup(\'' + r.c.id + '\')">' + esc(r.c.name) + '</button>').join('') +
+      '</div></div>';
+  }).filter(Boolean).join('');
+
+  el.innerHTML = cards ||
+    '<div class="alert alert-success">✅ <strong>Nothing outstanding.</strong> Every active consumer has both ' +
+    'numbers and proof uploaded to Fusion.</div>';
+}
+
 function renderTaxCompliance() {
   const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive');
   const rows = consumers.map(c => ({ c, s: taxStatus(c) }))
@@ -8155,22 +8227,16 @@ function renderTaxCompliance() {
         (open === 1 ? '' : 's') + ' still outstanding</div>';
   }
 
-  // ---- summary tiles ----
+  renderTaxBatches(rows);
+
+  // ---- one quiet line; the batch cards above carry the numbers that matter ----
   const count = f => rows.filter(f).length;
-  const tiles = [
-    ['Compliant',        count(r => r.s.lane === 'OK'),                    'var(--success)'],
-    ['No EIN yet',       count(r => r.s.lane === 'D'),                     'var(--danger)'],
-    ['Need IRS letter',  count(r => r.s.lane === 'C'),                     'var(--warn)'],
-    ['Ready to upload',  count(r => r.s.lane === 'B'),                     'var(--primary-light)'],
-    ['Missing MO Tax ID',count(r => !r.s.hasMoId && r.s.lane !== 'OK'),    'var(--warn)'],
-    ['Active consumers', rows.length,                                      'var(--primary)'],
-  ];
   const tEl = document.getElementById('taxStatTiles');
-  if (tEl) tEl.innerHTML = tiles.map(([label, n, col]) =>
-    '<div class="card" style="padding:14px 18px;text-align:center">' +
-    '<div style="font-size:26px;font-weight:700;color:' + col + '">' + n + '</div>' +
-    '<div style="font-size:11.5px;color:var(--gray-600);font-weight:600;text-transform:uppercase;letter-spacing:.04em">' +
-    label + '</div></div>').join('');
+  if (tEl) tEl.innerHTML =
+    '<div style="font-size:12.5px;color:var(--gray-600)">' +
+    '<strong>' + count(r => r.s.lane === 'OK') + '</strong> of <strong>' + rows.length + '</strong> compliant · ' +
+    '<strong>' + count(r => !r.s.hasEin) + '</strong> without an EIN · ' +
+    '<strong>' + count(r => !r.s.hasMoId && r.s.lane !== 'OK') + '</strong> without a Missouri Tax ID</div>';
 
   // ---- worklist ----
   const filter = (document.getElementById('taxFilterLane') || {}).value || '';
@@ -8181,7 +8247,7 @@ function renderTaxCompliance() {
   const body = document.getElementById('taxComplianceBody');
   if (!body) return;
   if (!shown.length) {
-    body.innerHTML = '<tr><td colspan="10"><div class="empty"><div class="empty-icon">🧾</div><p>' +
+    body.innerHTML = '<tr><td colspan="9"><div class="empty"><div class="empty-icon">🧾</div><p>' +
       (rows.length ? 'No consumers in this lane.' : 'No active consumers yet.') + '</p></div></td></tr>';
     return;
   }
@@ -8207,7 +8273,6 @@ function renderTaxCompliance() {
     return '<tr>' +
       '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a>' + (c.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(c.dcn) + '</div>' : '') + '</td>' +
       '<td><span class="badge ' + cls + '">' + text + '</span></td>' +
-      '<td style="font-size:12px;max-width:270px">' + s.next + '</td>' +
       '<td>' + (s.hasEin ? yes : no) + '</td>' +
       '<td>' + (s.hasMoId ? yes : no) + '</td>' +
       '<td style="font-size:12px">' + (s.hasProof ? labelFor(EIN_PROOF_DOCS, c.proofDocType) : '<span style="color:var(--gray-600)">none</span>') +
