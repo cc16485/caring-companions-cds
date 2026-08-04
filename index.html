@@ -225,6 +225,33 @@
   .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray-600); padding: 4px; }
   .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--gray-200); }
 
+  /* TAX SETUP — a full workspace, not a popup. This is the screen the DHSS audit
+     turns on, so it gets the whole window and lays its steps out side by side
+     instead of one narrow column you scroll for two minutes. Scoped to this
+     modal so every other modal in the hub is untouched. */
+  #taxSetupModal .modal { width: 96vw; max-width: 1500px; height: 94vh; max-height: 94vh;
+    padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+  #taxSetupModal .modal-header { margin: 0; padding: 16px 24px 12px; border-bottom: 1px solid var(--gray-200); flex: none; }
+  #taxSetupModal .tax-body { flex: 1; overflow-y: auto; padding: 14px 24px 20px; }
+  #taxSetupModal .tax-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
+    gap: 14px; align-items: start; margin-top: 12px; }
+  #taxSetupModal .tax-card { border: 1.5px solid var(--gray-200); border-radius: 10px; padding: 14px 16px; background: #fff; }
+  #taxSetupModal .tax-card.audited { border-color: var(--danger); }
+  /* Cards are already a column of the page, so the old two-up form rows only
+     strand a checkbox beside a paragraph of help text. Inside a card everything
+     reads straight down, in the order the step is worked. */
+  #taxSetupModal .tax-card .form-row { grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+  #taxSetupModal .tax-card .form-group { justify-content: flex-start; }
+  #taxSetupModal .tax-card .form-group > label[style] { margin-top: 0; }
+  #taxSetupModal .modal-footer { margin: 0; padding: 12px 24px; border-top: 1px solid var(--gray-200); flex: none; background: #fff; }
+  .tax-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+    border-radius: 999px; padding: 4px 10px; border: 1.5px solid var(--gray-300); color: var(--gray-600); background: var(--gray-100); }
+  .tax-chip.done { border-color: var(--success); color: var(--success); background: #eafaf1; }
+  @media (max-width: 900px) {
+    #taxSetupModal .modal { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
+    #taxSetupModal .tax-grid { grid-template-columns: 1fr; }
+  }
+
   /* CALENDAR */
   .deadline-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-200); }
   .deadline-item:last-child { border-bottom: none; }
@@ -2789,13 +2816,18 @@
 
 <!-- Tax Setup Modal -->
 <div class="modal-overlay" id="taxSetupModal">
-  <div class="modal" style="max-width:680px;max-height:90vh;overflow-y:auto">
+  <!-- No inline sizing here on purpose: the width and height come from the
+       #taxSetupModal rules in the stylesheet, and an inline style would beat
+       them. This one is a full workspace, not a dialog. -->
+  <div class="modal">
     <div class="modal-header">
       <div class="modal-title">Tax &amp; Enrollment Setup</div>
       <button class="modal-close" onclick="closeModal('taxSetupModal')">×</button>
     </div>
+    <div class="tax-body">
     <input type="hidden" id="tax_consumer_id">
-    <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--primary)" id="tax_consumer_name"></div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:8px;color:var(--primary)" id="tax_consumer_name"></div>
+    <div id="tax_progress" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
 
     <!-- Step-by-step instructions panel -->
     <div style="margin-bottom:14px">
@@ -2903,7 +2935,9 @@
     <div style="background:#fff3cd;border-radius:6px;padding:8px 12px;font-size:11.5px;margin-bottom:10px;line-height:1.6">
       ⚠️ <strong>Wet signature:</strong> Forms 8821 and 2678 may require original signatures — confirm with your accountant before marking filed. &nbsp;|&nbsp; ⚠️ <strong>DES:</strong> Cannot register in UInteract until after first payroll and $1,000+ paid in a single quarter.
     </div>
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">START &nbsp;·&nbsp; Enrollment packet (GoHighLevel)</div>
+    <div class="tax-grid">
+<section class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">START &nbsp;·&nbsp; Enrollment packet (GoHighLevel)</div>
     <div class="form-row">
       <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
       <div class="form-group"><label>Packet Signed &amp; Returned (date)</label><input type="date" id="tax_packet_signed"></div>
@@ -2919,7 +2953,9 @@
     <input type="file" id="tax_packet_upload" accept="application/pdf"
            onchange="splitEnrollmentPacket(event)" style="font-size:12px">
     <div id="tax_packet_status" style="font-size:11.5px;margin-top:6px"></div>
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEPS 1&ndash;3 &nbsp;·&nbsp; Federal tax (IRS): EIN, 8821, 2678</div>
+</section>
+<section class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEPS 1&ndash;3 &nbsp;·&nbsp; Federal tax (IRS): EIN, 8821, 2678</div>
     <div class="form-row">
       <div class="form-group"><label>Federal EIN (SS-4)</label><input type="text" id="tax_ein" placeholder="XX-XXXXXXX" oninput="refreshPacketHold()">
         <!-- The online application shows the CP 575 once, on the last screen, and
@@ -2945,7 +2981,9 @@
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_irs2678"> <span><strong>Form 2678</strong> — IRS Agent Appt (designates Caring Companions as payroll agent)</span></label>
       </div>
     </div>
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri Department of Revenue (withholding)</div>
+</section>
+<section class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri Department of Revenue (withholding)</div>
     <!-- Written down because it is the thing everyone gets wrong once. There is no
          "CDS" option in MyTax: CDS is a Medicaid programme, not a tax type, and
          the employer being registered is the consumer, not us. -->
@@ -2999,8 +3037,9 @@
         anyone with a hub login as someone who can read these.
       </div>
     </div>
-
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)</div>
+</section>
+<section class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)</div>
     <div class="form-row">
       <div class="form-group"><label>DES Account # (EAN) — after registration</label><input type="text" id="tax_des_ean" placeholder="e.g. 10-63887-0-00"></div>
       <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
@@ -3008,7 +3047,9 @@
       </div>
     </div>
     <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: register via UInteract. Transferred consumer: email MODES-5083 to cdstax@labor.mo.gov. Questions: 573-751-1995 Opt. 1</div>
-    <div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">STEP 6 &nbsp;·&nbsp; DHSS Fusion &mdash; this is the step that gets audited</div>
+</section>
+<section class="tax-card audited">
+<div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">STEP 6 &nbsp;·&nbsp; DHSS Fusion &mdash; this is the step that gets audited</div>
     <div class="form-row">
       <div class="form-group"><label>CDS start date <span style="font-weight:400;color:var(--gray-600)">(starts the 90-day clock)</span></label><input type="date" id="tax_cds_start"></div>
       <div class="form-group"><label>Proof uploaded to Fusion (date)</label><input type="date" id="tax_proof_uploaded"></div>
@@ -3041,8 +3082,9 @@
     <input type="file" id="tax_proof_upload" accept="application/pdf,image/jpeg,image/png,image/heic"
            onchange="uploadProofFile(event)" style="font-size:12px">
     <div id="tax_proof_status" style="font-size:11.5px;margin-top:6px"></div>
-
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">LAST &nbsp;·&nbsp; Empeon (payroll)</div>
+</section>
+<section class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">LAST &nbsp;·&nbsp; Empeon (payroll)</div>
     <div class="form-row">
       <div class="form-group"><label>Tax info uploaded into Empeon (date)</label><input type="date" id="tax_empeon_updated"></div>
       <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
@@ -3052,7 +3094,9 @@
         </div>
       </div>
     </div>
-
+</section>
+</div>
+</div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('taxSetupModal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTaxSetup()">Save Tax Setup</button>
@@ -4362,6 +4406,7 @@ function openTaxSetup(cid) {
   document.getElementById('tax_empeon_updated').value   = c.empeonUpdated || '';
   renderProofFiles(c);
   renderPacketForms(c);
+  renderTaxProgress(c);
   loadPortalLogins();
   document.getElementById('tax_proof_status').innerHTML = '';
   document.getElementById('tax_packet_status').innerHTML = '';
@@ -7859,6 +7904,38 @@ function clearPacketSent(fileKey) {
   delete form.sent;
   setData('consumers', consumers);
   renderPacketForms(c);
+}
+
+// ---------------------------------------------------------------------------
+// Where this consumer stands, across the top, so opening the screen answers
+// "what is left for this person" before any scrolling. Reads the record rather
+// than the form fields, so it reflects what is actually saved.
+// ---------------------------------------------------------------------------
+const TAX_PROGRESS_STEPS = [
+  ['Packet signed', c => !!c.packetSigned],
+  ['Split',         c => (c.packetForms || []).length > 0],
+  ['EIN',           c => !!(c.ein || '').trim()],
+  ['8821',          c => !!c.irs8821],
+  ['2678',          c => !!c.irs2678],
+  ['MO Tax ID',     c => !!(c.moTaxId || '').trim()],
+  ['2643A',         c => !!c.mo2643a],
+  ['2827',          c => !!c.mo2827],
+  ['DES',           c => !!c.desRegistered],
+  ['In Fusion',     c => !!c.fusionEntered],
+  ['Proof uploaded', c => !!c.proofUploaded || !!c.priorVendorProof],
+  ['Empeon',        c => !!c.empeonUpdated],
+];
+
+function renderTaxProgress(c) {
+  const el = document.getElementById('tax_progress');
+  if (!el) return;
+  const done = TAX_PROGRESS_STEPS.filter(([, f]) => f(c)).length;
+  el.innerHTML =
+    '<span class="tax-chip' + (done === TAX_PROGRESS_STEPS.length ? ' done' : '') + '" style="font-weight:700">' +
+      done + ' of ' + TAX_PROGRESS_STEPS.length + ' done</span>' +
+    TAX_PROGRESS_STEPS.map(([label, f]) =>
+      '<span class="tax-chip' + (f(c) ? ' done' : '') + '">' + (f(c) ? '✓' : '○') + ' ' + label + '</span>'
+    ).join('');
 }
 
 // Typing the EIN releases the two Missouri forms, so redraw as it is typed.
