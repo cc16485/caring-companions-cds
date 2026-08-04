@@ -7720,6 +7720,7 @@ function acceptChangedPacket() {
 // ---------------------------------------------------------------------------
 const FILINGS = [
   { key: 'IRS-SS-4',
+    ifBlocked: 'Online refused this one? That happens: the online application needs the responsible party to have a valid SSN or ITIN, and it also throws technical refusals that no amount of retrying fixes. <strong>Fax the SS-4 instead and you get the EIN back by fax in about 4 business days</strong> &mdash; but only because there is a fax number on the form for the IRS to send it to. Ours is already printed in the Third Party Designee box (417-719-7870). With no fax number on it, the EIN comes by mail instead, about four weeks, which will not make August 31.',
     efax: '18556416935',
     mailTo: 'Internal Revenue Service, Attn: EIN Operation, Cincinnati OH 45999',
     link: { href: 'https://www.irs.gov/businesses/small-businesses-self-employed/apply-for-an-employer-identification-number-ein-online', label: 'Apply for an EIN online' },
@@ -7833,6 +7834,8 @@ function renderFilings(c) {
           'Opens an addressed email. Attach the signed form above and send from the eFax address. ' +
           'Keep the confirmation eFax sends back: that is the receipt.</div>' : '')
         : '') +
+      (spec.ifBlocked ? '<div style="font-size:10.5px;color:var(--gray-700);margin-bottom:6px;line-height:1.5;' +
+        'background:#fff3cd;border-radius:5px;padding:6px 8px">' + spec.ifBlocked + '</div>' : '') +
       (!held && spec.mailTo ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px;line-height:1.5">' +
         '✉ Mail to: <strong>' + esc(spec.mailTo) + '</strong></div>' : '') +
       (spec.note ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px">' + spec.note + '</div>' : '') +
