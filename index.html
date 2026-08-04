@@ -7649,56 +7649,16 @@ function renderPacketForms(c) {
   const hasEin = !!((einField ? einField.value : c.ein) || '').trim();
   el.innerHTML =
     '<div style="font-size:11.5px;color:var(--gray-600);margin-bottom:6px">Split ' + (forms[0].at || '') +
-    '. The five marked IRS or Missouri are the ones that have to be sent out.</div>' +
-    forms.map(f => {
-      const spec = PACKET_LAYOUT.find(x => x.file === f.file) || {};
-      const outbound = f.dest !== 'file';
-      const held = spec.needsEin && !hasEin;
-      const channels = [];
-      if (spec.send) {
-        if (spec.send.email)  channels.push('Email <strong>' + spec.send.email + '</strong>');
-        if (spec.send.fax)    channels.push('Fax <strong>' + spec.send.fax + '</strong>');
-        if (spec.send.online) channels.push('Online <strong>' + spec.send.online + '</strong>');
-        if (spec.send.mail)   channels.push('Mail ' + spec.send.mail);
-      }
+    '. The five that get sent out have moved to their own steps, with the record of sending them. ' +
+    'These stay in the consumer\'s file.</div>' +
+    forms.filter(f => f.dest === 'file').map(f => {
       return '<div style="background:var(--gray-100);border-radius:6px;padding:7px 10px;margin-bottom:5px;font-size:12px">' +
         '<div style="display:flex;align-items:center;gap:8px">' +
-        '<span>' + (held ? '⏸' : outbound ? '📤' : '📄') + '</span>' +
-        '<span style="flex:1">' + f.title +
-          '<span style="color:var(--gray-600)"> · ' + (PACKET_DEST_LABEL[f.dest] || f.dest) + '</span></span>' +
+        '<span>📄</span>' +
+        '<span style="flex:1">' + f.title + '</span>' +
         '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' +
           f.path.replace(/'/g, "\\'") + '\')">View</button>' +
         '</div>' +
-        (held
-          ? '<div style="font-size:11px;color:var(--warning,#B45309);margin-top:5px;line-height:1.5">' +
-            'Hold. Missouri cannot register the employer until the IRS issues the EIN. Fill in the Federal EIN ' +
-            'field above and the sending details appear here.</div>'
-          : channels.length
-            ? '<div style="font-size:11px;color:var(--gray-600);margin-top:5px;line-height:1.6">Send to: ' +
-              channels.join(' · ') + '</div>'
-            : '') +
-        (spec.note && !held
-          ? '<div style="font-size:11px;color:var(--gray-600);margin-top:3px;line-height:1.5">' + spec.note + '</div>'
-          : '') +
-        // Only for the forms that leave the building. There is nothing to record
-        // about a form that just sits in the consumer's file.
-        (outbound && !held
-          ? (f.sent
-              ? '<div style="font-size:11px;color:var(--success);margin-top:5px;display:flex;align-items:center;gap:8px">' +
-                '<span>✓ ' + (PACKET_SEND_VERB[f.sent.channel] || 'Sent') + ' ' + esc(f.sent.at) + '</span>' +
-                '<button type="button" class="btn btn-sm btn-outline" style="font-size:10px" onclick="clearPacketSent(\'' +
-                  esc(f.file) + '\')">undo</button></div>'
-              : '<div style="font-size:11px;margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-                (spec.send && spec.send.email
-                  ? '<button type="button" class="btn btn-sm btn-outline" style="font-size:10px;font-weight:700" ' +
-                    'onclick="emailPacketForm(\'' + esc(f.file) + '\')">✉ Open email</button>'
-                  : '') +
-                '<span style="color:var(--gray-600)">Once it has gone, record it:</span>' +
-                Object.keys(spec.send || {}).map(ch =>
-                  '<button type="button" class="btn btn-sm btn-outline" style="font-size:10px" onclick="markPacketSent(\'' +
-                  esc(f.file) + '\',\'' + ch + '\')">' + (PACKET_SEND_VERB[ch] || ch) + '</button>').join('') +
-                '</div>')
-          : '') +
         (f.warn ? '<div style="font-size:11px;color:var(--warning,#B45309);margin-top:5px;line-height:1.5">⚠️ ' +
           f.warn + '</div>' : '') +
         '</div>';
@@ -7732,59 +7692,9 @@ function acceptChangedPacket() {
     '<span style="color:var(--success)">✓ New packet layout accepted. Choose the packet again to split it.</span>';
 }
 
-// ---------------------------------------------------------------------------
-// What went where, and when. The forms carry Social Security numbers, so at
-// audit "we sent the 8821" is worth much less than "we faxed the 8821 on the
-// 4th of August". Recorded per form, per consumer.
-// ---------------------------------------------------------------------------
-const PACKET_SEND_VERB = { fax: 'Faxed', email: 'Emailed', mail: 'Mailed', online: 'Filed online' };
 
-// Missouri takes these two by email, which is the only outbound channel a
-// browser can actually start. It opens an addressed draft; attaching the form
-// and pressing send stays with the person, which is right for a document
-// carrying a Social Security number.
-function emailPacketForm(fileKey) {
-  const cid = document.getElementById('tax_consumer_id').value;
-  const c = getData('consumers').find(x => x.id === cid);
-  const spec = PACKET_LAYOUT.find(x => x.file === fileKey);
-  if (!c || !spec || !spec.send || !spec.send.email) return;
-  const form = (c.packetForms || []).find(f => f.file === fileKey);
-  const subject = spec.title.split(',')[0] + ' — ' + c.name;
-  const body =
-    'Please find attached the ' + spec.title + ' for ' + c.name + '.\n\n' +
-    'Caring Companions Consumer Directed Services, LLC\n' +
-    '1331 N Stewart Ave Ste A, Springfield MO 65802\n' +
-    'Phone: 866-863-5151   Fax: 417-719-7870\n\n' +
-    'ATTACH: ' + (form ? form.name : spec.file + '.pdf') + ' before sending.';
-  window.location.href = 'mailto:' + spec.send.email +
-    '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-}
 
-function markPacketSent(fileKey, channel) {
-  const cid = document.getElementById('tax_consumer_id').value;
-  const consumers = getData('consumers');
-  const c = consumers.find(x => x.id === cid);
-  if (!c) return;
-  const form = (c.packetForms || []).find(f => f.file === fileKey);
-  if (!form) return;
-  form.sent = { channel, at: new Date().toISOString().slice(0, 10) };
-  setData('consumers', consumers);
-  renderPacketForms(c);
-}
 
-function clearPacketSent(fileKey) {
-  const cid = document.getElementById('tax_consumer_id').value;
-  const consumers = getData('consumers');
-  const c = consumers.find(x => x.id === cid);
-  if (!c) return;
-  const form = (c.packetForms || []).find(f => f.file === fileKey);
-  if (!form || !form.sent) return;
-  if (!confirm('Clear the record that this was ' + (PACKET_SEND_VERB[form.sent.channel] || 'sent').toLowerCase() +
-    ' on ' + form.sent.at + '?')) return;
-  delete form.sent;
-  setData('consumers', consumers);
-  renderPacketForms(c);
-}
 
 // ---------------------------------------------------------------------------
 // FILING RECORD, one per required form.
@@ -7818,12 +7728,14 @@ const FILINGS = [
     doc: 'IRS approval letter', ref: 'Reference',
     note: 'Payroll cannot run until the IRS approves this one.' },
   { key: 'MO-2643A',
+    needsEin: true,
     mailTo: 'Missouri Department of Revenue, Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357',
     link: { href: 'https://mytax.mo.gov/rptp/portal/business/register-new-business/', label: 'Online New Business Registration' },
     fastest: '<strong>Quickest: the online registration, 2-3 business days.</strong> Emailing or mailing the form is slower and gives you no confirmation number at submission.',  label: 'Form 2643A / Missouri registration',
     channels: ['online', 'email', 'fax', 'mail'],
     doc: 'Confirmation or Tax ID notice', ref: 'Confirmation number' },
   { key: 'MO-2827',
+    needsEin: true,
     mailTo: 'Missouri Department of Revenue, Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357',
     link: { href: 'mailto:businesstaxregister@dor.mo.gov', label: 'Email businesstaxregister@dor.mo.gov' },
     fastest: '<strong>Quickest: email to businesstaxregister@dor.mo.gov.</strong> Same day, and you keep the sent message as your record.',   label: 'Form 2827',
@@ -7844,19 +7756,39 @@ function renderFilings(c) {
     const el = document.getElementById('filing-' + spec.key);
     if (!el) return;
     const f = filingsFor(c)[spec.key] || {};
+    // Missouri cannot register an employer before the IRS issues the EIN, so
+    // there is no point offering a channel or an address yet.
+    const einField = document.getElementById('tax_ein');
+    const hasEin = !!(((einField ? einField.value : c.ein) || '').trim());
+    const held = spec.needsEin && !hasEin;
     const opts = ['<option value="">how…</option>'].concat(spec.channels.map(ch =>
       '<option value="' + ch + '"' + (f.channel === ch ? ' selected' : '') + '>' +
       FILING_CHANNEL_LABEL[ch] + '</option>')).join('');
+    // The form itself, cut out of the signed packet, so the thing you send sits
+    // with the record of sending it rather than in a list further up the page.
+    const cut = ((c && c.packetForms) || []).find(p => p.file === spec.key);
     el.innerHTML =
       '<div style="border-top:1px dashed var(--gray-300);margin-top:8px;padding-top:8px">' +
       '<div style="font-size:11px;font-weight:700;color:var(--gray-600);margin-bottom:5px">' +
         esc(spec.label) + (f.sentAt ? ' <span style="color:var(--success)">✓ sent</span>' : '') + '</div>' +
-      (spec.fastest ? '<div style="font-size:10.5px;color:var(--gray-700);margin-bottom:5px;line-height:1.5;' +
+      (cut
+        ? '<div style="display:flex;align-items:center;gap:8px;background:var(--gray-100);border-radius:6px;' +
+          'padding:6px 9px;margin-bottom:6px;font-size:11px"><span>📄</span>' +
+          '<span style="flex:1">' + esc(cut.name) + '<span style="color:var(--gray-600)"> · signed, ready to send' +
+          '</span></span><button type="button" class="btn btn-sm btn-outline" style="font-size:10px" ' +
+          'onclick="openProofFile(\'' + esc(cut.path) + '\')">View</button></div>'
+        : '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:6px">Split the signed packet in ' +
+          'START and this form appears here, ready to send.</div>') +
+      (held ? '<div style="font-size:10.5px;color:var(--warning,#B45309);margin-bottom:5px;line-height:1.5;' +
+        'background:#fff3cd;border-radius:5px;padding:5px 8px">⏸ Hold. Missouri cannot register the employer ' +
+        'until the IRS issues the EIN. Fill in the Federal EIN in step 1 and the sending details appear here.' +
+        '</div>' : '') +
+      (!held && spec.fastest ? '<div style="font-size:10.5px;color:var(--gray-700);margin-bottom:5px;line-height:1.5;' +
         'background:#eafaf1;border-radius:5px;padding:5px 8px">⚡ ' + spec.fastest + '</div>' : '') +
-      (spec.link ? '<div style="margin-bottom:6px"><a href="' + spec.link.href + '" target="_blank" ' +
+      (!held && spec.link ? '<div style="margin-bottom:6px"><a href="' + spec.link.href + '" target="_blank" ' +
         'rel="noopener" class="btn btn-sm btn-outline" style="font-size:10.5px;text-decoration:none;' +
         'display:inline-block">↗ ' + spec.link.label + '</a></div>' : '') +
-      (spec.mailTo ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px;line-height:1.5">' +
+      (!held && spec.mailTo ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px;line-height:1.5">' +
         '✉ Mail to: <strong>' + esc(spec.mailTo) + '</strong></div>' : '') +
       (spec.note ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px">' + spec.note + '</div>' : '') +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
@@ -7999,7 +7931,9 @@ function renderTaxProgress(c) {
 function refreshPacketHold() {
   const cid = document.getElementById('tax_consumer_id').value;
   const c = getData('consumers').find(x => x.id === cid);
-  if (c && Array.isArray(c.packetForms) && c.packetForms.length) renderPacketForms(c);
+  if (!c) return;
+  if (Array.isArray(c.packetForms) && c.packetForms.length) renderPacketForms(c);
+  renderFilings(c);
 }
 
 // ---------------------------------------------------------------------------
