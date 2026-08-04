@@ -2943,7 +2943,7 @@
       ⚠️ <strong>Wet signature:</strong> Forms 8821 and 2678 may require original signatures — confirm with your accountant before marking filed. &nbsp;|&nbsp; ⚠️ <strong>DES:</strong> Cannot register in UInteract until after first payroll and $1,000+ paid in a single quarter.
     </div>
     <div class="tax-grid">
-<section class="tax-card">
+<section data-card="1" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">START &nbsp;·&nbsp; Enrollment packet (GoHighLevel)</div>
     <div class="form-row">
       <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
@@ -2961,39 +2961,28 @@
            onchange="splitEnrollmentPacket(event)" style="font-size:12px">
     <div id="tax_packet_status" style="font-size:11.5px;margin-top:6px"></div>
     </section>
-<section class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEPS 1&ndash;3 &nbsp;·&nbsp; Federal tax (IRS): EIN, 8821, 2678</div>
+<section data-card="2" class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 1 &nbsp;·&nbsp; Federal EIN (Form SS-4)</div>
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">The consumer is their own employer and needs their own EIN, separate from ours. Online is immediate; by fax it is about four business days and by post about four weeks. <strong>Everything Missouri needs waits on this number.</strong></div>
     <div class="form-row">
-      <div class="form-group"><label>Federal EIN (SS-4)</label><input type="text" id="tax_ein" placeholder="XX-XXXXXXX" oninput="refreshPacketHold()">
-        <!-- The online application shows the CP 575 once, on the last screen, and
-             the IRS does not reissue it. Missing it is not fatal, but the recovery
-             is a phone call, so the note is here rather than in a runbook nobody
-             opens mid-application. -->
-        <div style="font-size:11px;color:var(--gray-600);margin-top:4px;line-height:1.55">
-          Applying online? <strong>Use the download button on the final screen, not print.</strong> Printing the
-          confirmation page gives you a picture of a web page, which is not an IRS-issued document and does not
-          count as proof for Fusion. The download button gives the real CP 575 letter, it is offered once, and the
-          IRS will not reissue it. If it was missed, ring the Business &amp; Specialty Tax Line on
-          <strong>800-829-4933</strong> (Mon-Fri, 7am-7pm local) and ask for a <strong>147C letter</strong>, which
-          they can fax while you wait. A 147C counts as proof for Fusion exactly like a CP 575 does. Expect them to
-          want the consumer on the call unless their 8821 is already on file with the IRS.
-        </div>
-      </div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_irs8821"> <span><strong>Form 8821</strong> — IRS Tax Auth (allows Caring Companions to receive IRS info)</span></label>
-      </div>
+      <div class="form-group"><label>Federal EIN, once issued</label><input type="text" id="tax_ein" placeholder="XX-XXXXXXX" oninput="refreshPacketHold()"></div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_irs2678"> <span><strong>Form 2678</strong> — IRS Agent Appt (designates Caring Companions as payroll agent)</span></label>
-      </div>
-    </div>
-
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Applying online? <strong>Use the download button on the final screen, not print.</strong> Printing the confirmation page gives you a picture of a web page, which is not an IRS-issued document and does not count as proof for Fusion. The download button gives the real CP 575 letter, it is offered once, and the IRS will not reissue it. If it was missed, ring <strong>800-829-4933</strong> (Mon-Fri, 7am-7pm local) and ask for a <strong>147C letter</strong>, which they can fax while you wait. A 147C counts as proof exactly like a CP 575. Expect them to want the consumer on the call unless their 8821 is already on file.</div>
       <div id="filing-IRS-SS-4"></div>
+</section>
+<section data-card="3" class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 2 &nbsp;·&nbsp; Form 8821</div>
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Lets the IRS talk to us about this consumer. Without it on file they will want the consumer on the phone every time, including for a 147C.</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-bottom:6px"><input type="checkbox" id="tax_irs8821"> <span><strong>Form 8821 filed</strong> — IRS Tax Authorization</span></label>
       <div id="filing-IRS-8821"></div>
+</section>
+<section data-card="4" class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 3 &nbsp;·&nbsp; Form 2678</div>
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Appoints us as the consumer's payroll agent for FICA and FUTA. <strong>Post only, and payroll cannot run until the IRS approves it</strong>, which takes weeks, so send this one early.</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-bottom:6px"><input type="checkbox" id="tax_irs2678"> <span><strong>Form 2678 filed</strong> — IRS Agent Appointment</span></label>
       <div id="filing-IRS-2678"></div>
-    </section>
-<section class="tax-card">
+</section>
+<section data-card="5" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri Department of Revenue (withholding)</div>
     <!-- Written down because it is the thing everyone gets wrong once. There is no
          "CDS" option in MyTax: CDS is a Medicaid programme, not a tax type, and
@@ -3052,7 +3041,7 @@
       <div id="filing-MO-2643A"></div>
       <div id="filing-MO-2827"></div>
     </section>
-<section class="tax-card">
+<section data-card="6" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)</div>
     <div class="form-row">
       <div class="form-group"><label>DES Account # (EAN) — after registration</label><input type="text" id="tax_des_ean" placeholder="e.g. 10-63887-0-00"></div>
@@ -3064,7 +3053,7 @@
 
       <div id="filing-DES"></div>
     </section>
-<section class="tax-card audited">
+<section data-card="7" class="tax-card audited">
 <div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">STEP 6 &nbsp;·&nbsp; DHSS Fusion &mdash; this is the step that gets audited</div>
     <div class="form-row">
       <div class="form-group"><label>CDS start date <span style="font-weight:400;color:var(--gray-600)">(starts the 90-day clock)</span></label><input type="date" id="tax_cds_start"></div>
@@ -3099,7 +3088,7 @@
            onchange="uploadProofFile(event)" style="font-size:12px">
     <div id="tax_proof_status" style="font-size:11.5px;margin-top:6px"></div>
 </section>
-<section class="tax-card">
+<section data-card="8" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">LAST &nbsp;·&nbsp; Empeon (payroll)</div>
     <div class="form-row">
       <div class="form-group"><label>Tax info uploaded into Empeon (date)</label><input type="date" id="tax_empeon_updated"></div>
@@ -4424,6 +4413,7 @@ function openTaxSetup(cid) {
   renderPacketForms(c);
   renderFilings(c);
   renderTaxProgress(c);
+  focusTaxCard(null);   // always reopen showing everything, never last time's filter
   const build = document.getElementById('tax_build');
   if (build) build.textContent = ' · build ' + document.lastModified;
   loadPortalLogins();
@@ -8065,20 +8055,35 @@ function filingSent(c, key) {
   return !!(f && f.sentAt);
 }
 
+// Third column is the card each chip belongs to, so a chip is also the way to
+// get to that step. Tax setup is worked over weeks with long waits in between,
+// not start to finish in one sitting, so everything stays on one screen and the
+// chips narrow it rather than a wizard marching you through in order.
 const TAX_PROGRESS_STEPS = [
-  ['Packet signed', c => !!c.packetSigned],
-  ['Split',         c => (c.packetForms || []).length > 0],
-  ['EIN',           c => !!(c.ein || '').trim()],
-  ['8821',          c => !!c.irs8821 || filingSent(c, 'IRS-8821')],
-  ['2678',          c => !!c.irs2678 || filingSent(c, 'IRS-2678')],
-  ['MO Tax ID',     c => !!(c.moTaxId || '').trim()],
-  ['2643A',         c => !!c.mo2643a || filingSent(c, 'MO-2643A')],
-  ['2827',          c => !!c.mo2827 || filingSent(c, 'MO-2827')],
-  ['DES',           c => !!c.desRegistered || filingSent(c, 'DES')],
-  ['In Fusion',     c => !!c.fusionEntered],
-  ['Proof uploaded', c => !!c.proofUploaded || !!c.priorVendorProof],
-  ['Empeon',        c => !!c.empeonUpdated],
+  ['Packet signed', c => !!c.packetSigned, 1],
+  ['Split',         c => (c.packetForms || []).length > 0, 1],
+  ['EIN',           c => !!(c.ein || '').trim(), 2],
+  ['8821',          c => !!c.irs8821 || filingSent(c, 'IRS-8821'), 3],
+  ['2678',          c => !!c.irs2678 || filingSent(c, 'IRS-2678'), 4],
+  ['MO Tax ID',     c => !!(c.moTaxId || '').trim(), 5],
+  ['2643A',         c => !!c.mo2643a || filingSent(c, 'MO-2643A'), 5],
+  ['2827',          c => !!c.mo2827 || filingSent(c, 'MO-2827'), 5],
+  ['DES',           c => !!c.desRegistered || filingSent(c, 'DES'), 6],
+  ['In Fusion',     c => !!c.fusionEntered, 7],
+  ['Proof uploaded', c => !!c.proofUploaded || !!c.priorVendorProof, 7],
+  ['Empeon',        c => !!c.empeonUpdated, 8],
 ];
+
+// null shows every card again.
+function focusTaxCard(n) {
+  document.querySelectorAll('#taxSetupModal .tax-card').forEach(el => {
+    el.style.display = (n === null || Number(el.dataset.card) === n) ? '' : 'none';
+  });
+  const all = document.getElementById('tax_show_all');
+  if (all) all.style.display = n === null ? 'none' : '';
+  const body = document.querySelector('#taxSetupModal .tax-body');
+  if (body) body.scrollTop = 0;
+}
 
 function renderTaxProgress(c) {
   const el = document.getElementById('tax_progress');
@@ -8087,8 +8092,12 @@ function renderTaxProgress(c) {
   el.innerHTML =
     '<span class="tax-chip' + (done === TAX_PROGRESS_STEPS.length ? ' done' : '') + '" style="font-weight:700">' +
       done + ' of ' + TAX_PROGRESS_STEPS.length + ' done</span>' +
-    TAX_PROGRESS_STEPS.map(([label, f]) =>
-      '<span class="tax-chip' + (f(c) ? ' done' : '') + '">' + (f(c) ? '✓' : '○') + ' ' + label + '</span>'
+    '<button type="button" id="tax_show_all" class="tax-chip" style="display:none;cursor:pointer;font-weight:700" ' +
+      'onclick="focusTaxCard(null)">← show every step</button>' +
+    TAX_PROGRESS_STEPS.map(([label, f, card]) =>
+      '<button type="button" class="tax-chip' + (f(c) ? ' done' : '') + '" style="cursor:pointer" ' +
+      'title="Show only this step" onclick="focusTaxCard(' + card + ')">' +
+      (f(c) ? '✓' : '○') + ' ' + label + '</button>'
     ).join('');
 }
 
