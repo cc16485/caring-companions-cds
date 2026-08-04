@@ -2960,7 +2960,7 @@
     <input type="file" id="tax_packet_upload" accept="application/pdf"
            onchange="splitEnrollmentPacket(event)" style="font-size:12px">
     <div id="tax_packet_status" style="font-size:11.5px;margin-top:6px"></div>
-</section>
+    </section>
 <section class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEPS 1&ndash;3 &nbsp;·&nbsp; Federal tax (IRS): EIN, 8821, 2678</div>
     <div class="form-row">
@@ -2988,7 +2988,11 @@
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_irs2678"> <span><strong>Form 2678</strong> — IRS Agent Appt (designates Caring Companions as payroll agent)</span></label>
       </div>
     </div>
-</section>
+
+      <div id="filing-IRS-SS-4"></div>
+      <div id="filing-IRS-8821"></div>
+      <div id="filing-IRS-2678"></div>
+    </section>
 <section class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri Department of Revenue (withholding)</div>
     <!-- Written down because it is the thing everyone gets wrong once. There is no
@@ -3044,7 +3048,10 @@
         anyone with a hub login as someone who can read these.
       </div>
     </div>
-</section>
+
+      <div id="filing-MO-2643A"></div>
+      <div id="filing-MO-2827"></div>
+    </section>
 <section class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)</div>
     <div class="form-row">
@@ -3054,7 +3061,9 @@
       </div>
     </div>
     <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: register via UInteract. Transferred consumer: email MODES-5083 to cdstax@labor.mo.gov. Questions: 573-751-1995 Opt. 1</div>
-</section>
+
+      <div id="filing-DES"></div>
+    </section>
 <section class="tax-card audited">
 <div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">STEP 6 &nbsp;·&nbsp; DHSS Fusion &mdash; this is the step that gets audited</div>
     <div class="form-row">
@@ -4413,6 +4422,7 @@ function openTaxSetup(cid) {
   document.getElementById('tax_empeon_updated').value   = c.empeonUpdated || '';
   renderProofFiles(c);
   renderPacketForms(c);
+  renderFilings(c);
   renderTaxProgress(c);
   const build = document.getElementById('tax_build');
   if (build) build.textContent = ' · build ' + document.lastModified;
@@ -7916,20 +7926,155 @@ function clearPacketSent(fileKey) {
 }
 
 // ---------------------------------------------------------------------------
+// FILING RECORD, one per required form.
+//
+// The audit question is never "did you file it", it is "when, how, and show me".
+// Until now the hub held one proof document for the whole consumer, so the fact
+// that the 8821 went by fax on the 4th and the 2643A online on the 5th lived in
+// somebody's memory. Each form now carries its own date, channel, reference
+// number and document.
+//
+// Keyed by the same file key the splitter uses, so a filing sits beside the form
+// it belongs to and survives the packet being split again.
+// ---------------------------------------------------------------------------
+const FILINGS = [
+  { key: 'IRS-SS-4',  label: 'Form SS-4 / EIN application',
+    channels: ['online', 'fax', 'mail'],
+    doc: 'CP 575 or 147C letter', ref: 'EIN issued' },
+  { key: 'IRS-8821',  label: 'Form 8821',
+    channels: ['fax', 'online', 'mail'],
+    doc: 'Fax receipt or acknowledgement', ref: 'Reference' },
+  { key: 'IRS-2678',  label: 'Form 2678',
+    channels: ['mail'],
+    doc: 'IRS approval letter', ref: 'Reference',
+    note: 'Payroll cannot run until the IRS approves this one.' },
+  { key: 'MO-2643A',  label: 'Form 2643A / Missouri registration',
+    channels: ['online', 'email', 'fax', 'mail'],
+    doc: 'Confirmation or Tax ID notice', ref: 'Confirmation number' },
+  { key: 'MO-2827',   label: 'Form 2827',
+    channels: ['email', 'fax', 'mail'],
+    doc: 'Confirmation', ref: 'Reference' },
+  { key: 'DES',       label: 'DES / UInteract registration',
+    channels: ['online', 'email'],
+    doc: 'EAN notice', ref: 'EAN' },
+];
+const FILING_CHANNEL_LABEL = { online: 'Online', fax: 'Fax', email: 'Email', mail: 'Post' };
+
+function filingsFor(c) { return (c && c.filings) || {}; }
+
+function renderFilings(c) {
+  FILINGS.forEach(spec => {
+    const el = document.getElementById('filing-' + spec.key);
+    if (!el) return;
+    const f = filingsFor(c)[spec.key] || {};
+    const opts = ['<option value="">how…</option>'].concat(spec.channels.map(ch =>
+      '<option value="' + ch + '"' + (f.channel === ch ? ' selected' : '') + '>' +
+      FILING_CHANNEL_LABEL[ch] + '</option>')).join('');
+    el.innerHTML =
+      '<div style="border-top:1px dashed var(--gray-300);margin-top:8px;padding-top:8px">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--gray-600);margin-bottom:5px">' +
+        esc(spec.label) + (f.sentAt ? ' <span style="color:var(--success)">✓ sent</span>' : '') + '</div>' +
+      (spec.note ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px">' + spec.note + '</div>' : '') +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+        '<label style="font-size:10.5px;color:var(--gray-600)">Sent ' +
+          '<input type="date" value="' + esc(f.sentAt || '') + '" style="font-size:11px;padding:4px 6px" ' +
+          'onchange="setFiling(\'' + spec.key + '\',\'sentAt\',this.value)"></label>' +
+        '<select style="font-size:11px;padding:4px 6px" ' +
+          'onchange="setFiling(\'' + spec.key + '\',\'channel\',this.value)">' + opts + '</select>' +
+        '<input type="text" placeholder="' + esc(spec.ref) + '" value="' + esc(f.ref || '') + '" ' +
+          'style="font-size:11px;padding:4px 6px;flex:1;min-width:110px" ' +
+          'onchange="setFiling(\'' + spec.key + '\',\'ref\',this.value)">' +
+      '</div>' +
+      '<div style="margin-top:5px;font-size:10.5px;color:var(--gray-600)">' +
+        (f.docPath
+          ? '📎 ' + esc(f.docName || 'document') +
+            ' <button type="button" class="btn btn-sm btn-outline" style="font-size:10px" onclick="openProofFile(\'' +
+              esc(f.docPath) + '\')">View</button>' +
+            ' <button type="button" class="btn btn-sm btn-outline" style="font-size:10px;color:var(--danger)" onclick="removeFilingDoc(\'' +
+              spec.key + '\')">Remove</button>'
+          : esc(spec.doc) + ': <input type="file" accept="application/pdf,image/jpeg,image/png" ' +
+            'style="font-size:10.5px" onchange="uploadFilingDoc(\'' + spec.key + '\',event)">') +
+      '</div>' +
+      '<div id="filing-status-' + spec.key + '" style="font-size:10.5px;margin-top:3px"></div>' +
+      '</div>';
+  });
+}
+
+function _filingConsumer() {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const consumers = getData('consumers');
+  return { consumers, c: consumers.find(x => x.id === cid), cid };
+}
+
+function setFiling(key, field, value) {
+  const { consumers, c } = _filingConsumer();
+  if (!c) return;
+  c.filings = c.filings || {};
+  c.filings[key] = c.filings[key] || {};
+  c.filings[key][field] = value;
+  setData('consumers', consumers);
+  renderFilings(c);
+}
+
+async function uploadFilingDoc(key, event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const { consumers, c, cid } = _filingConsumer();
+  const status = document.getElementById('filing-status-' + key);
+  if (!c) return;
+  status.innerHTML = '<span style="color:var(--gray-600)">Uploading…</span>';
+  try {
+    const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+    const path = cid + '/filings/' + consumerStem(c.name) + '_' + key + '-proof.' + ext;
+    const { error } = await _db.storage.from(PROOF_BUCKET).upload(path, file, { upsert: true });
+    if (error) throw error;
+    c.filings = c.filings || {};
+    c.filings[key] = Object.assign({}, c.filings[key], {
+      docPath: path, docName: file.name, docAt: new Date().toISOString().slice(0, 10),
+    });
+    setData('consumers', consumers);
+    renderFilings(c);
+  } catch (e) {
+    status.innerHTML = '<span style="color:var(--danger)">Upload failed — ' + (e.message || 'unknown error') + '</span>';
+  } finally {
+    event.target.value = '';
+  }
+}
+
+async function removeFilingDoc(key) {
+  const { consumers, c } = _filingConsumer();
+  if (!c || !c.filings || !c.filings[key]) return;
+  const f = c.filings[key];
+  if (!confirm('Remove ' + (f.docName || 'this document') + ' from our records?')) return;
+  if (f.docPath) await _db.storage.from(PROOF_BUCKET).remove([f.docPath]);
+  delete f.docPath; delete f.docName; delete f.docAt;
+  setData('consumers', consumers);
+  renderFilings(c);
+}
+
+// ---------------------------------------------------------------------------
 // Where this consumer stands, across the top, so opening the screen answers
 // "what is left for this person" before any scrolling. Reads the record rather
 // than the form fields, so it reflects what is actually saved.
 // ---------------------------------------------------------------------------
+// A form counts as done once there is a filing record for it, not only when
+// somebody ticked the box. The two can disagree, and the filing record is the
+// one with a date and a document behind it.
+function filingSent(c, key) {
+  const f = filingsFor(c)[key];
+  return !!(f && f.sentAt);
+}
+
 const TAX_PROGRESS_STEPS = [
   ['Packet signed', c => !!c.packetSigned],
   ['Split',         c => (c.packetForms || []).length > 0],
   ['EIN',           c => !!(c.ein || '').trim()],
-  ['8821',          c => !!c.irs8821],
-  ['2678',          c => !!c.irs2678],
+  ['8821',          c => !!c.irs8821 || filingSent(c, 'IRS-8821')],
+  ['2678',          c => !!c.irs2678 || filingSent(c, 'IRS-2678')],
   ['MO Tax ID',     c => !!(c.moTaxId || '').trim()],
-  ['2643A',         c => !!c.mo2643a],
-  ['2827',          c => !!c.mo2827],
-  ['DES',           c => !!c.desRegistered],
+  ['2643A',         c => !!c.mo2643a || filingSent(c, 'MO-2643A')],
+  ['2827',          c => !!c.mo2827 || filingSent(c, 'MO-2827')],
+  ['DES',           c => !!c.desRegistered || filingSent(c, 'DES')],
   ['In Fusion',     c => !!c.fusionEntered],
   ['Proof uploaded', c => !!c.proofUploaded || !!c.priorVendorProof],
   ['Empeon',        c => !!c.empeonUpdated],
