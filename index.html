@@ -7469,9 +7469,7 @@ const PACKET_LAYOUT = [
   { pages: [4],  file: 'Emergency-Backup-Plan',    title: 'Consumer Emergency Back-Up Plan',           dest: 'file' },
   { pages: [6],  file: 'Employment-Numbers-Auth',  title: 'Authorization to Obtain Employment Numbers', dest: 'file' },
   { pages: [7],  file: 'Previous-Vendor-Auth',     title: 'Previous CDS Vendor Authorization',         dest: 'file' },
-  { pages: [9],  file: 'Training-Acknowledgement', title: 'Consumer Training Acknowledgement',         dest: 'file',
-    warn: 'This was signed at enrollment, before orientation. The training acknowledgement is meant to go out ' +
-          'after the consumer has been trained, so on its own it does not evidence training that had happened yet.' },
+  { pages: [9],  file: 'Training-Acknowledgement', title: 'Consumer Training Acknowledgement',         dest: 'file' },
 
   { pages: [11], file: 'IRS-SS-4', title: 'IRS Form SS-4, Application for EIN', dest: 'IRS',
     send: { fax: '855-641-6935', mail: 'IRS, Attn: EIN Operation, Cincinnati OH 45999' },
@@ -7608,7 +7606,7 @@ async function splitEnrollmentPacket(event) {
       const { error } = await _db.storage.from(PROOF_BUCKET)
         .upload(path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true });
       if (error) throw error;
-      saved.push({ path, name, file: form.file, title: form.title, dest: form.dest, warn: form.warn || '',
+      saved.push({ path, name, file: form.file, title: form.title, dest: form.dest,
                    at: new Date().toISOString().slice(0, 10) });
     }
 
@@ -7659,8 +7657,6 @@ function renderPacketForms(c) {
         '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' +
           f.path.replace(/'/g, "\\'") + '\')">View</button>' +
         '</div>' +
-        (f.warn ? '<div style="font-size:11px;color:var(--warning,#B45309);margin-top:5px;line-height:1.5">⚠️ ' +
-          f.warn + '</div>' : '') +
         '</div>';
     }).join('');
 }
