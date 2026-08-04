@@ -7720,12 +7720,14 @@ function acceptChangedPacket() {
 // ---------------------------------------------------------------------------
 const FILINGS = [
   { key: 'IRS-SS-4',
+    efax: '18556416935',
     mailTo: 'Internal Revenue Service, Attn: EIN Operation, Cincinnati OH 45999',
     link: { href: 'https://www.irs.gov/businesses/small-businesses-self-employed/apply-for-an-employer-identification-number-ein-online', label: 'Apply for an EIN online' },
     fastest: '<strong>Quickest: online, issued in minutes.</strong> Fax takes about 4 business days, mail about 4 weeks. Open Mon-Fri 6am-1am ET, Sat 6am-9pm, Sun 6pm-midnight.',  label: 'Form SS-4 / EIN application',
     channels: ['online', 'fax', 'mail'],
     doc: 'CP 575 or 147C letter', ref: 'EIN issued' },
   { key: 'IRS-8821',
+    efax: '18552147522',
     mailTo: 'Internal Revenue Service, 1973 Rulon White Blvd MS 6737, Ogden UT 84201',
     link: { href: 'https://www.irs.gov/submit8821', label: 'Submit Form 8821 online' },
     fastest: '<strong>Quickest: fax to 855-214-7522.</strong> IRS.gov/Submit8821 also works but needs a Secure Access account set up first, so the fax is faster the first time.',  label: 'Form 8821',
@@ -7738,6 +7740,7 @@ const FILINGS = [
     doc: 'IRS approval letter', ref: 'Reference',
     note: 'Payroll cannot run until the IRS approves this one.' },
   { key: 'MO-2643A',
+    efax: '15735221722',
     needsEin: true,
     mailTo: 'Missouri Department of Revenue, Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357',
     link: { href: 'https://mytax.mo.gov/rptp/portal/business/register-new-business/', label: 'Online New Business Registration' },
@@ -7745,6 +7748,7 @@ const FILINGS = [
     channels: ['online', 'email', 'fax', 'mail'],
     doc: 'Confirmation or Tax ID notice', ref: 'Confirmation number' },
   { key: 'MO-2827',
+    efax: '15735221722',
     needsEin: true,
     mailTo: 'Missouri Department of Revenue, Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357',
     link: { href: 'mailto:businesstaxregister@dor.mo.gov', label: 'Email businesstaxregister@dor.mo.gov' },
@@ -7760,6 +7764,29 @@ const FILINGS = [
 const FILING_CHANNEL_LABEL = { online: 'Online', fax: 'Fax', email: 'Email', mail: 'Mail' };
 
 function filingsFor(c) { return (c && c.filings) || {}; }
+
+// Faxing through eFax, which the office already pays for. eFax sends whatever is
+// attached to an email addressed to <11 digits>@efaxsend.com from a registered
+// address, and emails back a confirmation when it lands. That confirmation is
+// the transmission receipt worth keeping: it is dated, it names the number, and
+// it is not something we typed ourselves.
+//
+// The body deliberately reads as a cover sheet, because eFax prints it as one.
+// The reminder to attach the form lives beside the button instead.
+function efaxPacketForm(fileKey) {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const c = getData('consumers').find(x => x.id === cid);
+  const spec = FILINGS.find(x => x.key === fileKey);
+  if (!c || !spec || !spec.efax) return;
+  const subject = spec.label.split(' /')[0] + ' — ' + c.name;
+  const body =
+    'Caring Companions Consumer Directed Services, LLC\n' +
+    '1331 N Stewart Ave Ste A, Springfield MO 65802\n' +
+    'Phone: 866-863-5151   Fax: 417-719-7870\n\n' +
+    'Please find attached ' + spec.label + ' for ' + c.name + '.\n';
+  window.location.href = 'mailto:' + spec.efax + '@efaxsend.com' +
+    '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
 
 function renderFilings(c) {
   FILINGS.forEach(spec => {
@@ -7795,9 +7822,17 @@ function renderFilings(c) {
         '</div>' : '') +
       (!held && spec.fastest ? '<div style="font-size:10.5px;color:var(--gray-700);margin-bottom:5px;line-height:1.5;' +
         'background:#eafaf1;border-radius:5px;padding:5px 8px">⚡ ' + spec.fastest + '</div>' : '') +
-      (!held && spec.link ? '<div style="margin-bottom:6px"><a href="' + spec.link.href + '" target="_blank" ' +
-        'rel="noopener" class="btn btn-sm btn-outline" style="font-size:10.5px;text-decoration:none;' +
-        'display:inline-block">↗ ' + spec.link.label + '</a></div>' : '') +
+      (!held && (spec.link || spec.efax) ? '<div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap">' +
+        (spec.link ? '<a href="' + spec.link.href + '" target="_blank" rel="noopener" ' +
+          'class="btn btn-sm btn-outline" style="font-size:10.5px;text-decoration:none">↗ ' +
+          spec.link.label + '</a>' : '') +
+        (spec.efax ? '<button type="button" class="btn btn-sm btn-outline" style="font-size:10.5px" ' +
+          'onclick="efaxPacketForm(\'' + spec.key + '\')">📠 Fax it via eFax</button>' : '') +
+        '</div>' +
+        (spec.efax ? '<div style="font-size:10px;color:var(--gray-600);margin-bottom:6px;line-height:1.5">' +
+          'Opens an addressed email. Attach the signed form above and send from the eFax address. ' +
+          'Keep the confirmation eFax sends back: that is the receipt.</div>' : '')
+        : '') +
       (!held && spec.mailTo ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px;line-height:1.5">' +
         '✉ Mail to: <strong>' + esc(spec.mailTo) + '</strong></div>' : '') +
       (spec.note ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px">' + spec.note + '</div>' : '') +
