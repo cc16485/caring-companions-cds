@@ -2821,7 +2821,14 @@
        them. This one is a full workspace, not a dialog. -->
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Tax &amp; Enrollment Setup</div>
+      <div class="modal-title">Tax &amp; Enrollment Setup
+        <!-- Which copy of the hub is actually loaded. GitHub Pages sends
+             cache-control: max-age=600 and the GoHighLevel iframe holds on
+             longer still, so "I deployed it" and "you are looking at it" are
+             different claims. document.lastModified is the file's own date, so
+             this needs no bumping by hand. -->
+        <span id="tax_build" style="font-size:10.5px;font-weight:500;color:var(--gray-600)"></span>
+      </div>
       <button class="modal-close" onclick="closeModal('taxSetupModal')">×</button>
     </div>
     <div class="tax-body">
@@ -4407,6 +4414,8 @@ function openTaxSetup(cid) {
   renderProofFiles(c);
   renderPacketForms(c);
   renderTaxProgress(c);
+  const build = document.getElementById('tax_build');
+  if (build) build.textContent = ' · build ' + document.lastModified;
   loadPortalLogins();
   document.getElementById('tax_proof_status').innerHTML = '';
   document.getElementById('tax_packet_status').innerHTML = '';
