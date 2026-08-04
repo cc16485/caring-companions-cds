@@ -2963,7 +2963,7 @@
     </section>
 <section data-card="2" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 1 &nbsp;·&nbsp; Federal EIN (Form SS-4)</div>
-<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">The consumer is their own employer and needs their own EIN, separate from ours. Online is immediate; by fax it is about four business days and by post about four weeks. <strong>Everything Missouri needs waits on this number.</strong></div>
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">The consumer is their own employer and needs their own EIN, separate from ours. Online is immediate; by fax about four business days and by mail about four weeks. <strong>Everything Missouri needs waits on this number.</strong></div>
     <div class="form-row">
       <div class="form-group"><label>Federal EIN, once issued</label><input type="text" id="tax_ein" placeholder="XX-XXXXXXX" oninput="refreshPacketHold()"></div>
     </div>
@@ -3007,7 +3007,7 @@
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_des_reg"> <span><strong>Consumer registered in UInteract</strong> (after $1,000+ quarter)</span></label>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: register in UInteract. <strong>Transferred consumer</strong> (came from another CDS vendor): download <a href="https://labor.mo.gov/media/22536/download" target="_blank" rel="noopener"><strong>MODES-5083</strong></a> &mdash; Transferred Consumer Registration &mdash; fill it in and <a href="mailto:cdstax@labor.mo.gov">email it to cdstax@labor.mo.gov</a>. Do not post or fax it. Questions: 573-751-1995 Opt. 1</div>
+    <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: register in UInteract. <strong>Transferred consumer</strong> (came from another CDS vendor): download <a href="https://labor.mo.gov/media/22536/download" target="_blank" rel="noopener"><strong>MODES-5083</strong></a> &mdash; Transferred Consumer Registration &mdash; fill it in and <a href="mailto:cdstax@labor.mo.gov">email it to cdstax@labor.mo.gov</a>. Do not mail or fax it. Questions: 573-751-1995 Opt. 1</div>
 
       <div id="filing-DES"></div>
     </section>
@@ -7737,7 +7737,7 @@ function acceptChangedPacket() {
 // audit "we sent the 8821" is worth much less than "we faxed the 8821 on the
 // 4th of August". Recorded per form, per consumer.
 // ---------------------------------------------------------------------------
-const PACKET_SEND_VERB = { fax: 'Faxed', email: 'Emailed', mail: 'Posted', online: 'Filed online' };
+const PACKET_SEND_VERB = { fax: 'Faxed', email: 'Emailed', mail: 'Mailed', online: 'Filed online' };
 
 // Missouri takes these two by email, which is the only outbound channel a
 // browser can actually start. It opens an addressed draft; attaching the form
@@ -7800,26 +7800,31 @@ function clearPacketSent(fileKey) {
 // ---------------------------------------------------------------------------
 const FILINGS = [
   { key: 'IRS-SS-4',
+    mailTo: 'Internal Revenue Service, Attn: EIN Operation, Cincinnati OH 45999',
     link: { href: 'https://www.irs.gov/businesses/small-businesses-self-employed/apply-for-an-employer-identification-number-ein-online', label: 'Apply for an EIN online' },
-    fastest: '<strong>Quickest: online, issued in minutes.</strong> Fax takes about 4 business days, post about 4 weeks. Open Mon-Fri 6am-1am ET, Sat 6am-9pm, Sun 6pm-midnight.',  label: 'Form SS-4 / EIN application',
+    fastest: '<strong>Quickest: online, issued in minutes.</strong> Fax takes about 4 business days, mail about 4 weeks. Open Mon-Fri 6am-1am ET, Sat 6am-9pm, Sun 6pm-midnight.',  label: 'Form SS-4 / EIN application',
     channels: ['online', 'fax', 'mail'],
     doc: 'CP 575 or 147C letter', ref: 'EIN issued' },
   { key: 'IRS-8821',
+    mailTo: 'Internal Revenue Service, 1973 Rulon White Blvd MS 6737, Ogden UT 84201',
     link: { href: 'https://www.irs.gov/submit8821', label: 'Submit Form 8821 online' },
     fastest: '<strong>Quickest: fax to 855-214-7522.</strong> IRS.gov/Submit8821 also works but needs a Secure Access account set up first, so the fax is faster the first time.',  label: 'Form 8821',
     channels: ['fax', 'online', 'mail'],
     doc: 'Fax receipt or acknowledgement', ref: 'Reference' },
   { key: 'IRS-2678',
-    fastest: '<strong>No quick route: post only.</strong> The IRS gives no fax number for this one and approval takes weeks, so send it the day the EIN arrives.',  label: 'Form 2678',
+    mailTo: 'Department of the Treasury, Internal Revenue Service Center, Ogden UT 84201',
+    fastest: '<strong>No quick route: mail only.</strong> The IRS gives no fax number for this one and approval takes weeks, so send it the day the EIN arrives.',  label: 'Form 2678',
     channels: ['mail'],
     doc: 'IRS approval letter', ref: 'Reference',
     note: 'Payroll cannot run until the IRS approves this one.' },
   { key: 'MO-2643A',
+    mailTo: 'Missouri Department of Revenue, Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357',
     link: { href: 'https://mytax.mo.gov/rptp/portal/business/register-new-business/', label: 'Online New Business Registration' },
-    fastest: '<strong>Quickest: the online registration, 2-3 business days.</strong> Emailing or posting the form is slower and gives you no confirmation number at submission.',  label: 'Form 2643A / Missouri registration',
+    fastest: '<strong>Quickest: the online registration, 2-3 business days.</strong> Emailing or mailing the form is slower and gives you no confirmation number at submission.',  label: 'Form 2643A / Missouri registration',
     channels: ['online', 'email', 'fax', 'mail'],
     doc: 'Confirmation or Tax ID notice', ref: 'Confirmation number' },
   { key: 'MO-2827',
+    mailTo: 'Missouri Department of Revenue, Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357',
     link: { href: 'mailto:businesstaxregister@dor.mo.gov', label: 'Email businesstaxregister@dor.mo.gov' },
     fastest: '<strong>Quickest: email to businesstaxregister@dor.mo.gov.</strong> Same day, and you keep the sent message as your record.',   label: 'Form 2827',
     channels: ['email', 'fax', 'mail'],
@@ -7830,7 +7835,7 @@ const FILINGS = [
     channels: ['online', 'email'],
     doc: 'EAN notice', ref: 'EAN' },
 ];
-const FILING_CHANNEL_LABEL = { online: 'Online', fax: 'Fax', email: 'Email', mail: 'Post' };
+const FILING_CHANNEL_LABEL = { online: 'Online', fax: 'Fax', email: 'Email', mail: 'Mail' };
 
 function filingsFor(c) { return (c && c.filings) || {}; }
 
@@ -7851,6 +7856,8 @@ function renderFilings(c) {
       (spec.link ? '<div style="margin-bottom:6px"><a href="' + spec.link.href + '" target="_blank" ' +
         'rel="noopener" class="btn btn-sm btn-outline" style="font-size:10.5px;text-decoration:none;' +
         'display:inline-block">↗ ' + spec.link.label + '</a></div>' : '') +
+      (spec.mailTo ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px;line-height:1.5">' +
+        '✉ Mail to: <strong>' + esc(spec.mailTo) + '</strong></div>' : '') +
       (spec.note ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px">' + spec.note + '</div>' : '') +
       '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
         '<label style="font-size:10.5px;color:var(--gray-600)">Sent ' +
