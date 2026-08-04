@@ -7512,9 +7512,22 @@ async function packetPageFingerprint(doc, page) {
   return biggest ? await sha256Short(biggest) : 'text-page';
 }
 
+// The fingerprints the splitter checks against. Normally the constant above, but
+// once the packet is legitimately changed in GoHighLevel the new ones are stored
+// in settings, so a template change no longer needs the file editing.
+function expectedPacketFingerprints() {
+  const saved = getObj('settings').packetFingerprints;
+  return Array.isArray(saved) && saved.length ? saved : PACKET_FINGERPRINTS;
+}
+
+// Held between a refusal and the "accept this packet" button, so the office can
+// look at the refused packet before deciding, rather than the splitter deciding.
+let _refusedPacket = null;
+
 async function splitEnrollmentPacket(event) {
   const file = event.target.files[0];
   if (!file) return;
+  _refusedPacket = null;
   const status = document.getElementById('tax_packet_status');
   const cid = document.getElementById('tax_consumer_id').value;
   const consumers = getData('consumers');
@@ -7531,22 +7544,40 @@ async function splitEnrollmentPacket(event) {
     const doc = await PDFLib.PDFDocument.load(new Uint8Array(await file.arrayBuffer()));
 
     // ---- refuse anything that is not the packet we know how to cut ----
-    if (doc.getPageCount() !== PACKET_FINGERPRINTS.length) {
-      fail('That PDF has ' + doc.getPageCount() + ' pages and the enrollment packet has ' +
-        PACKET_FINGERPRINTS.length + '. Nothing was split. If the packet has genuinely changed in ' +
-        'GoHighLevel, send it over and the page map here can be updated.');
+    const expected = expectedPacketFingerprints();
+    const pages = doc.getPages();
+    const seen = [];
+    for (const p of pages) seen.push(await packetPageFingerprint(doc, p));
+
+    // Offered on a refusal so a genuine template change can be accepted here
+    // rather than waiting on someone to edit the code. Deliberately NOT
+    // automatic: the fingerprints prove the packet changed, they cannot prove
+    // the eleven forms are still on the same pages, and only a person looking
+    // at the packet can say that.
+    const offerAccept = () => {
+      _refusedPacket = { fingerprints: seen, pageCount: doc.getPageCount(), name: file.name };
+      const el = document.getElementById('tax_packet_status');
+      el.innerHTML += '<div style="margin-top:8px;background:#fff3cd;border-radius:6px;padding:8px 10px;' +
+        'color:var(--gray-700);line-height:1.6">If the packet really was changed in GoHighLevel, open it and ' +
+        'check that the eleven forms are still on the same pages as before. <strong>If, and only if, they are' +
+        '</strong>, you can teach the splitter this new packet:' +
+        '<div style="margin-top:6px"><button type="button" class="btn btn-sm btn-outline" style="font-size:11px" ' +
+        'onclick="acceptChangedPacket()">I have checked the pages, accept this packet</button></div></div>';
+    };
+
+    if (doc.getPageCount() !== expected.length) {
+      fail('That PDF has ' + doc.getPageCount() + ' pages and the enrollment packet has ' + expected.length +
+        '. Nothing was split.');
+      offerAccept();
       return;
     }
-    const pages = doc.getPages();
-    for (let i = 0; i < pages.length; i++) {
-      const seen = await packetPageFingerprint(doc, pages[i]);
-      if (seen !== PACKET_FINGERPRINTS[i]) {
-        fail('Page ' + (i + 1) + ' of that PDF is not the form this splitter expects there, so nothing was ' +
-          'split. This is the safety check doing its job: cutting to a page map that no longer matches ' +
-          'would put the wrong name on a form. If the packet was changed in GoHighLevel, send it over and ' +
-          'the page map can be updated.');
-        return;
-      }
+    const wrong = seen.findIndex((f, i) => f !== expected[i]);
+    if (wrong !== -1) {
+      fail('Page ' + (wrong + 1) + ' of that PDF is not the form this splitter expects there, so nothing was ' +
+        'split. This is the safety check doing its job: cutting to a page map that no longer matches would put ' +
+        'the wrong name on a form, and these forms carry Social Security numbers.');
+      offerAccept();
+      return;
     }
 
     // ---- cut, name, and keep ----
@@ -7638,6 +7669,25 @@ function renderPacketForms(c) {
         (spec.note && !held
           ? '<div style="font-size:11px;color:var(--gray-600);margin-top:3px;line-height:1.5">' + spec.note + '</div>'
           : '') +
+        // Only for the forms that leave the building. There is nothing to record
+        // about a form that just sits in the consumer's file.
+        (outbound && !held
+          ? (f.sent
+              ? '<div style="font-size:11px;color:var(--success);margin-top:5px;display:flex;align-items:center;gap:8px">' +
+                '<span>✓ ' + (PACKET_SEND_VERB[f.sent.channel] || 'Sent') + ' ' + esc(f.sent.at) + '</span>' +
+                '<button type="button" class="btn btn-sm btn-outline" style="font-size:10px" onclick="clearPacketSent(\'' +
+                  esc(f.file) + '\')">undo</button></div>'
+              : '<div style="font-size:11px;margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+                (spec.send && spec.send.email
+                  ? '<button type="button" class="btn btn-sm btn-outline" style="font-size:10px;font-weight:700" ' +
+                    'onclick="emailPacketForm(\'' + esc(f.file) + '\')">✉ Open email</button>'
+                  : '') +
+                '<span style="color:var(--gray-600)">Once it has gone, record it:</span>' +
+                Object.keys(spec.send || {}).map(ch =>
+                  '<button type="button" class="btn btn-sm btn-outline" style="font-size:10px" onclick="markPacketSent(\'' +
+                  esc(f.file) + '\',\'' + ch + '\')">' + (PACKET_SEND_VERB[ch] || ch) + '</button>').join('') +
+                '</div>')
+          : '') +
         (f.warn ? '<div style="font-size:11px;color:var(--warning,#B45309);margin-top:5px;line-height:1.5">⚠️ ' +
           f.warn + '</div>' : '') +
         '</div>';
@@ -7728,6 +7778,87 @@ function removePortalLogin(i) {
   const rows = currentPortalRows().filter((_, n) => n !== i);
   loadPortalLogins(rows);
   savePortalLogins();
+}
+
+// Teaches the splitter a changed packet. Only reachable from a refusal, and only
+// after someone has said they checked the pages, because nothing here can verify
+// that claim. Stored in settings so it applies to everyone and survives a deploy.
+function acceptChangedPacket() {
+  if (!_refusedPacket) { alert('Choose the new packet again first.'); return; }
+  const p = _refusedPacket;
+  // The page map still refers to fixed page numbers, so a shorter packet would
+  // make it read off the end. That one thing can be checked, so it is.
+  const lastNeeded = PACKET_LAYOUT.reduce((n, f) => Math.max(n, ...f.pages), 0);
+  if (p.pageCount < lastNeeded) {
+    alert('That packet has ' + p.pageCount + ' pages but the page map reads up to page ' + lastNeeded + '. ' +
+      'It cannot be accepted without the page map being rewritten too. Send it over instead.');
+    return;
+  }
+  if (!confirm('Accept "' + p.name + '" as the packet layout from now on?\n\n' +
+      'Say yes only if you have opened it and confirmed each of the eleven forms is still on the same page ' +
+      'as before. If a form has moved, this will name forms wrongly and could send one consumer\'s Social ' +
+      'Security number to the wrong agency.')) return;
+  const s = getObj('settings');
+  s.packetFingerprints = p.fingerprints;
+  s.packetFingerprintsAt = new Date().toISOString().slice(0, 10);
+  setObj('settings', s);
+  _refusedPacket = null;
+  document.getElementById('tax_packet_status').innerHTML =
+    '<span style="color:var(--success)">✓ New packet layout accepted. Choose the packet again to split it.</span>';
+}
+
+// ---------------------------------------------------------------------------
+// What went where, and when. The forms carry Social Security numbers, so at
+// audit "we sent the 8821" is worth much less than "we faxed the 8821 on the
+// 4th of August". Recorded per form, per consumer.
+// ---------------------------------------------------------------------------
+const PACKET_SEND_VERB = { fax: 'Faxed', email: 'Emailed', mail: 'Posted', online: 'Filed online' };
+
+// Missouri takes these two by email, which is the only outbound channel a
+// browser can actually start. It opens an addressed draft; attaching the form
+// and pressing send stays with the person, which is right for a document
+// carrying a Social Security number.
+function emailPacketForm(fileKey) {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const c = getData('consumers').find(x => x.id === cid);
+  const spec = PACKET_LAYOUT.find(x => x.file === fileKey);
+  if (!c || !spec || !spec.send || !spec.send.email) return;
+  const form = (c.packetForms || []).find(f => f.file === fileKey);
+  const subject = spec.title.split(',')[0] + ' — ' + c.name;
+  const body =
+    'Please find attached the ' + spec.title + ' for ' + c.name + '.\n\n' +
+    'Caring Companions Consumer Directed Services, LLC\n' +
+    '1331 N Stewart Ave Ste A, Springfield MO 65802\n' +
+    'Phone: 866-863-5151   Fax: 417-719-7870\n\n' +
+    'ATTACH: ' + (form ? form.name : spec.file + '.pdf') + ' before sending.';
+  window.location.href = 'mailto:' + spec.send.email +
+    '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+}
+
+function markPacketSent(fileKey, channel) {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const form = (c.packetForms || []).find(f => f.file === fileKey);
+  if (!form) return;
+  form.sent = { channel, at: new Date().toISOString().slice(0, 10) };
+  setData('consumers', consumers);
+  renderPacketForms(c);
+}
+
+function clearPacketSent(fileKey) {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const form = (c.packetForms || []).find(f => f.file === fileKey);
+  if (!form || !form.sent) return;
+  if (!confirm('Clear the record that this was ' + (PACKET_SEND_VERB[form.sent.channel] || 'sent').toLowerCase() +
+    ' on ' + form.sent.at + '?')) return;
+  delete form.sent;
+  setData('consumers', consumers);
+  renderPacketForms(c);
 }
 
 // Typing the EIN releases the two Missouri forms, so redraw as it is typed.
