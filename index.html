@@ -24,6 +24,10 @@
   window.__applyEmbedFlags();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Splits the signed enrollment packet into its separate forms, in the browser,
+     so a PDF carrying the consumer's SSN never passes through anything of ours
+     on its way to being cut up. Deferred: nothing on load needs it. -->
+<script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -2807,7 +2811,7 @@
           2. Entity type: <strong>Individual / Sole Proprietor</strong>.<br>
           3. Reason: <strong>Hired employees</strong>.<br>
           4. Use the consumer's SSN, legal name, and home address.<br>
-          5. Complete online — you'll receive the EIN immediately. Print and save the confirmation.<br>
+          5. Complete online, the EIN is issued immediately. On the final screen use the <strong>download</strong> button to save the CP 575 letter. <strong>Do not print the page</strong>: a printout of a web page is not an IRS-issued document and will not pass the Fusion audit. It is offered once and is never reissued, so if it is missed, ring 800-829-4933 and ask for a 147C.<br>
           6. Enter the EIN in the field below.
         </div>
 
@@ -2834,7 +2838,7 @@
           Registers the consumer with the Missouri Department of Revenue for state income tax withholding.<br>
           1. Complete Form 2643A using consumer's EIN, SSN, name, and home address.<br>
           2. Business type: Individual / Household employer.<br>
-          3. Submit online at <strong>dor.mo.gov</strong> (preferred) or mail to MO Dept of Revenue.<br>
+          3. Submit online (much faster than paper). <strong>Do not look for CDS inside our own MyTax account</strong> &mdash; it is not a tax type, and the employer being registered is the consumer, not us. Use the Online New Business Registration, signed out, once per consumer, and pick Withholding Tax.<br>
           4. You will receive the consumer's MO Withholding Tax ID — enter it in the MO Tax ID field below.<br>
           Phone: (573) 751-5860 | businesstaxregister@dor.mo.gov
         </div>
@@ -2899,7 +2903,112 @@
     <div style="background:#fff3cd;border-radius:6px;padding:8px 12px;font-size:11.5px;margin-bottom:10px;line-height:1.6">
       ⚠️ <strong>Wet signature:</strong> Forms 8821 and 2678 may require original signatures — confirm with your accountant before marking filed. &nbsp;|&nbsp; ⚠️ <strong>DES:</strong> Cannot register in UInteract until after first payroll and $1,000+ paid in a single quarter.
     </div>
-    <div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">DHSS Fusion verification &nbsp;·&nbsp; this is what gets audited</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">START &nbsp;·&nbsp; Enrollment packet (GoHighLevel)</div>
+    <div class="form-row">
+      <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
+      <div class="form-group"><label>Packet Signed &amp; Returned (date)</label><input type="date" id="tax_packet_signed"></div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">Then split the signed packet into separate forms</div>
+    <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
+      The consumer signs once and GoHighLevel gives back one 19-page PDF. Drop that PDF here and it comes apart into
+      the eleven forms inside it, each one on its own and named, ready to fax or mail. Nothing leaves this browser:
+      the splitting happens on your machine and only the finished forms are saved.
+    </div>
+    <div id="tax_packet_forms" style="margin-bottom:8px"></div>
+    <input type="file" id="tax_packet_upload" accept="application/pdf"
+           onchange="splitEnrollmentPacket(event)" style="font-size:12px">
+    <div id="tax_packet_status" style="font-size:11.5px;margin-top:6px"></div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEPS 1&ndash;3 &nbsp;·&nbsp; Federal tax (IRS): EIN, 8821, 2678</div>
+    <div class="form-row">
+      <div class="form-group"><label>Federal EIN (SS-4)</label><input type="text" id="tax_ein" placeholder="XX-XXXXXXX" oninput="refreshPacketHold()">
+        <!-- The online application shows the CP 575 once, on the last screen, and
+             the IRS does not reissue it. Missing it is not fatal, but the recovery
+             is a phone call, so the note is here rather than in a runbook nobody
+             opens mid-application. -->
+        <div style="font-size:11px;color:var(--gray-600);margin-top:4px;line-height:1.55">
+          Applying online? <strong>Use the download button on the final screen, not print.</strong> Printing the
+          confirmation page gives you a picture of a web page, which is not an IRS-issued document and does not
+          count as proof for Fusion. The download button gives the real CP 575 letter, it is offered once, and the
+          IRS will not reissue it. If it was missed, ring the Business &amp; Specialty Tax Line on
+          <strong>800-829-4933</strong> (Mon-Fri, 7am-7pm local) and ask for a <strong>147C letter</strong>, which
+          they can fax while you wait. A 147C counts as proof for Fusion exactly like a CP 575 does. Expect them to
+          want the consumer on the call unless their 8821 is already on file with the IRS.
+        </div>
+      </div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_irs8821"> <span><strong>Form 8821</strong> — IRS Tax Auth (allows Caring Companions to receive IRS info)</span></label>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_irs2678"> <span><strong>Form 2678</strong> — IRS Agent Appt (designates Caring Companions as payroll agent)</span></label>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri Department of Revenue (withholding)</div>
+    <!-- Written down because it is the thing everyone gets wrong once. There is no
+         "CDS" option in MyTax: CDS is a Medicaid programme, not a tax type, and
+         the employer being registered is the consumer, not us. -->
+    <div style="font-size:11.5px;color:var(--gray-600);margin:0 0 8px;line-height:1.6;background:var(--gray-100);border-radius:6px;padding:8px 10px">
+      <strong>Do not look for CDS inside our own MyTax account.</strong> It is not there. CDS is a Medicaid
+      programme, not a tax type, and the employer being registered is <strong>the consumer</strong>, not Caring
+      Companions. So each consumer gets their <em>own separate</em> registration as a household employer, using
+      their own EIN, for <strong>Withholding Tax</strong>.
+      <div style="margin-top:5px">
+        Start it here, signed out, once per consumer:
+        <a href="https://mytax.mo.gov/rptp/portal/business/register-new-business/" target="_blank" rel="noopener">Online New Business Registration</a>.
+        Fill it in from the consumer's signed 2643A, which is already split out and sitting in the packet list
+        above. Allow 2-3 business days, and <strong>keep the confirmation number</strong>: it is the only thing you
+        get at the moment you submit, and it is what Revenue will ask for. Missouri does not publish how the Tax ID
+        itself arrives, so if nothing has turned up after about a week, ring Business Tax on
+        <strong>(573) 751-5860</strong> with that number and ask them to read you the account number.
+      </div>
+      <div style="margin-top:5px">
+        Our logins below are for <em>our own</em> entities' taxes. What ties us to a consumer's account is their
+        signed <strong>2827 Power of Attorney</strong>, not anything in the portal.
+        Unemployment is a different system again: <a href="https://uinteract.labor.mo.gov" target="_blank" rel="noopener">uinteract.labor.mo.gov</a>.
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>MO Tax ID (from 2643A approval)</label><input type="text" id="tax_mo_tax_id" placeholder="MO withholding ID"></div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_mo2643a"> <span><strong>Form 2643A</strong> — MO Tax Registration</span></label>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_mo2827"> <span><strong>Form 2827</strong> — MO Power of Attorney (MO Revenue)</span></label>
+      </div>
+    </div>
+    <!-- The portal is where the 2643A lands and where the withholding account is
+         managed afterwards. Link only. No username and no password: this file is
+         served publicly by GitHub Pages, so anything written here can be read
+         with View Source by anyone who visits the hub. -->
+    <div style="font-size:11.5px;color:var(--gray-600);margin:6px 0 10px;line-height:1.6;background:var(--gray-100);border-radius:6px;padding:8px 10px">
+      <strong>MO tax portal:</strong>
+      <a href="https://mytax.mo.gov/" target="_blank" rel="noopener">mytax.mo.gov</a>
+      <div id="portal_rows" style="margin-top:7px"></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button type="button" class="btn btn-sm btn-outline" style="font-size:11px" onclick="addPortalLogin()">+ Add an account</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+          <input type="checkbox" id="portal_reveal" onchange="applyPortalReveal()"> Show passwords</label>
+      </div>
+      <div style="margin-top:6px">
+        One row per entity, because the portal has a separate login for each. Saved to the hub's database, so it is
+        only readable once signed in, and never written into this page. It is stored as ordinary text, so treat
+        anyone with a hub login as someone who can read these.
+      </div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)</div>
+    <div class="form-row">
+      <div class="form-group"><label>DES Account # (EAN) — after registration</label><input type="text" id="tax_des_ean" placeholder="e.g. 10-63887-0-00"></div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_des_reg"> <span><strong>Consumer registered in UInteract</strong> (after $1,000+ quarter)</span></label>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: register via UInteract. Transferred consumer: email MODES-5083 to cdstax@labor.mo.gov. Questions: 573-751-1995 Opt. 1</div>
+    <div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">STEP 6 &nbsp;·&nbsp; DHSS Fusion &mdash; this is the step that gets audited</div>
     <div class="form-row">
       <div class="form-group"><label>CDS start date <span style="font-weight:400;color:var(--gray-600)">(starts the 90-day clock)</span></label><input type="date" id="tax_cds_start"></div>
       <div class="form-group"><label>Proof uploaded to Fusion (date)</label><input type="date" id="tax_proof_uploaded"></div>
@@ -2922,18 +3031,7 @@
       <strong>EIN Tax Documents</strong> category, or the auditor will not find it.
     </div>
 
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">Empeon (payroll)</div>
-    <div class="form-row">
-      <div class="form-group"><label>Tax info uploaded into Empeon (date)</label><input type="date" id="tax_empeon_updated"></div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <div style="font-size:11.5px;color:var(--gray-600);line-height:1.55;margin-top:20px">
-          Do this <strong>last</strong>. Empeon needs the real EIN and MO Tax ID to exist first, so uploading before
-          they do means doing it twice.
-        </div>
-      </div>
-    </div>
-
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Our copy of the proof document</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 6b &nbsp;·&nbsp; our own copy of the proof document</div>
     <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
       Keep the document here so the whole set is in one place if MMAC ever asks, and so a faxed 147C has somewhere to
       live before it goes into Fusion. <strong>This is our file copy, not the state's.</strong> The audited upload still
@@ -2944,43 +3042,17 @@
            onchange="uploadProofFile(event)" style="font-size:12px">
     <div id="tax_proof_status" style="font-size:11.5px;margin-top:6px"></div>
 
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Enrollment Packet (GoHighLevel)</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">LAST &nbsp;·&nbsp; Empeon (payroll)</div>
     <div class="form-row">
-      <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
-      <div class="form-group"><label>Packet Signed &amp; Returned (date)</label><input type="date" id="tax_packet_signed"></div>
-    </div>
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Federal Tax (IRS)</div>
-    <div class="form-row">
-      <div class="form-group"><label>Federal EIN (SS-4)</label><input type="text" id="tax_ein" placeholder="XX-XXXXXXX"></div>
+      <div class="form-group"><label>Tax info uploaded into Empeon (date)</label><input type="date" id="tax_empeon_updated"></div>
       <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_irs8821"> <span><strong>Form 8821</strong> — IRS Tax Auth (allows Caring Companions to receive IRS info)</span></label>
+        <div style="font-size:11.5px;color:var(--gray-600);line-height:1.55;margin-top:20px">
+          Do this <strong>last</strong>. Empeon needs the real EIN and MO Tax ID to exist first, so uploading before
+          they do means doing it twice.
+        </div>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_irs2678"> <span><strong>Form 2678</strong> — IRS Agent Appt (designates Caring Companions as payroll agent)</span></label>
-      </div>
-    </div>
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Missouri Department of Revenue (MO withholding)</div>
-    <div class="form-row">
-      <div class="form-group"><label>MO Tax ID (from 2643A approval)</label><input type="text" id="tax_mo_tax_id" placeholder="MO withholding ID"></div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_mo2643a"> <span><strong>Form 2643A</strong> — MO Tax Registration</span></label>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_mo2827"> <span><strong>Form 2827</strong> — MO Power of Attorney (MO Revenue)</span></label>
-      </div>
-    </div>
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">DES / UInteract — Missouri Unemployment Insurance (UI) Tax</div>
-    <div class="form-row">
-      <div class="form-group"><label>DES Account # (EAN) — after registration</label><input type="text" id="tax_des_ean" placeholder="e.g. 10-63887-0-00"></div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_des_reg"> <span><strong>Consumer registered in UInteract</strong> (after $1,000+ quarter)</span></label>
-      </div>
-    </div>
-    <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: register via UInteract. Transferred consumer: email MODES-5083 to cdstax@labor.mo.gov. Questions: 573-751-1995 Opt. 1</div>
+
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('taxSetupModal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTaxSetup()">Save Tax Setup</button>
@@ -4289,7 +4361,10 @@ function openTaxSetup(cid) {
   document.getElementById('tax_prior_vendor').checked   = !!c.priorVendorProof;
   document.getElementById('tax_empeon_updated').value   = c.empeonUpdated || '';
   renderProofFiles(c);
+  renderPacketForms(c);
+  loadPortalLogins();
   document.getElementById('tax_proof_status').innerHTML = '';
+  document.getElementById('tax_packet_status').innerHTML = '';
   openModal('taxSetupModal');
 }
 
@@ -7237,14 +7312,19 @@ function renderPayroll() {
 // ============================================================
 const PROOF_BUCKET = 'ein-proof';
 
-// DODD_CRYSTAL_EIN-proof.pdf — named so the bucket is readable without opening
-// anything, matching the naming the runbook asks staff to use.
-function proofFileName(consumerName, seq, ext) {
+// DODD_CRYSTAL — the readable half of every filename in the bucket, so the
+// listing can be scanned without opening anything.
+function consumerStem(consumerName) {
   const parts = (consumerName || 'unknown').trim().split(/\s+/);
   const last  = (parts.length > 1 ? parts[parts.length - 1] : parts[0]).toUpperCase();
   const first = (parts.length > 1 ? parts[0] : '').toUpperCase();
-  const stem  = [last, first].filter(Boolean).join('_').replace(/[^A-Z_]/g, '');
-  return stem + '_EIN-proof' + (seq > 1 ? '-' + seq : '') + '.' + ext;
+  return [last, first].filter(Boolean).join('_').replace(/[^A-Z_]/g, '');
+}
+
+// DODD_CRYSTAL_EIN-proof.pdf — named so the bucket is readable without opening
+// anything, matching the naming the runbook asks staff to use.
+function proofFileName(consumerName, seq, ext) {
+  return consumerStem(consumerName) + '_EIN-proof' + (seq > 1 ? '-' + seq : '') + '.' + ext;
 }
 
 async function uploadProofFile(event) {
@@ -7322,6 +7402,353 @@ async function removeProofFile(path) {
   renderProofFiles(c);
   renderTaxCompliance();
 }
+
+// ============================================================
+// ENROLLMENT PACKET SPLITTER  (same private 'ein-proof' bucket, packet/ folder)
+//
+// The consumer signs once, in GoHighLevel, and what comes back is a single
+// 19-page PDF with eleven separate forms inside it. Five of those have to reach
+// two different agencies as forms in their own right: the IRS will not take a
+// 19-page packet with an SS-4 buried on page 11.
+//
+// So the signing stays as it is (one signature, one link, one thing asked of a
+// consumer who is usually elderly) and the packet is cut up afterwards, here.
+//
+// WHY THE FINGERPRINTS: the government pages are scans. Their own text ("Form
+// SS-4") is inside the image, not readable as text, so there is nothing on the
+// page to check a page number against. What IS checkable is the image itself:
+// the blank template behind each page is byte-identical in every consumer's
+// packet, because it is the same file every time. Hashing it gives each page a
+// fingerprint, and the sequence of nineteen fingerprints identifies this exact
+// packet layout.
+//
+// That matters because the alternative is worse than not building this. If the
+// packet is ever re-ordered in GoHighLevel and the page numbers below go stale,
+// a splitter that trusted them would label the SS-4 as an 8821 and someone
+// would fax a consumer's Social Security number to the wrong agency. So the
+// fingerprints are checked first and a packet that does not match is refused
+// rather than guessed at.
+// ============================================================
+
+// The nineteen pages of the current packet. Pages 1-9 are our own forms on
+// letterhead and share the two logo images; 10-19 are the government forms,
+// each with its own scan. Regenerate with the reference block at the bottom of
+// this section if the packet is ever changed.
+const PACKET_FINGERPRINTS = [
+  '76f63cd733301e70', '76f63cd733301e70', 'b389d4fa04b2605c', 'b389d4fa04b2605c',
+  'text-page',        '76f63cd733301e70', 'b389d4fa04b2605c', 'text-page',
+  'b389d4fa04b2605c', '79fd4910e4caa957', '879347046b6b6350', '811b13abeb40f435',
+  'f9a32e0c624c1795', '77f47a0e425de46b', '876c4e3bcf3a9420', '224f21c9ed9845d9',
+  '4c0886938f99730b', '58d3516361901c1f', 'a82916f9d1a87f7b',
+];
+
+// Page 1 is the welcome cover and pages 5 and 8 are blank separators, so they
+// are not listed: nothing is lost by leaving them in the original, which stays
+// on file whole.
+// Where each outbound form actually goes. Checked against the IRS and Missouri
+// DOR's own pages on 2026-08-03; they do move these, so if one bounces, check
+// the source before trusting what is written here.
+//
+// needsEin marks the two Missouri forms: the state cannot register an employer
+// until the IRS has issued the EIN, so sending them early only produces a
+// rejection. The panel holds them until the EIN field above is filled in.
+const PACKET_LAYOUT = [
+  { pages: [2],  file: 'Vendor-Acknowledgement',   title: 'Consumer Vendor Acknowledgement',           dest: 'file' },
+  { pages: [3],  file: 'Telephony-EVV-Consent',    title: 'Telephony / EVV Consent',                   dest: 'file' },
+  { pages: [4],  file: 'Emergency-Backup-Plan',    title: 'Consumer Emergency Back-Up Plan',           dest: 'file' },
+  { pages: [6],  file: 'Employment-Numbers-Auth',  title: 'Authorization to Obtain Employment Numbers', dest: 'file' },
+  { pages: [7],  file: 'Previous-Vendor-Auth',     title: 'Previous CDS Vendor Authorization',         dest: 'file' },
+  { pages: [9],  file: 'Training-Acknowledgement', title: 'Consumer Training Acknowledgement',         dest: 'file',
+    warn: 'This was signed at enrollment, before orientation. The training acknowledgement is meant to go out ' +
+          'after the consumer has been trained, so on its own it does not evidence training that had happened yet.' },
+
+  { pages: [11], file: 'IRS-SS-4', title: 'IRS Form SS-4, Application for EIN', dest: 'IRS',
+    send: { fax: '855-641-6935', mail: 'IRS, Attn: EIN Operation, Cincinnati OH 45999' },
+    note: 'Send this one first. Everything Missouri needs waits on the EIN it produces.' },
+  { pages: [10], file: 'IRS-8821', title: 'IRS Form 8821, Tax Information Authorization', dest: 'IRS',
+    send: { fax: '855-214-7522', online: 'IRS.gov/Submit8821',
+            mail: 'IRS, 1973 Rulon White Blvd MS 6737, Ogden UT 84201' } },
+  { pages: [12, 13], file: 'IRS-2678', title: 'IRS Form 2678, Employer/Payer Appointment of Agent', dest: 'IRS',
+    send: { mail: 'Department of the Treasury, IRS Center, Ogden UT 84201' },
+    note: 'Mail only. The IRS gives no fax number for this one.' },
+
+  { pages: [14, 15, 16, 17], file: 'MO-2643A', title: 'Missouri Form 2643A, Tax Registration Application',
+    dest: 'MO DOR', needsEin: true,
+    send: { email: 'businesstaxregister@dor.mo.gov', fax: '(573) 522-1722',
+            mail: 'Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357' } },
+  { pages: [18, 19], file: 'MO-2827', title: 'Missouri Form 2827, Power of Attorney',
+    dest: 'MO DOR', needsEin: true,
+    send: { email: 'businesstaxregister@dor.mo.gov', fax: '(573) 522-1722',
+            mail: 'Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357' } },
+];
+
+const PACKET_DEST_LABEL = {
+  file:     'consumer file',
+  IRS:      'IRS',
+  'MO DOR': 'Missouri Dept of Revenue',
+};
+
+async function sha256Short(bytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
+// The largest image drawn on the page is the form behind it. Our own letterhead
+// pages have only the logo, which is why they fingerprint alike and are told
+// apart by position instead.
+async function packetPageFingerprint(doc, page) {
+  const { PDFName, PDFDict, PDFRawStream } = PDFLib;
+  const res = page.node.Resources();
+  const xobjects = res && res.lookupMaybe(PDFName.of('XObject'), PDFDict);
+  let biggest = null;
+  if (xobjects) {
+    for (const [, ref] of xobjects.entries()) {
+      const stream = doc.context.lookup(ref);
+      if (stream instanceof PDFRawStream && (!biggest || stream.contents.length > biggest.length)) {
+        biggest = stream.contents;
+      }
+    }
+  }
+  return biggest ? await sha256Short(biggest) : 'text-page';
+}
+
+async function splitEnrollmentPacket(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('tax_packet_status');
+  const cid = document.getElementById('tax_consumer_id').value;
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) return;
+
+  const fail = msg => { status.innerHTML = '<span style="color:var(--danger)">' + msg + '</span>'; };
+  try {
+    if (typeof PDFLib === 'undefined') {
+      fail('The PDF splitter did not load. Refresh the page and try again.');
+      return;
+    }
+    status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + file.name + '…</span>';
+    const doc = await PDFLib.PDFDocument.load(new Uint8Array(await file.arrayBuffer()));
+
+    // ---- refuse anything that is not the packet we know how to cut ----
+    if (doc.getPageCount() !== PACKET_FINGERPRINTS.length) {
+      fail('That PDF has ' + doc.getPageCount() + ' pages and the enrollment packet has ' +
+        PACKET_FINGERPRINTS.length + '. Nothing was split. If the packet has genuinely changed in ' +
+        'GoHighLevel, send it over and the page map here can be updated.');
+      return;
+    }
+    const pages = doc.getPages();
+    for (let i = 0; i < pages.length; i++) {
+      const seen = await packetPageFingerprint(doc, pages[i]);
+      if (seen !== PACKET_FINGERPRINTS[i]) {
+        fail('Page ' + (i + 1) + ' of that PDF is not the form this splitter expects there, so nothing was ' +
+          'split. This is the safety check doing its job: cutting to a page map that no longer matches ' +
+          'would put the wrong name on a form. If the packet was changed in GoHighLevel, send it over and ' +
+          'the page map can be updated.');
+        return;
+      }
+    }
+
+    // ---- cut, name, and keep ----
+    const stem = consumerStem(c.name);
+    const saved = [];
+    for (let n = 0; n < PACKET_LAYOUT.length; n++) {
+      const form = PACKET_LAYOUT[n];
+      status.innerHTML = '<span style="color:var(--gray-600)">Splitting… ' + (n + 1) + ' of ' +
+        PACKET_LAYOUT.length + ' (' + form.title + ')</span>';
+      const out = await PDFLib.PDFDocument.create();
+      const copied = await out.copyPages(doc, form.pages.map(p => p - 1));
+      copied.forEach(p => out.addPage(p));
+      const bytes = await out.save();
+
+      const name = stem + '_' + form.file + '.pdf';
+      const path = cid + '/packet/' + name;
+      const { error } = await _db.storage.from(PROOF_BUCKET)
+        .upload(path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true });
+      if (error) throw error;
+      saved.push({ path, name, file: form.file, title: form.title, dest: form.dest, warn: form.warn || '',
+                   at: new Date().toISOString().slice(0, 10) });
+    }
+
+    // Replaces rather than appends: splitting the same packet twice should leave
+    // one set of forms, not two.
+    c.packetForms = saved;
+    if (!c.packetSigned) {
+      c.packetSigned = new Date().toISOString().slice(0, 10);
+      document.getElementById('tax_packet_signed').value = c.packetSigned;
+    }
+    setData('consumers', consumers);
+    renderPacketForms(c);
+    status.innerHTML = '<span style="color:var(--success)">✓ Split into ' + saved.length +
+      ' forms. The signed packet itself was not uploaded, only the forms cut from it.</span>';
+  } catch (e) {
+    const rls = /row-level security|violates/i.test(e.message || '');
+    fail('Could not split that packet — ' + (e.message || 'unknown error') +
+      (rls ? '. The storage policies have not been run yet (storage_policies.sql).' : ''));
+  } finally {
+    event.target.value = '';
+  }
+}
+
+function renderPacketForms(c) {
+  const el = document.getElementById('tax_packet_forms');
+  if (!el) return;
+  const forms = Array.isArray(c.packetForms) ? c.packetForms : [];
+  if (!forms.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--gray-600)">Packet not split yet.</div>';
+    return;
+  }
+  // Where a form goes is read from PACKET_LAYOUT rather than from what was saved
+  // at split time, so correcting a fax number here fixes it for every consumer
+  // already split rather than only for the next one.
+  // Read the live field, not the saved value, so the two Missouri forms unlock
+  // as the EIN is typed rather than after a save and a reopen.
+  const einField = document.getElementById('tax_ein');
+  const hasEin = !!((einField ? einField.value : c.ein) || '').trim();
+  el.innerHTML =
+    '<div style="font-size:11.5px;color:var(--gray-600);margin-bottom:6px">Split ' + (forms[0].at || '') +
+    '. The five marked IRS or Missouri are the ones that have to be sent out.</div>' +
+    forms.map(f => {
+      const spec = PACKET_LAYOUT.find(x => x.file === f.file) || {};
+      const outbound = f.dest !== 'file';
+      const held = spec.needsEin && !hasEin;
+      const channels = [];
+      if (spec.send) {
+        if (spec.send.email)  channels.push('Email <strong>' + spec.send.email + '</strong>');
+        if (spec.send.fax)    channels.push('Fax <strong>' + spec.send.fax + '</strong>');
+        if (spec.send.online) channels.push('Online <strong>' + spec.send.online + '</strong>');
+        if (spec.send.mail)   channels.push('Mail ' + spec.send.mail);
+      }
+      return '<div style="background:var(--gray-100);border-radius:6px;padding:7px 10px;margin-bottom:5px;font-size:12px">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span>' + (held ? '⏸' : outbound ? '📤' : '📄') + '</span>' +
+        '<span style="flex:1">' + f.title +
+          '<span style="color:var(--gray-600)"> · ' + (PACKET_DEST_LABEL[f.dest] || f.dest) + '</span></span>' +
+        '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' +
+          f.path.replace(/'/g, "\\'") + '\')">View</button>' +
+        '</div>' +
+        (held
+          ? '<div style="font-size:11px;color:var(--warning,#B45309);margin-top:5px;line-height:1.5">' +
+            'Hold. Missouri cannot register the employer until the IRS issues the EIN. Fill in the Federal EIN ' +
+            'field above and the sending details appear here.</div>'
+          : channels.length
+            ? '<div style="font-size:11px;color:var(--gray-600);margin-top:5px;line-height:1.6">Send to: ' +
+              channels.join(' · ') + '</div>'
+            : '') +
+        (spec.note && !held
+          ? '<div style="font-size:11px;color:var(--gray-600);margin-top:3px;line-height:1.5">' + spec.note + '</div>'
+          : '') +
+        (f.warn ? '<div style="font-size:11px;color:var(--warning,#B45309);margin-top:5px;line-height:1.5">⚠️ ' +
+          f.warn + '</div>' : '') +
+        '</div>';
+    }).join('');
+}
+
+// ---------------------------------------------------------------------------
+// MO tax portal usernames.
+//
+// These are agency-wide, not per-consumer, so they live in the settings object
+// rather than on a consumer record. They are kept as data in Supabase, behind
+// the hub login, rather than written into this file: the hub is served by GitHub
+// Pages, so anything hardcoded here is readable by anyone who visits the site
+// and opens View Source. Passwords are not stored at either place.
+// ---------------------------------------------------------------------------
+// One row per legal entity: the portal issues a separate login to each, and
+// there are already three (the CDS agency, Troutman Enterprises, and the owner's
+// own). A fixed pair of fields would have run out immediately.
+function portalLoginRows() {
+  const p = getObj('settings').moPortal;
+  if (Array.isArray(p)) return p;
+  return [];
+}
+
+// What is on screen right now, including rows still being typed into and not yet
+// worth saving. Add and remove work from this rather than from storage, so a
+// half-typed row is not thrown away by clicking the button next to it.
+function currentPortalRows() {
+  const entities  = Array.from(document.querySelectorAll('#portal_rows .portal-entity'));
+  const usernames = Array.from(document.querySelectorAll('#portal_rows .portal-username'));
+  const passwords = Array.from(document.querySelectorAll('#portal_rows .portal-password'));
+  return entities.map((e, i) => ({
+    entity:   e.value || '',
+    username: (usernames[i] || {}).value || '',
+    password: (passwords[i] || {}).value || '',
+  }));
+}
+
+function loadPortalLogins(rows) {
+  const el = document.getElementById('portal_rows');
+  if (!el) return;
+  rows = (rows || portalLoginRows()).slice();
+  if (!rows.length) rows.push({ entity: '', username: '' });
+  // Rendered once on open and again only on add or remove. Redrawing on every
+  // keystroke would take the cursor out of the field being typed into.
+  el.innerHTML = rows.map((r, i) =>
+    '<div style="display:flex;gap:8px;margin-bottom:5px;align-items:center">' +
+    '<input type="text" class="portal-entity" value="' + esc(r.entity || '') + '" ' +
+      'oninput="savePortalLogins()" placeholder="Entity, e.g. Troutman Enterprises, LLC" ' +
+      'style="flex:2;min-width:150px;font-size:12px;padding:5px 7px">' +
+    '<input type="text" class="portal-username" value="' + esc(r.username || '') + '" ' +
+      'oninput="savePortalLogins()" placeholder="Username" ' +
+      'style="flex:1;min-width:110px;font-size:12px;padding:5px 7px">' +
+    '<input type="password" class="portal-password" value="' + esc(r.password || '') + '" ' +
+      'oninput="savePortalLogins()" placeholder="Password" autocomplete="off" ' +
+      'style="flex:1;min-width:110px;font-size:12px;padding:5px 7px">' +
+    '<button type="button" class="btn btn-sm btn-outline" style="font-size:11px;color:var(--danger)" ' +
+      'onclick="removePortalLogin(' + i + ')">×</button>' +
+    '</div>').join('');
+  applyPortalReveal();
+}
+
+// Masked by default so a password is not sitting in plain view over someone's
+// shoulder while the modal is open for an unrelated reason.
+function applyPortalReveal() {
+  const on = (document.getElementById('portal_reveal') || {}).checked;
+  document.querySelectorAll('#portal_rows .portal-password')
+    .forEach(el => { el.type = on ? 'text' : 'password'; });
+}
+
+function savePortalLogins() {
+  // Merge into settings rather than replacing it, or every other setting in
+  // that object would be wiped on the first keystroke. Blank rows are not
+  // stored: they are a display convenience, not data.
+  const s = getObj('settings');
+  s.moPortal = currentPortalRows()
+    // The password is deliberately not trimmed: trailing spaces are legal in one.
+    .map(r => ({ entity: r.entity.trim(), username: r.username.trim(), password: r.password }))
+    .filter(r => r.entity || r.username || r.password);
+  setObj('settings', s);
+}
+
+function addPortalLogin() {
+  loadPortalLogins(currentPortalRows().concat([{ entity: '', username: '' }]));
+}
+
+function removePortalLogin(i) {
+  const rows = currentPortalRows().filter((_, n) => n !== i);
+  loadPortalLogins(rows);
+  savePortalLogins();
+}
+
+// Typing the EIN releases the two Missouri forms, so redraw as it is typed.
+function refreshPacketHold() {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const c = getData('consumers').find(x => x.id === cid);
+  if (c && Array.isArray(c.packetForms) && c.packetForms.length) renderPacketForms(c);
+}
+
+// ---------------------------------------------------------------------------
+// If the packet is ever changed, paste this into the browser console with the
+// new packet chosen in the file box, and replace PACKET_FINGERPRINTS above:
+//
+//   const d = await PDFLib.PDFDocument.load(new Uint8Array(
+//     await document.getElementById('tax_packet_upload').files[0].arrayBuffer()));
+//   console.log(JSON.stringify(await Promise.all(
+//     d.getPages().map(p => packetPageFingerprint(d, p)))));
+//
+// Then check every page of the new packet by eye once, and update
+// PACKET_LAYOUT to match. The page map is only ever as right as that one look.
+// ---------------------------------------------------------------------------
 
 // ============================================================
 // TAX & EIN COMPLIANCE
