@@ -2983,65 +2983,23 @@
       <div id="filing-IRS-2678"></div>
 </section>
 <section data-card="5" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri Department of Revenue (withholding)</div>
-    <!-- Written down because it is the thing everyone gets wrong once. There is no
-         "CDS" option in MyTax: CDS is a Medicaid programme, not a tax type, and
-         the employer being registered is the consumer, not us. -->
-    <div style="font-size:11.5px;color:var(--gray-600);margin:0 0 8px;line-height:1.6;background:var(--gray-100);border-radius:6px;padding:8px 10px">
-      <strong>Do not look for CDS inside our own MyTax account.</strong> It is not there. CDS is a Medicaid
-      programme, not a tax type, and the employer being registered is <strong>the consumer</strong>, not Caring
-      Companions. So each consumer gets their <em>own separate</em> registration as a household employer, using
-      their own EIN, for <strong>Withholding Tax</strong>.
-      <div style="margin-top:5px">
-        Start it here, signed out, once per consumer:
-        <a href="https://mytax.mo.gov/rptp/portal/business/register-new-business/" target="_blank" rel="noopener">Online New Business Registration</a>.
-        Fill it in from the consumer's signed 2643A, which is already split out and sitting in the packet list
-        above. Allow 2-3 business days, and <strong>keep the confirmation number</strong>: it is the only thing you
-        get at the moment you submit, and it is what Revenue will ask for. Missouri does not publish how the Tax ID
-        itself arrives, so if nothing has turned up after about a week, ring Business Tax on
-        <strong>(573) 751-5860</strong> with that number and ask them to read you the account number.
-      </div>
-      <div style="margin-top:5px">
-        Our logins below are for <em>our own</em> entities' taxes. What ties us to a consumer's account is their
-        signed <strong>2827 Power of Attorney</strong>, not anything in the portal.
-        Unemployment is a different system again: <a href="https://uinteract.labor.mo.gov" target="_blank" rel="noopener">uinteract.labor.mo.gov</a>.
-      </div>
-    </div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri registration (Form 2643A)</div>
+<div style="font-size:11px;line-height:1.55;margin-bottom:8px;background:#fff3cd;border-radius:6px;padding:8px 10px"><strong>There is no CDS option in MyTax.</strong> You are registering <strong>the consumer</strong> as a household employer on their own EIN, not Caring Companions. One registration each, tax type <strong>Withholding Tax</strong>.</div>
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Start here, <strong>signed out</strong>: <a href="https://mytax.mo.gov/rptp/portal/business/register-new-business/" target="_blank" rel="noopener">Online New Business Registration</a>. Fill it in from their signed 2643A in the packet list. Needs the EIN first.</div>
     <div class="form-row">
-      <div class="form-group"><label>MO Tax ID (from 2643A approval)</label><input type="text" id="tax_mo_tax_id" placeholder="MO withholding ID"></div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_mo2643a"> <span><strong>Form 2643A</strong> — MO Tax Registration</span></label>
-      </div>
+      <div class="form-group"><label>MO Tax ID, once issued</label><input type="text" id="tax_mo_tax_id" placeholder="MO withholding ID"></div>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px"><input type="checkbox" id="tax_mo2827"> <span><strong>Form 2827</strong> — MO Power of Attorney (MO Revenue)</span></label>
-      </div>
-    </div>
-    <!-- The portal is where the 2643A lands and where the withholding account is
-         managed afterwards. Link only. No username and no password: this file is
-         served publicly by GitHub Pages, so anything written here can be read
-         with View Source by anyone who visits the hub. -->
-    <div style="font-size:11.5px;color:var(--gray-600);margin:6px 0 10px;line-height:1.6;background:var(--gray-100);border-radius:6px;padding:8px 10px">
-      <strong>MO tax portal:</strong>
-      <a href="https://mytax.mo.gov/" target="_blank" rel="noopener">mytax.mo.gov</a>
-      <div id="portal_rows" style="margin-top:7px"></div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <button type="button" class="btn btn-sm btn-outline" style="font-size:11px" onclick="addPortalLogin()">+ Add an account</button>
-        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
-          <input type="checkbox" id="portal_reveal" onchange="applyPortalReveal()"> Show passwords</label>
-      </div>
-      <div style="margin-top:6px">
-        One row per entity, because the portal has a separate login for each. Saved to the hub's database, so it is
-        only readable once signed in, and never written into this page. It is stored as ordinary text, so treat
-        anyone with a hub login as someone who can read these.
-      </div>
-    </div>
-
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-bottom:6px"><input type="checkbox" id="tax_mo2643a"> <span><strong>Form 2643A filed</strong> — Missouri tax registration</span></label>
       <div id="filing-MO-2643A"></div>
-      <div id="filing-MO-2827"></div>
-    </section>
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Allow 2-3 business days. The confirmation number above is the only thing you get at submission and is what Revenue will ask for. If nothing has arrived after a week, ring <strong>(573) 751-5860</strong> with it and ask them to read you the account number.</div>
+</section>
 <section data-card="6" class="tax-card">
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4b &nbsp;·&nbsp; Form 2827 (Missouri Power of Attorney)</div>
+<div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">This is what lets us act for the consumer at the Department of Revenue. Nothing in the portal grants it; the signed form does.</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-bottom:6px"><input type="checkbox" id="tax_mo2827"> <span><strong>Form 2827 filed</strong> — Missouri Power of Attorney</span></label>
+      <div id="filing-MO-2827"></div>
+</section>
+<section data-card="7" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)</div>
     <div class="form-row">
       <div class="form-group"><label>DES Account # (EAN) — after registration</label><input type="text" id="tax_des_ean" placeholder="e.g. 10-63887-0-00"></div>
@@ -3053,7 +3011,7 @@
 
       <div id="filing-DES"></div>
     </section>
-<section data-card="7" class="tax-card audited">
+<section data-card="8" class="tax-card audited">
 <div style="font-size:12px;font-weight:700;color:var(--danger);margin:14px 0 4px">STEP 6 &nbsp;·&nbsp; DHSS Fusion &mdash; this is the step that gets audited</div>
     <div class="form-row">
       <div class="form-group"><label>CDS start date <span style="font-weight:400;color:var(--gray-600)">(starts the 90-day clock)</span></label><input type="date" id="tax_cds_start"></div>
@@ -3088,7 +3046,7 @@
            onchange="uploadProofFile(event)" style="font-size:12px">
     <div id="tax_proof_status" style="font-size:11.5px;margin-top:6px"></div>
 </section>
-<section data-card="8" class="tax-card">
+<section data-card="9" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">LAST &nbsp;·&nbsp; Empeon (payroll)</div>
     <div class="form-row">
       <div class="form-group"><label>Tax info uploaded into Empeon (date)</label><input type="date" id="tax_empeon_updated"></div>
@@ -4416,7 +4374,6 @@ function openTaxSetup(cid) {
   focusTaxCard(null);   // always reopen showing everything, never last time's filter
   const build = document.getElementById('tax_build');
   if (build) build.textContent = ' · build ' + document.lastModified;
-  loadPortalLogins();
   document.getElementById('tax_proof_status').innerHTML = '';
   document.getElementById('tax_packet_status').innerHTML = '';
   openModal('taxSetupModal');
@@ -7748,92 +7705,6 @@ function renderPacketForms(c) {
     }).join('');
 }
 
-// ---------------------------------------------------------------------------
-// MO tax portal usernames.
-//
-// These are agency-wide, not per-consumer, so they live in the settings object
-// rather than on a consumer record. They are kept as data in Supabase, behind
-// the hub login, rather than written into this file: the hub is served by GitHub
-// Pages, so anything hardcoded here is readable by anyone who visits the site
-// and opens View Source. Passwords are not stored at either place.
-// ---------------------------------------------------------------------------
-// One row per legal entity: the portal issues a separate login to each, and
-// there are already three (the CDS agency, Troutman Enterprises, and the owner's
-// own). A fixed pair of fields would have run out immediately.
-function portalLoginRows() {
-  const p = getObj('settings').moPortal;
-  if (Array.isArray(p)) return p;
-  return [];
-}
-
-// What is on screen right now, including rows still being typed into and not yet
-// worth saving. Add and remove work from this rather than from storage, so a
-// half-typed row is not thrown away by clicking the button next to it.
-function currentPortalRows() {
-  const entities  = Array.from(document.querySelectorAll('#portal_rows .portal-entity'));
-  const usernames = Array.from(document.querySelectorAll('#portal_rows .portal-username'));
-  const passwords = Array.from(document.querySelectorAll('#portal_rows .portal-password'));
-  return entities.map((e, i) => ({
-    entity:   e.value || '',
-    username: (usernames[i] || {}).value || '',
-    password: (passwords[i] || {}).value || '',
-  }));
-}
-
-function loadPortalLogins(rows) {
-  const el = document.getElementById('portal_rows');
-  if (!el) return;
-  rows = (rows || portalLoginRows()).slice();
-  if (!rows.length) rows.push({ entity: '', username: '' });
-  // Rendered once on open and again only on add or remove. Redrawing on every
-  // keystroke would take the cursor out of the field being typed into.
-  el.innerHTML = rows.map((r, i) =>
-    '<div style="display:flex;gap:8px;margin-bottom:5px;align-items:center">' +
-    '<input type="text" class="portal-entity" value="' + esc(r.entity || '') + '" ' +
-      'oninput="savePortalLogins()" placeholder="Entity, e.g. Troutman Enterprises, LLC" ' +
-      'style="flex:2;min-width:150px;font-size:12px;padding:5px 7px">' +
-    '<input type="text" class="portal-username" value="' + esc(r.username || '') + '" ' +
-      'oninput="savePortalLogins()" placeholder="Username" ' +
-      'style="flex:1;min-width:110px;font-size:12px;padding:5px 7px">' +
-    '<input type="password" class="portal-password" value="' + esc(r.password || '') + '" ' +
-      'oninput="savePortalLogins()" placeholder="Password" autocomplete="off" ' +
-      'style="flex:1;min-width:110px;font-size:12px;padding:5px 7px">' +
-    '<button type="button" class="btn btn-sm btn-outline" style="font-size:11px;color:var(--danger)" ' +
-      'onclick="removePortalLogin(' + i + ')">×</button>' +
-    '</div>').join('');
-  applyPortalReveal();
-}
-
-// Masked by default so a password is not sitting in plain view over someone's
-// shoulder while the modal is open for an unrelated reason.
-function applyPortalReveal() {
-  const on = (document.getElementById('portal_reveal') || {}).checked;
-  document.querySelectorAll('#portal_rows .portal-password')
-    .forEach(el => { el.type = on ? 'text' : 'password'; });
-}
-
-function savePortalLogins() {
-  // Merge into settings rather than replacing it, or every other setting in
-  // that object would be wiped on the first keystroke. Blank rows are not
-  // stored: they are a display convenience, not data.
-  const s = getObj('settings');
-  s.moPortal = currentPortalRows()
-    // The password is deliberately not trimmed: trailing spaces are legal in one.
-    .map(r => ({ entity: r.entity.trim(), username: r.username.trim(), password: r.password }))
-    .filter(r => r.entity || r.username || r.password);
-  setObj('settings', s);
-}
-
-function addPortalLogin() {
-  loadPortalLogins(currentPortalRows().concat([{ entity: '', username: '' }]));
-}
-
-function removePortalLogin(i) {
-  const rows = currentPortalRows().filter((_, n) => n !== i);
-  loadPortalLogins(rows);
-  savePortalLogins();
-}
-
 // Teaches the splitter a changed packet. Only reachable from a refusal, and only
 // after someone has said they checked the pages, because nothing here can verify
 // that claim. Stored in settings so it applies to everyone and survives a deploy.
@@ -8067,11 +7938,11 @@ const TAX_PROGRESS_STEPS = [
   ['2678',          c => !!c.irs2678 || filingSent(c, 'IRS-2678'), 4],
   ['MO Tax ID',     c => !!(c.moTaxId || '').trim(), 5],
   ['2643A',         c => !!c.mo2643a || filingSent(c, 'MO-2643A'), 5],
-  ['2827',          c => !!c.mo2827 || filingSent(c, 'MO-2827'), 5],
-  ['DES',           c => !!c.desRegistered || filingSent(c, 'DES'), 6],
-  ['In Fusion',     c => !!c.fusionEntered, 7],
-  ['Proof uploaded', c => !!c.proofUploaded || !!c.priorVendorProof, 7],
-  ['Empeon',        c => !!c.empeonUpdated, 8],
+  ['2827',          c => !!c.mo2827 || filingSent(c, 'MO-2827'), 6],
+  ['DES',           c => !!c.desRegistered || filingSent(c, 'DES'), 7],
+  ['In Fusion',     c => !!c.fusionEntered, 8],
+  ['Proof uploaded', c => !!c.proofUploaded || !!c.priorVendorProof, 8],
+  ['Empeon',        c => !!c.empeonUpdated, 9],
 ];
 
 // null shows every card again.
