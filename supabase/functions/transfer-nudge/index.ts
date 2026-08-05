@@ -48,6 +48,10 @@ const json = (b: unknown, s = 200) =>
 const GHL_API = 'https://services.leadconnectorhq.com'
 const OFFICE = '(417) 218-2888'
 const ONBOARDING = 'https://caringcds.com/onboarding-packet'
+/* Internal only, and email rather than text on purpose: these are "somebody has
+   to decide something" messages, not reminders, and they need to sit in an inbox
+   until acted on rather than scroll past on a phone. */
+const OFFICE_ALERTS = ['intake@caringcds.com', 'samantha@caringcds.com', 'samantha@mo-care.com']
 const ORIENTATION = 'https://caringcds.com/orientation'
 const TODAY = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
 const daysBetween = (a: string, b: string) =>
@@ -98,6 +102,32 @@ Deno.serve(async (req) => {
         html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.7;color:#1f2a36">${html}` +
               `<p style="color:#57606a">Caring Companions Consumer Directed Services<br>${OFFICE}</p></div>` }) })
     return true
+  }
+
+  /* The office flags were being written to the record and nobody was told, which
+     is a flag in a drawer. These go to every address that should see them, and
+     the marker is only written once one of them actually went. */
+  const tellOffice = async (subject: string, body: string) => {
+    if (!token || !locationId) return false
+    let any = false
+    for (const email of OFFICE_ALERTS) {
+      const up = await fetch(`${GHL_API}/contacts/upsert`, {
+        method: 'POST', headers: h,
+        body: JSON.stringify({ locationId, email, firstName: 'Caring Companions' }),
+      })
+      const uj = await up.json().catch(() => ({}))
+      const contactId = uj?.contact?.id ?? uj?.id
+      if (!contactId) continue
+      const r = await fetch(`${GHL_API}/conversations/messages`, {
+        method: 'POST', headers: h,
+        body: JSON.stringify({ type: 'Email', contactId, subject,
+          html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.7;color:#1f2a36">` +
+                body + `<p style="color:#57606a">Sent by the transfer watcher in the CDS hub. ` +
+                `Nobody outside the office receives this.</p></div>` }),
+      })
+      if (r.ok) any = true
+    }
+    return any
   }
 
   const plan: { who: string; what: string; why: string }[] = []
@@ -188,9 +218,18 @@ Deno.serve(async (req) => {
               delay: they need a different attendant. Stop chasing the one who
               cannot be hired, and put it in front of a person. */
       if (a && a.backgroundResult === 'failed' && !t.attendantFailedFlagged) {
-        plan.push({ who: 'the office', what: 'attendantFailedFlagged',
-          why: `${a.name || 'the attendant'} failed their background check, ${p.name} needs a different one` })
-        if (!dry) { t.attendantFailedFlagged = new Date().toISOString(); touched = true }
+        const why = `${a.name || 'the attendant'} failed their background check, so ${p.name} needs a different one`
+        plan.push({ who: OFFICE_ALERTS.join(', '), what: 'attendantFailedFlagged', why })
+        if (!dry) {
+          if (await tellOffice(`Background check failed — ${p.name} needs a different attendant`,
+            `<p><b>${a.name || 'The attendant'}</b> put forward by <b>${p.name}</b> has failed their ` +
+            `background check.</p>` +
+            `<p>They cannot be hired or paid. ${p.name} needs to nominate somebody else, and the sooner they are ` +
+            `asked the better${t.startDate ? `: the transfer still happens on ${t.startDate} whatever we do here` : ''}.</p>` +
+            `<p>Nothing further will be sent to ${a.name || 'them'} automatically.</p>`)) {
+            t.attendantFailedFlagged = new Date().toISOString(); touched = true; sent++
+          }
+        }
         continue        // nothing else about this transfer is sendable yet
       }
 
@@ -262,11 +301,26 @@ Deno.serve(async (req) => {
            nothing, and by the time anybody notices the hours are already lost
            and cannot be put right. */
         if (until >= 0 && until <= 3 && !t.readyToWork && !t.notReadyFlagged) {
-          plan.push({ who: 'the office', what: 'notReadyFlagged',
-            why: `${p.name} transfers to us on ${t.startDate}, ${until} days away, and their attendant is not ` +
-                 `cleared to be paid yet. The transfer happens regardless, so on that day they have care nobody ` +
-                 `can be paid for.` })
-          if (!dry) { t.notReadyFlagged = new Date().toISOString(); touched = true }
+          const why = `${p.name} transfers to us on ${t.startDate}, ${until} days away, and their attendant is ` +
+                      `not cleared to be paid yet`
+          plan.push({ who: OFFICE_ALERTS.join(', '), what: 'notReadyFlagged', why })
+          if (!dry) {
+            if (await tellOffice(`${p.name} transfers in ${until} days and their attendant cannot be paid`,
+              `<p><b>${p.name}</b> transfers to us on <b>${t.startDate}</b>, which is ${until} day` +
+              `${until === 1 ? '' : 's'} away. Their attendant is not marked Ready to Work.</p>` +
+              `<p><b>The transfer happens either way.</b> So the risk is not that nobody turns up, it is that ` +
+              `${a && a.name ? a.name : 'their attendant'} works hours that cannot be paid, and those hours ` +
+              `cannot be put right afterwards.</p>` +
+              `<p>Outstanding: ${[
+                !t.onboardingSigned && 'consumer paperwork',
+                !t.orientationDone && 'consumer orientation',
+                a && !a.applicationBack && 'attendant application',
+                a && a.backgroundResult !== 'clear' && 'background check',
+                a && !a.wellskyReady && 'WellSky app',
+              ].filter(Boolean).join(', ') || 'nothing obvious, check the profile'}.</p>`)) {
+              t.notReadyFlagged = new Date().toISOString(); touched = true; sent++
+            }
+          }
           continue
         }
 
