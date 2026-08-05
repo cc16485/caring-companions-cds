@@ -653,7 +653,15 @@
   <div id="csub-pipeline" style="display:none">
     <div class="section-header">
       <div class="section-title">Consumer Pipeline</div>
-      <button class="btn btn-primary" onclick="openModal('addPipelineModal')">+ Add to Pipeline</button>
+      <!-- Three buttons rather than one, because the form is three different
+           calls now and you always know which one you are on before you open
+           it. Choosing the type after opening was a step that only ever got
+           chosen wrong. -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="openAddPipeline('lead')">+ Add Lead</button>
+        <button class="btn btn-outline" onclick="openAddPipeline('referral')">+ New to CDS</button>
+        <button class="btn btn-outline" onclick="openAddPipeline('pccp')">+ Transferring to Us</button>
+      </div>
     </div>
 
     <div class="grid-3" style="margin-bottom:16px">
@@ -706,7 +714,7 @@
             </tr>
           </thead>
           <tbody id="pipelineTableBody">
-            <tr><td colspan="8"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts yet.<br>Click "+ Add to Pipeline" to get started.</p></div></td></tr>
+            <tr><td colspan="8"><div class="empty"><div class="empty-icon">🔮</div><p>Nobody in the pipeline yet.<br>Use the buttons above: <b>Add Lead</b> for somebody still deciding, <b>New to CDS</b> for a referral, <b>Transferring to Us</b> for somebody already in the programme.</p></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -3269,7 +3277,7 @@
 <div class="modal-overlay" id="addPipelineModal">
   <div class="modal" style="width:620px">
     <div class="modal-header">
-      <div class="modal-title">Add to Consumer Pipeline</div>
+      <div class="modal-title">Add to pipeline &mdash; <span id="addPipelineTitle" style="font-weight:600;color:var(--gray-600)"></span></div>
       <button class="modal-close" onclick="closeModal('addPipelineModal')">×</button>
     </div>
     <div class="form-row">
@@ -4892,6 +4900,21 @@ function plHospToggle(){
   const w = document.getElementById('pl_hospWho');
   if (d) d.style.display = on ? 'block' : 'none';
   if (w) w.style.display = on ? 'flex' : 'none';
+}
+
+/* Opening the form already knowing what kind of call it is. The type select
+   stays, so it can still be changed mid-call when somebody turns out to be
+   further along than they first said. */
+function openAddPipeline(type){
+  const sel = document.getElementById('pl_type');
+  if (sel) sel.value = type || 'lead';
+  updatePipelineModalFields();
+  const title = document.getElementById('addPipelineTitle');
+  if (title) title.textContent =
+    type === 'pccp' ? 'Transferring to us from another agency' :
+    type === 'referral' ? 'New to the CDS programme' :
+    'A lead, still deciding';
+  openModal('addPipelineModal');
 }
 
 function updatePipelineModalFields() {
