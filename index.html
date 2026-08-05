@@ -244,6 +244,10 @@
   #taxSetupModal .tax-card .form-group { justify-content: flex-start; }
   #taxSetupModal .tax-card .form-group > label[style] { margin-top: 0; }
   #taxSetupModal .modal-footer { margin: 0; padding: 12px 24px; border-top: 1px solid var(--gray-200); flex: none; background: #fff; }
+  .chipset{display:flex;flex-wrap:wrap;gap:6px;}
+  .chipbox{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:400;
+    background:#fff;border:1.5px solid var(--gray-300);border-radius:7px;padding:6px 10px;cursor:pointer;}
+  .chipbox:has(input:checked){background:#E4F4F3;border-color:var(--primary-light);font-weight:600;}
   .tax-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
     border-radius: 999px; padding: 4px 10px; border: 1.5px solid var(--gray-300); color: var(--gray-600); background: var(--gray-100); }
   .tax-chip.done { border-color: var(--success); color: var(--success); background: #eafaf1; }
@@ -3463,62 +3467,140 @@
         </div>
       </details>
 
-      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
-        Who the consumer is</div>
+      <div style="font-size:11.5px;margin:12px 0 8px;background:#FEF3C7;border-radius:6px;padding:8px 10px;line-height:1.6">
+        <strong>The HCBS-1 says ALL FIELDS REQUIRED.</strong> These are its own questions in its own order, so
+        filling this in on the call means the form can go straight out afterwards without ringing anybody back.
+        Form MO 580-3377, returned to
+        <a href="mailto:HCBSCallCenterReferrals@health.mo.gov">HCBSCallCenterReferrals@health.mo.gov</a>.
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">Person being referred</div>
       <div class="form-row">
-        <div class="form-group"><label>First name</label><input type="text" id="pl_nfirst"></div>
         <div class="form-group"><label>Last name</label><input type="text" id="pl_nlast"></div>
+        <div class="form-group"><label>First name</label><input type="text" id="pl_nfirst"></div>
       </div>
       <div class="form-row">
+        <div class="form-group"><label>Middle initial</label><input type="text" id="pl_nmi" maxlength="2"></div>
         <div class="form-group"><label>Date of birth</label><input type="date" id="pl_ndob"></div>
-        <div class="form-group"><label>Who is calling?</label>
-          <input type="text" id="pl_caller" placeholder="the consumer, or daughter, or a social worker"></div>
-      </div>
-
-      <!-- Straight off the assessment brochure. Asking these now means the
-           consumer is prepared for the visit rather than ambushed by it, and it
-           is the same information Fusion wants for the referral. -->
-      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
-        What the assessor is going to ask them</div>
-      <div class="form-group" style="margin-bottom:9px"><label>What help do they need, and how often?</label>
-        <textarea id="pl_needs" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="bathing, meals, reminders… and roughly how long each takes"></textarea></div>
-      <div class="form-row">
-        <div class="form-group"><label>Can they direct their own care?</label>
-          <select id="pl_selfdirect">
-            <option value="">—</option>
-            <option value="yes">Yes</option>
-            <option value="rep">No, but someone can direct it for them</option>
-            <option value="no">No, and nobody can</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Any dementia or memory loss?</label>
-          <select id="pl_dementia">
-            <option value="">—</option>
-            <option value="no">No</option>
-            <option value="some">Some memory trouble</option>
-            <option value="diagnosed">Diagnosed dementia</option>
-          </select>
-        </div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Guardian or power of attorney?</label>
-          <select id="pl_dpoa">
-            <option value="">—</option>
-            <option value="none">No</option>
-            <option value="dpoa">Durable power of attorney</option>
-            <option value="guardian">Guardian</option>
-          </select>
+        <div class="form-group"><label>DCN (Medicaid number)</label><input type="text" id="pl_ndcn"></div>
+        <div class="form-group"><label>Applied for HCBS in the last 90 days?</label>
+          <select id="pl_applied90"><option value="">—</option><option value="no">No</option><option value="yes">Yes</option></select>
         </div>
-        <div class="form-group"><label>How many medications?</label>
-          <input type="text" id="pl_meds" placeholder="prescription and over the counter"></div>
       </div>
-      <div class="form-group" style="margin-bottom:9px"><label>Back-up plan &mdash; the state requires one</label>
-        <textarea id="pl_backup" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="name, relationship, phone, and what they can help with"></textarea></div>
-      <div class="form-group" style="margin-bottom:9px"><label>Doctors and other providers</label>
-        <textarea id="pl_docs" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="primary care, social worker, hospice, home health… names and numbers"></textarea></div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">Where they live</div>
+      <div class="form-row">
+        <div class="form-group"><label>Street</label><input type="text" id="pl_street"></div>
+        <div class="form-group"><label>Apt / lot</label><input type="text" id="pl_apt"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>City</label><input type="text" id="pl_city"></div>
+        <div class="form-group"><label>ZIP</label><input type="text" id="pl_zip"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Mailing address, if different</label>
+          <input type="text" id="pl_mailing" placeholder="leave blank if the same"></div>
+        <div class="form-group"><label>Alternate phone</label><input type="tel" id="pl_phone2"></div>
+      </div>
 
       <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
-        Where they are with the state</div>
+        Responsible party or guardian</div>
+      <div class="form-row">
+        <div class="form-group"><label>Contact them to schedule the assessment?</label>
+          <select id="pl_contactrp"><option value="">—</option><option value="no">No, call the consumer</option><option value="yes">Yes, call this person</option></select>
+        </div>
+        <div class="form-group"><label>Their name</label><input type="text" id="pl_rpname"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Relationship</label>
+          <select id="pl_rprel">
+            <option value="">—</option>
+            <option>Family Member</option><option>Legal Guardian</option>
+            <option>Durable Power of Attorney / Power of Attorney</option>
+            <option>Public Administrator</option><option>Other</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Their phone</label><input type="tel" id="pl_rpphone"></div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">Communication</div>
+      <div class="form-row">
+        <div class="form-group"><label>Primary language</label><input type="text" id="pl_lang" placeholder="English"></div>
+        <div class="form-group"><label>Interpreter needed?</label>
+          <select id="pl_interp"><option value="">—</option><option value="no">No</option><option value="yes">Yes</option></select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:9px"><label>Other communication needs</label>
+        <input type="text" id="pl_commneeds" placeholder="hard of hearing, non-verbal, use the daughter's phone…"></div>
+
+      <!-- A discharge inside 15 days is the one thing on this form that changes
+           how fast the state moves, so it is asked plainly rather than buried. -->
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        In hospital or a facility right now?</div>
+      <div class="form-row">
+        <div class="form-group"><label>Currently admitted?</label>
+          <select id="pl_inhosp" onchange="plHospToggle()">
+            <option value="no">No</option><option value="yes">Yes</option>
+          </select>
+        </div>
+        <div class="form-group" id="pl_hospDateGroup" style="display:none">
+          <label>Expected discharge <span style="font-weight:400;color:var(--danger)">must be within 15 days</span></label>
+          <input type="date" id="pl_dischargedate"></div>
+      </div>
+      <div class="form-row" id="pl_hospWho" style="display:none">
+        <div class="form-group"><label>Which hospital or facility</label><input type="text" id="pl_hospname"></div>
+        <div class="form-group"><label>Contact there, and phone</label><input type="text" id="pl_hospcontact"></div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">Living arrangements</div>
+      <div class="form-row">
+        <div class="form-group"><label>Marital status</label>
+          <select id="pl_marital">
+            <option value="">—</option><option>Never Married</option><option>Married</option>
+            <option>Separated</option><option>Divorced</option><option>Widowed</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Living alone?</label>
+          <select id="pl_alone"><option value="">—</option><option value="yes">Yes</option><option value="no">No</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>If not, how many adults in the house?</label><input type="number" id="pl_adults" min="0"></div>
+        <div class="form-group"><label>In an RCF or assisted living?</label>
+          <select id="pl_rcf"><option value="">—</option><option value="no">No</option><option value="yes">Yes</option></select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:9px"><label>Anyone else in the house receiving or asking for services?</label>
+        <select id="pl_otherhh"><option value="">—</option><option value="no">No</option><option value="yes">Yes</option></select></div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        Why they need help</div>
+      <div class="form-group" style="margin-bottom:9px"><label>Primary medical conditions, as they relate to needing help</label>
+        <textarea id="pl_conditions" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px"></textarea></div>
+      <div class="form-group" style="margin-bottom:9px"><label>Unmet needs <span style="font-weight:400;color:var(--gray-600)">tick all that apply</span></label>
+        <div id="pl_unmetHost" class="chipset"></div></div>
+      <div class="form-group" style="margin-bottom:9px"><label>Reason for referral <span style="font-weight:400;color:var(--gray-600)">tick all that apply</span></label>
+        <div id="pl_reasonHost" class="chipset"></div></div>
+      <div class="form-group" style="margin-bottom:9px"><label>Safety concerns <span style="font-weight:400;color:var(--gray-600)">the assessor is walking into their home</span></label>
+        <div id="pl_safetyHost" class="chipset"></div></div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">The rest of the form</div>
+      <div class="form-row">
+        <div class="form-group"><label>Who is referring them?</label><input type="text" id="pl_referrer" placeholder="name"></div>
+        <div class="form-group"><label>Referrer phone and relationship</label><input type="text" id="pl_referrerrel"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Have they or an immediate family member served in the Armed Forces?</label>
+          <select id="pl_military"><option value="">—</option><option value="no">No</option><option value="yes">Yes</option></select>
+        </div>
+        <div class="form-group"><label>If yes, want information on military services in Missouri?</label>
+          <select id="pl_militaryinfo"><option value="">—</option><option value="no">No</option><option value="yes">Yes</option></select>
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">Where they are with the state</div>
       <div class="form-row">
         <div class="form-group"><label>Referral status</label>
           <select id="pl_refstatus">
@@ -3541,9 +3623,8 @@
         or the paper <strong>HCBS-1</strong> emailed to
         <a href="mailto:HCBSCallCenterReferrals@health.mo.gov">HCBSCallCenterReferrals@health.mo.gov</a>.
         Afterwards, check where it has got to under the <strong>Referral</strong> and <strong>PCCP Request</strong>
-        tabs in Fusion, which is also where a transfer request is tracked.
-        The assessor rings once and the referral closes after 10 days of silence, so that warning is worth more to
-        a caller than anything else on this call.
+        tabs in Fusion. The assessor rings once and the referral closes after 10 days of silence, so that warning
+        is worth more to a caller than anything else on this call.
       </div>
     </div>
 
@@ -4761,6 +4842,58 @@ const PIPELINE_STATUS_LABELS = {
 const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other'];
 const PIPELINE_DONE_STATUSES = ['authorized','transfer_complete'];
 
+// ============================================================================
+// THE HCBS-1 REFERRAL, ASKED ON THE CALL
+//
+// These option lists are the form's own, verbatim, from MO 580-3377 (8-2025).
+// Not paraphrased: a coordinator ticking "Hands-On Personal Care" here and the
+// person filling the HCBS-1 afterwards must be choosing the same thing, or the
+// two records disagree and the state's version wins.
+//
+// "Personal Care (Consumer Directed)" is the one that means us.
+// ============================================================================
+const HCBS1_UNMET = ['Adult Day Care', 'Caregiver Relief (Respite)', 'Dietary',
+  'Essential Transportation', 'Hands-On Personal Care', 'Household Cleaning Related Tasks'];
+
+const HCBS1_REASON = ['Adult Day Care', 'Advanced Personal Care', 'Authorized Nurse Visits',
+  'Home Delivered Meals (Age 63+)', 'Homemaker (Age 63+)', 'Independent Living Waiver (Age 18-64)',
+  'Personal Care (Agency)', 'Personal Care (Consumer Directed)', 'Personal Care (RCF/ALF)',
+  'Respite Care (Age 63+)', 'Structured Family Caregiving Waiver'];
+
+const HCBS1_SAFETY = ['Access to Home', 'Contagious/Infectious Disease', 'Dangerous Neighborhood',
+  'History of Violent Behavior', 'Illegal Drug Activity', 'No Known Concerns', 'Pest Infestation',
+  'Structurally Unsafe Home', 'Vicious or Dangerous Animal/Pet', 'Weapons in the Home', 'Other'];
+
+function plChipset(hostId, list, key){
+  const host = document.getElementById(hostId);
+  if (!host || host.dataset.built) return;
+  host.dataset.built = '1';
+  host.innerHTML = list.map((label, i) =>
+    '<label class="chipbox"><input type="checkbox" data-' + key + '="' + i + '"> ' + label + '</label>').join('');
+}
+function plChipsBuild(){
+  plChipset('pl_unmetHost',  HCBS1_UNMET,  'unmet');
+  plChipset('pl_reasonHost', HCBS1_REASON, 'reason');
+  plChipset('pl_safetyHost', HCBS1_SAFETY, 'safety');
+}
+function plChipsRead(hostId, list, key){
+  return Array.from(document.querySelectorAll('#' + hostId + ' input[data-' + key + ']'))
+    .filter(el => el.checked).map(el => list[+el.dataset[key]]);
+}
+function plChipsClear(){
+  document.querySelectorAll('.chipset input[type=checkbox]').forEach(el => { el.checked = false; });
+}
+
+// A discharge date only matters if they are actually admitted, and the state
+// only takes the referral if it is inside 15 days.
+function plHospToggle(){
+  const on = (document.getElementById('pl_inhosp') || {}).value === 'yes';
+  const d = document.getElementById('pl_hospDateGroup');
+  const w = document.getElementById('pl_hospWho');
+  if (d) d.style.display = on ? 'block' : 'none';
+  if (w) w.style.display = on ? 'flex' : 'none';
+}
+
 function updatePipelineModalFields() {
   const type = document.getElementById('pl_type').value;
   const stateFields = document.getElementById('pl_stateFields');
@@ -4771,6 +4904,7 @@ function updatePipelineModalFields() {
   if (pccp) pccp.style.display = type === 'pccp' ? 'block' : 'none';
   const newb = document.getElementById('pl_newBlock');
   if (newb) newb.style.display = type === 'referral' ? 'block' : 'none';
+  if (type === 'referral') { plChipsBuild(); plHospToggle(); }
 }
 
 function addPipelineContact() {
@@ -4815,17 +4949,43 @@ function addPipelineContact() {
        the assessment prepared rather than ambushed, and it is the same
        information the Fusion referral wants. */
     referral: type === 'referral' ? {
-      firstName: v('pl_nfirst').trim() || null,
+      // HCBS-1, MO 580-3377. Field names follow the form so the two never drift.
       lastName: v('pl_nlast').trim() || null,
+      firstName: v('pl_nfirst').trim() || null,
+      middleInitial: v('pl_nmi').trim() || null,
       dob: v('pl_ndob') || null,
-      caller: v('pl_caller').trim() || null,
-      needs: v('pl_needs').trim() || null,
-      selfDirect: v('pl_selfdirect') || null,
-      dementia: v('pl_dementia') || null,
-      dpoa: v('pl_dpoa') || null,
-      medications: v('pl_meds').trim() || null,
-      backupPlan: v('pl_backup').trim() || null,
-      providers: v('pl_docs').trim() || null,
+      dcn: v('pl_ndcn').trim() || null,
+      appliedLast90Days: v('pl_applied90') || null,
+      street: v('pl_street').trim() || null,
+      apt: v('pl_apt').trim() || null,
+      city: v('pl_city').trim() || null,
+      zip: v('pl_zip').trim() || null,
+      mailingIfDifferent: v('pl_mailing').trim() || null,
+      altPhone: v('pl_phone2').trim() || null,
+      contactResponsibleParty: v('pl_contactrp') || null,
+      responsiblePartyName: v('pl_rpname').trim() || null,
+      responsiblePartyRelationship: v('pl_rprel') || null,
+      responsiblePartyPhone: v('pl_rpphone').trim() || null,
+      primaryLanguage: v('pl_lang').trim() || null,
+      interpreterNeeded: v('pl_interp') || null,
+      otherCommunicationNeeds: v('pl_commneeds').trim() || null,
+      inFacility: v('pl_inhosp') || null,
+      expectedDischarge: v('pl_dischargedate') || null,
+      facilityName: v('pl_hospname').trim() || null,
+      facilityContact: v('pl_hospcontact').trim() || null,
+      maritalStatus: v('pl_marital') || null,
+      livesAlone: v('pl_alone') || null,
+      adultsInHouse: v('pl_adults') || null,
+      inRcfAlf: v('pl_rcf') || null,
+      otherHouseholdMemberServices: v('pl_otherhh') || null,
+      primaryConditions: v('pl_conditions').trim() || null,
+      unmetNeeds: plChipsRead('pl_unmetHost', HCBS1_UNMET, 'unmet'),
+      reasonForReferral: plChipsRead('pl_reasonHost', HCBS1_REASON, 'reason'),
+      safetyConcerns: plChipsRead('pl_safetyHost', HCBS1_SAFETY, 'safety'),
+      referrerName: v('pl_referrer').trim() || null,
+      referrerPhoneRelationship: v('pl_referrerrel').trim() || null,
+      military: v('pl_military') || null,
+      militaryInfoWanted: v('pl_militaryinfo') || null,
       referralStatus: v('pl_refstatus') || 'none',
       warnedAboutTenDays: v('pl_warned') || null,
     } : null,
@@ -4866,9 +5026,12 @@ function addPipelineContact() {
   closeModal('addPipelineModal');
   ['pl_name','pl_phone','pl_email','pl_firstcontact','pl_followup','pl_statesubmit','pl_currentagency','pl_dcn','pl_hours','pl_notes',
    'pl_first','pl_last','pl_dob','pl_currentagency2','pl_whyswitch','pl_dcn2','pl_att_name','pl_att_phone','pl_att_email',
-   'pl_nfirst','pl_nlast','pl_ndob','pl_caller','pl_needs','pl_meds','pl_backup','pl_docs']
+   'pl_nfirst','pl_nlast','pl_nmi','pl_ndob','pl_ndcn','pl_street','pl_apt','pl_city','pl_zip','pl_mailing',
+   'pl_phone2','pl_rpname','pl_rpphone','pl_lang','pl_commneeds','pl_dischargedate','pl_hospname',
+   'pl_hospcontact','pl_adults','pl_conditions','pl_referrer','pl_referrerrel']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   ['pl_medicaid'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  plChipsClear();
   document.getElementById('pl_type').value = 'lead';
   document.getElementById('pl_stateFields').style.display = 'none';
   renderPipeline();
