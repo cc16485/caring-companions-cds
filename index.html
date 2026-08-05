@@ -3413,6 +3413,131 @@
         <span>Send them the application as soon as this is saved</span></label>
     </div>
 
+    <!-- ===================== A CALL FROM SOMEBODY NEW =====================
+         Built from the state's own assessment brochure (health.mo.gov, Nov
+         2025) and its HCBS referral page, so what we tell a caller cannot
+         contradict what the assessor then tells them.
+         The two facts that lose referrals are at the top on purpose: the
+         assessor calls ONCE, and the referral closes after 10 days. A caller
+         who has been warned answers the phone. -->
+    <div id="pl_newBlock" style="display:none">
+
+      <details style="margin:14px 0 10px;background:#F4F8FF;border:1.5px solid #CBD9EC;border-radius:8px;padding:10px 12px">
+        <summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:var(--primary-light)">
+          📞 What to say to somebody who has never heard of CDS</summary>
+        <div style="font-size:12px;line-height:1.65;color:var(--gray-700);margin-top:9px">
+          <p style="margin-bottom:7px"><strong>What the programme is.</strong> Medicaid can pay for someone to help
+          you at home. There are two ways to do it. With an agency, the agency picks, hires, trains and supervises
+          the caregiver. With <strong>Consumer Directed Services</strong>, you do: you choose the person, often
+          somebody you already know and trust, and we handle the paperwork, the payroll and the state side.</p>
+
+          <p style="margin-bottom:7px"><strong>Who it is for.</strong> To have Medicaid pay, the state has to find
+          that your care needs are <em>equal to nursing home care</em>. You also have to be able to direct your own
+          care, or have somebody legally able to direct it for you.</p>
+
+          <p style="margin-bottom:7px"><strong>Be honest about what it is not.</strong> It is not 24-hour care and
+          it is not total care. It is extra help on top of what you already have, and it only covers what you need
+          now, not what you might need later.</p>
+
+          <p style="margin-bottom:7px"><strong>What happens next.</strong> A referral goes to the state. An HCBS
+          assessor rings to arrange a visit to your home, face to face, and works out what you qualify for. You can
+          have anyone you like with you for that visit.</p>
+
+          <p style="margin-bottom:7px;background:#FEF3C7;border-radius:6px;padding:7px 9px"><strong>Say this
+          plainly, it is the bit that goes wrong.</strong> The assessor will try you <strong>once</strong>. If you
+          miss it they leave a message or send a letter and you have <strong>10 days</strong> to ring back. Miss
+          that and the referral closes and you start again. So answer unknown numbers for the next couple of weeks.</p>
+
+          <p style="margin-bottom:7px"><strong>Tell them to have ready:</strong> their MO HealthNet (Medicaid)
+          number, date of birth and Social Security number, because the assessor has to verify who they are
+          speaking to. Guardianship or power of attorney paperwork if there is any.</p>
+
+          <p style="margin-bottom:0"><strong>And ask them to name us.</strong> The assessor asks which provider
+          they want. Give the full business name and our number: <strong>Caring Companions Consumer Directed
+          Services</strong>, (417) 218-2888.</p>
+        </div>
+      </details>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        Who the consumer is</div>
+      <div class="form-row">
+        <div class="form-group"><label>First name</label><input type="text" id="pl_nfirst"></div>
+        <div class="form-group"><label>Last name</label><input type="text" id="pl_nlast"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Date of birth</label><input type="date" id="pl_ndob"></div>
+        <div class="form-group"><label>Who is calling?</label>
+          <input type="text" id="pl_caller" placeholder="the consumer, or daughter, or a social worker"></div>
+      </div>
+
+      <!-- Straight off the assessment brochure. Asking these now means the
+           consumer is prepared for the visit rather than ambushed by it, and it
+           is the same information Fusion wants for the referral. -->
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        What the assessor is going to ask them</div>
+      <div class="form-group" style="margin-bottom:9px"><label>What help do they need, and how often?</label>
+        <textarea id="pl_needs" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="bathing, meals, reminders… and roughly how long each takes"></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Can they direct their own care?</label>
+          <select id="pl_selfdirect">
+            <option value="">—</option>
+            <option value="yes">Yes</option>
+            <option value="rep">No, but someone can direct it for them</option>
+            <option value="no">No, and nobody can</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Any dementia or memory loss?</label>
+          <select id="pl_dementia">
+            <option value="">—</option>
+            <option value="no">No</option>
+            <option value="some">Some memory trouble</option>
+            <option value="diagnosed">Diagnosed dementia</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Guardian or power of attorney?</label>
+          <select id="pl_dpoa">
+            <option value="">—</option>
+            <option value="none">No</option>
+            <option value="dpoa">Durable power of attorney</option>
+            <option value="guardian">Guardian</option>
+          </select>
+        </div>
+        <div class="form-group"><label>How many medications?</label>
+          <input type="text" id="pl_meds" placeholder="prescription and over the counter"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:9px"><label>Back-up plan &mdash; the state requires one</label>
+        <textarea id="pl_backup" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="name, relationship, phone, and what they can help with"></textarea></div>
+      <div class="form-group" style="margin-bottom:9px"><label>Doctors and other providers</label>
+        <textarea id="pl_docs" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="primary care, social worker, hospice, home health… names and numbers"></textarea></div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        Where they are with the state</div>
+      <div class="form-row">
+        <div class="form-group"><label>Referral status</label>
+          <select id="pl_refstatus">
+            <option value="none">Not referred yet &mdash; we will do it</option>
+            <option value="we_did">We submitted the referral</option>
+            <option value="they_did">They referred themselves</option>
+            <option value="assessed">Already assessed, waiting on a decision</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Did we warn them about the 10 days?</label>
+          <select id="pl_warned">
+            <option value="">—</option>
+            <option value="yes">Yes, told them to answer the phone</option>
+            <option value="no">Not yet</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:4px;line-height:1.6">
+        Referral goes in online, or by phone on <strong>1-866-835-3505</strong>. The assessor rings once and the
+        referral closes after 10 days of silence, so that warning is worth more to a caller than anything else on
+        this call.
+      </div>
+    </div>
+
     <div class="form-group" style="margin-bottom:12px"><label>Notes</label>
       <textarea id="pl_notes" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="What did they say? Any concerns? Specific needs? Family contact info?"></textarea>
     </div>
@@ -4635,6 +4760,8 @@ function updatePipelineModalFields() {
   stateFields.style.display = (type === 'referral' || type === 'pccp') ? 'block' : 'none';
   agencyGroup.style.display = 'none';   // asked inside the transfer block now
   if (pccp) pccp.style.display = type === 'pccp' ? 'block' : 'none';
+  const newb = document.getElementById('pl_newBlock');
+  if (newb) newb.style.display = type === 'referral' ? 'block' : 'none';
 }
 
 function addPipelineContact() {
@@ -4646,6 +4773,10 @@ function addPipelineContact() {
   // goes on the PCCP. Let somebody save without them and it gets discovered
   // the day they try to submit it.
   let name = v('pl_name').trim();
+  if (type === 'referral' && !name) {
+    const nf = v('pl_nfirst').trim(), nl = v('pl_nlast').trim();
+    if (nf || nl) name = (nf + ' ' + nl).trim();
+  }
   if (type === 'pccp') {
     if (!first || !last) { alert('A transfer needs the consumer\'s first and last name separately, because that is what goes on the PCCP.'); return; }
     if (!v('pl_dob')) { alert('A transfer needs a date of birth. The state matches on it.'); return; }
@@ -4669,6 +4800,26 @@ function addPipelineContact() {
     hours: document.getElementById('pl_hours').value,
     notes: [{ date: new Date().toISOString().split('T')[0], text: document.getElementById('pl_notes').value.trim() }].filter(n=>n.text),
     addedAt: new Date().toISOString(),
+
+    /* A call from somebody new to the programme. These are the state's own
+       assessment questions, so asking them now means the consumer walks into
+       the assessment prepared rather than ambushed, and it is the same
+       information the Fusion referral wants. */
+    referral: type === 'referral' ? {
+      firstName: v('pl_nfirst').trim() || null,
+      lastName: v('pl_nlast').trim() || null,
+      dob: v('pl_ndob') || null,
+      caller: v('pl_caller').trim() || null,
+      needs: v('pl_needs').trim() || null,
+      selfDirect: v('pl_selfdirect') || null,
+      dementia: v('pl_dementia') || null,
+      dpoa: v('pl_dpoa') || null,
+      medications: v('pl_meds').trim() || null,
+      backupPlan: v('pl_backup').trim() || null,
+      providers: v('pl_docs').trim() || null,
+      referralStatus: v('pl_refstatus') || 'none',
+      warnedAboutTenDays: v('pl_warned') || null,
+    } : null,
     onboardingSent: false, welcomeSent: false,
 
     // Transfer-call fields. Empty on the other two types, which is fine: they
@@ -4705,7 +4856,8 @@ function addPipelineContact() {
   const saved = setData('pipeline', pipeline);
   closeModal('addPipelineModal');
   ['pl_name','pl_phone','pl_email','pl_firstcontact','pl_followup','pl_statesubmit','pl_currentagency','pl_dcn','pl_hours','pl_notes',
-   'pl_first','pl_last','pl_dob','pl_currentagency2','pl_whyswitch','pl_dcn2','pl_att_name','pl_att_phone','pl_att_email']
+   'pl_first','pl_last','pl_dob','pl_currentagency2','pl_whyswitch','pl_dcn2','pl_att_name','pl_att_phone','pl_att_email',
+   'pl_nfirst','pl_nlast','pl_ndob','pl_caller','pl_needs','pl_meds','pl_backup','pl_docs']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   ['pl_medicaid'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('pl_type').value = 'lead';
