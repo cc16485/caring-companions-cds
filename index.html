@@ -244,6 +244,26 @@
   #taxSetupModal .tax-card .form-group { justify-content: flex-start; }
   #taxSetupModal .tax-card .form-group > label[style] { margin-top: 0; }
   #taxSetupModal .modal-footer { margin: 0; padding: 12px 24px; border-top: 1px solid var(--gray-200); flex: none; background: #fff; }
+/* ADD TO PIPELINE — the referral form is thirty-five fields now, which is a
+     ribbon in a 620px box. Scoped to this modal so the other twenty are
+     untouched. The lead form is five fields and simply looks roomy; the
+     referral form uses the width in two columns. */
+  #addPipelineModal .modal { width: min(1100px, 94vw); max-width: none; max-height: 92vh;
+    display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  #addPipelineModal .modal-header { margin: 0; padding: 16px 22px 12px;
+    border-bottom: 1px solid var(--gray-200); flex: none; }
+  #addPipelineModal .apl-body { flex: 1; overflow-y: auto; padding: 14px 22px 18px; }
+  #addPipelineModal #pl_newBlock, #addPipelineModal #pl_pccpBlock { max-width: 780px; }
+  #addPipelineModal .modal-footer { margin: 0; padding: 12px 22px; border-top: 1px solid var(--gray-200);
+    flex: none; background: #fff; }
+  /* Deliberately NOT column-count. CSS columns make a form read down the left
+     and then jump back to the top on the right, so somebody filling it in tabs
+     from "ZIP" to "marital status" and back again. The width is spent on the
+     existing two-up rows instead, which keeps the reading order the order the
+     questions are asked in. */
+  @media (max-width: 900px) {
+    #addPipelineModal .modal { width: 100vw; max-height: 100vh; border-radius: 0; }
+  }
   .chipset{display:flex;flex-wrap:wrap;gap:6px;}
   .chipbox{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:400;
     background:#fff;border:1.5px solid var(--gray-300);border-radius:7px;padding:6px 10px;cursor:pointer;}
@@ -3275,11 +3295,12 @@
 
 <!-- Pipeline Modal -->
 <div class="modal-overlay" id="addPipelineModal">
-  <div class="modal" style="width:620px">
+  <div class="modal">
     <div class="modal-header">
       <div class="modal-title">Add to pipeline &mdash; <span id="addPipelineTitle" style="font-weight:600;color:var(--gray-600)"></span></div>
       <button class="modal-close" onclick="closeModal('addPipelineModal')">×</button>
     </div>
+    <div class="apl-body">
     <div class="form-row">
       <div class="form-group"><label>Full Name *</label><input type="text" id="pl_name" placeholder="Potential consumer's name"></div>
       <div class="form-group"><label>Type *</label>
@@ -3639,6 +3660,7 @@
     <div class="form-group" style="margin-bottom:12px"><label>Notes</label>
       <textarea id="pl_notes" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="What did they say? Any concerns? Specific needs? Family contact info?"></textarea>
     </div>
+</div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('addPipelineModal')">Cancel</button>
       <button class="btn btn-primary" onclick="addPipelineContact()">Save to Pipeline</button>
