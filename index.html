@@ -3331,6 +3331,88 @@
         <div class="form-group"><label>Authorized Hours/Week (if known)</label><input type="number" id="pl_hours" placeholder="e.g. 20"></div>
       </div>
     </div>
+    <!-- ===================== A TRANSFER CALL =====================
+         Somebody already in CDS, ringing to move to us. They are already
+         accepted in the programme, so almost nothing needs asking: the state
+         needs a name and a date of birth for the PCCP, and everything else is
+         notes about their situation. Asking a transfer caller the full referral
+         questionnaire is how you lose them to the agency that did not. -->
+    <div id="pl_pccpBlock" style="display:none">
+      <div style="font-size:12px;font-weight:700;color:var(--warn);margin:14px 0 6px">
+        What the state needs for the PCCP</div>
+      <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
+        Only three things, and they have to match MO HealthNet exactly. Everything else on this call is notes.
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Consumer first name *</label><input type="text" id="pl_first"></div>
+        <div class="form-group"><label>Consumer last name *</label><input type="text" id="pl_last"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Date of birth *</label><input type="date" id="pl_dob"></div>
+        <div class="form-group"><label>Who are they with now?</label>
+          <input type="text" id="pl_currentagency2" placeholder="the agency they are leaving"></div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        Where they are in deciding</div>
+      <div class="form-row">
+        <div class="form-group"><label>Ready to switch?</label>
+          <select id="pl_readiness">
+            <option value="ready">Wants to switch to us now</option>
+            <option value="shopping">Calling around, still deciding</option>
+            <option value="unsure">Unsure, wants to think about it</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Why are they leaving?</label>
+          <input type="text" id="pl_whyswitch" placeholder="in their words"></div>
+      </div>
+
+      <!-- eMOMED comes before Fusion, always. Putting a PCCP in for somebody
+           whose Medicaid has lapsed wastes weeks and the consumer finds out
+           from the state rather than from us. -->
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        eMOMED check &mdash; do this before anything goes into Fusion</div>
+      <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
+        Confirm their Medicaid is active and take the DCN from eMOMED, not from what they tell you on the phone.
+        Save the PDF: it is the proof we checked.
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Medicaid status in eMOMED</label>
+          <select id="pl_medicaid">
+            <option value="">Not checked yet</option>
+            <option value="active">Active</option>
+            <option value="inactive">Not active &mdash; do not submit</option>
+          </select>
+        </div>
+        <div class="form-group"><label>DCN from eMOMED</label>
+          <input type="text" id="pl_dcn2" placeholder="Medicaid ID"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>eMOMED screenshot or PDF</label>
+        <input type="file" id="pl_emomedProof" accept="application/pdf,image/*" style="font-size:12px">
+        <div id="pl_emomedStatus" style="font-size:11.5px;margin-top:5px"></div>
+      </div>
+
+      <!-- The attendant is half the transfer and the half that stalls it. Their
+           details taken on this call means the application goes out today
+           rather than after somebody remembers to ring back for an email. -->
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
+        Their attendant</div>
+      <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
+        Who is going to be paid to care for them. With an email we can send the application while you are still
+        on the phone.
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Attendant full name</label><input type="text" id="pl_att_name"></div>
+        <div class="form-group"><label>Attendant phone</label><input type="tel" id="pl_att_phone"></div>
+      </div>
+      <div class="form-group" style="margin-bottom:6px"><label>Attendant email</label>
+        <input type="email" id="pl_att_email" placeholder="the application goes here"></div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;font-size:12.5px;margin-bottom:4px">
+        <input type="checkbox" id="pl_att_send" checked>
+        <span>Send them the application as soon as this is saved</span></label>
+    </div>
+
     <div class="form-group" style="margin-bottom:12px"><label>Notes</label>
       <textarea id="pl_notes" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="What did they say? Any concerns? Specific needs? Family contact info?"></textarea>
     </div>
@@ -4549,13 +4631,26 @@ function updatePipelineModalFields() {
   const type = document.getElementById('pl_type').value;
   const stateFields = document.getElementById('pl_stateFields');
   const agencyGroup = document.getElementById('pl_currentAgencyGroup');
+  const pccp = document.getElementById('pl_pccpBlock');
   stateFields.style.display = (type === 'referral' || type === 'pccp') ? 'block' : 'none';
-  agencyGroup.style.display = type === 'pccp' ? 'block' : 'none';
+  agencyGroup.style.display = 'none';   // asked inside the transfer block now
+  if (pccp) pccp.style.display = type === 'pccp' ? 'block' : 'none';
 }
 
 function addPipelineContact() {
-  const name = document.getElementById('pl_name').value.trim();
   const type = document.getElementById('pl_type').value;
+  const v = id => (document.getElementById(id) || {}).value || '';
+  const first = v('pl_first').trim(), last = v('pl_last').trim();
+
+  // A transfer needs the name split and a date of birth, because that is what
+  // goes on the PCCP. Let somebody save without them and it gets discovered
+  // the day they try to submit it.
+  let name = v('pl_name').trim();
+  if (type === 'pccp') {
+    if (!first || !last) { alert('A transfer needs the consumer\'s first and last name separately, because that is what goes on the PCCP.'); return; }
+    if (!v('pl_dob')) { alert('A transfer needs a date of birth. The state matches on it.'); return; }
+    if (!name) name = first + ' ' + last;
+  }
   if (!name) { alert('Name is required.'); return; }
   const newId = Date.now().toString();
   const pipeline = getData('pipeline');
@@ -4574,12 +4669,45 @@ function addPipelineContact() {
     hours: document.getElementById('pl_hours').value,
     notes: [{ date: new Date().toISOString().split('T')[0], text: document.getElementById('pl_notes').value.trim() }].filter(n=>n.text),
     addedAt: new Date().toISOString(),
-    onboardingSent: false, welcomeSent: false
+    onboardingSent: false, welcomeSent: false,
+
+    // Transfer-call fields. Empty on the other two types, which is fine: they
+    // are asked only where they mean something.
+    firstName: first || null,
+    lastName: last || null,
+    dob: v('pl_dob') || null,
+    leavingAgency: v('pl_currentagency2').trim() || null,
+    readiness: type === 'pccp' ? v('pl_readiness') : null,
+    whySwitching: v('pl_whyswitch').trim() || null,
+    medicaidStatus: v('pl_medicaid') || null,
+    attendant: (v('pl_att_name').trim() || v('pl_att_email').trim() || v('pl_att_phone').trim()) ? {
+      name: v('pl_att_name').trim() || null,
+      email: v('pl_att_email').trim() || null,
+      phone: v('pl_att_phone').trim() || null,
+      applicationSent: null,
+      applicationBack: null,
+      backgroundClear: null,
+      inEmpeon: null,
+      wellskyReady: null,
+    } : null,
+    transfer: type === 'pccp' ? { emomedChecked: v('pl_medicaid') ? new Date().toISOString().slice(0,10) : null } : null,
   };
+  if (v('pl_dcn2').trim()) newContact.dcn = v('pl_dcn2').trim();
+
+  /* Medicaid not active is the one thing worth stopping for. A PCCP submitted
+     for somebody whose coverage has lapsed costs weeks, and the consumer hears
+     it from the state instead of from us. */
+  if (type === 'pccp' && v('pl_medicaid') === 'inactive' &&
+      !confirm('eMOMED says their Medicaid is not active.\n\nSave them to the pipeline anyway? Do not put the PCCP into Fusion until coverage is sorted out, or the request will be refused and they will wait weeks to find out.')) {
+    return;
+  }
   pipeline.unshift(newContact);
   const saved = setData('pipeline', pipeline);
   closeModal('addPipelineModal');
-  ['pl_name','pl_phone','pl_email','pl_firstcontact','pl_followup','pl_statesubmit','pl_currentagency','pl_dcn','pl_hours','pl_notes'].forEach(id => document.getElementById(id).value = '');
+  ['pl_name','pl_phone','pl_email','pl_firstcontact','pl_followup','pl_statesubmit','pl_currentagency','pl_dcn','pl_hours','pl_notes',
+   'pl_first','pl_last','pl_dob','pl_currentagency2','pl_whyswitch','pl_dcn2','pl_att_name','pl_att_phone','pl_att_email']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['pl_medicaid'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('pl_type').value = 'lead';
   document.getElementById('pl_stateFields').style.display = 'none';
   renderPipeline();
