@@ -9,9 +9,19 @@
 // WHAT CANNOT BE AUTOMATED, AND IS NOT PRETENDED OTHERWISE
 // eMOMED has no API, so somebody logs in and looks. Fusion has no API, so
 // somebody types the PCCP in. The state rings the consumer on its own schedule.
-// Background checks and Empeon are other people's systems. WellSky has to be
-// installed by the attendant on their own phone. All of those stay manual, and
-// this function's job is to chase them, not to claim them.
+// Background checks are other people's systems. WellSky has to be installed by
+// the attendant on their own phone.
+//
+// And Empeon is manual: somebody in the office invites each attendant by hand,
+// and Empeon is where the whole hiring pack lives, the application, W-4, I-9,
+// direct deposit, the contract and the consent to run a criminal record check.
+// There is deliberately NO second application: duplicating those consents in
+// another system would leave two signed versions of the same legal statements
+// and a real question at audit about which one governs.
+//
+// So the attendant is never told to expect anything until the office has
+// actually invited them. Chasing the office first, and the attendant second, is
+// the whole shape of the attendant half of this.
 //
 // THE TRANSFER DATE IS FIRM. BEING PAID IS THE PART THAT IS NOT.
 // The state's start date for a transfer is set in stone: on that day the
@@ -233,39 +243,69 @@ Deno.serve(async (req) => {
         continue        // nothing else about this transfer is sendable yet
       }
 
-      // ---- the attendant's application. This is the piece that quietly stalls.
-      if (a && a.backgroundResult !== 'failed' && a.email && !a.applicationSent) {
-        if (await act('attApplicationSent', { name: a.name, phone: a.phone, email: a.email },
-          'attendant on file, application never sent',
-          `Hi ${String(a.name || '').split(' ')[0] || 'there'}, Caring Companions CDS here. ` +
-          `${p.name} has asked for you to be their paid caregiver. Here is your application: ${ONBOARDING} ` +
-          `Any questions, ring us on ${OFFICE}.`,
-          'Your application to be a paid caregiver',
-          `<p>Hi ${String(a.name || '').split(' ')[0] || 'there'},</p>` +
-          `<p><b>${p.name}</b> has asked for you to be their paid caregiver through Caring Companions.</p>` +
-          `<p><a href="${ONBOARDING}">Start your application</a></p>` +
-          `<p>Once it is back we run your background checks, and then you can be paid.</p>`)) {
-          if (!dry && !quiet) { a.applicationSent = new Date().toISOString(); touched = true }
+      /* ---- the attendant. Nothing reaches them until the office has invited
+              them into Empeon, because promising somebody an email that never
+              arrives is worse than saying nothing. So the office is chased
+              first. */
+      if (a && (a.email || a.phone) && a.backgroundResult !== 'failed' && !a.empeonInvited
+          && !t.askedOfficeToInvite) {
+        const why = `${a.name || 'the attendant'} for ${p.name} has not been invited into Empeon yet`
+        plan.push({ who: OFFICE_ALERTS.join(', '), what: 'askedOfficeToInvite', why })
+        if (!dry) {
+          if (await tellOffice(`Invite ${a.name || 'an attendant'} into Empeon — for ${p.name}`,
+            `<p><b>${p.name}</b> has nominated <b>${a.name || 'an attendant'}</b> as their paid caregiver.</p>` +
+            `<p>Nothing has been sent to them, because Empeon invites are manual and there is no point promising ` +
+            `an email nobody has sent. Please invite them:</p>` +
+            `<p>${a.name ? '<b>' + a.name + '</b><br>' : ''}` +
+            `${a.email ? 'Email: ' + a.email + '<br>' : ''}${a.phone ? 'Phone: ' + a.phone : ''}</p>` +
+            `<p>Empeon carries the application, W-4, I-9, direct deposit, the contract and the consent to run ` +
+            `their criminal record check, so <b>the checks cannot start until that pack comes back signed</b>.</p>` +
+            `<p>Tick "invited to Empeon" on their profile once it is done and they will be told to watch for it.` +
+            `${t.startDate ? ` The transfer lands on ${t.startDate} either way.` : ''}</p>`)) {
+            t.askedOfficeToInvite = new Date().toISOString(); touched = true; sent++
+          }
+        }
+        continue
+      }
+
+      // ---- invited. Now they can be told, because there is something coming.
+      if (a && a.empeonInvited && !a.toldAboutEmpeon && a.backgroundResult !== 'failed') {
+        const attFirst = String(a.name || '').split(' ')[0] || 'there'
+        if (await act('attToldAboutEmpeon', { name: a.name, phone: a.phone, email: a.email },
+          'invited to Empeon, not told to look for it',
+          `Hi ${attFirst}, Caring Companions CDS. ${p.name} has asked for you to be their paid caregiver. ` +
+          `Watch for an email from Empeon with your hiring paperwork and please finish it, we cannot run your ` +
+          `checks or pay you until it is done. Stuck on any of it, ring ${OFFICE}.`,
+          'Your hiring paperwork is on its way',
+          `<p>Hi ${attFirst},</p><p><b>${p.name}</b> has asked for you to be their paid caregiver through ` +
+          `Caring Companions.</p>` +
+          `<p><b>Watch for an email from Empeon.</b> It has your application, W-4, I-9, direct deposit details ` +
+          `and the consent we need to run your background check. Check your junk folder if it has not arrived.</p>` +
+          `<p>We cannot run your checks or pay you until that pack comes back signed, so it is the one thing ` +
+          `worth doing today.</p>` +
+          `<p>If any of it is confusing, ring us on ${OFFICE} and we will go through it with you.</p>`)) {
+          if (!dry && !quiet) { a.toldAboutEmpeon = new Date().toISOString(); touched = true }
           continue
         }
       }
 
-      // ---- sent, and nothing back. Chase once at four days, once at nine.
-      if (a && a.backgroundResult !== 'failed' && a.applicationSent && !a.applicationBack) {
-        const days = daysBetween(TODAY(), String(a.applicationSent).slice(0, 10))
+      // ---- invited, told, and the pack still is not back. Chase at 4 and 9.
+      if (a && a.empeonInvited && a.backgroundResult !== 'failed' && !a.paperworkBack) {
+        const days = daysBetween(TODAY(), String(a.empeonInvited).slice(0, 10))
         const step = days >= 9 && !t.attChase2 ? 'attChase2'
                    : days >= 4 && !t.attChase1 ? 'attChase1' : null
         if (step) {
+          const attFirst = String(a.name || '').split(' ')[0] || 'there'
           if (await act(step, { name: a.name, phone: a.phone, email: a.email },
-            `attendant application ${days} days out, nothing back`,
-            `Hi ${String(a.name || '').split(' ')[0] || 'there'}, Caring Companions CDS. We still need your ` +
-            `application before you can be paid for looking after ${p.name}: ${ONBOARDING} ` +
-            `Stuck on any of it? Ring us on ${OFFICE} and we will do it with you.`,
-            'We still need your application',
-            `<p>Hi ${String(a.name || '').split(' ')[0] || 'there'},</p>` +
-            `<p>We cannot pay you for looking after <b>${p.name}</b> until your application is back.</p>` +
-            `<p><a href="${ONBOARDING}">Finish your application</a></p>` +
-            `<p>If any of it is confusing, ring us and we will fill it in with you.</p>`)) continue
+            `Empeon pack ${days} days out, nothing back`,
+            `Hi ${attFirst}, Caring Companions CDS. Your Empeon hiring paperwork is still outstanding and we ` +
+            `cannot pay you for looking after ${p.name} until it is done. Check your junk folder, or ring ` +
+            `${OFFICE} and we will do it with you.`,
+            'We still need your hiring paperwork',
+            `<p>Hi ${attFirst},</p><p>Your hiring paperwork in Empeon is still outstanding.</p>` +
+            `<p>We cannot run your background check or pay you for looking after <b>${p.name}</b> until it comes ` +
+            `back signed. If the email never arrived, check your junk folder.</p>` +
+            `<p>Ring ${OFFICE} and we will sit and do it with you over the phone. It is quicker than it looks.</p>`)) continue
         }
       }
 
@@ -314,7 +354,8 @@ Deno.serve(async (req) => {
               `<p>Outstanding: ${[
                 !t.onboardingSigned && 'consumer paperwork',
                 !t.orientationDone && 'consumer orientation',
-                a && !a.applicationBack && 'attendant application',
+                a && !a.empeonInvited && 'attendant not invited to Empeon',
+                a && a.empeonInvited && !a.paperworkBack && 'Empeon hiring pack',
                 a && a.backgroundResult !== 'clear' && 'background check',
                 a && !a.wellskyReady && 'WellSky app',
               ].filter(Boolean).join(', ') || 'nothing obvious, check the profile'}.</p>`)) {

@@ -3458,9 +3458,12 @@
       </div>
       <div class="form-group" style="margin-bottom:6px"><label>Attendant email</label>
         <input type="email" id="pl_att_email" placeholder="the application goes here"></div>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;font-size:12.5px;margin-bottom:4px">
-        <input type="checkbox" id="pl_att_send" checked>
-        <span>Send them the application as soon as this is saved</span></label>
+      <div style="font-size:11.5px;color:var(--gray-600);background:var(--gray-100);border-radius:6px;padding:8px 10px;line-height:1.6;margin-bottom:4px">
+        Nothing is sent to them from here. Empeon invites are done by hand, so the office gets an email asking
+        for this one to be invited, and the attendant only hears from us once that has actually happened. Empeon
+        carries the application, W-4, I-9, direct deposit and the consent to run their background check, which is
+        why <strong>the checks cannot start until that pack comes back</strong>.
+      </div>
     </div>
 
     <!-- ===================== A CALL FROM SOMEBODY NEW =====================
@@ -5066,10 +5069,10 @@ function addPipelineContact() {
       name: v('pl_att_name').trim() || null,
       email: v('pl_att_email').trim() || null,
       phone: v('pl_att_phone').trim() || null,
-      applicationSent: null,
-      applicationBack: null,
-      backgroundClear: null,
-      inEmpeon: null,
+      empeonInvited: null,
+      toldAboutEmpeon: null,
+      paperworkBack: null,
+      backgroundResult: null,
       wellskyReady: null,
     } : null,
     transfer: type === 'pccp' ? { emomedChecked: v('pl_medicaid') ? new Date().toISOString().slice(0,10) : null } : null,
@@ -5234,8 +5237,9 @@ function openLeadProfile(id){
 const NUDGE_LOG = [
   ['toldSubmitted',          'Told them the request is with the state'],
   ['toldStartDate',          'Told them their start date'],
-  ['attApplicationSent',     'Sent the attendant their application'],
-  ['attChase1',              'Chased the attendant about the application'],
+  ['askedOfficeToInvite',    '⚠️ Asked the office to invite the attendant into Empeon'],
+  ['attToldAboutEmpeon',     'Told the attendant to watch for the Empeon email'],
+  ['attChase1',              'Chased the attendant about the Empeon pack'],
   ['attChase2',              'Chased the attendant again'],
   ['toldReadyToWork',        'Told the attendant they are cleared to be paid'],
   ['chaseOnboarding',        'Chased the consumer for paperwork'],
@@ -5254,10 +5258,13 @@ const XFER_STEPS = [
   ['orientationDone', 'Consumer orientation done'],
   ['readyToWork',     'Ready to Work — attendant cleared to be paid'],
 ];
+/* Empeon is manual and Empeon is where the whole hiring pack lives, so this is
+   the real sequence: somebody invites them, they finish it, then the checks can
+   be run. There is no separate application, on purpose. */
 const ATT_STEPS = [
-  ['applicationSent', 'Application sent'],
-  ['applicationBack', 'Application came back'],
-  ['inEmpeon',        'Entered in Empeon'],
+  ['empeonInvited',   'Invited into Empeon'],
+  ['toldAboutEmpeon', 'Told to watch for it'],
+  ['paperworkBack',   'Empeon hiring pack came back signed'],
   ['wellskyReady',    'Has WellSky and can clock in and out'],
 ];
 
