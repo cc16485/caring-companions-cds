@@ -813,6 +813,23 @@
   <div id="prof_body"></div>
 </div>
 
+<!-- ==================== LEAD / TRANSFER PROFILE ====================
+     One page per person, because a transfer is no longer a table row: it has a
+     dozen dated steps, an attendant with their own hiring sequence, the HCBS-1
+     answers, an eMOMED PDF, and a record of everything the automation has
+     already said to them.
+     That last part is why this exists. Without it a coordinator rings a family
+     about paperwork they were texted about an hour ago. -->
+<div id="page-leadprofile" class="page">
+  <div class="section-header">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="showPage('consumers');showConsumerTab('pipeline')" style="font-size:12px">← Back to pipeline</button>
+    </div>
+    <button class="btn btn-outline" onclick="renderLeadProfile()" style="font-size:12px">↻ Refresh</button>
+  </div>
+  <div id="lprof_body"></div>
+</div>
+
 <!-- ==================== AUTHORIZATIONS ==================== -->
 <div id="page-authorizations" class="page">
   <div class="section-header">
@@ -5195,6 +5212,213 @@ async function importWebsiteLeads() {
   return fresh.length;
 }
 
+// ============================================================================
+// LEAD / TRANSFER PROFILE
+//
+// The checklist here writes exactly the fields transfer-nudge reads. That is the
+// contract between the two: a coordinator ticking "submitted to Fusion" is what
+// causes the consumer to be told, and there is no second copy of the truth.
+//
+// The sent-log is built from the automation's own markers rather than a separate
+// log table, so it cannot disagree with what was actually sent.
+// ============================================================================
+let _lprofId = null;
+
+function openLeadProfile(id){
+  _lprofId = id;
+  showPage('leadprofile');
+  renderLeadProfile();
+}
+
+// Every message the automation can send, and what it means in English.
+const NUDGE_LOG = [
+  ['toldSubmitted',          'Told them the request is with the state'],
+  ['toldStartDate',          'Told them their start date'],
+  ['attApplicationSent',     'Sent the attendant their application'],
+  ['attChase1',              'Chased the attendant about the application'],
+  ['attChase2',              'Chased the attendant again'],
+  ['toldReadyToWork',        'Told the attendant they are cleared to be paid'],
+  ['chaseOnboarding',        'Chased the consumer for paperwork'],
+  ['chaseOrientation',       'Chased the consumer for orientation'],
+  ['chaseWellsky',           'Chased the attendant about the WellSky app'],
+  ['notReadyFlagged',        '⚠️ Flagged to the office: attendant not cleared and the date is close'],
+  ['attendantFailedFlagged', '⛔ Flagged to the office: background check failed, needs a different attendant'],
+];
+
+// The steps a person does. Order is the order they happen in.
+const XFER_STEPS = [
+  ['emomedChecked',   'eMOMED checked, Medicaid active'],
+  ['fusionSubmitted', 'PCCP request entered in Fusion'],
+  ['startDate',       'Start date from the state'],
+  ['onboardingSigned','Consumer paperwork signed'],
+  ['orientationDone', 'Consumer orientation done'],
+  ['readyToWork',     'Ready to Work — attendant cleared to be paid'],
+];
+const ATT_STEPS = [
+  ['applicationSent', 'Application sent'],
+  ['applicationBack', 'Application came back'],
+  ['inEmpeon',        'Entered in Empeon'],
+  ['wellskyReady',    'Has WellSky and can clock in and out'],
+];
+
+function lpDate(v){ return v ? String(v).slice(0,10) : ''; }
+function lpWhen(v){
+  if(!v) return '';
+  const d = new Date(v);
+  return isNaN(d) ? String(v).slice(0,10)
+    : d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
+      d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+
+function renderLeadProfile(){
+  const host = document.getElementById('lprof_body'); if(!host) return;
+  const p = getData('pipeline').find(x => x.id === _lprofId);
+  if(!p){ host.innerHTML = '<div class="field-note">That record is gone.</div>'; return; }
+
+  const t = p.transfer || {}, a = p.attendant || null, R = p.referral || null;
+  const TYPE = { lead:'Lead, still deciding', referral:'New to CDS', pccp:'Transferring to us' };
+
+  const row = (label, val) => val
+    ? '<div style="display:flex;gap:10px;padding:4px 0;font-size:13px"><span style="color:var(--gray-600);min-width:150px">' +
+      esc(label) + '</span><span>' + esc(val) + '</span></div>' : '';
+
+  // ---- the call ----
+  let html = '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
+    '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">' +
+      '<h2 style="font-size:20px;color:var(--primary);margin:0">' + esc(p.name || 'Unnamed') + '</h2>' +
+      '<span class="badge" style="background:var(--gray-100)">' + esc(TYPE[p.type] || p.type) + '</span>' +
+      (p.status ? '<span class="badge" style="background:var(--gray-100)">' + esc(p.status) + '</span>' : '') +
+    '</div>' +
+    row('Phone', p.phone) + row('Email', p.email) + row('County', p.county) +
+    row('Date of birth', lpDate(p.dob || (R && R.dob))) + row('DCN', p.dcn || (R && R.dcn)) +
+    row('First contact', p.firstContact) + row('Heard about us', p.source) +
+    row('Leaving', p.leavingAgency) + row('Why switching', p.whySwitching) +
+    row('Where they are', ({ready:'Wants to switch now', shopping:'Calling around', unsure:'Unsure'})[p.readiness]) +
+    '</div>';
+
+  // ---- what the automation has already said. Top of the page on purpose. ----
+  const said = NUDGE_LOG.filter(([k]) => t[k]);
+  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;border-left:4px solid var(--accent)">' +
+    '<b style="color:var(--primary)">What we have already sent them</b>' +
+    '<div class="field-note" style="margin:3px 0 8px">Check this before you ring. It is built from what the ' +
+      'automation actually sent, not a separate list.</div>' +
+    (said.length
+      ? said.map(([k, label]) =>
+          '<div style="display:flex;gap:10px;padding:3px 0;font-size:13px">' +
+          '<span style="color:var(--gray-600);min-width:110px">' + esc(lpWhen(t[k])) + '</span>' +
+          '<span>' + label + '</span></div>').join('')
+      : '<div class="field-note">Nothing sent automatically yet.</div>') +
+    '</div>';
+
+  // ---- the transfer, if it is one ----
+  if(p.type === 'pccp'){
+    html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
+      '<b style="color:var(--primary)">Getting them transferred</b>' +
+      '<div class="field-note" style="margin:3px 0 10px">Dating a step here is what sets the automation off. ' +
+        'Fusion submitted tells the consumer what happens next; a start date tells them the date; ' +
+        'Ready to Work tells the attendant they can be paid.</div>' +
+      XFER_STEPS.map(([k, label]) =>
+        '<div style="display:flex;gap:10px;align-items:center;padding:5px 0;flex-wrap:wrap">' +
+        '<span style="min-width:250px;font-size:13px' + (t[k] ? ';color:var(--success);font-weight:600' : '') + '">' +
+          (t[k] ? '✓ ' : '○ ') + label + '</span>' +
+        '<input type="date" value="' + esc(lpDate(t[k])) + '" style="font-size:12px;padding:4px 7px" ' +
+          'onchange="lpSetStep(\'transfer\',\'' + k + '\',this.value)">' +
+        '</div>').join('') +
+      '</div>';
+  }
+
+  // ---- their attendant ----
+  if(a){
+    const failed = a.backgroundResult === 'failed';
+    html += '<div class="card" style="padding:18px 20px;margin-bottom:14px' +
+      (failed ? ';border-left:4px solid var(--danger)' : '') + '">' +
+      '<b style="color:var(--primary)">Their attendant</b>' +
+      row('Name', a.name) + row('Phone', a.phone) + row('Email', a.email) +
+      '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;flex-wrap:wrap">' +
+        '<span style="min-width:250px;font-size:13px">Background check</span>' +
+        '<select style="font-size:12px;padding:4px 7px" onchange="lpSetBackground(this.value)">' +
+          ['', 'clear', 'failed'].map(v => '<option value="' + v + '"' +
+            ((a.backgroundResult || '') === v ? ' selected' : '') + '>' +
+            (v === '' ? 'not back yet' : v === 'clear' ? 'came back clear' : 'failed') + '</option>').join('') +
+        '</select>' +
+        (failed ? '<span class="badge" style="background:#FEE2E2;color:#991B1B">they need a different attendant</span>' : '') +
+      '</div>' +
+      ATT_STEPS.map(([k, label]) =>
+        '<div style="display:flex;gap:10px;align-items:center;padding:5px 0;flex-wrap:wrap">' +
+        '<span style="min-width:250px;font-size:13px' + (a[k] ? ';color:var(--success);font-weight:600' : '') + '">' +
+          (a[k] ? '✓ ' : '○ ') + label + '</span>' +
+        '<input type="date" value="' + esc(lpDate(a[k])) + '" style="font-size:12px;padding:4px 7px" ' +
+          'onchange="lpSetStep(\'attendant\',\'' + k + '\',this.value)">' +
+        '</div>').join('') +
+      '<div class="field-note" style="margin-top:6px">No clock in and out on WellSky means those hours cannot ' +
+        'be paid, and it cannot be fixed afterwards. That is why it is on this list.</div>' +
+      '</div>';
+  }
+
+  // ---- the HCBS-1 answers, if this was a referral call ----
+  if(R){
+    const list = v => Array.isArray(v) && v.length ? v.join(', ') : '';
+    html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
+      '<b style="color:var(--primary)">What they told us for the HCBS-1</b>' +
+      row('Address', [R.street, R.apt, R.city, R.zip].filter(Boolean).join(', ')) +
+      row('Responsible party', [R.responsiblePartyName, R.responsiblePartyRelationship].filter(Boolean).join(' — ')) +
+      row('Their phone', R.responsiblePartyPhone) +
+      row('Language', R.primaryLanguage) + row('Interpreter', R.interpreterNeeded) +
+      row('Communication needs', R.otherCommunicationNeeds) +
+      row('In a facility', R.inFacility === 'yes' ? 'Yes, discharge ' + (R.expectedDischarge || 'unknown') : '') +
+      row('Marital status', R.maritalStatus) + row('Lives alone', R.livesAlone) +
+      row('Adults in house', R.adultsInHouse) + row('RCF / assisted living', R.inRcfAlf) +
+      row('Conditions', R.primaryConditions) +
+      row('Unmet needs', list(R.unmetNeeds)) +
+      row('Reason for referral', list(R.reasonForReferral)) +
+      row('Safety concerns', list(R.safetyConcerns)) +
+      row('Referrer', [R.referrerName, R.referrerPhoneRelationship].filter(Boolean).join(' — ')) +
+      row('Armed forces', R.military) +
+      row('Warned about the 10 days', R.warnedAboutTenDays) +
+      '</div>';
+  }
+
+  // ---- notes ----
+  const notes = Array.isArray(p.notes) ? p.notes : [];
+  html += '<div class="card" style="padding:18px 20px">' +
+    '<b style="color:var(--primary)">Notes</b>' +
+    (notes.length
+      ? notes.map(n => '<div style="padding:6px 0;font-size:13px;border-bottom:1px solid var(--gray-200)">' +
+          '<span style="color:var(--gray-600)">' + esc(n.date || '') + '</span> ' + esc(n.text || '') + '</div>').join('')
+      : '<div class="field-note">No notes yet.</div>') +
+    '</div>';
+
+  host.innerHTML = html;
+}
+
+/* Writing a date is the trigger, so it saves immediately rather than waiting for
+   a Save button somebody might not press. */
+function lpSetStep(where, key, value){
+  const list = getData('pipeline');
+  const p = list.find(x => x.id === _lprofId);
+  if(!p) return;
+  if(where === 'attendant'){
+    if(!p.attendant) return;
+    p.attendant[key] = value || null;
+  } else {
+    p.transfer = p.transfer || {};
+    p.transfer[key] = value || null;
+  }
+  setData('pipeline', list);
+  renderLeadProfile();
+}
+
+function lpSetBackground(value){
+  const list = getData('pipeline');
+  const p = list.find(x => x.id === _lprofId);
+  if(!p || !p.attendant) return;
+  p.attendant.backgroundResult = value || null;
+  // Clearing a check is not the same as being ready to work: the paperwork still
+  // has to be in, so that stays a separate deliberate tick.
+  setData('pipeline', list);
+  renderLeadProfile();
+}
+
 function renderPipeline() {
   const pipeline = getData('pipeline');
   const now = new Date();
@@ -5274,6 +5498,7 @@ function renderPipeline() {
           ${isDone?'<button class="btn btn-sm btn-success" onclick="convertToConsumer(\''+p.id+'\')" style="width:100%;font-size:11px;margin-bottom:3px">→ Move to Consumers</button>':''}
           ${p.type==='lead'?`<button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','lead_welcome')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--primary)">${p.welcomeSent?'✓ Welcome Sent':'📤 Send Welcome'}</button>`:''}
           ${(p.type==='referral'||p.type==='pccp')?`<button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','consumer_onboarding')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--accent)">${p.onboardingSent?'✓ Onboarding Sent':'📤 Send Onboarding'}</button>`:''}
+          <button class="btn btn-sm btn-outline" onclick="openLeadProfile('${p.id}')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--primary-light);font-weight:700">👤 Open profile</button>
           <button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','app_sent')" style="width:100%;font-size:10px;color:var(--gray-600)">📦 Packet Sent</button>
         </td>
       </tr>`;
