@@ -13,16 +13,17 @@
 // installed by the attendant on their own phone. All of those stay manual, and
 // this function's job is to chase them, not to claim them.
 //
-// THE START DATE IS NOT THE GO-LIVE. READY TO WORK IS.
-// The state approving a transfer and giving a date does not mean anybody starts
-// on it. The attendant still has to clear their background check, and everybody
-// still has to finish their paperwork. Either can fail: a failed check means
-// finding a different attendant altogether, not waiting a bit longer.
+// THE TRANSFER DATE IS FIRM. BEING PAID IS THE PART THAT IS NOT.
+// The state's start date for a transfer is set in stone: on that day the
+// consumer is ours. What is not settled is whether their chosen attendant can
+// be PAID yet, because that waits on a background check clearing.
 //
-// So the state's date is told as a TARGET, never as a promise, and the only
-// message that says "you are starting" is the one sent after Ready to Work.
-// Getting this wrong means telling a family a date, them giving notice to their
-// current agency, and then nobody turning up.
+// So the transfer date is told plainly, as fact. The thing chased hard is the
+// attendant's clearance before it, for one reason: an attendant who starts
+// working before they are cleared does not get paid for those hours, and it
+// cannot be fixed afterwards. That falls on somebody earning very little to
+// look after somebody's mother, so the message says it in those words rather
+// than in the language of compliance.
 //
 // WHAT IS AUTOMATED
 //   the telling    every time the transfer moves, the people affected hear
@@ -146,36 +147,41 @@ Deno.serve(async (req) => {
 
       // ---- the start date exists. That is the date everything else hangs on.
       if (t.startDate && !t.toldStartDate) {
-        if (await act('toldStartDate', consumer, 'target date received, consumer not told',
-          `Hi ${first}, the state has approved your transfer and given a target date of ${t.startDate}. ` +
-          `It is not final yet: your caregiver's background check has to clear and the paperwork has to be in. ` +
-          `Do not give notice to your current agency until we confirm. Paperwork here: ${ONBOARDING}`,
-          `Your transfer is approved, target date ${t.startDate}`,
-          `<p>Hi ${first},</p><p>The state has approved your transfer and given a target date of ` +
+        if (await act('toldStartDate', consumer, 'start date received, consumer not told',
+          `Hi ${first}, your transfer to Caring Companions is confirmed for ${t.startDate}. ` +
+          `Stay with your current agency until that day. One thing to know: your caregiver cannot be paid until ` +
+          `their background check clears, so please do not have them start early. Paperwork: ${ONBOARDING}`,
+          `Your transfer is confirmed for ${t.startDate}`,
+          `<p>Hi ${first},</p><p>The state has confirmed your transfer to Caring Companions. It starts on ` +
           `<b>${t.startDate}</b>.</p>` +
-          `<p><b>It is not final yet.</b> Two things still have to happen: your caregiver's background check has ` +
-          `to come back clear, and everybody's paperwork has to be in. Until both are done we cannot confirm the ` +
-          `date, and occasionally it moves.</p>` +
-          `<p><b>So please do not give notice to your current agency yet.</b> Stay exactly as you are until we ` +
-          `ring you to confirm. We will, as soon as we can.</p>` +
-          `<p>What you can do now, and it is what decides how fast this goes:</p>` +
+          `<p>Carry on with your current agency right up to that day. Nothing changes before it.</p>` +
+          `<p><b>One thing worth knowing now.</b> Your caregiver cannot be paid until their background check ` +
+          `comes back clear. If they start working before that, those hours cannot be paid, and we are not able ` +
+          `to fix it afterwards. We will tell you both the moment they are cleared.</p>` +
+          `<p>Two things to get done before the ${t.startDate}, and they are quick:</p>` +
           `<p><a href="${ONBOARDING}">Sign your paperwork</a> &middot; <a href="${ORIENTATION}">Do your orientation</a></p>`)) continue
       }
 
-      /* ---- Ready to Work. The only message that says anybody is starting.
-              Sent once the state's approval, the background check and the
-              paperwork have all actually landed. */
+      /* ---- Cleared to be paid. This message exists because the alternative
+              is somebody working for nothing and finding out later. It goes to
+              the attendant, who is the one who loses money. */
       if (t.readyToWork && !t.toldReadyToWork) {
-        if (await act('toldReadyToWork', consumer, 'Ready to Work cleared, consumer not confirmed yet',
-          `Hi ${first}, you are confirmed. Everything has cleared and your care with Caring Companions starts ` +
-          `${t.startDate || 'on the agreed date'}. You can give notice to your current agency now. ` +
-          `Anything at all, ring ${OFFICE}.`,
-          'You are confirmed, and this is the date',
-          `<p>Hi ${first},</p><p><b>You are confirmed.</b> The background check has cleared, the paperwork is in, ` +
-          `and your care with Caring Companions starts <b>${t.startDate || 'on the agreed date'}</b>.</p>` +
-          `<p>You can give notice to your current agency now.</p>` +
-          `<p>If anything at all is unclear before then, ring us on ${OFFICE}. It is easier to sort out now than ` +
-          `on the first morning.</p>`)) continue
+        const attFirst = String((a && a.name) || '').split(' ')[0] || 'there'
+        if (a && (a.phone || a.email)) {
+          if (await act('toldReadyToWork', { name: a.name, phone: a.phone, email: a.email },
+            'attendant cleared to be paid, not told yet',
+            `Hi ${attFirst}, good news from Caring Companions. Your background check has cleared and your ` +
+            `paperwork is in, so you can be paid for looking after ${p.name} from ${t.startDate || 'your start date'}. ` +
+            `Remember to clock in and out on the WellSky app every visit, that is what pays you. ${OFFICE}`,
+            'You are cleared, and you can be paid',
+            `<p>Hi ${attFirst},</p><p><b>Your background check has cleared</b> and your paperwork is in.</p>` +
+            `<p>You can be paid for looking after <b>${p.name}</b> from ` +
+            `<b>${t.startDate || 'your start date'}</b>.</p>` +
+            `<p><b>One thing, every single visit:</b> clock in when you arrive and clock out when you leave, on ` +
+            `the WellSky Personal Care app. That is what pays you. Hours that are not clocked cannot be paid, and ` +
+            `we cannot put them right afterwards.</p>` +
+            `<p>If the app is giving you trouble, ring ${OFFICE} before your first visit, not after.</p>`)) continue
+        }
       }
 
       /* ---- the background check came back failed. This is a fork, not a
@@ -250,13 +256,16 @@ Deno.serve(async (req) => {
             `<p>If you would rather we walked you through it on the phone, ring ${OFFICE}.</p>`)) continue
         }
 
-        /* The target date is nearly here and Ready to Work has not happened.
-           Nobody outside the office should hear about this, but somebody inside
-           it has to, today, because the alternative is a family expecting care
-           on Monday that is not coming. */
+        /* The transfer lands in days and the attendant still cannot be paid.
+           Only the office hears this. The transfer happens regardless, so the
+           risk is not that nobody turns up: it is that somebody works for
+           nothing, and by the time anybody notices the hours are already lost
+           and cannot be put right. */
         if (until >= 0 && until <= 3 && !t.readyToWork && !t.notReadyFlagged) {
           plan.push({ who: 'the office', what: 'notReadyFlagged',
-            why: `${p.name} has a target date of ${t.startDate} in ${until} days and is not Ready to Work` })
+            why: `${p.name} transfers to us on ${t.startDate}, ${until} days away, and their attendant is not ` +
+                 `cleared to be paid yet. The transfer happens regardless, so on that day they have care nobody ` +
+                 `can be paid for.` })
           if (!dry) { t.notReadyFlagged = new Date().toISOString(); touched = true }
           continue
         }
