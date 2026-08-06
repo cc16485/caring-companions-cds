@@ -2995,21 +2995,89 @@
         <div style="font-weight:700;font-size:13px;color:var(--primary);margin-bottom:4px">STEP 5 — DES / UInteract (Missouri Unemployment Insurance Tax)</div>
         <div style="margin-bottom:4px">
           ⚠️ <strong>TIMING: Cannot do this step until AFTER first payroll is issued AND consumer has paid $1,000+ in wages in a single quarter.</strong> DES will not issue an account number until then.<br><br>
+          <strong>Before any of this:</strong> you need the CDS Vendor third-party login, created through
+          "Reporting Service Signup" on UInteract. That signup is <em>not</em> where consumers get registered,
+          it is what lets you register them. If you already log in and see your consumers, you have it.<br><br>
+
           <strong>If NEW consumer (never had a CDS vendor before):</strong><br>
-          1. Login to <strong>uinteract.labor.mo.gov</strong> with your CDS Vendor credentials.<br>
-          2. Click Employer Registration → Register Employer. Enter YOUR info as the submitter.<br>
-          3. Enter CONSUMER's EIN. Type of Organization = Individual Ownership.<br>
-          4. Business activity: Health Care → Social Assistance → Services for Elderly and Persons with Disabilities.<br>
-          5. Domestic employment = Yes. Enter consumer's home address as headquarters address.<br>
-          6. Telephone: 000-000-0000 (consumer is never contacted). Enter YOUR info as the contact.<br>
-          7. Enter gross wage history per quarter. Enter attendant count per week.<br>
-          8. Submit. You receive the consumer's EAN (Employer Account Number) — record it below.<br><br>
+          Log in to <a href="https://uinteract.labor.mo.gov/benefits/#/benefits/login" target="_blank" rel="noopener"><strong>UInteract</strong></a>
+          with your CDS Vendor user ID, then <strong>Employer Registration → Register Employer</strong>.
+          Enter <em>your</em> details as the person submitting, and Next. Everything after that is the
+          <em>consumer's</em> details, screen by screen:<br><br>
+
+          <strong>General Information</strong><br>
+          1. The CONSUMER's Federal Tax ID (EIN).<br>
+          2. Type of Organization = <strong>Individual Ownership</strong>. Next.<br><br>
+
+          <strong>Employer Entity Information</strong><br>
+          3. Consumer's first name, middle initial, last name. Leave Trade Name / DBA blank.<br>
+          4. Paid employees for work performed in Missouri? <strong>Yes</strong>. Then the first worker date
+             (when they first had an attendant) and the first payroll date (when they first paid one).
+             <em>If they have not paid wages you cannot finish the registration.</em><br>
+          5. Agricultural work? <strong>No</strong>.<br>
+          6. Employs housekeepers, sitters or other domestic employment? <strong>Yes</strong>.<br>
+          7. Is this a general business? <strong>No</strong>.<br>
+          8. Religious employer? <strong>No</strong>. &nbsp;Federally recognised Indian tribe? <strong>No</strong>.<br>
+          9. Paid unemployment insurance in another state (FUTA) this year or last? <strong>No</strong>.<br>
+          10. Lessor / Professional Employment Organisation? <strong>No</strong>. &nbsp;Leasing employees from
+              another business? <strong>No</strong>.<br>
+          11. Business locations in Missouri? <strong>Yes</strong>, then Continue.<br><br>
+
+          <strong>Add Business Location / Headquarters</strong><br>
+          12. Number of Missouri employees at this location = the number of attendants.<br>
+          13. Physical address = the CONSUMER's home address. County = where the consumer lives.<br>
+          14. Describe the nature of your business: type <strong>CDS Consumer</strong>.<br>
+          15. Principal Business Activity, three dropdowns in order:
+              <strong>Health Care and Social Assistance</strong> → <strong>Social Assistance</strong> →
+              <strong>Services for the Elderly and Persons with Disabilities</strong>.<br>
+          16. Is this the primary business activity? <strong>Yes</strong>, Continue, then verify the address and
+              Continue again.<br><br>
+
+          <strong>Employer Contact Details</strong><br>
+          17. Unemployment Tax Mailing Address = the CONSUMER's home address.<br>
+          18. Telephone = <strong>000-000-0000</strong>. The consumer is never contacted. Fax blank.<br>
+          19. Claims mailing address and payroll records address = <strong>Same as Unemployment Tax Mailing
+              Address</strong> for both.<br>
+          20. Contact Person for Unemployment Tax = <em>your</em> details. Continue.<br><br>
+
+          <strong>Add Individual Ownership Details (the consumer)</strong><br>
+          21. Type of Individual Owner = <strong>Individual</strong>.<br>
+          22. The consumer's <strong>SSN</strong> (required) and their name. Job Title = <strong>Owner</strong>.<br>
+          23. Term begin and end dates: leave blank. Residential address = consumer's home address.
+              Residential phone and email: leave blank.<br>
+          24. Deceased? <strong>No</strong>, unless they are, in which case give the date of death.
+              Continue, verify, Continue again.<br><br>
+
+          <strong>The last few screens</strong><br>
+          25. <strong>Wage History</strong>: gross wages paid to the attendants for each quarter shown.
+              <em>Under $1,000 in every quarter means no account number.</em><br>
+          26. <strong>Employment History</strong>: how many attendants worked in each week.<br>
+          27. <strong>Business Acquisition</strong>: did you acquire this business? <strong>No</strong>.<br>
+          28. <strong>Prior Registration</strong>: previously registered with Missouri? <strong>No</strong>.<br>
+          29. <strong>Upload Documents</strong> and <strong>Tax and Wage Reports Received</strong>: neither
+              applies, just Continue.<br>
+          30. <strong>Statement of Acknowledgement</strong>: read it, I accept, Submit.<br>
+          31. The confirmation screen shows the consumer's <strong>EAN and contribution rate</strong>. Record the
+              EAN below. A letter follows in the post the next business day, and you can see it again by logging
+              in later.<br><br>
+
+          <div style="background:#fffaf0;border-left:3px solid var(--accent);padding:8px 10px;margin-bottom:10px">
+            <strong>If you have to stop partway, click "Finish Later".</strong> Closing without it loses
+            everything and the registration starts from the beginning.
+          </div>
+
           <strong>If TRANSFERRED consumer (came from another CDS vendor):</strong><br>
+          If you are not sure whether they were with another vendor, <strong>try registering them in UInteract
+          first</strong>. If you get an error, they are a transfer, and then:<br>
           1. Download <a href="https://labor.mo.gov/media/22536/download" target="_blank" rel="noopener"><strong>MODES-5083</strong></a> (Transferred Consumer Registration)<br>
-          2. Fill in: your name/EIN, consumer's EIN + SSN, first payroll date with you, name of prior vendor.<br>
-          3. Email (do NOT mail or fax) to cdstax@labor.mo.gov.<br><br>
+          2. Fill in: your name and EIN, the consumer's EIN <em>and</em> SSN, the first date they paid wages since
+             coming to us (never a future date), and the vendor they were with before. Check Fusion if you do not
+             know who that was. Leave the account number blank if you do not have it.<br>
+          3. Email (do NOT mail or fax) to cdstax@labor.mo.gov. A form missing any required item is rejected and
+             sent back.<br>
+          <em>They may have no account at all if they never paid $1,000 in a quarter with the previous vendor.</em><br><br>
           <strong>After registration — quarterly wage reporting:</strong><br>
-          Login → Contribution and Wage Report → File Contribution and Wage Report. File oldest quarter first. Select Method A. Enter attendant SSN, name, and gross wages per quarter. Separate payment per consumer — never combine. If parent is the attendant: do NOT report those wages (not subject to UI tax).<br><br>
+          <a href="https://uinteract.labor.mo.gov/benefits/#/benefits/login" target="_blank" rel="noopener">Login</a> → Contribution and Wage Report → File Contribution and Wage Report. File oldest quarter first. Select Method A. Enter attendant SSN, name, and gross wages per quarter. Separate payment per consumer — never combine. If parent is the attendant: do NOT report those wages (not subject to UI tax).<br><br>
           <strong>Quarterly deadlines:</strong> Q1 (Jan–Mar): Apr 30 | Q2 (Apr–Jun): Jul 30 | Q3 (Jul–Sep): Oct 31 | Q4 (Oct–Dec): Jan 31<br>
           Late penalty: 10% of tax or $100/month, whichever is greater — max 20% or $200.<br><br>
           Questions: cdstax@labor.mo.gov | 573-751-1995 Opt. 1<br>
@@ -3109,7 +3177,7 @@
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-top:20px"><input type="checkbox" id="tax_des_reg"> <span><strong>Consumer registered in UInteract</strong> (after $1,000+ quarter)</span></label>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: register in UInteract. <strong>Transferred consumer</strong> (came from another CDS vendor): download <a href="https://labor.mo.gov/media/22536/download" target="_blank" rel="noopener"><strong>MODES-5083</strong></a> &mdash; Transferred Consumer Registration &mdash; fill it in and <a href="mailto:cdstax@labor.mo.gov">email it to cdstax@labor.mo.gov</a>. Do not mail or fax it. Questions: 573-751-1995 Opt. 1</div>
+    <div style="font-size:11px;color:var(--gray-600);margin-bottom:12px">New consumer: <a href="https://uinteract.labor.mo.gov/benefits/#/benefits/login" target="_blank" rel="noopener">register in UInteract</a>. <strong>Transferred consumer</strong> (came from another CDS vendor): download <a href="https://labor.mo.gov/media/22536/download" target="_blank" rel="noopener"><strong>MODES-5083</strong></a> &mdash; Transferred Consumer Registration &mdash; fill it in and <a href="mailto:cdstax@labor.mo.gov">email it to cdstax@labor.mo.gov</a>. Do not mail or fax it. Questions: 573-751-1995 Opt. 1</div>
 
       <div id="filing-DES"></div>
     </section>
@@ -8933,7 +9001,7 @@ const FILINGS = [
     channels: ['email', 'fax', 'mail'],
     doc: 'Confirmation', ref: 'Reference' },
   { key: 'DES',
-    link: { href: 'https://uinteract.labor.mo.gov', label: 'UInteract' },
+    link: { href: 'https://uinteract.labor.mo.gov/benefits/#/benefits/login', label: 'UInteract login' },
     fastest: '<strong>Quickest: online in UInteract.</strong> Cannot be done at all until after first payroll and a $1,000 quarter, so there is no way to get ahead on this one.',       label: 'DES / UInteract registration',
     channels: ['online', 'email'],
     doc: 'EAN notice', ref: 'EAN' },
