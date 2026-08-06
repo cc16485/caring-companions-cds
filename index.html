@@ -3597,6 +3597,18 @@
           <input type="text" id="pl_mailing" placeholder="leave blank if the same"></div>
         <div class="form-group"><label>Alternate phone</label><input type="tel" id="pl_phone2"></div>
       </div>
+      <!-- The HCBS-1 wants the mailing town, state and zip in their own boxes,
+           so ask for them that way rather than splitting one line up later and
+           guessing wrong. Hidden until a mailing address is actually entered. -->
+      <div class="form-row" id="pl_mailBits" style="display:none">
+        <div class="form-group"><label>Mailing city</label><input type="text" id="pl_mailcity"></div>
+        <div class="form-group"><label>Mailing state / ZIP</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="pl_mailstate" placeholder="MO" style="width:70px">
+            <input type="text" id="pl_mailzip" placeholder="ZIP" style="flex:1">
+          </div>
+        </div>
+      </div>
 
       <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">
         Responsible party or guardian</div>
@@ -3616,6 +3628,20 @@
           </select>
         </div>
         <div class="form-group"><label>Their phone</label><input type="tel" id="pl_rpphone"></div>
+      </div>
+      <!-- The form asks for this person's own address, not the consumer's. -->
+      <div class="form-row">
+        <div class="form-group"><label>Their street address</label><input type="text" id="pl_rpstreet"></div>
+        <div class="form-group"><label>Their alternate phone</label><input type="tel" id="pl_rpphone2"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Their city</label><input type="text" id="pl_rpcity"></div>
+        <div class="form-group"><label>Their state / ZIP</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="pl_rpstate" placeholder="MO" style="width:70px">
+            <input type="text" id="pl_rpzip" placeholder="ZIP" style="flex:1">
+          </div>
+        </div>
       </div>
 
       <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 6px">Communication</div>
@@ -4968,6 +4994,12 @@ function plChipset(hostId, list, key){
     '<label class="chipbox"><input type="checkbox" data-' + key + '="' + i + '"> ' + label + '</label>').join('');
 }
 function plChipsBuild(){
+  // Asking for a mailing town when there is no separate mailing address is
+  // three empty boxes on an already long call, so keep them out of the way.
+  const mail = document.getElementById('pl_mailing');
+  if (mail) mail.addEventListener('input', () => {
+    document.getElementById('pl_mailBits').style.display = mail.value.trim() ? '' : 'none';
+  });
   plChipset('pl_unmetHost',  HCBS1_UNMET,  'unmet');
   plChipset('pl_reasonHost', HCBS1_REASON, 'reason');
   plChipset('pl_safetyHost', HCBS1_SAFETY, 'safety');
@@ -5072,11 +5104,20 @@ function addPipelineContact() {
       city: v('pl_city').trim() || null,
       zip: v('pl_zip').trim() || null,
       mailingIfDifferent: v('pl_mailing').trim() || null,
+      mailingCity: v('pl_mailcity').trim() || null,
+      mailingState: v('pl_mailstate').trim() || null,
+      mailingZip: v('pl_mailzip').trim() || null,
+      county: document.getElementById('pl_county').value || null,
       altPhone: v('pl_phone2').trim() || null,
       contactResponsibleParty: v('pl_contactrp') || null,
       responsiblePartyName: v('pl_rpname').trim() || null,
       responsiblePartyRelationship: v('pl_rprel') || null,
       responsiblePartyPhone: v('pl_rpphone').trim() || null,
+      responsiblePartyAltPhone: v('pl_rpphone2').trim() || null,
+      responsiblePartyStreet: v('pl_rpstreet').trim() || null,
+      responsiblePartyCity: v('pl_rpcity').trim() || null,
+      responsiblePartyState: v('pl_rpstate').trim() || null,
+      responsiblePartyZip: v('pl_rpzip').trim() || null,
       primaryLanguage: v('pl_lang').trim() || null,
       interpreterNeeded: v('pl_interp') || null,
       otherCommunicationNeeds: v('pl_commneeds').trim() || null,
@@ -5138,6 +5179,7 @@ function addPipelineContact() {
   ['pl_name','pl_phone','pl_email','pl_firstcontact','pl_followup','pl_statesubmit','pl_currentagency','pl_dcn','pl_hours','pl_notes',
    'pl_first','pl_last','pl_dob','pl_currentagency2','pl_whyswitch','pl_dcn2','pl_att_name','pl_att_phone','pl_att_email',
    'pl_nfirst','pl_nlast','pl_nmi','pl_ndob','pl_ndcn','pl_street','pl_apt','pl_city','pl_zip','pl_mailing',
+   'pl_mailcity','pl_mailstate','pl_mailzip','pl_rpstreet','pl_rpcity','pl_rpstate','pl_rpzip','pl_rpphone2',
    'pl_phone2','pl_rpname','pl_rpphone','pl_lang','pl_commneeds','pl_dischargedate','pl_hospname',
    'pl_hospcontact','pl_adults','pl_conditions','pl_referrer','pl_referrerrel']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -5365,6 +5407,27 @@ function renderLeadProfile(){
 
   // ---- the transfer, if it is one ----
   if(p.type === 'pccp'){
+    /* A care plan change has no email route: the state gives providers the portal
+       and reserves the phone line for participants. So this cannot be automated,
+       and pretending otherwise would waste somebody's afternoon. What it can do
+       is put the answers in one place to copy from, so nobody is scrolling the
+       lead looking for a date of birth while a form times out. */
+    html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;background:#f0f7ff;border-left:4px solid var(--primary-light)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+        '<b style="color:var(--primary)">For the state portal</b>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn btn-outline" style="font-size:12px" onclick="pccpCopy(this)">📋 Copy these details</button>' +
+          '<a class="btn btn-accent" style="font-size:12px;text-decoration:none" target="_blank" rel="noopener"' +
+            ' href="https://modhss.entellitrak.com/etk-modhss-prod/page.request.do?page=portal.pccpRequest">Open the portal ↗</a>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field-note" style="margin:6px 0 10px">A care plan change has to be entered in the state portal. ' +
+        'There is no email option for providers, so this part stays manual. These are the answers to copy across.</div>' +
+      '<div style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:1.7;white-space:pre-wrap;' +
+        'background:white;border:1px solid var(--gray-200);border-radius:6px;padding:12px" id="pccpBlock">' +
+        esc(pccpDetails(p)) +
+      '</div></div>';
+
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
       '<b style="color:var(--primary)">Getting them transferred</b>' +
       '<div class="field-note" style="margin:3px 0 10px">Dating a step here is what sets the automation off. ' +
@@ -5412,7 +5475,14 @@ function renderLeadProfile(){
   if(R){
     const list = v => Array.isArray(v) && v.length ? v.join(', ') : '';
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
-      '<b style="color:var(--primary)">What they told us for the HCBS-1</b>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+        '<b style="color:var(--primary)">What they told us for the HCBS-1</b>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn btn-accent" style="font-size:12px" onclick="hcbs1Build(false)">⬇ Fill the HCBS-1</button>' +
+          '<button class="btn btn-outline" style="font-size:12px" onclick="hcbs1Build(true)">✉ Fill and email it</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="hcbs1Status" style="font-size:12px;margin:8px 0 0"></div>' +
       row('Address', [R.street, R.apt, R.city, R.zip].filter(Boolean).join(', ')) +
       row('Responsible party', [R.responsiblePartyName, R.responsiblePartyRelationship].filter(Boolean).join(' — ')) +
       row('Their phone', R.responsiblePartyPhone) +
@@ -5442,6 +5512,269 @@ function renderLeadProfile(){
     '</div>';
 
   host.innerHTML = html;
+}
+
+/* The details a care plan change request asks for, in one block to copy. */
+function pccpDetails(p) {
+  const line = (label, val) => val ? label + ': ' + val + '\n' : '';
+  const t = p.transfer || {};
+  return (
+    line('Consumer', p.name) +
+    line('Date of birth', p.dob) +
+    line('DCN', p.dcn) +
+    line('Phone', p.phone) +
+    line('Current provider', p.leavingAgency) +
+    line('Requested provider', 'Caring Companions Consumer Directed Services') +
+    line('Reason for the change', p.whySwitching) +
+    line('Medicaid checked in eMOMED', t.emomedChecked ? 'yes, ' + t.emomedChecked : 'NOT YET CHECKED') +
+    line('Attendant', p.attendant ? p.attendant.name : null) +
+    line('Requested by', 'Caring Companions CDS, 417-218-2888')
+  ).trim() || 'Nothing recorded on this lead yet.';
+}
+
+function pccpCopy(btn) {
+  const list = getData('pipeline');
+  const p = list.find(x => x.id === _lprofId);
+  if (!p) return;
+  navigator.clipboard.writeText(pccpDetails(p)).then(() => {
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.innerHTML = '📋 Copy these details'; }, 1800);
+  });
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   FILLING THE HCBS-1 (MO 580-3377)
+
+   The intake was built from this form, so everything it needs is already on the
+   lead. This puts it onto the real PDF rather than having somebody retype it.
+
+   The blank form is served from this site, not fetched from health.mo.gov: their
+   pages move (two of the URLs they publish are already dead) and a cross-origin
+   fetch would be blocked anyway.
+
+   Two things this deliberately does NOT do. It does not send by itself, because
+   the form says ALL FIELDS REQUIRED and a bounced referral costs somebody weeks
+   of waiting, so a person looks at it first. And it does not guess at export
+   values: the Yes/No boxes on this form are cased inconsistently (/Yes on one
+   question, /yes on another, /YES on a third), so the right value is read out of
+   the PDF at fill time instead of hardcoded.
+   ──────────────────────────────────────────────────────────────────────── */
+const HCBS1_URL = '/forms/hcbs-1.pdf';
+const HCBS1_REVISION = 'MO 580-3377 (8-2025)';
+const HCBS1_EMAIL = 'HCBSCallCenterReferrals@health.mo.gov';
+
+/* If the state reissues the form with renamed fields, filling by name would
+   quietly produce a half-empty referral and nobody would notice until it was
+   rejected. So check the names first and refuse rather than half-fill. */
+const HCBS1_MUST_HAVE = [
+  'PERSON BEING REFERRED (LAST, FIRST, MI)', 'DCN', 'DOB (MM/DD/YYY)',
+  'PHYSICAL ADDRESS: STREET:', 'CITY', 'ZIP', 'COUNTY',
+  'PRIMARY PHONE NUMBER', 'PRIMARY LANGUAGE',
+  'PRIMARY MEDICAL CONDITIONS RELATED TO THE PERSONS NEED FOR HOME AND COMMUNITY BASED SERVICES',
+  'REFERRER NAME', 'MARTITAL STATUS', 'LIVE ALONE',
+  'Personal Care (Consumer Directed)', 'No Known Concerns'
+];
+
+// What the intake calls a thing -> what the PDF calls it.
+const HCBS1_TEXT_MAP = [
+  ['DCN',                                    r => r.dcn],
+  ['DOB (MM/DD/YYY)',                        r => hcbs1Date(r.dob)],
+  ['PHYSICAL ADDRESS: STREET:',              r => r.street],
+  ['APT./LOT',                               r => r.apt],
+  ['CITY',                                   r => r.city],
+  ['ZIP',                                    r => r.zip],
+  ['COUNTY',                                 r => r.county],
+  ['MAILING ADDRESS: P.O. BOX/STREET:',      r => r.mailingIfDifferent],
+  ['CITY_2',                                 r => r.mailingCity],
+  ['STATE',                                  r => r.mailingState],
+  ['ZIP_2',                                  r => r.mailingZip],
+  ['ALTERNATE PHONE NUMBER',                 r => r.altPhone],
+  ['OTHER RESPONSIBLE PARTYLEGAL GUARDIAN CONTACT NAME', r => r.responsiblePartyName],
+  ['PRIMARY PHONE NUMBER_2',                 r => r.responsiblePartyPhone],
+  ['ALTERNATE PHONE NUMBER_2',               r => r.responsiblePartyAltPhone],
+  ['ADDRESS',                                r => r.responsiblePartyStreet],
+  ['CITY_3',                                 r => r.responsiblePartyCity],
+  ['STATE_2',                                r => r.responsiblePartyState],
+  ['ZIP_3',                                  r => r.responsiblePartyZip],
+  ['PRIMARY LANGUAGE',                       r => r.primaryLanguage],
+  ['INTERPRETER NEEDED',                     r => r.interpreterNeeded],
+  ['IF YES WHAT LANGUAGE',                   r => r.interpreterNeeded === 'yes' ? r.primaryLanguage : null],
+  ['OTHER COMMUNICATION NEEDS',              r => r.otherCommunicationNeeds],
+  ['IF YES EXPECTED DISCHARGE DATE (MM/DD/YYY)', r => hcbs1Date(r.expectedDischarge)],
+  ['NAMEADDRESS OF HOSPITALFACILITY',        r => r.facilityName],
+  ['POINT OF CONTACT AT HOSPITALFACILITY',   r => r.facilityContact],
+  ['IF NO NUMBER OF ADULTS IN HOUSE',        r => r.adultsInHouse],
+  ['PRIMARY MEDICAL CONDITIONS RELATED TO THE PERSONS NEED FOR HOME AND COMMUNITY BASED SERVICES',
+                                             r => r.primaryConditions],
+  ['REFERRER NAME',                          r => r.referrerName],
+  ['REFERRER RELATIONSHIP',                  r => r.referrerPhoneRelationship],
+  ['**DOCUMENT UNMET CONDITIONS AND CIRCUMSTANCES FROM APPLICATION FOR HCBS IN LAST 90 DAYS HERE:',
+                                             r => r.appliedLast90Days === 'yes' ? (r.changeSince90Days || '') : null],
+];
+
+// Yes/No questions: intake value -> the PDF's own spelling, resolved at runtime.
+const HCBS1_YESNO_MAP = [
+  ['SAME AS PHYSICAL ADDRESS',               r => r.mailingIfDifferent ? 'no' : 'yes'],
+  ['CONTACT OTHER RESPONSIBLE PARTY/GUARDIAN TO SCHEDULE ASSESSMENT:', r => r.contactResponsibleParty],
+  ['IS THE PERSON BEING REFERRED CURRENTLY IN A HOSPITAL/FACILITY?', r => r.inFacility],
+  ['RCF/ALF',                                r => r.inRcfAlf],
+  ['LIVE ALONE',                             r => r.livesAlone],
+  ['ANY OTHER HOUSEHOLD MEMBER(S) RECEIVING OR REQUESTING SERVICES:', r => r.otherHouseholdMemberServices],
+  ['APPLIED FOR HCBS IN LAST 90 DAYS',       r => r.appliedLast90Days],
+  ['Have you or an immediate family member ever served in the U.S. Armed Forces?', r => r.military],
+  ['If YES, would you like information about military-related services in Missouri?', r => r.militaryInfoWanted],
+];
+
+// The relationship boxes are separate checkboxes, not one group.
+const HCBS1_REL_MAP = {
+  'Family Member': 'FAMILY MEMBER',
+  'Legal Guardian': 'LEGAL GUARDIAN',
+  'Durable Power of Attorney / Power of Attorney': 'DURABLE POWER OF ATTORNEY',
+  'Public Administrator': 'PUBLIC ADMINISTRATOR',
+  'Other': 'OTHER'
+};
+
+// The chip lists on the intake use the same words as the PDF apart from these.
+const HCBS1_CHIP_FIXUPS = {
+  'Caregiver Relief (Respite)': 'Caregiver Relief Respite',
+  'Hands-On Personal Care': 'HandsOn Personal Care',
+  'Household Cleaning / Related Tasks': 'Household Cleaning Related Tasks',
+  'Adult Day Care': 'Adult Day Care'   // appears twice on the form, handled below
+};
+
+function hcbs1Date(iso) {
+  if (!iso) return null;
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[2] + '/' + m[3] + '/' + m[1] : String(iso);
+}
+
+function hcbs1Say(msg, kind) {
+  const el = document.getElementById('hcbs1Status');
+  if (!el) return;
+  const colour = kind === 'bad' ? 'var(--danger)' : kind === 'good' ? 'var(--success)' : 'var(--gray-600)';
+  el.innerHTML = '<span style="color:' + colour + '">' + esc(msg) + '</span>';
+}
+
+async function hcbs1Build(alsoEmail) {
+  const list = getData('pipeline');
+  const p = list.find(x => x.id === _lprofId);
+  if (!p || !p.referral) { hcbs1Say('No referral answers on this lead.', 'bad'); return; }
+  const R = p.referral;
+
+  if (typeof PDFLib === 'undefined') { hcbs1Say('The PDF library did not load. Reload the page.', 'bad'); return; }
+  hcbs1Say('Filling the form…');
+
+  let bytes;
+  try {
+    const res = await fetch(HCBS1_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    bytes = await res.arrayBuffer();
+  } catch (e) {
+    hcbs1Say('Could not load the blank form (' + e.message + '). It should be at ' + HCBS1_URL, 'bad');
+    return;
+  }
+
+  const doc  = await PDFLib.PDFDocument.load(bytes);
+  const form = doc.getForm();
+  const have = {};
+  form.getFields().forEach(f => { have[f.getName()] = f; });
+
+  // The guard. Refuse rather than half-fill.
+  const missing = HCBS1_MUST_HAVE.filter(n => !have[n]);
+  if (missing.length) {
+    hcbs1Say('This does not look like ' + HCBS1_REVISION + ' any more: ' + missing.length +
+             ' expected field(s) are gone, starting with "' + missing[0] + '". The state has probably ' +
+             'reissued the form. Nothing was filled. Download the current HCBS-1 and send it to Claude.', 'bad');
+    return;
+  }
+
+  const skipped = [];
+  const setText = (name, val) => {
+    if (val == null || val === '' || !have[name]) return;
+    try { form.getTextField(name).setText(String(val)); } catch (e) { skipped.push(name); }
+  };
+
+  /* Every tick box on this form, including the Yes/No pairs and the five marital
+     status boxes, is the same kind of field with one widget per answer, and each
+     widget carries its own export value. Those values are cased inconsistently
+     (/Yes on one question, /yes on another, /YES on a third) and spaces come
+     through hex-escaped as #20, so the value is matched out of the PDF rather
+     than assumed. pdf-lib's own checkbox and radio helpers cannot express this,
+     hence setting /V and /AS directly. */
+  const N = PDFLib.PDFName;
+  const norm = v => String(v == null ? '' : v).replace(/^\//, '').replace(/#20/gi, ' ')
+                      .toLowerCase().replace(/[^a-z0-9]/g, '');
+  const setButton = (name, wanted) => {
+    if (!wanted || !have[name]) return;
+    let af;
+    try { af = form.getField(name).acroField; } catch (e) { skipped.push(name); return; }
+    const widgets = af.getWidgets();
+    let hit = null;
+    widgets.forEach(w => {
+      const on = w.getOnValue();
+      if (on && norm(on.asString()) === norm(wanted)) hit = on;
+    });
+    if (!hit) { skipped.push(name + ' (nothing matching "' + wanted + '")'); return; }
+    af.dict.set(N.of('V'), hit);
+    widgets.forEach(w => {
+      const on = w.getOnValue();
+      w.dict.set(N.of('AS'), (on && on.asString() === hit.asString()) ? hit : N.of('Off'));
+    });
+  };
+  const setChoice = setButton;               // Yes/No and marital status
+  const tick = name => setButton(name, 'On'); // the plain service and safety boxes
+  // name, which the form wants as one "LAST, FIRST, MI" box
+  const nameBits = [R.lastName, R.firstName, R.middleInitial].filter(Boolean).join(', ');
+  setText('PERSON BEING REFERRED (LAST, FIRST, MI)', nameBits || p.name);
+  setText('PRIMARY PHONE NUMBER', p.phone);
+  HCBS1_TEXT_MAP.forEach(([field, get]) => setText(field, get(R)));
+  HCBS1_YESNO_MAP.forEach(([field, get]) => setChoice(field, get(R)));
+  setChoice('MARTITAL STATUS', R.maritalStatus);
+
+  // We are the referring provider, every time.
+  setChoice('PROVIDER AGENCY REFERRAL:', 'yes');
+
+  if (R.responsiblePartyRelationship && HCBS1_REL_MAP[R.responsiblePartyRelationship]) {
+    tick(HCBS1_REL_MAP[R.responsiblePartyRelationship]);
+    if (R.responsiblePartyRelationship === 'Other') setText('OTHER RELATIONSHIP', 'see notes');
+  }
+
+  const chip = label => HCBS1_CHIP_FIXUPS[label] || label;
+  (R.unmetNeeds || []).forEach(l => tick(chip(l)));
+  // "Adult Day Care" is on the form twice; the second copy is in the services
+  // list and carries the _2 suffix.
+  (R.reasonForReferral || []).forEach(l => tick(l === 'Adult Day Care' ? 'Adult Day Care_2' : chip(l)));
+  (R.safetyConcerns || []).forEach(l => tick(chip(l)));
+
+  const out = await doc.save({ objectsPerTick: Infinity });
+  const safeName = (p.name || 'referral').replace(/[^A-Za-z0-9 _-]/g, '').trim() || 'referral';
+  const file = 'HCBS-1 ' + safeName + '.pdf';
+  const blob = new Blob([out], { type: 'application/pdf' });
+  const url  = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url; a.download = file; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+  const note = skipped.length
+    ? ' ' + skipped.length + ' box(es) could not be set: ' + skipped.slice(0,3).join('; ') + '.'
+    : '';
+  hcbs1Say('Saved as "' + file + '". Open it and check every box before you send it, because the ' +
+           'form requires all fields.' + note, skipped.length ? 'bad' : 'good');
+
+  if (alsoEmail) {
+    /* Opens a pre-addressed email with the PDF already downloaded, for you to
+       attach. It is not sent for you on purpose: this carries a name, date of
+       birth, DCN and medical conditions, and the alternative would mean putting
+       that file at a public URL for GoHighLevel to collect, which is not a
+       trade worth making for one drag and drop. */
+    const subject = 'HCBS Referral — ' + (nameBits || p.name);
+    const body = 'Please find the completed HCBS-1 attached for ' + (nameBits || p.name) + '.\n\n' +
+      'Attach the file "' + file + '" from your Downloads folder before sending.\n\n' +
+      'Caring Companions Consumer Directed Services';
+    window.location.href = 'mailto:' + HCBS1_EMAIL +
+      '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
 }
 
 /* Writing a date is the trigger, so it saves immediately rather than waiting for
