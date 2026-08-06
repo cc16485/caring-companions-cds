@@ -3132,7 +3132,7 @@
     <div id="tax_packet_status" style="font-size:11.5px;margin-top:6px"></div>
     </section>
 <section data-card="2" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 1 &nbsp;·&nbsp; Federal EIN (Form SS-4)</div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 1 &nbsp;·&nbsp; Federal EIN (Form SS-4)&nbsp;&nbsp;<button type="button" onclick="taxShowStep('1')" style="background:none;border:none;padding:0;font:inherit;font-weight:600;font-size:11px;color:var(--primary);text-decoration:underline;cursor:pointer">how do I do this?</button></div>
 <div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">The consumer is their own employer and needs their own EIN, separate from ours. Online is immediate; by fax about four business days and by mail about four weeks. <strong>Everything Missouri needs waits on this number.</strong></div>
     <div class="form-row">
       <div class="form-group"><label>Federal EIN, once issued</label><input type="text" id="tax_ein" placeholder="XX-XXXXXXX" oninput="refreshPacketHold()"></div>
@@ -3141,19 +3141,19 @@
       <div id="filing-IRS-SS-4"></div>
 </section>
 <section data-card="3" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 2 &nbsp;·&nbsp; Form 8821</div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 2 &nbsp;·&nbsp; Form 8821&nbsp;&nbsp;<button type="button" onclick="taxShowStep('2')" style="background:none;border:none;padding:0;font:inherit;font-weight:600;font-size:11px;color:var(--primary);text-decoration:underline;cursor:pointer">how do I do this?</button></div>
 <div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Lets the IRS talk to us about this consumer. Without it on file they will want the consumer on the phone every time, including for a 147C.</div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-bottom:6px"><input type="checkbox" id="tax_irs8821"> <span><strong>Form 8821 filed</strong> — IRS Tax Authorization</span></label>
       <div id="filing-IRS-8821"></div>
 </section>
 <section data-card="4" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 3 &nbsp;·&nbsp; Form 2678</div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 3 &nbsp;·&nbsp; Form 2678&nbsp;&nbsp;<button type="button" onclick="taxShowStep('3')" style="background:none;border:none;padding:0;font:inherit;font-weight:600;font-size:11px;color:var(--primary);text-decoration:underline;cursor:pointer">how do I do this?</button></div>
 <div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Appoints us as the consumer's payroll agent for FICA and FUTA. <strong>Post only, and payroll cannot run until the IRS approves it</strong>, which takes weeks, so send this one early.</div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-bottom:6px"><input type="checkbox" id="tax_irs2678"> <span><strong>Form 2678 filed</strong> — IRS Agent Appointment</span></label>
       <div id="filing-IRS-2678"></div>
 </section>
 <section data-card="5" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri registration (Form 2643A)</div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4 &nbsp;·&nbsp; Missouri registration (Form 2643A)&nbsp;&nbsp;<button type="button" onclick="taxShowStep('4A')" style="background:none;border:none;padding:0;font:inherit;font-weight:600;font-size:11px;color:var(--primary);text-decoration:underline;cursor:pointer">how do I do this?</button></div>
 <div style="font-size:11px;line-height:1.55;margin-bottom:8px;background:#fff3cd;border-radius:6px;padding:8px 10px">You are registering <strong>the consumer</strong> as a household employer on their own EIN, not Caring Companions. One registration each, tax type <strong>Withholding Tax</strong>.</div>
 <div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Start here, <strong>signed out</strong>: <a href="https://mytax.mo.gov/rptp/portal/business/register-new-business/" target="_blank" rel="noopener">Online New Business Registration</a>. Fill it in from their signed 2643A in the packet list. Needs the EIN first.</div>
     <div class="form-row">
@@ -3164,13 +3164,13 @@
 <div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">Allow 2-3 business days. The confirmation number above is the only thing you get at submission and is what Revenue will ask for. If nothing has arrived after a week, ring <strong>(573) 751-5860</strong> with it and ask them to read you the account number.</div>
 </section>
 <section data-card="6" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4b &nbsp;·&nbsp; Form 2827 (Missouri Power of Attorney)</div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 4b &nbsp;·&nbsp; Form 2827 (Missouri Power of Attorney)&nbsp;&nbsp;<button type="button" onclick="taxShowStep('4B')" style="background:none;border:none;padding:0;font:inherit;font-weight:600;font-size:11px;color:var(--primary);text-decoration:underline;cursor:pointer">how do I do this?</button></div>
 <div style="font-size:11px;color:var(--gray-600);line-height:1.55;margin-bottom:6px">This is what lets us act for the consumer at the Department of Revenue. Nothing in the portal grants it; the signed form does.</div>
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--gray-100);padding:8px 10px;border-radius:6px;margin-bottom:6px"><input type="checkbox" id="tax_mo2827"> <span><strong>Form 2827 filed</strong> — Missouri Power of Attorney</span></label>
       <div id="filing-MO-2827"></div>
 </section>
 <section data-card="7" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)</div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">STEP 5 &nbsp;·&nbsp; DES / UInteract (Missouri unemployment tax)&nbsp;&nbsp;<button type="button" onclick="taxShowStep('5')" style="background:none;border:none;padding:0;font:inherit;font-weight:600;font-size:11px;color:var(--primary);text-decoration:underline;cursor:pointer">how do I do this?</button></div>
     <div class="form-row">
       <div class="form-group"><label>DES Account # (EAN) — after registration</label><input type="text" id="tax_des_ean" placeholder="e.g. 10-63887-0-00"></div>
       <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
@@ -4831,6 +4831,22 @@ function removeConsumer(cid) {
   setData('consumers', consumers);
   renderConsumers();
   updateDashboard();
+}
+
+/* The step-by-step instructions sit in a panel at the top of this window that is
+   collapsed by default, which makes them effectively invisible once you have
+   scrolled down to the fields. This opens the panel and jumps to the step you are
+   actually working on, so the instructions come to you. */
+function taxShowStep(stepLabel) {
+  const panel = document.getElementById('taxInstructions');
+  if (!panel) return;
+  panel.style.display = 'block';
+  const want = 'STEP ' + String(stepLabel).toUpperCase();
+  const heading = Array.from(panel.querySelectorAll('div')).find(d => {
+    const t = (d.textContent || '').trim().toUpperCase();
+    return t.indexOf(want) === 0 && d.children.length === 0;
+  });
+  (heading || panel).scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function openTaxSetup(cid) {
