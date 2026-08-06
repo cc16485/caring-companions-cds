@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Care Plan Scheduling Preferences | Caring Companions CDS</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0e3860">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Care Plan">
+<link rel="apple-touch-icon" href="/cds-apple-touch-icon.png">
+<link rel="icon" href="/cds-icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #0e3860;
+    --teal: #54bdb8;
+    --honey: #e0a458;
+    --danger: #e74c3c;
+    --success: #27ae60;
+    --gray-100: #f8f9fa;
+    --gray-200: #e9ecef;
+    --gray-300: #dee2e6;
+    --gray-600: #6c757d;
+    --gray-800: #343a40;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Poppins', sans-serif; background: var(--gray-100); color: var(--gray-800); min-height: 100vh; }
+
+  /* HEADER */
+  .header { background: white; padding: 12px 20px; display: flex; align-items: center; border-bottom: 3px solid var(--teal); }
+  .header-logo { height: 44px; width: auto; max-width: 100%; }
+  @media (max-width: 400px) { .header-logo { height: 38px; } }
+
+  /* LAYOUT */
+  .container { max-width: 760px; margin: 0 auto; padding: 20px 16px 80px; }
+  .page-title { font-size: 21px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+  .page-sub { font-size: 13px; color: var(--gray-600); margin-bottom: 20px; }
+
+  /* CARDS */
+  .card { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--primary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid var(--teal); }
+  .card.office { background: #f4f8fc; border: 1px solid #d6e4f0; box-shadow: none; }
+  .card.office .card-title { color: var(--primary); border-bottom-color: #c9dcec; }
+  .office-note { font-size: 11px; color: var(--gray-600); margin-top: -8px; margin-bottom: 14px; }
+
+  /* EXPLAINER */
+  .explain { font-size: 14px; line-height: 1.6; }
+  .explain p { margin-bottom: 11px; }
+  .explain p:last-child { margin-bottom: 0; }
+  .explain strong { color: var(--primary); }
+
+  /* FORM FIELDS */
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .form-row.single { grid-template-columns: 1fr; }
+  @media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group label { font-size: 11px; font-weight: 600; color: var(--gray-600); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .req { color: var(--danger); }
+  .form-group input, .form-group select {
+    border: 1.5px solid var(--gray-300); border-radius: 6px; padding: 10px 11px;
+    font-size: 15px; font-family: inherit; background: white; color: var(--gray-800); transition: border-color 0.15s;
+  }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--teal); }
+  .form-group .hint { font-size: 11px; color: var(--gray-600); margin-top: 4px; }
+
+  /* TASK ROWS */
+  .task { border: 1.5px solid var(--gray-200); border-radius: 9px; padding: 15px; margin-bottom: 12px; background: white; }
+  .task-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .task-num { width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; background: var(--primary); color: white; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .task-head .form-group { flex: 1; margin: 0; }
+  .task-del { background: none; border: none; color: var(--gray-600); font-size: 12px; font-family: inherit; cursor: pointer; padding: 6px; text-decoration: underline; flex-shrink: 0; }
+  .task-del:hover { color: var(--danger); }
+  /* On a phone the number and Remove link squeeze the task name down to a few
+     visible characters, so give the name its own full-width line underneath. */
+  @media (max-width: 560px) {
+    .task-head { flex-wrap: wrap; }
+    .task-head .form-group { order: 3; flex-basis: 100%; }
+    .task-head .task-del { margin-left: auto; }
+  }
+
+  .task-q { font-size: 13.5px; font-weight: 600; color: var(--primary); margin-bottom: 10px; }
+  .daygrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  @media (max-width: 560px) { .daygrid { grid-template-columns: repeat(4, 1fr); } }
+  .day {
+    border: 1.5px solid var(--gray-300); border-radius: 7px; background: white;
+    min-height: 46px; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; color: var(--gray-600);
+    cursor: pointer; user-select: none; transition: all 0.12s;
+  }
+  .day:hover { border-color: var(--teal); }
+  .day.on { background: var(--teal); border-color: var(--teal); color: white; }
+  .day input { position: absolute; opacity: 0; pointer-events: none; }
+
+  .counter { font-size: 12px; font-weight: 600; margin-top: 10px; }
+  .counter.need { color: var(--gray-600); }
+  .counter.done { color: var(--success); }
+  .counter.over { color: var(--danger); }
+
+  .nopref { display: flex; align-items: center; gap: 9px; margin-top: 12px; font-size: 13px; color: var(--gray-800); cursor: pointer; }
+  .nopref input { width: 19px; height: 19px; accent-color: var(--teal); flex-shrink: 0; }
+
+  /* DAILY TASK ROWS */
+  .daily-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .daily-row .task-num { background: var(--teal); }
+  .daily-row input { flex: 1; border: 1.5px solid var(--gray-300); border-radius: 6px; padding: 10px 11px; font-size: 15px; font-family: inherit; }
+  .daily-row input:focus { outline: none; border-color: var(--teal); }
+  .daily-tag { font-size: 11px; font-weight: 600; color: var(--teal); text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+
+  .add-btn { background: white; border: 1.5px dashed var(--gray-300); border-radius: 8px; padding: 11px; width: 100%; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--primary); cursor: pointer; }
+  .add-btn:hover { border-color: var(--teal); background: #fafffe; }
+
+  /* ATTESTATION */
+  .attest { background: var(--gray-100); border-left: 3px solid var(--honey); border-radius: 6px; padding: 15px; font-size: 13.5px; line-height: 1.6; font-style: italic; margin-bottom: 18px; }
+
+  /* SIGNATURES */
+  .sig-block { margin-bottom: 20px; }
+  .sig-label { font-size: 11px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  .sig-canvas-wrap { border: 1.5px solid var(--gray-300); border-radius: 8px; background: #fafafa; touch-action: none; }
+  .sig-canvas-wrap canvas { display: block; width: 100%; height: 120px; cursor: crosshair; border-radius: 7px; }
+  .sig-tools { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 8px; }
+  .sig-clear { background: none; border: none; color: var(--gray-600); font-size: 12px; font-family: inherit; cursor: pointer; text-decoration: underline; padding: 4px 0; }
+
+  /* SUBMIT */
+  .err { background: #fdeaea; border: 1px solid #f5c6c6; color: #a12020; border-radius: 8px; padding: 12px 14px; font-size: 13.5px; line-height: 1.5; margin-bottom: 16px; display: none; }
+  .submit-btn { width: 100%; background: var(--teal); color: white; border: none; border-radius: 9px; padding: 16px; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .submit-btn:hover { background: #47a8a3; }
+  .submit-btn:disabled { background: var(--gray-300); cursor: default; }
+
+  /* SUCCESS */
+  #successPage { display: none; }
+  .success-card { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); padding: 32px 24px; text-align: center; }
+  .success-mark { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: var(--success); display: flex; align-items: center; justify-content: center; }
+  .success-mark svg { width: 30px; height: 30px; }
+  .success-title { font-size: 19px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
+  .success-detail { font-size: 14px; line-height: 1.6; color: var(--gray-800); }
+  .summary { text-align: left; background: var(--gray-100); border-radius: 8px; padding: 16px; margin-top: 20px; font-size: 13.5px; line-height: 1.7; }
+  .summary h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-600); margin-bottom: 8px; }
+  .summary .line { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--gray-200); }
+  .summary .line:last-child { border-bottom: none; }
+  .summary .line b { color: var(--primary); font-weight: 600; }
+  .print-btn { background: white; border: 1.5px solid var(--gray-300); border-radius: 8px; padding: 12px; width: 100%; margin-top: 16px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--primary); cursor: pointer; }
+
+  @media print {
+    body { background: white; }
+    .add-btn, .task-del, .sig-clear, .submit-btn, .print-btn, .card.office { display: none !important; }
+    .card { box-shadow: none; border: 1px solid #ccc; page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img src="/cds-logo.png" class="header-logo" alt="Caring Companions CDS">
+</div>
+
+<div class="container">
+
+<div id="formPage">
+
+  <div class="page-title">Care Plan Scheduling Preferences</div>
+  <div class="page-sub">Choosing which days your approved tasks are scheduled.</div>
+
+  <!-- ── WHICH PLAN IS THIS ─────────────────────────────────────────────── -->
+  <div class="card office">
+    <div class="card-title">Which care plan is this</div>
+    <div class="office-note">Filled in by the onboarding specialist before going through the form with the consumer.</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Care plan for <span class="req">*</span></label>
+        <input type="text" id="f_consumer" placeholder="Consumer's full name" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Care plan effective date <span class="req">*</span></label>
+        <input type="date" id="f_plandate">
+        <div class="hint">The date on the plan the state approved.</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>WellSky ID</label>
+        <input type="text" id="f_wellsky" placeholder="Optional" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Onboarding specialist</label>
+        <input type="text" id="f_specialist" placeholder="Your name" autocomplete="off">
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HOW THIS WORKS ─────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">How this works</div>
+    <div class="explain">
+      <p>The State of Missouri has approved your care plan. That plan lists the tasks you will
+         get help with, and how many days each week you are approved for each one.</p>
+      <p>Some tasks are approved for <strong>every day</strong>, 7 days a week. You do not need
+         to pick days for those. They will be scheduled daily.</p>
+      <p>Other tasks are approved for a <strong>set number of days each week</strong>, such as 1,
+         2, 3, 4 or 5 days. For those, you choose which days of the week you would like them done.</p>
+      <p>The days you choose here go onto your schedule. Your attendant follows that schedule, so
+         they know which tasks to do on which days. If you want to change your days later, call
+         the office and we will update it.</p>
+    </div>
+  </div>
+
+  <!-- ── SECTION 1 ──────────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Section 1: Tasks scheduled every day</div>
+    <div class="explain" style="margin-bottom:16px">
+      <p>The State of Missouri requires these tasks to be scheduled every day, 7 days per week.
+         You do not need to choose days for them.</p>
+    </div>
+    <div id="dailyList"></div>
+    <button type="button" class="add-btn" onclick="addDaily()">+ Add a daily task</button>
+  </div>
+
+  <!-- ── SECTION 2 ──────────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Section 2: Tasks where you choose the days</div>
+    <div class="explain" style="margin-bottom:16px">
+      <p>For each task below, the state approved a set number of days per week. You choose which
+         days those are. The form will only let you pick as many days as you were approved for.</p>
+    </div>
+    <div id="flexList"></div>
+    <button type="button" class="add-btn" onclick="addFlex()">+ Add a task</button>
+  </div>
+
+  <!-- ── SECTION 3 ──────────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Section 3: Verification</div>
+    <div class="attest">
+      "I understand that my care plan is created and approved by the State of Missouri. I do not
+      select my tasks or how many days I receive them. I only choose the days for tasks that are
+      scheduled less than 7 days per week. I have reviewed my care plan and selected my preferences."
+    </div>
+
+    <div class="sig-block">
+      <div class="sig-label">Consumer or representative signature <span class="req">*</span></div>
+      <div class="sig-canvas-wrap"><canvas id="sig_consumer" height="120"></canvas></div>
+      <div class="sig-tools">
+        <button type="button" class="sig-clear" onclick="clearSig('consumer')">Clear signature</button>
+        <div class="form-group" style="max-width:190px">
+          <label>Date</label>
+          <input type="date" id="sig_consumer_date">
+        </div>
+      </div>
+      <div class="form-row single" style="margin-top:12px">
+        <div class="form-group">
+          <label>Printed name of person signing <span class="req">*</span></label>
+          <input type="text" id="f_signer" placeholder="Full name" autocomplete="off">
+          <div class="hint">If you are signing on the consumer's behalf, put your own name here.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sig-block" style="margin-bottom:0">
+      <div class="sig-label">Onboarding specialist signature <span class="req">*</span></div>
+      <div class="sig-canvas-wrap"><canvas id="sig_staff" height="120"></canvas></div>
+      <div class="sig-tools">
+        <button type="button" class="sig-clear" onclick="clearSig('staff')">Clear signature</button>
+        <div class="form-group" style="max-width:190px">
+          <label>Date</label>
+          <input type="date" id="sig_staff_date">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="err" id="submit_error"></div>
+  <button class="submit-btn" id="submit_btn" onclick="submitForm()">Submit Scheduling Preferences</button>
+
+</div><!-- /formPage -->
+
+<div id="successPage">
+  <div class="success-card">
+    <div class="success-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </div>
+    <div class="success-title">Preferences received</div>
+    <div class="success-detail" id="success_detail"></div>
+    <div class="summary" id="success_summary"></div>
+    <button class="print-btn" onclick="window.print()">Print a copy for the file</button>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<script>
+const SUPABASE_URL      = 'https://siivpekcaryeyttszwav.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_iDJ00Ve4hw5iw2YtVmiulg__FmjShmO';
+const AGENCY_ID         = 'caring-companions-cds';
+
+const _db   = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const _sigs = { consumer: false, staff: false };
+
+const DAYS = [
+  { key: 'mon', label: 'Mon' }, { key: 'tue', label: 'Tue' }, { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' }, { key: 'fri', label: 'Fri' }, { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' }
+];
+
+let _flexSeq  = 0;   // ids only ever go up, so removing a row never collides with a new one
+let _dailySeq = 0;
+
+/* Today's date in Missouri, not in UTC. toISOString() rolls over to tomorrow at
+   7pm Central, so anything signed in the evening would carry the wrong date on a
+   signed record. */
+function todayLocal() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', () => {
+  const today = todayLocal();
+  document.getElementById('sig_consumer_date').value = today;
+  document.getElementById('sig_staff_date').value    = today;
+  _initSigPads();
+  addDaily(); addDaily();   // start with a couple of empty rows so the sections are not bare
+  addFlex();  addFlex();
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   DAILY TASKS
+   ──────────────────────────────────────────────────────────────────────── */
+function addDaily() {
+  const id = ++_dailySeq;
+  const row = document.createElement('div');
+  row.className = 'daily-row';
+  row.id = 'daily_' + id;
+  row.innerHTML =
+    '<div class="task-num">' + id + '</div>' +
+    '<input type="text" id="dailyname_' + id + '" placeholder="Task approved for every day" autocomplete="off">' +
+    '<div class="daily-tag">Every day</div>' +
+    '<button type="button" class="task-del" onclick="delRow(\'daily_' + id + '\', renumberDaily)">Remove</button>';
+  document.getElementById('dailyList').appendChild(row);
+}
+
+function renumberDaily() {
+  document.querySelectorAll('#dailyList .daily-row').forEach((r, i) => {
+    r.querySelector('.task-num').textContent = i + 1;
+  });
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   FLEXIBLE TASKS
+   The point of this section: the state approved a number of days, so the form
+   holds the consumer to that number instead of letting them pick a count that
+   has to be corrected by a phone call later.
+   ──────────────────────────────────────────────────────────────────────── */
+function addFlex() {
+  const id = ++_flexSeq;
+  const wrap = document.createElement('div');
+  wrap.className = 'task';
+  wrap.id = 'flex_' + id;
+
+  let days = '';
+  DAYS.forEach(d => {
+    days +=
+      '<label class="day" id="day_' + id + '_' + d.key + '">' +
+        '<input type="checkbox" data-flex="' + id + '" data-day="' + d.key + '" ' +
+               'onchange="dayToggled(' + id + ', this)">' +
+        d.label +
+      '</label>';
+  });
+
+  let opts = '';
+  for (let n = 1; n <= 6; n++) opts += '<option value="' + n + '">' + n + (n === 1 ? ' day' : ' days') + '</option>';
+
+  wrap.innerHTML =
+    '<div class="task-head">' +
+      '<div class="task-num"></div>' +
+      '<div class="form-group"><label>Task</label>' +
+        '<input type="text" id="flexname_' + id + '" placeholder="Task name from the care plan" autocomplete="off"></div>' +
+      '<button type="button" class="task-del" onclick="delRow(\'flex_' + id + '\', renumberFlex)">Remove</button>' +
+    '</div>' +
+    '<div class="form-row" style="margin-bottom:14px">' +
+      '<div class="form-group"><label>Days per week approved</label>' +
+        '<select id="flexdays_' + id + '" onchange="approvedChanged(' + id + ')">' +
+          '<option value="">Choose</option>' + opts +
+        '</select></div>' +
+    '</div>' +
+    '<div class="task-q">Which day or days would you like this scheduled?</div>' +
+    '<div class="daygrid">' + days + '</div>' +
+    '<div class="counter need" id="count_' + id + '">Choose how many days per week were approved first.</div>' +
+    '<label class="nopref">' +
+      '<input type="checkbox" id="nopref_' + id + '" onchange="noPrefToggled(' + id + ')">' +
+      '<span>No preference. The office can choose the days.</span>' +
+    '</label>';
+
+  document.getElementById('flexList').appendChild(wrap);
+  renumberFlex();
+}
+
+function renumberFlex() {
+  document.querySelectorAll('#flexList .task').forEach((t, i) => {
+    t.querySelector('.task-num').textContent = i + 1;
+  });
+}
+
+function delRow(rowId, renumber) {
+  const el = document.getElementById(rowId);
+  if (el) el.remove();
+  renumber();
+}
+
+function flexIds() {
+  return Array.from(document.querySelectorAll('#flexList .task')).map(t => Number(t.id.replace('flex_', '')));
+}
+
+function approvedOf(id) {
+  const v = document.getElementById('flexdays_' + id);
+  return v && v.value ? Number(v.value) : 0;
+}
+
+function chosenOf(id) {
+  return Array.from(document.querySelectorAll('input[data-flex="' + id + '"]:checked')).map(cb => cb.dataset.day);
+}
+
+/* Ticking past the approved number is refused rather than allowed and flagged.
+   Letting it through would mean the consumer signs a sheet that contradicts the
+   plan, and somebody has to ring them back to unpick it. */
+function dayToggled(id, cb) {
+  const approved = approvedOf(id);
+  if (!approved) {
+    cb.checked = false;
+    setCounter(id, 'Choose how many days per week were approved first.', 'need');
+    return;
+  }
+  if (cb.checked && chosenOf(id).length > approved) {
+    cb.checked = false;
+    setCounter(id, 'You were approved for ' + approved + (approved === 1 ? ' day' : ' days') +
+                   '. Untick a day before choosing another one.', 'over');
+    paintDays(id);
+    return;
+  }
+  const nop = document.getElementById('nopref_' + id);
+  if (nop.checked) { nop.checked = false; }      // picking a day is a preference
+  paintDays(id);
+  updateCounter(id);
+}
+
+function noPrefToggled(id) {
+  if (!document.getElementById('nopref_' + id).checked) { updateCounter(id); return; }
+  document.querySelectorAll('input[data-flex="' + id + '"]').forEach(cb => { cb.checked = false; });
+  paintDays(id);
+  setCounter(id, 'The office will choose the days for this task.', 'done');
+}
+
+function approvedChanged(id) {
+  const approved = approvedOf(id);
+  const chosen   = chosenOf(id);
+  // Dropping the approved number below what is already ticked, or back to blank,
+  // would leave the row silently over its limit. Clear to a clean slate and say so.
+  if (chosen.length && (!approved || chosen.length > approved)) {
+    document.querySelectorAll('input[data-flex="' + id + '"]').forEach(cb => { cb.checked = false; });
+    paintDays(id);
+    setCounter(id, approved
+      ? 'Days cleared, because more were chosen than ' + approved + '. Please choose again.'
+      : 'Days cleared. Choose how many days per week were approved first.', 'over');
+    return;
+  }
+  updateCounter(id);
+}
+
+function paintDays(id) {
+  DAYS.forEach(d => {
+    const box = document.querySelector('input[data-flex="' + id + '"][data-day="' + d.key + '"]');
+    document.getElementById('day_' + id + '_' + d.key).classList.toggle('on', !!(box && box.checked));
+  });
+}
+
+function setCounter(id, text, cls) {
+  const el = document.getElementById('count_' + id);
+  el.textContent = text;
+  el.className = 'counter ' + cls;
+}
+
+function updateCounter(id) {
+  const approved = approvedOf(id);
+  if (!approved) { setCounter(id, 'Choose how many days per week were approved first.', 'need'); return; }
+  if (document.getElementById('nopref_' + id).checked) {
+    setCounter(id, 'The office will choose the days for this task.', 'done'); return;
+  }
+  const n = chosenOf(id).length;
+  if (n === approved) { setCounter(id, 'All set. ' + n + ' of ' + approved + ' days chosen.', 'done'); return; }
+  const left = approved - n;
+  setCounter(id, n + ' of ' + approved + ' days chosen. Choose ' + left + ' more.', 'need');
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   SIGNATURE PADS
+   ──────────────────────────────────────────────────────────────────────── */
+function _initSigPads() {
+  ['consumer','staff'].forEach(name => {
+    const canvas = document.getElementById('sig_' + name);
+    const ctx = canvas.getContext('2d');
+
+    function fit() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width  = (rect.width || 300) * ratio;
+      canvas.height = 120 * ratio;
+      ctx.scale(ratio, ratio);
+      ctx.strokeStyle = '#1a1a2e';
+      ctx.lineWidth   = 2.2;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
+    }
+    fit();
+
+    /* Turning a tablet sideways changes the pad's width, and a canvas keeps its
+       old pixel size, which would squash the signature. Refit on resize, but only
+       while the pad is still blank: refitting clears it, and silently wiping a
+       signature somebody already drew would be far worse than a squashed box. */
+    window.addEventListener('resize', () => { if (!_sigs[name]) fit(); });
+
+    let drawing = false;
+    function getPos(e) {
+      const r   = canvas.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return { x: (src.clientX - r.left) * (canvas.width  / r.width),
+               y: (src.clientY - r.top)  * (canvas.height / r.height) };
+    }
+    /* Fit again on the first stroke of a blank pad. Sizing at load is not
+       reliable: if the page has not finished laying out, the pad measures a few
+       pixels wide and the signature comes out unreadable on the saved record.
+       By the time somebody's finger is on it, the real width is known. */
+    function start(e) {
+      e.preventDefault();
+      if (!_sigs[name]) fit();
+      drawing = true; _sigs[name] = true;
+      const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y);
+    }
+    function move(e)  { e.preventDefault(); if (!drawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }
+    function end()    { drawing = false; }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove',  move,  { passive: false });
+    canvas.addEventListener('touchend', end);
+  });
+}
+
+function clearSig(name) {
+  const canvas = document.getElementById('sig_' + name);
+  canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  _sigs[name] = false;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   COLLECT AND SUBMIT
+   ──────────────────────────────────────────────────────────────────────── */
+function collect() {
+  const daily = [];
+  document.querySelectorAll('#dailyList .daily-row').forEach(r => {
+    const name = r.querySelector('input').value.trim();
+    if (name) daily.push({ task: name, days_per_week: 7, days: DAYS.map(d => d.key), chosen_by: 'state' });
+  });
+
+  const flex = [];
+  flexIds().forEach(id => {
+    const name = document.getElementById('flexname_' + id).value.trim();
+    const approved = approvedOf(id);
+    const nopref = document.getElementById('nopref_' + id).checked;
+    if (!name && !approved) return;              // an untouched row is not an error, it is just empty
+    flex.push({ row: id, task: name, days_per_week: approved, no_preference: nopref,
+                days: nopref ? [] : chosenOf(id), chosen_by: nopref ? 'office' : 'consumer' });
+  });
+
+  return { daily, flex };
+}
+
+function fail(msg) {
+  const errEl = document.getElementById('submit_error');
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+  errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return false;
+}
+
+async function submitForm() {
+  document.getElementById('submit_error').style.display = 'none';
+
+  const consumer = document.getElementById('f_consumer').value.trim();
+  const plandate = document.getElementById('f_plandate').value;
+  const signer   = document.getElementById('f_signer').value.trim();
+  if (!consumer)  return fail('Please enter the name of the consumer this care plan is for.');
+  if (!plandate)  return fail('Please enter the care plan effective date, so these preferences are tied to the right version of the plan.');
+
+  const { daily, flex } = collect();
+  if (!daily.length && !flex.length) return fail('Please add at least one task from the care plan.');
+
+  // Every flexible row has to be complete, because a half-filled row becomes a
+  // schedule nobody can build from.
+  for (let i = 0; i < flex.length; i++) {
+    const f = flex[i];
+    const n = i + 1;
+    if (!f.task)          return fail('Task ' + n + ' in Section 2 needs a name, or remove the row.');
+    if (!f.days_per_week) return fail('Task ' + n + ' in Section 2 needs the number of days per week the state approved.');
+    if (f.no_preference)  continue;
+    if (f.days.length !== f.days_per_week) {
+      return fail('Task ' + n + ' in Section 2 is approved for ' + f.days_per_week +
+                  (f.days_per_week === 1 ? ' day' : ' days') + ' per week, but ' + f.days.length +
+                  (f.days.length === 1 ? ' day is' : ' days are') + ' chosen. Choose the days, or tick "No preference".');
+    }
+  }
+
+  if (!signer)         return fail('Please print the name of the person signing.');
+  if (!_sigs.consumer) return fail('The consumer or representative signature is required.');
+  if (!_sigs.staff)    return fail('The onboarding specialist signature is required.');
+
+  const btn = document.getElementById('submit_btn');
+  btn.textContent = 'Submitting…'; btn.disabled = true;
+
+  const { error } = await _db.from('care_plan_preferences').insert({
+    agency_id:       AGENCY_ID,
+    consumer,
+    plan_date:       plandate,
+    wellsky_id:      document.getElementById('f_wellsky').value.trim()    || null,
+    specialist:      document.getElementById('f_specialist').value.trim() || null,
+    daily_tasks:     daily,
+    flexible_tasks:  flex,
+    signer_name:     signer,
+    sig_consumer:      document.getElementById('sig_consumer').toDataURL(),
+    sig_consumer_date: document.getElementById('sig_consumer_date').value || null,
+    sig_staff:         document.getElementById('sig_staff').toDataURL(),
+    sig_staff_date:    document.getElementById('sig_staff_date').value    || null
+  });
+
+  if (error) {
+    btn.textContent = 'Submit Scheduling Preferences'; btn.disabled = false;
+    return fail('It did not save: ' + error.message + '. Nothing has been lost, so try Submit again. ' +
+                'If it keeps failing, call the office before the consumer leaves.');
+  }
+
+  showSuccess(consumer, plandate, daily, flex);
+}
+
+function showSuccess(consumer, plandate, daily, flex) {
+  const label = k => (DAYS.find(d => d.key === k) || {}).label || k;
+  const planStr = new Date(plandate + 'T12:00:00').toLocaleDateString('en-US',
+    { month: 'long', day: 'numeric', year: 'numeric' });
+
+  document.getElementById('success_detail').innerHTML =
+    'The scheduling preferences for <strong>' + esc(consumer) + '</strong> have been saved against the ' +
+    'care plan effective ' + planStr + '. The office will build the schedule from these days.';
+
+  let html = '<h4>What was chosen</h4>';
+  daily.forEach(d => {
+    html += '<div class="line"><span>' + esc(d.task) + '</span><b>Every day</b></div>';
+  });
+  flex.forEach(f => {
+    const right = f.no_preference
+      ? 'Office chooses (' + f.days_per_week + ')'
+      : f.days.map(label).join(', ');
+    html += '<div class="line"><span>' + esc(f.task) + '</span><b>' + esc(right) + '</b></div>';
+  });
+  document.getElementById('success_summary').innerHTML = html;
+
+  document.getElementById('formPage').style.display    = 'none';
+  document.getElementById('successPage').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+</script>
+
+</body>
+</html>

@@ -830,6 +830,50 @@
   <div id="lprof_body"></div>
 </div>
 
+<!-- ==================== CARE PLAN DAYS ==================== -->
+<div id="page-careplans" class="page">
+  <div class="section-header">
+    <div class="section-title">Care Plan Days</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-outline" style="font-size:12px" onclick="loadCarePlanPrefs()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- FORM LINK ADMIN BAR -->
+  <div style="background:#f0f7ff;border:1.5px solid #b8d4ef;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <div style="font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap">📋 Consumer Form Link</div>
+    <code style="font-size:13px;font-weight:600;color:var(--primary);background:#dde9f8;padding:5px 12px;border-radius:6px;flex:1;min-width:200px">hub.caringcds.com/care-plan/</code>
+    <button class="btn btn-outline" style="font-size:12px;white-space:nowrap" onclick="navigator.clipboard.writeText('https://hub.caringcds.com/care-plan/').then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='📋 Copy Link',1800)})">📋 Copy Link</button>
+  </div>
+
+  <div class="card" style="background:#f0f7ff;border-left:4px solid var(--primary-light)">
+    <div class="card-title" style="margin-bottom:8px"><span class="icon">📅</span> What this is</div>
+    <div style="font-size:13px;line-height:1.6">
+      The state sets the tasks and how many days a week each one is approved for. The consumer
+      only chooses <strong>which</strong> days. They do that on the form above, at orientation,
+      and it arrives here signed.
+      <br><br>
+      WellSky has no open API, so nobody can push these days into it for you. What this page does
+      instead is lay them out as a week grid you can read straight down while you build the
+      schedule, and keep a signed copy for the consumer's file. Tick
+      <strong>Built in WellSky</strong> when it is in, and it leaves the queue.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span class="icon">⏳</span> Waiting to be built in WellSky
+      <span id="cppBadge" style="display:none;background:var(--danger);color:white;font-size:11px;font-weight:700;padding:2px 9px;border-radius:11px;margin-left:8px"></span>
+    </div>
+    <div id="cppPending"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="icon">✅</span> Already built</div>
+    <div id="cppDone"></div>
+  </div>
+</div>
+
 <!-- ==================== AUTHORIZATIONS ==================== -->
 <div id="page-authorizations" class="page">
   <div class="section-header">
@@ -4237,6 +4281,7 @@ const SECTIONS = [
       { page: 'consumers',      label: 'Active Consumers' },
       { page: 'taxcompliance',  label: 'Tax & EIN' },
       { page: 'authorizations', label: 'Authorizations' },
+      { page: 'careplans',      label: 'Care Plan Days' },
       { page: 'profile',        label: 'Consumer Profile' } ] },
   { id: 'attendants', label: '🧑‍🤝‍🧑 Attendants',  tabs: [
       { page: 'attendants',     label: 'Roster' },
@@ -4334,6 +4379,7 @@ function showPage(id) {
 
   if (id === 'dashboard') updateDashboard();
   if (id === 'automations') renderAutomations();
+  if (id === 'careplans') loadCarePlanPrefs();
   if (id === 'quarterly') renderQuarterlyReport();
   if (id === 'financials') renderFinancials();
   if (id === 'consumers' || id === 'pipeline') {
@@ -9803,6 +9849,171 @@ async function loadPendingSubmissions() {
       </div>
     </div>`;
   }).join('');
+}
+
+// ── CARE PLAN DAYS (from care_plan_preferences table) ─────────────────
+// The consumer picks which days on hub.caringcds.com/care-plan/ and it lands
+// here signed. WellSky has no open API, so this cannot push anything into it.
+// The job is to make transcribing it quick and hard to get wrong: one week grid
+// per consumer, read straight down.
+const CPP_DAYS = [['mon','Mon'],['tue','Tue'],['wed','Wed'],['thu','Thu'],
+                  ['fri','Fri'],['sat','Sat'],['sun','Sun']];
+let _cppRows = [];
+
+async function loadCarePlanPrefs() {
+  const pend = document.getElementById('cppPending');
+  const done = document.getElementById('cppDone');
+  const badge = document.getElementById('cppBadge');
+  if (!pend) return;
+  if (!_db) { pend.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Database not connected.</p>'; return; }
+
+  pend.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Loading…</p>';
+  done.innerHTML = '';
+
+  const { data, error } = await _db.from('care_plan_preferences')
+    .select('*')
+    .eq('agency_id', AGENCY_ID)
+    .order('submitted_at', { ascending: false });
+
+  if (error) {
+    pend.innerHTML = '<p style="font-size:13px;color:var(--danger)">Could not load: ' + esc(error.message) + '</p>';
+    return;
+  }
+
+  _cppRows = data || [];
+  const waiting = _cppRows.filter(r => !r.scheduled);
+  const built   = _cppRows.filter(r =>  r.scheduled);
+
+  if (waiting.length) {
+    badge.textContent = waiting.length + ' waiting';
+    badge.style.display = 'inline-block';
+    pend.innerHTML = waiting.map(r => cppCard(r, false)).join('');
+  } else {
+    badge.style.display = 'none';
+    pend.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Nothing waiting. Every signed sheet is in WellSky ✅</p>';
+  }
+
+  done.innerHTML = built.length
+    ? built.slice(0, 15).map(r => cppCard(r, true)).join('')
+    : '<p style="font-size:13px;color:var(--gray-600)">Nothing built yet.</p>';
+}
+
+// All tasks in one list, the state's daily ones first so the grid reads the way
+// the plan does.
+function cppTasks(row) {
+  const daily = (Array.isArray(row.daily_tasks) ? row.daily_tasks : []).map(t => ({
+    task: t.task, everyDay: true, noPref: false, days: CPP_DAYS.map(d => d[0]), approved: 7
+  }));
+  const flex = (Array.isArray(row.flexible_tasks) ? row.flexible_tasks : []).map(t => ({
+    task: t.task, everyDay: false, noPref: !!t.no_preference,
+    days: Array.isArray(t.days) ? t.days : [], approved: t.days_per_week || 0
+  }));
+  return daily.concat(flex);
+}
+
+function cppCard(row, isDone) {
+  const tasks = cppTasks(row);
+  const when = row.submitted_at
+    ? new Date(row.submitted_at).toLocaleString('en-US',
+        { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit' })
+    : '—';
+  const planDate = row.plan_date
+    ? new Date(row.plan_date + 'T12:00:00').toLocaleDateString('en-US',
+        { month:'short', day:'numeric', year:'numeric' })
+    : '—';
+
+  const head = CPP_DAYS.map(d =>
+    '<th style="padding:6px 0;font-size:11px;color:var(--gray-600);font-weight:700;width:38px">' + d[1] + '</th>').join('');
+
+  const body = tasks.map(t => {
+    // A "no preference" row has no days to transcribe, so say what is owed
+    // rather than showing seven blanks that read like a finished answer.
+    if (t.noPref) {
+      return '<tr><td style="padding:7px 10px 7px 0;font-size:13px">' + esc(t.task) +
+             '</td><td colspan="7" style="font-size:12px;color:var(--warn);font-weight:600">' +
+             'No preference — you choose ' + t.approved + (t.approved === 1 ? ' day' : ' days') + '</td></tr>';
+    }
+    const cells = CPP_DAYS.map(d => {
+      const on = t.days.indexOf(d[0]) !== -1;
+      return '<td style="text-align:center;padding:5px 0">' + (on
+        ? '<span style="display:inline-block;width:20px;height:20px;line-height:20px;border-radius:50%;background:var(--primary);color:white;font-size:12px;font-weight:700">✓</span>'
+        : '<span style="color:var(--gray-300)">·</span>') + '</td>';
+    }).join('');
+    const tag = t.everyDay
+      ? '<span style="font-size:10px;color:var(--success);font-weight:700;margin-left:6px">EVERY DAY</span>'
+      : '<span style="font-size:10px;color:var(--gray-600);margin-left:6px">' + t.approved + '/wk</span>';
+    return '<tr><td style="padding:7px 10px 7px 0;font-size:13px">' + esc(t.task) + tag + '</td>' + cells + '</tr>';
+  }).join('');
+
+  const sig = (img, label) => img
+    ? '<div><div style="font-size:10px;color:var(--gray-600);margin-bottom:2px">' + label + '</div>' +
+      '<img src="' + esc(img) + '" style="max-width:150px;border:1px solid var(--gray-300);border-radius:4px"></div>'
+    : '';
+
+  const action = isDone
+    ? '<span style="font-size:11px;background:var(--success-pale);color:var(--success);padding:4px 10px;border-radius:12px;font-weight:700">✓ Built ' +
+      (row.scheduled_at ? new Date(row.scheduled_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '') +
+      (row.scheduled_by ? ' by ' + esc(row.scheduled_by) : '') + '</span>'
+    : '<button class="btn btn-success" style="font-size:12px" onclick="cppMarkBuilt(\'' + esc(row.id) + '\')">✓ Built in WellSky</button>';
+
+  return '<div style="border:1.5px solid var(--gray-200);border-radius:8px;padding:14px;margin-bottom:12px;background:#FAF9F6">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">' +
+      '<div>' +
+        '<div style="font-weight:700;font-size:14px">' + esc(row.consumer) + '</div>' +
+        '<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+          '<span style="font-size:12px;background:#e8f4fd;color:#1a5276;padding:3px 10px;border-radius:12px;font-weight:600">Plan effective ' + planDate + '</span>' +
+          (row.wellsky_id ? '<span style="font-size:12px;background:#eaf6f6;color:var(--primary);padding:3px 10px;border-radius:12px;font-weight:600">WellSky ' + esc(row.wellsky_id) + '</span>' : '') +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--gray-600);margin-top:4px">Signed by ' + esc(row.signer_name || '—') +
+          ' · submitted ' + when + (row.specialist ? ' · with ' + esc(row.specialist) : '') + '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-shrink:0;align-items:center">' +
+        '<button class="btn btn-outline" style="font-size:12px" onclick="cppCopy(\'' + esc(row.id) + '\', this)">📋 Copy as text</button>' +
+        action +
+      '</div>' +
+    '</div>' +
+    (tasks.length
+      ? '<div style="overflow-x:auto"><table style="border-collapse:collapse;min-width:340px"><thead><tr>' +
+        '<th style="text-align:left;padding:6px 10px 6px 0;font-size:11px;color:var(--gray-600);font-weight:700">Task</th>' +
+        head + '</tr></thead><tbody>' + body + '</tbody></table></div>'
+      : '<p style="font-size:12px;color:var(--gray-600)">No tasks were listed on this sheet.</p>') +
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px">' +
+      sig(row.sig_consumer, 'Consumer or representative') + sig(row.sig_staff, 'Onboarding specialist') +
+    '</div>' +
+  '</div>';
+}
+
+// Plain text, for pasting into a note or an email without the grid.
+function cppCopy(id, btn) {
+  const row = _cppRows.filter(r => String(r.id) === String(id))[0];
+  if (!row) return;
+  const label = k => (CPP_DAYS.filter(d => d[0] === k)[0] || [k,k])[1];
+  const lines = cppTasks(row).map(t =>
+    t.everyDay ? t.task + ': every day'
+    : t.noPref ? t.task + ': no preference, office picks ' + t.approved
+    : t.task + ': ' + t.days.map(label).join(', '));
+  const when = row.plan_date
+    ? new Date(row.plan_date + 'T12:00:00').toLocaleDateString('en-US',
+        { month:'short', day:'numeric', year:'numeric' })
+    : row.plan_date;
+  const text = row.consumer + ', care plan effective ' + when + '\n' + lines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.innerHTML = '📋 Copy as text'; }, 1800);
+  });
+}
+
+async function cppMarkBuilt(id) {
+  const row = _cppRows.filter(r => String(r.id) === String(id))[0];
+  if (!row) return;
+  if (!confirm('Mark ' + row.consumer + "'s days as built in WellSky?\n\nIt moves out of the waiting list.")) return;
+  const { error } = await _db.from('care_plan_preferences').update({
+    scheduled: true,
+    scheduled_at: new Date().toISOString(),
+    scheduled_by: _user ? _user.email.split('@')[0] : 'admin'
+  }).eq('id', id);
+  if (error) { alert('Could not save that: ' + error.message); return; }
+  loadCarePlanPrefs();
 }
 
 async function acceptSubmission(sub) {
