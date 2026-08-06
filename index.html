@@ -5025,15 +5025,44 @@ function plHospToggle(){
 /* Opening the form already knowing what kind of call it is. The type select
    stays, so it can still be changed mid-call when somebody turns out to be
    further along than they first said. */
-function openAddPipeline(type){
+/* Set when the answers are being added to somebody already on the pipeline, so
+   saving updates them instead of creating a second record for the same person.
+   A lead who rang to ask questions and later decides to go ahead is the normal
+   case, not an edge case. */
+let _plEditId = null;
+
+function openAddPipeline(type, existingId){
+  _plEditId = existingId || null;
   const sel = document.getElementById('pl_type');
   if (sel) sel.value = type || 'lead';
   updatePipelineModalFields();
   const title = document.getElementById('addPipelineTitle');
-  if (title) title.textContent =
-    type === 'pccp' ? 'Transferring to us from another agency' :
-    type === 'referral' ? 'New to the CDS programme' :
-    'A lead, still deciding';
+  if (title) title.textContent = _plEditId
+    ? 'Answers for the HCBS-1'
+    : (type === 'pccp' ? 'Transferring to us from another agency' :
+       type === 'referral' ? 'New to the CDS programme' :
+       'A lead, still deciding');
+
+  /* Clear who-they-are first, every time. Without this, opening the modal for one
+     person and then opening it again for somebody else inherits the first
+     person's name, which would file a referral under the wrong name. */
+  ['pl_name','pl_phone','pl_email','pl_nfirst','pl_nlast','pl_nmi','pl_ndob','pl_ndcn',
+   'pl_first','pl_last','pl_dob','pl_dcn2'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+
+  // Carry across what we already know, so nobody is asked their name twice.
+  if (_plEditId) {
+    const p = getData('pipeline').find(x => x.id === _plEditId);
+    if (p) {
+      const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+      const bits = String(p.name || '').trim().split(/\s+/);
+      set('pl_name', p.name); set('pl_phone', p.phone); set('pl_email', p.email);
+      set('pl_nfirst', p.firstName || bits[0]);
+      set('pl_nlast', p.lastName || (bits.length > 1 ? bits[bits.length - 1] : ''));
+      set('pl_ndob', p.dob); set('pl_ndcn', p.dcn);
+    }
+  }
   openModal('addPipelineModal');
 }
 
@@ -5172,6 +5201,29 @@ function addPipelineContact() {
   if (type === 'pccp' && v('pl_medicaid') === 'inactive' &&
       !confirm('eMOMED says their Medicaid is not active.\n\nSave them to the pipeline anyway? Do not put the PCCP into Fusion until coverage is sorted out, or the request will be refused and they will wait weeks to find out.')) {
     return;
+  }
+  /* Adding the referral answers to somebody already on the pipeline updates
+     them in place. Keep their id, their notes and anything already recorded:
+     only the answers we just collected are new. */
+  if (_plEditId) {
+    const existing = pipeline.find(x => x.id === _plEditId);
+    if (existing) {
+      existing.type = type;
+      existing.referral = newContact.referral;
+      ['firstName','lastName','dob','dcn','phone','email'].forEach(k => {
+        if (newContact[k]) existing[k] = newContact[k];
+      });
+      if (newContact.attendant && !existing.attendant) existing.attendant = newContact.attendant;
+      if (newContact.transfer && !existing.transfer) existing.transfer = newContact.transfer;
+      setData('pipeline', pipeline);
+      closeModal('addPipelineModal');
+      plChipsClear();
+      _plEditId = null;
+      renderPipeline();
+      if (typeof renderLeadProfile === 'function' && _lprofId === existing.id) renderLeadProfile();
+      return;
+    }
+    _plEditId = null;   // it vanished while the modal was open; fall through and add
   }
   pipeline.unshift(newContact);
   const saved = setData('pipeline', pipeline);
@@ -5472,6 +5524,20 @@ function renderLeadProfile(){
   }
 
   // ---- the HCBS-1 answers, if this was a referral call ----
+  /* Say why the form is not offered, rather than just not offering it. Somebody
+     who added this person with "+ Add Lead" has no way to know the HCBS-1 answers
+     live behind a different button. */
+  if(!R && p.type !== 'pccp'){
+    html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;background:#fffaf0;border-left:4px solid var(--accent)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+        '<b style="color:var(--primary)">No HCBS-1 answers yet</b>' +
+        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'referral\', \'' + esc(p.id) + '\')">Collect them now</button>' +
+      '</div>' +
+      '<div class="field-note" style="margin-top:6px">This person was added as a lead, so the referral questions were never asked. ' +
+        'Collect them and the filled HCBS-1 becomes available here. It updates this record rather than making a second one.</div>' +
+    '</div>';
+  }
+
   if(R){
     const list = v => Array.isArray(v) && v.length ? v.join(', ') : '';
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
