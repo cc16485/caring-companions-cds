@@ -1007,7 +1007,7 @@
       <table>
         <thead>
           <tr>
-            <th>Consumer</th><th>Gross wages</th><th>$1,000 threshold</th>
+            <th>Consumer</th><th>Gross wages</th><th>$1,000 in a quarter</th>
             <th>DES registered</th><th>Attendants</th><th>What this means</th><th></th>
           </tr>
         </thead>
@@ -6919,7 +6919,7 @@ function renderComplianceClocks() {
     // and it used to read as an all-clear at the top of a page showing nobody
     // compliant with eleven days to go.
     host.innerHTML = '<div class="alert alert-info" style="font-size:13px">⏱ <strong>Clocks clear.</strong> ' +
-      'No consumer is over the $1,000 DES threshold unregistered, and no 90-day EIN clock is inside three weeks. ' +
+      'No consumer has passed $1,000 in a quarter while unregistered, and no 90-day EIN clock is inside three weeks. ' +
       'This says nothing about the remediation work below.</div>';
     return;
   }
@@ -8498,8 +8498,8 @@ function renderPayroll() {
       if (!c) meaning = 'Not matched to a consumer record, so nothing is tracked for them.';
       else if (met && !reg) meaning = '<strong style="color:var(--warn)">Register with DES now.</strong> They have crossed the threshold.';
       else if (met && reg) meaning = 'Registered. File the quarterly wage report for them.';
-      else if (!met && reg) meaning = 'Registered already. Report the wages even though they are under $1,000.';
-      else meaning = 'Under $1,000, so DES cannot issue an account yet. Nothing to do.';
+      else if (!met && reg) meaning = 'Registered already. Report the wages even though they are under $1,000 for the quarter.';
+      else meaning = 'Under $1,000 for this quarter, so DES cannot issue an account yet. Nothing to do.';
       return '<tr>' +
         '<td>' + (c
             ? '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none;cursor:pointer">' + esc(r.name) + '</a>'
@@ -10720,7 +10720,7 @@ function renderDailyRoutine() {
     items: [
       einLate && { t: einLate + ' consumer' + (einLate !== 1 ? 's' : '') + ' past the 90-day EIN deadline', go: 'taxcompliance', bad: true },
       einSoon && { t: einSoon + ' inside three weeks of it', go: 'taxcompliance' },
-      desDue  && { t: desDue + ' over $1,000 and not registered with DES', go: 'taxcompliance', bad: true }
+      desDue  && { t: desDue + ' past $1,000 in a quarter and not registered with DES', go: 'taxcompliance', bad: true }
     ].filter(Boolean),
     clear: 'Nothing outstanding with the state.'
   });
