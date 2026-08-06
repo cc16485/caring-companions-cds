@@ -1697,6 +1697,22 @@
         </div>
       </div>
 
+      <div class="step">
+        <div class="step-num">6b</div>
+        <div class="step-content">
+          <div class="step-title">Collect Their Scheduling Preferences</div>
+          <div class="step-desc">The state's plan of care fixes the tasks and how many days a week each one is
+            approved for. The consumer chooses <strong>which</strong> days. Take those choices on
+            <a href="https://hub.caringcds.com/care-plan/" target="_blank" rel="noopener"><strong>hub.caringcds.com/care-plan/</strong></a>,
+            which holds them to the approved number of days and will not let them pick a fourth day on a
+            three-day task.<br><br>
+            It arrives signed under <strong>Consumers → Care Plan Days</strong> laid out as a week grid to build
+            the WellSky schedule from. Tick <strong>Built in WellSky</strong> once it is in. WellSky has no open
+            API, so nothing can push it there for you.</div>
+          <div class="step-regs">Replaces the old GoHighLevel scheduling preferences document, whose signed output was an image nobody could read</div>
+        </div>
+      </div>
+
       <div class="cat-header">STEP 4 — PROCESS TAX FORMS (After Signed Packet Received)</div>
       <div class="step">
         <div class="step-num">7</div>
@@ -1727,9 +1743,11 @@
           <div class="step-desc">
             ⚠️ <strong>Timing:</strong> UInteract registration can ONLY happen AFTER first payroll is issued AND consumer has paid at least $1,000 in wages in a single quarter. Do not attempt before then — DES will not issue an account number.<br><br>
             <strong>NEW Consumer (never had a CDS vendor before):</strong><br>
-            Login to uinteract.labor.mo.gov → Employer Registration → Register Employer. Enter consumer's EIN and SSN. Type of Organization = "Individual Ownership." Business type = "Health Care / Social Assistance / Services for Elderly and Persons with Disabilities." Domestic employment = Yes. Enter consumer's home address as headquarters. Enter wage history (gross wages per quarter). Submit. You will receive the consumer's MO Unemployment Tax Account Number (EAN).<br><br>
+            Login to uinteract.labor.mo.gov → Employer Registration → Register Employer. Enter consumer's EIN and SSN. Type of Organization = "Individual Ownership." Business type = "Health Care / Social Assistance / Services for Elderly and Persons with Disabilities." Domestic employment = Yes. Enter consumer's home address as headquarters. Enter wage history (gross wages per quarter). Submit. The confirmation screen shows the consumer's MO Unemployment Tax Account Number (EAN) and is the only place it appears during registration, so record it before closing the window. If you lose it: <strong>Inquiry → Tax Inquiry → Client List Details</strong> lists every consumer with their EAN. The full screen-by-screen walkthrough is in the consumer's Tax Setup window under step 5.<br><br>
             <strong>TRANSFERRED Consumer (came from another CDS vendor):</strong><br>
-            Do NOT use UInteract to register. Instead, email MODES-5083 (Transferred Consumer Registration form) to cdstax@labor.mo.gov after their first payroll with you. Need: consumer's EIN, SSN, first payroll date with you, name of previous vendor. Download form: labor.mo.gov/media/22536/download<br><br>
+            If you are not sure whether they were with another vendor, <strong>try registering them in UInteract
+            first</strong>. If it errors, they are a transfer. Then email MODES-5083 (Transferred Consumer
+            Registration form) to cdstax@labor.mo.gov after their first payroll with you. Need: consumer's EIN, SSN, first payroll date with you, name of previous vendor. Download form: labor.mo.gov/media/22536/download<br><br>
             <strong>After registration:</strong> File quarterly wage reports per consumer (Q1 Apr 30 / Q2 Jul 30 / Q3 Oct 31 / Q4 Jan 31). Wages reported under consumer's account — NEVER under Caring Companions' account. Separate payment per consumer — do NOT combine.<br><br>
             <strong>Parent attendant exception:</strong> If attendant is a parent of the consumer, wages are NEVER reportable for UI purposes — do not report them.
           </div>
@@ -1787,15 +1805,22 @@
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-content">
-          <div class="step-title">Invite Attendant to Empeon — Complete All Hiring Paperwork Digitally</div>
-          <div class="step-desc">Invite attendant into <strong>Empeon</strong>. Attendant completes all hiring paperwork digitally via e-sign: application, W-4, I-9, direct deposit, attendant contract, and all required disclosures. Application must capture: (a) disclosure of ALL criminal convictions/pleas; (b) consent to criminal record check; (c) consent to closed records check (§610.120 RSMo); (d) disclosure of ALL aliases and SSNs used. <strong>Do not run background checks or approve attendant until signed paperwork is returned.</strong></div>
-          <div class="step-regs">Platform: Empeon | Reg: CDS Program Req. §4.2.1</div>
+          <div class="step-title">Send the Attendant Application — GoHighLevel, Not Empeon Yet</div>
+          <div class="step-desc">Send the <strong>attendant application</strong> as a GoHighLevel document for e-signature.
+            This comes <strong>before</strong> Empeon: the application is what lets us run the checks, and there is
+            no point setting somebody up for payroll who has not cleared them.<br><br>
+            The application must capture: (a) disclosure of ALL criminal convictions and pleas; (b) authorisation to
+            obtain criminal background information; (c) consent to release closed records (§610.120 RSMo);
+            (d) ALL aliases and SSNs ever used; (e) whether they have lived outside Missouri in the last five years.<br><br>
+            <strong>Do not run any background check until the signed application is back</strong>, because the
+            consent to look is on it.</div>
+          <div class="step-regs">Platform: GoHighLevel documents | Reg: CDS Program Req. §4.2.1</div>
         </div>
       </div>
 
       <div class="cat-header">STEP 2 — PRE-HIRE SCREENING (After Signed Packet Received)</div>
       <div class="step">
-        <div class="step-num">3</div>
+        <div class="step-num">2</div>
         <div class="step-content">
           <div class="step-title">FCSR — Family Care Safety Registry Check</div>
           <div class="step-desc">Screen ALL aliases and ALL SSNs disclosed. Check for: criminal history, sex offender registry, child abuse records, DHSS EDL, DMH EDR, child care license revocations. Retain documentation on file. If finding — verify whether disqualifying under RSMo 192.2495.</div>
@@ -1803,7 +1828,7 @@
         </div>
       </div>
       <div class="step">
-        <div class="step-num">4</div>
+        <div class="step-num">3</div>
         <div class="step-content">
           <div class="step-title">EDL — Employee Disqualification List Check</div>
           <div class="step-desc">Check Missouri EDL at health.mo.gov/safety/edl — screen ALL known aliases. Do NOT hire anyone listed. Retain documentation.</div>
@@ -1835,7 +1860,7 @@
         </div>
       </div>
       <div class="step">
-        <div class="step-num">6</div>
+        <div class="step-num">7</div>
         <div class="step-content">
           <div class="step-title">E-Verify — Work Authorization</div>
           <div class="step-desc">If agency qualifies as a "business entity" under RSMo 285.525, must enroll and participate in E-Verify. Run E-Verify on all new hires.</div>
@@ -1847,8 +1872,11 @@
       <div class="step">
         <div class="step-num">8</div>
         <div class="step-content">
-          <div class="step-title">Confirm All Checks Cleared — Approve in Empeon</div>
-          <div class="step-desc">Only after FCSR + EDL + OIG/LEIE all return clear (and fingerprint check if out-of-state) — mark attendant as approved in Empeon and allow them to begin serving a consumer.<br><br><strong>⚠️ FCSR Disqualifying Finding?</strong> If FCSR returns a disqualifying offense, the attendant <strong>CANNOT work under ANY circumstances</strong> until a Good Cause Waiver (GCW) is applied for AND approved by DHSS. Conditional employment is never permitted while awaiting GCW. If GCW is denied — the attendant cannot be hired. Reg: P&amp;P Policy 13; CDS Program Req. §4.3</div>
+          <div class="step-title">Checks Cleared — Now Invite Them Into Empeon</div>
+          <div class="step-desc">Only once FCSR, EDL and OIG/LEIE have all come back clear, plus the fingerprint check
+            if they have lived out of state, invite the attendant into <strong>Empeon</strong> for the hiring paperwork:
+            W-4, I-9, direct deposit and the attendant contract. Empeon invitations are manual, so this is a person
+            doing it, not an automation. Then they may begin serving a consumer.<br><br><strong>⚠️ FCSR Disqualifying Finding?</strong> If FCSR returns a disqualifying offense, the attendant <strong>CANNOT work under ANY circumstances</strong> until a Good Cause Waiver (GCW) is applied for AND approved by DHSS. Conditional employment is never permitted while awaiting GCW. If GCW is denied — the attendant cannot be hired. Reg: P&amp;P Policy 13; CDS Program Req. §4.3</div>
         </div>
       </div>
       <div class="step">
