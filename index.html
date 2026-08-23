@@ -1626,6 +1626,13 @@
   <div id="gsub-onboarding">
   <div class="section-title" style="margin-bottom:16px">Onboarding Checklists</div>
 
+  <div class="card" style="margin-bottom:16px;border:2px solid #14807A">
+    <div class="card-title"><span class="icon">🎓</span> Orientation Completions <button class="btn-sm" style="float:right" onclick="renderOrientCompletions(true)">↻ Refresh</button></div>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:10px">Every finished online orientation posts itself here the moment the learner completes it &mdash; name, date, score, and whether all seven acknowledgments were checked. This is the case-file proof of training per 19 CSR 15-8.400(5)(H)5: print the learner&rsquo;s completion page for the file, and use this list to see who has finished without waiting for paper. Courses live at caringcds.com/consumer-orientation/ and /attendant-orientation/.</p>
+    <div id="orientCompletionsList" style="font-size:13px"><span style="color:var(--gray-600)">Loading&hellip;</span></div>
+  </div>
+
+
   <div class="grid-2">
     <div class="card">
       <div class="card-title"><span class="icon">👤</span> New Consumer Onboarding Checklist</div>
@@ -4581,6 +4588,34 @@ function showConsumerTab(tab) {
   if (tab === 'active') { renderConsumers(); renderOngoingRequirements(); }
 }
 
+
+// ---------------- Orientation completions (orientation_completions table) ----
+let _ocLoaded=false;
+async function renderOrientCompletions(force){
+  const box=document.getElementById('orientCompletionsList'); if(!box||!_db) return;
+  if(_ocLoaded&&!force) return;
+  try{
+    const { data, error } = await _db.from('orientation_completions').select('*').order('completed_at',{ascending:false}).limit(200);
+    if(error) throw error;
+    _ocLoaded=true;
+    if(!data||!data.length){ box.innerHTML='<span style="color:var(--gray-600)">No completions yet. The list fills itself as consumers and attendants finish the online orientations.</span>'; return; }
+    const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    box.innerHTML='<table style="width:100%;border-collapse:collapse">'
+      +'<tr style="text-align:left;color:var(--gray-600);font-size:11px;text-transform:uppercase"><th style="padding:4px 6px">When</th><th>Course</th><th>Name</th><th>Signed</th><th>Score</th><th>Acks</th><th>Time</th></tr>'
+      +data.map(r=>{
+        const pass=(r.score!=null&&r.total)?(r.score>=Math.ceil(r.total*10/12)):null;
+        return '<tr style="border-top:1px solid var(--gray-200)">'
+          +'<td style="padding:5px 6px;white-space:nowrap">'+esc((r.completed_at||'').slice(0,10))+'</td>'
+          +'<td>'+(r.course==='consumer'?'👤 Consumer':'🤝 Attendant')+'</td>'
+          +'<td><strong>'+esc(r.name)+'</strong></td>'
+          +'<td>'+esc(r.date_signed||'')+'</td>'
+          +'<td style="color:'+(pass===false?'#C0392B':'#1E8A5F')+'">'+(r.score!=null?esc(r.score)+'/'+esc(r.total):'&mdash;')+'</td>'
+          +'<td>'+(r.acks?'✓ all 7':'<span style="color:#C0392B">incomplete</span>')+'</td>'
+          +'<td>'+(r.elapsed_min?esc(r.elapsed_min)+'m':'&mdash;')+'</td></tr>';
+      }).join('')+'</table>';
+  }catch(e){ box.innerHTML='<span style="color:#C0392B">Could not load: '+String(e.message||e).replace(/</g,'&lt;')+' &mdash; has orientation_completions.sql been run?</span>'; }
+}
+
 function showGuideTab(tab) {
   tab = tab || 'onboarding';
   ['calendar','compliance','onboarding','reference'].forEach(t => {
@@ -4589,6 +4624,7 @@ function showGuideTab(tab) {
     const tabEl = document.getElementById('gsub-tab-' + t);
     if (tabEl) tabEl.classList.toggle('active', t === tab);
   });
+  if (tab === 'onboarding') renderOrientCompletions();
 }
 
 // ============================================================
