@@ -249,34 +249,40 @@
   <!-- CDS TASKS -->
   <div class="card">
     <div class="card-title">Missouri CDS Program Tasks Performed</div>
-    <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">Select all services provided during this visit.</p>
+    <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">Select the tasks provided during this visit. Only tasks authorized on the consumer's plan of care may be performed and recorded.</p>
 
     <div class="task-section-label">Personal Care</div>
     <div class="task-grid">
       <label class="task-item"><input type="checkbox" name="tasks" value="Bathing"><span>Bathing</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Dressing/Grooming"><span>Dressing / Grooming</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Dressing and Grooming"><span>Dressing and Grooming</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Toileting"><span>Toileting</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Bowel/Bladder"><span>Bowel / Bladder</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Catheter Hygiene"><span>Catheter Hygiene</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Ostomy Hygiene"><span>Ostomy Hygiene</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Medications"><span>Medications</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Treatments (eye drops, creams/lotions)"><span>Treatments (eye drops, creams/lotions)</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Passive Range of Motion"><span>Passive Range of Motion</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Cleaning/Maintaining Equipment"><span>Cleaning / Maintaining Equipment</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Bowel/Bladder Routine"><span>Bowel / Bladder Routine</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Mobility/Transfer"><span>Mobility / Transfer</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Medications"><span>Medications (manual assistance)</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Treatments"><span>Treatments (eye drops, creams/lotions)</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Clean and Maintain Equipment"><span>Clean and Maintain Equipment</span></label>
     </div>
 
-    <div class="task-section-label">Mobility &amp; Transfers</div>
+    <div class="task-section-label">Advanced Personal Care (only if authorized on the plan of care)</div>
     <div class="task-grid">
-      <label class="task-item"><input type="checkbox" name="tasks" value="Mobility/Transfer"><span>Mobility / Transfer</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Assistance with Transfer Device"><span>Assistance with Transfer Device</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Catheter Hygiene"><span>Catheter Hygiene</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Ostomy Hygiene"><span>Ostomy Hygiene</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Bowel Program"><span>Bowel Program</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Passive Range of Motion"><span>Passive Range of Motion</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Transfer with Device/Lift"><span>Transfer with Device / Lift</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Turning/Positioning"><span>Turning / Positioning</span></label>
     </div>
 
-    <div class="task-section-label">Household Tasks</div>
+    <div class="task-section-label">Meals</div>
+    <div class="task-grid">
+      <label class="task-item"><input type="checkbox" name="tasks" value="Meal Prep and Eating"><span>Meal Prep and Eating</span></label>
+      <label class="task-item"><input type="checkbox" name="tasks" value="Wash Dishes"><span>Wash Dishes</span></label>
+    </div>
+
+    <div class="task-section-label">Housekeeping</div>
     <div class="task-grid">
       <label class="task-item"><input type="checkbox" name="tasks" value="Make Bed"><span>Make Bed</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Change Linens"><span>Change Linens</span></label>
-      <label class="task-item"><input type="checkbox" name="tasks" value="Wash Dishes"><span>Wash Dishes</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Clean Kitchen"><span>Clean Kitchen</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Clean Bath"><span>Clean Bath</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Clean Floors"><span>Clean Floors</span></label>
@@ -286,20 +292,11 @@
       <label class="task-item"><input type="checkbox" name="tasks" value="Laundry (Off-Site)"><span>Laundry (Off-Site)</span></label>
     </div>
 
-    <div class="task-section-label">Meals</div>
+    <div class="task-section-label">Essential Errands &amp; Transportation</div>
     <div class="task-grid">
-      <label class="task-item"><input type="checkbox" name="tasks" value="Meal Prep/Eating"><span>Meal Prep / Eating</span></label>
-    </div>
-
-    <div class="task-section-label">Community &amp; Transportation</div>
-    <div class="task-grid">
+      <label class="task-item"><input type="checkbox" name="tasks" value="Essential Shopping/Errands"><span>Essential Shopping / Errands</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Essential Transportation"><span>Essential Transportation</span></label>
       <label class="task-item"><input type="checkbox" name="tasks" value="Essential Correspondence"><span>Essential Correspondence</span></label>
-    </div>
-
-    <div class="form-group" style="margin-top:14px">
-      <label>Other task(s) not listed above</label>
-      <input type="text" id="f_tasks_other" placeholder="Describe any additional tasks…">
     </div>
   </div>
 
@@ -470,8 +467,6 @@ async function submitForm() {
   btn.textContent = 'Submitting…'; btn.disabled = true;
 
   const tasks = Array.from(document.querySelectorAll('input[name="tasks"]:checked')).map(cb => cb.value);
-  const tasksOther = document.getElementById('f_tasks_other').value.trim();
-  if (tasksOther) tasks.push(tasksOther);
 
   const reasonOther = document.getElementById('f_reason_other').value.trim();
 
@@ -513,7 +508,7 @@ async function submitForm() {
 // ── RESET ──
 function resetForm() {
   ['f_attendant','f_consumer','f_visitdate','f_orig_in','f_orig_out',
-   'f_new_in','f_new_out','f_notes','f_reason_other','f_tasks_other'].forEach(id => {
+   'f_new_in','f_new_out','f_notes','f_reason_other'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('f_reason').value = '';
