@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EVV Correction Form — Caring Companions CDS</title>
+<title>EVV Correction Form · Caring Companions CDS</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0e3860">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -155,9 +155,9 @@
 
   <!-- WARNING -->
   <div style="background:#fef9e7;border-left:4px solid #f39c12;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:16px">
-    <div style="font-size:12px;font-weight:700;color:#7d5a00;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⚠️ Important — Do not rely on this form</div>
+    <div style="font-size:12px;font-weight:700;color:#7d5a00;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⚠️ Important: do not rely on this form</div>
     <div style="font-size:13px;color:#5d4200;line-height:1.7">
-      Manual corrections are reviewed by the office and flagged in WellSky. <strong>Frequent submissions may affect your standing and could trigger a compliance review.</strong> Missouri Medicaid requires EVV to be completed electronically at the time of the visit. This form is a last resort for genuine technical failures — not a backup for forgetting to clock in or out. If EVV problems keep happening, the attendant should tell the consumer, and the consumer should contact the office before the attendant's next shift.
+      Manual corrections are reviewed by the office and flagged in WellSky. <strong>Frequent submissions may affect your standing and could trigger a compliance review.</strong> Missouri Medicaid requires EVV to be completed electronically at the time of the visit. This form is a last resort for genuine technical failures, not a backup for forgetting to clock in or out. If EVV problems keep happening, the attendant should tell the consumer, and the consumer should contact the office before the attendant's next shift.
     </div>
   </div>
 
@@ -230,7 +230,7 @@
     <div class="card-title">Reason for Correction <span style="color:var(--danger)">*</span></div>
     <div class="form-group">
       <select id="f_reason" onchange="document.getElementById('reason_other_wrap').style.display=this.value==='Other'?'block':'none'">
-        <option value="">— Select reason —</option>
+        <option value="">Select a reason</option>
         <option>Phone dead / no battery</option>
         <option>App crashed or technical error</option>
         <option>No cell service at consumer location</option>
@@ -470,7 +470,10 @@ async function submitForm() {
 
   const reasonOther = document.getElementById('f_reason_other').value.trim();
 
+  /* 454 (2026-10-05): the form gets its own id here, so the office email can find it (the public form may save, never read) */
+  const formId = (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16)));
   const { error } = await _db.from('evv_submissions').insert({
+    id:                 formId,
     agency_id:          AGENCY_ID,
     attendant,
     consumer,
@@ -490,11 +493,16 @@ async function submitForm() {
   });
 
   if (error) {
-    errEl.textContent = 'Submission error: ' + error.message + ' — please try again or call the office.';
+    errEl.textContent = 'Submission error: ' + error.message + '. Please try again or call the office.';
     errEl.style.display = 'block';
     btn.textContent = 'Submit Correction Form'; btn.disabled = false;
     return;
   }
+
+  /* tell the office (Samantha and Krystal) by email. The form is already saved, so this never holds the caregiver up. */
+  try { fetch(SUPABASE_URL + '/functions/v1/evv-notify', { method: 'POST', keepalive: true,
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY },
+    body: JSON.stringify({ id: formId }) }).catch(() => {}); } catch (e) {}
 
   const visitStr = new Date(visitdate + 'T12:00:00').toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
   document.getElementById('success_detail').innerHTML =
