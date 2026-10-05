@@ -47,7 +47,7 @@ ck('pressing it again (or a replay) sends nothing', s === 200 && r.emailed === 0
 reset(); FAILSEND = true; ;[s, r] = await call({ id: U(1) })
 ck('if GoHighLevel refuses both, the form is NOT marked emailed (the next form tries again)', r.failed === 2 && !T.evv_submissions[0].notified_at, [r, T.evv_submissions[0]])
 const sql = fs.readFileSync('evv_form_454.sql', 'utf8'), form = fs.readFileSync('evv-form.html', 'utf8')
-ck('SQL: the public form may only ADD a form for this agency; staff read; nothing dropped', /grant insert on public\.evv_submissions to anon;/.test(sql) && /revoke select, update, delete on public\.evv_submissions from anon;/.test(sql) && /with check \(agency_id = 'caring-companions-cds'/.test(sql) && !/drop table|truncate|delete from/i.test(sql))
+ck('SQL: the public form may only ADD a form for this agency; staff read; nothing dropped', /revoke all privileges on public\.evv_submissions from anon;\ngrant insert on public\.evv_submissions to anon;/.test(sql) && /with check \(agency_id = 'caring-companions-cds'/.test(sql) && !/drop table|truncate|delete from/i.test(sql.replace(/--.*$/gm, '')))
 ck('the form gives each submission its own id and asks for the email after saving, never before', /id:\s+formId,/.test(form) && form.indexOf("_db.from('evv_submissions').insert") < form.indexOf('/functions/v1/evv-notify') && /body: JSON\.stringify\(\{ id: formId \}\)/.test(form))
 ck('no em dash on the form or in the email', !/—/.test(form) && !/[—―]/.test(m.html + m.subject))
 let pass = 0; for (const [n, ok, note] of res) { console.log((ok ? 'PASS  ' : 'FAIL  ') + n + (ok ? '' : '  ' + note)); if (ok) pass++ }

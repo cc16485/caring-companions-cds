@@ -152,9 +152,14 @@ say("  · before: a form from the public page is " + ("REFUSED (permission denie
 
 say(); say("PART 2 · CHANGE")
 ok, r = sql(open(os.path.join(HUB, SQLFILE)).read())
-ok2, g = sql("select string_agg(privilege_type, ',' order by privilege_type) as p from information_schema.role_table_grants where table_schema = 'public' and table_name = 'evv_submissions' and grantee = 'anon'")
+ok2, g = sql("select grantee, string_agg(privilege_type, ',' order by privilege_type) as p from information_schema.role_table_grants where table_schema = 'public' and table_name = 'evv_submissions' and grantee in ('anon', 'authenticated') group by grantee")
 ok3, col = sql("select count(*)::int as n from information_schema.columns where table_schema = 'public' and table_name = 'evv_submissions' and column_name = 'notified_at'")
-chk(ok and ok2 and g and g[0]["p"] == "INSERT" and ok3 and col and col[0]["n"] == 1, "the public form may add a form and nothing else; staff read and mark them; notified_at is there" + ("" if ok else f" ({str(r)[:160]})"))
+G = {x["grantee"]: x["p"] for x in (g or [])} if ok2 else {}
+if not ok: bad(f"the database fix didn't run ({str(r)[:160]})")
+else:
+    chk(G.get("anon") == "INSERT", f"the public form may add a form and nothing else (it has: {G.get('anon') or 'nothing'})")
+    chk(G.get("authenticated") == "DELETE,INSERT,SELECT,UPDATE", f"office staff may read, add, mark and tidy forms (they have: {G.get('authenticated') or 'nothing'})")
+    chk(ok3 and col and col[0]["n"] == 1, "the email marker (notified_at) is there")
 if fails: say("  STOP. Tell Claude."); done(5)
 if st != "this" and not deploy(HUB_REF, HUB, "evv-notify", False, "CDS"): say("  STOP. Tell Claude. (The database fix is in; the email helper is not.)"); done(6)
 

@@ -25,10 +25,12 @@ class Hd(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0); raw = self.rfile.read(n) or b"{}"; p = self.path
         if p.endswith("/database/query"):
             q = json.loads(raw)["query"]; SEEN.append(q)
-            if "grant insert on public.evv_submissions to anon" in q:
+            if "revoke all privileges on public.evv_submissions from anon" in q:
                 if M.get("sqlfail"): return self._send(400, {"message": "boom"})
                 M["fixed"] = True; return self._send(201, [])
-            if "role_table_grants" in q: return self._send(201, [{"p": "INSERT"}] if M.get("fixed") else [{"p": None}])
+            if "role_table_grants" in q:
+                if M.get("extra"): return self._send(201, [{"grantee": "anon", "p": "INSERT,TRUNCATE"}, {"grantee": "authenticated", "p": "DELETE,INSERT,SELECT,UPDATE"}])
+                return self._send(201, [{"grantee": "anon", "p": "INSERT"}, {"grantee": "authenticated", "p": "DELETE,INSERT,SELECT,UPDATE"}] if M.get("fixed") else [])
             if "column_name = 'notified_at'" in q: return self._send(201, [{"n": 1 if M.get("fixed") else 0}])
             if "count(*)::int as n from public.evv_submissions" in q: return self._send(201, [{"n": 0}])
             return self._send(201, [])
@@ -79,9 +81,10 @@ ck("the only calls are: a save the database must refuse, a read that must be ref
 ck("no form is written, changed or deleted by the step", not any(re.search(r"\binsert into|\bupdate public\.|\bdelete from", q, re.I) for q in SEEN), [q for q in SEEN if re.search(r"insert into|update |delete from", q, re.I)])
 ck("no keys or tokens in the report", not re.search(r"sbp_|sb_publishable|eyJ", r), r)
 rc, r, d, _ = run(keep=True); ck("run again: already has it, nothing redeployed, still DONE (the SQL is safe twice)", rc == 0 and "already has this build" in r and not d and "RESULT: DONE" in r, r)
-rc, r, d, _ = run(OTHER="1", mode={"other": True}); ck("a different evv-notify already live: nothing is changed at all", rc != 0 and "different evv-notify live" in r and not d and not any("grant insert" in q for q in SEEN), r)
-rc, r, d, _ = run(mode={"nosecrets": True}); ck("no GoHighLevel keys in the CDS project: stops before changing anything", rc != 0 and "no GoHighLevel keys" in r and not d and not any("grant insert" in q for q in SEEN), r)
+rc, r, d, _ = run(OTHER="1", mode={"other": True}); ck("a different evv-notify already live: nothing is changed at all", rc != 0 and "different evv-notify live" in r and not d and not any("revoke all privileges" in q for q in SEEN), r)
+rc, r, d, _ = run(mode={"nosecrets": True}); ck("no GoHighLevel keys in the CDS project: stops before changing anything", rc != 0 and "no GoHighLevel keys" in r and not d and not any("revoke all privileges" in q for q in SEEN), r)
 rc, r, d, _ = run(mode={"sqlfail": True}); ck("if the database fix fails: stops, the helper is not deployed", rc != 0 and not d, r)
+rc, r, d, _ = run(mode={"extra": True}); ck("if the public form still had another permission, it says which and stops before the helper", rc != 0 and "(it has: INSERT,TRUNCATE)" in r and not d, r)
 rc, r, d, _ = run(SB_SQL_SHA="0" * 64); ck("a database fix that isn't the reviewed one: stops before anything", rc != 0 and "not the reviewed build" in r and not d, r)
 H.shutdown(); subprocess.run(["git", "worktree", "remove", "--force", WH], cwd=HERE); shutil.rmtree(tmp, ignore_errors=True)
 for n, ok, note in res: print(("PASS " if ok else "FAIL ") + n + ("" if ok else "\n      " + note))

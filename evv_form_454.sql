@@ -8,8 +8,12 @@
 -- Safe to run twice. Nothing is dropped or rewritten except the one insert rule, which is recreated tighter.
 begin;
 grant usage on schema public to anon, authenticated, service_role;
+-- 454b: first run stopped at its check. Start clean: take EVERY table permission off the public form (including any
+-- older TRUNCATE, which ignores row rules, REFERENCES or TRIGGER), then give back only "add a form". Staff get exactly
+-- read, add, update, delete (no TRUNCATE).
+revoke all privileges on public.evv_submissions from anon;
 grant insert on public.evv_submissions to anon;
-revoke select, update, delete on public.evv_submissions from anon;
+revoke all privileges on public.evv_submissions from authenticated;
 grant select, insert, update, delete on public.evv_submissions to authenticated;
 grant all privileges on public.evv_submissions to service_role;
 alter table public.evv_submissions enable row level security;
