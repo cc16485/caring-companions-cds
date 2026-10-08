@@ -6,7 +6,7 @@
 // The public EVV correction form (hub.caringcds.com/evv-form) saves the form, then calls this with the form's own id.
 // This looks the form up itself and emails the office once: who, which consumer, the visit, the original and corrected
 // times, the reason and the tasks, and where to find it in the CDS hub (EVV Corrections). It sends through the CDS
-// GoHighLevel sub-account, the same way transfer-nudge tells the office.
+// GoHighLevel sub-account (secrets CDS_GHL_TOKEN and CDS_GHL_LOCATION_ID).
 //
 // SAFE TO LEAVE OPEN (the form page has no sign-in):
 //   · the caller only names a form id; every word and every address is fixed here. It can never email anyone else.
@@ -66,6 +66,7 @@ export function message(f: Any) {
   return { subject, html }
 }
 
+const CDS_LOCATION = '4EFPkajwe0hHrqxvYkZ9'   // Caring Companions CDS, the only location this may use
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -78,8 +79,10 @@ Deno.serve(async (req) => {
   const { data: mine } = await db.from('evv_submissions').select('id').eq('id', id).eq('agency_id', AGENCY_ID).gte('submitted_at', since).maybeSingle()
   if (!mine) return json({ error: 'That form was not found.' }, 404)
 
-  const token = Deno.env.get('GHL_TOKEN'), locationId = Deno.env.get('GHL_LOCATION_ID')
+  /* CDS-only secret names (2026-10-08); any location but the CDS sub-account is refused */
+  const token = Deno.env.get('CDS_GHL_TOKEN'), locationId = Deno.env.get('CDS_GHL_LOCATION_ID')
   if (!token || !locationId) return json({ ok: false, error: 'email is not set up on the server' }, 503)
+  if (locationId !== CDS_LOCATION) return json({ ok: false, error: 'the server is not set to the CDS sub-account' }, 503)
   const h = { Authorization: `Bearer ${token}`, Version: '2021-07-28', 'Content-Type': 'application/json', Accept: 'application/json' }
 
   /* this form, plus any recent one whose email never went */
