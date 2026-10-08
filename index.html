@@ -5516,12 +5516,13 @@ async function importWebsiteLeads() {
 // ============================================================================
 // LEAD / TRANSFER PROFILE
 //
-// The checklist here writes exactly the fields transfer-nudge reads. That is the
-// contract between the two: a coordinator ticking "submitted to Fusion" is what
-// causes the consumer to be told, and there is no second copy of the truth.
+// The checklist records the steps a person does. Nothing is sent automatically:
+// the transfer-nudge texts were retired on 2026-10-08 (Samantha), so telling the
+// consumer or the attendant is a person's call. The function's source is kept in
+// archive/transfer-nudge for the record.
 //
-// The sent-log is built from the automation's own markers rather than a separate
-// log table, so it cannot disagree with what was actually sent.
+// The sent-log below only shows messages the retired automation sent before then,
+// read from its own markers; it stays hidden when there are none.
 // ============================================================================
 let _lprofId = null;
 
@@ -5531,7 +5532,7 @@ function openLeadProfile(id){
   renderLeadProfile();
 }
 
-// Every message the automation can send, and what it means in English.
+// Every message the retired automation (switched off 2026-10-08) could send, and what it means in English.
 const NUDGE_LOG = [
   ['toldSubmitted',          'Told them the request is with the state'],
   ['toldStartDate',          'Told them their start date'],
@@ -5603,16 +5604,14 @@ function renderLeadProfile(){
 
   // ---- what the automation has already said. Top of the page on purpose. ----
   const said = NUDGE_LOG.filter(([k]) => t[k]);
-  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;border-left:4px solid var(--accent)">' +
-    '<b style="color:var(--primary)">What we have already sent them</b>' +
-    '<div class="field-note" style="margin:3px 0 8px">Check this before you ring. It is built from what the ' +
-      'automation actually sent, not a separate list.</div>' +
-    (said.length
-      ? said.map(([k, label]) =>
+  if (said.length) html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;border-left:4px solid var(--accent)">' +
+    '<b style="color:var(--primary)">Sent automatically before 2026-10-08</b>' +
+    '<div class="field-note" style="margin:3px 0 8px">The automatic transfer texts are switched off. ' +
+      'This is what they sent before then. Nothing more will be sent automatically.</div>' +
+    said.map(([k, label]) =>
           '<div style="display:flex;gap:10px;padding:3px 0;font-size:13px">' +
           '<span style="color:var(--gray-600);min-width:110px">' + esc(lpWhen(t[k])) + '</span>' +
-          '<span>' + label + '</span></div>').join('')
-      : '<div class="field-note">Nothing sent automatically yet.</div>') +
+          '<span>' + label + '</span></div>').join('') +
     '</div>';
 
   // ---- the transfer, if it is one ----
@@ -5640,9 +5639,9 @@ function renderLeadProfile(){
 
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
       '<b style="color:var(--primary)">Getting them transferred</b>' +
-      '<div class="field-note" style="margin:3px 0 10px">Dating a step here is what sets the automation off. ' +
-        'Fusion submitted tells the consumer what happens next; a start date tells them the date; ' +
-        'Ready to Work tells the attendant they can be paid.</div>' +
+      '<div class="field-note" style="margin:3px 0 10px">Date each step as it happens. Nothing is sent ' +
+        'automatically: telling the consumer what happens next, their start date, or telling the attendant ' +
+        'they can be paid is done by a person.</div>' +
       XFER_STEPS.map(([k, label]) =>
         '<div style="display:flex;gap:10px;align-items:center;padding:5px 0;flex-wrap:wrap">' +
         '<span style="min-width:250px;font-size:13px' + (t[k] ? ';color:var(--success);font-weight:600' : '') + '">' +
