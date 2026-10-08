@@ -23,7 +23,7 @@ globalThis.fetch = async (url, o) => { url = String(url); const body = o?.body ?
   if (url.endsWith('/contacts/upsert')) { UPS.push(body.email); return new Response(JSON.stringify({ contact: { id: 'C:' + body.email } }), { status: 200 }) }
   if (url.endsWith('/conversations/messages')) { if (FAILSEND) return new Response('{}', { status: 400 }); SENT.push(body); return new Response('{}', { status: 200 }) }
   return new Response('{}', { status: 404 }) }
-let handler; globalThis.Deno = { env: { get: (k) => ({ SUPABASE_URL: 'https://sb', SUPABASE_SERVICE_ROLE_KEY: 'k', GHL_TOKEN: 'g', GHL_LOCATION_ID: 'loc' })[k] }, serve: (h) => { handler = h } }
+let handler; globalThis.Deno = { env: { get: (k) => ({ SUPABASE_URL: 'https://sb', SUPABASE_SERVICE_ROLE_KEY: 'k', CDS_GHL_TOKEN: 'g', CDS_GHL_LOCATION_ID: '4EFPkajwe0hHrqxvYkZ9' })[k] }, serve: (h) => { handler = h } }
 const FN = 'supabase/functions/evv-notify/index.ts'
 const src = fs.readFileSync(FN, 'utf8').replace(/^import \{ createClient \} from .*$/m, 'const createClient = () => globalThis.__db')
 const tmp = path.join(process.cwd(), 'supabase/functions/evv-notify/_t.ts'); fs.writeFileSync(tmp, src)

@@ -22,9 +22,10 @@
 // Auth: POST with a CDS-project user's access token (Authorization: Bearer).
 // Any signed-in hub user may sync; the GHL token never leaves the server.
 //
-// Secrets required (function returns configured:false until both are set):
-//   GHL_TOKEN        - GHL Private Integration token, scope contacts.write
-//   GHL_LOCATION_ID  - 4EFPkajwe0hHrqxvYkZ9  (Caring Companions CDS)
+// Secrets required (function returns configured:false until both are set). CDS-only names (2026-10-08) so a
+// Caring Companions (non-CDS) key can't be set here by mistake; any location but the CDS sub-account is refused:
+//   CDS_GHL_TOKEN        - GHL Private Integration token for the CDS sub-account, scope contacts.write
+//   CDS_GHL_LOCATION_ID  - 4EFPkajwe0hHrqxvYkZ9  (Caring Companions CDS)
 //
 // Deploy:
 //   supabase functions deploy ghl-sync --no-verify-jwt --project-ref siivpekcaryeyttszwav
@@ -139,6 +140,9 @@ async function inBatches<T, R>(items: T[], size: number, fn: (item: T) => Promis
   return out
 }
 
+// The only GoHighLevel location this function may ever touch (Caring Companions CDS).
+const CDS_LOCATION = '4EFPkajwe0hHrqxvYkZ9'
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -152,13 +156,16 @@ Deno.serve(async (req) => {
   const email = u?.user?.email
   if (!email) return json({ error: 'Sign in to the CDS hub first.' }, 401)
 
-  const token = Deno.env.get('GHL_TOKEN')
-  const locationId = Deno.env.get('GHL_LOCATION_ID')
+  const token = Deno.env.get('CDS_GHL_TOKEN')
+  const locationId = Deno.env.get('CDS_GHL_LOCATION_ID')
   if (!token || !locationId) {
     return json({
       configured: false,
-      error: 'GHL is not connected yet. Set the GHL_TOKEN and GHL_LOCATION_ID secrets on this function.',
+      error: 'GHL is not connected yet. Set the CDS_GHL_TOKEN and CDS_GHL_LOCATION_ID secrets on this function.',
     })
+  }
+  if (locationId !== CDS_LOCATION) {
+    return json({ configured: false, error: 'CDS_GHL_LOCATION_ID is not the CDS sub-account, so nothing was sent.' })
   }
 
   const headers = {
