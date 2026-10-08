@@ -1155,7 +1155,6 @@
   <div class="section-header">
     <div class="section-title">Attendant Roster</div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn btn-outline" onclick="openOutreachSettings()" style="font-size:12px">⚙️ Outreach Settings</button>
       <button class="btn btn-primary" onclick="openModal('addAttendantModal')">+ Add Attendant</button>
     </div>
   </div>
@@ -2273,7 +2272,6 @@
   <div class="section-header">
     <div class="section-title">🤖 Outreach Automations</div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-outline" onclick="openOutreachSettings()" style="font-size:12px">⚙️ GHL Settings</button>
       <button class="btn btn-outline" onclick="renderAutomations()" style="font-size:12px">↻ Refresh</button>
     </div>
   </div>
@@ -3356,43 +3354,6 @@
   </div>
 </div>
 
-<!-- Outreach Settings Modal -->
-<div class="modal-overlay" id="outreachSettingsModal">
-  <div class="modal" style="width:600px">
-    <div class="modal-header">
-      <div class="modal-title">⚙️ Welcome Outreach Settings</div>
-      <button class="modal-close" onclick="closeModal('outreachSettingsModal')">×</button>
-    </div>
-
-    <div style="background:#f0faf9;border-left:4px solid var(--accent);padding:10px 14px;font-size:12px;margin-bottom:16px;border-radius:0 6px 6px 0;line-height:1.6">
-      Welcome outreach is sent via the <strong>GoHighLevel API</strong> — SMS from your GHL Twilio number, email from <strong>intake@caringcds.com</strong>. No Zapier or GHL Workflow needed.
-    </div>
-
-    <div class="form-group" style="margin-bottom:14px">
-      <label style="font-weight:700">GHL Private API Key <span style="color:red">*</span></label>
-      <input type="text" id="or_api_key" placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6..." style="font-size:12px;font-family:monospace">
-      <div style="font-size:11px;color:var(--gray-600);margin-top:4px">
-        In GoHighLevel → Settings → Private Integrations → Create new key → copy here. Stored only in your browser.
-      </div>
-    </div>
-
-    <div class="form-group" style="margin-bottom:16px">
-      <label style="font-weight:700">GHL Location ID</label>
-      <input type="text" id="or_location_id" placeholder="GHL sub-account location ID" style="font-size:12px;font-family:monospace">
-      <div style="font-size:11px;color:var(--gray-600);margin-top:4px">Pre-filled with your CDS sub-account ID.</div>
-    </div>
-
-    <div style="background:#e2f4f3;border:1px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:12px;margin-bottom:16px;line-height:1.7">
-      <strong>✅ How it works — no setup required in GHL:</strong><br>
-      When you click Send Both Now, Claude uses the GHL API to: (1) create/find the attendant as a GHL contact, (2) send them an SMS from your Twilio number, (3) send them an email from intake@caringcds.com. All in one paste.
-    </div>
-
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('outreachSettingsModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveOutreachSettings()">Save Settings</button>
-    </div>
-  </div>
-</div>
 
 <!-- Welcome Outreach Modal -->
 <div class="modal-overlay" id="welcomeOutreachModal">
@@ -4355,6 +4316,8 @@ async function _loadAllData() {
     .select('data_key, data_value')
     .eq('agency_id', AGENCY_ID);
   if (data) data.forEach(row => { _store[row.data_key] = row.data_value; });
+  // 2026-10-08: an old GoHighLevel key may still be saved in outreachSettings; never keep it in the page.
+  if (_store.outreachSettings && typeof _store.outreachSettings === 'object') delete _store.outreachSettings.apiKey;
 
   // Load delivered units into a fast lookup map
   const { data: du } = await _db.from('delivered_units')
@@ -6282,40 +6245,9 @@ async function sendWelcomeNow() {
   const emailBody = buildWelcomeEmail(firstName);
   const textBody = buildWelcomeText(firstName);
 
-  const outreachSettings = getData('outreachSettings') || {};
-  const apiKey = outreachSettings.apiKey || '';
-  const locationId = outreachSettings.locationId || '4EFPkajwe0hHrqxvYkZ9';
-
+  // 2026-10-08: no GoHighLevel key is kept in the hub any more (it was readable by every signed-in user).
   let claudeCmd;
-  if (apiKey) {
-    claudeCmd = `Please send welcome outreach for a new CDS attendant via the GoHighLevel API. Use bash/Python to run these steps:
-
-GHL_API_KEY: ${apiKey}
-GHL_LOCATION_ID: ${locationId}
-ATTENDANT_NAME: ${a.name}
-ATTENDANT_PHONE: ${a.phone || ''}
-ATTENDANT_EMAIL: ${a.email || ''}
-
-STEP 1 — Upsert contact in GHL:
-POST https://services.leadconnectorhq.com/contacts/upsert
-Headers: Authorization: Bearer {GHL_API_KEY}, Version: 2021-07-28, Content-Type: application/json
-Body: { "locationId": "{GHL_LOCATION_ID}", "name": "{ATTENDANT_NAME}", "phone": "{ATTENDANT_PHONE}", "email": "{ATTENDANT_EMAIL}" }
-→ Save the returned contact.id
-
-STEP 2 — Send SMS (from GHL Twilio number):
-POST https://services.leadconnectorhq.com/conversations/messages
-Headers: same as above
-Body: { "type": "SMS", "contactId": "{contact.id}", "message": ${JSON.stringify(textBody)} }
-
-STEP 3 — Send Email (from intake@caringcds.com):
-POST https://services.leadconnectorhq.com/conversations/messages
-Headers: same as above
-Body: { "type": "Email", "contactId": "{contact.id}", "emailFrom": "intake@caringcds.com", "subject": "Welcome to Caring Companions CDS — Action Required", "html": ${JSON.stringify(emailBody.replace(/\n/g, '<br>'))} }
-
-Confirm each step succeeded and report back.`;
-  } else {
-    claudeCmd = `Please send welcome outreach for new attendant — GHL API key not configured yet.\n\nNAME: ${a.name}\nEMAIL: ${a.email || 'N/A'}\nPHONE: ${a.phone || 'N/A'}\n\nEMAIL SUBJECT: Welcome to Caring Companions CDS — Action Required\nEMAIL BODY:\n${emailBody}\n\nTEXT MESSAGE:\n${textBody}\n\n⚠️ Add your GHL Private API Key in the tracker → Attendant Roster → ⚙️ Outreach Settings so future sends go through GoHighLevel automatically.`;
-  }
+    claudeCmd = `Please send welcome outreach for new attendant\n\nNAME: ${a.name}\nEMAIL: ${a.email || 'N/A'}\nPHONE: ${a.phone || 'N/A'}\n\nEMAIL SUBJECT: Welcome to Caring Companions CDS — Action Required\nEMAIL BODY:\n${emailBody}\n\nTEXT MESSAGE:\n${textBody}\n\nSend these from GoHighLevel → Conversations in the CDS sub-account. The hub never keeps a GoHighLevel key.`;
 
   // Copy to clipboard so Samantha can paste to Claude chat
   try {
@@ -6501,9 +6433,7 @@ function openAttendantOutreach(aid, type) {
 
 async function sendUniversalOutreachNow() {
   const { type, data, config } = _uomCurrentData;
-  const settings = getData('outreachSettings') || {};
-  const apiKey = settings.apiKey || '';
-  const locationId = settings.locationId || '4EFPkajwe0hHrqxvYkZ9';
+  // 2026-10-08: no GoHighLevel key is kept in the hub any more.
 
   const btn = document.getElementById('uom_send_btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Copying…'; }
@@ -6525,30 +6455,7 @@ async function sendUniversalOutreachNow() {
       email: a.email || ''
     }));
 
-    claudeCmd = apiKey
-      ? `Please send the weekly EVV reminder to ALL active attendants via the GoHighLevel API.
-
-GHL_API_KEY: ${apiKey}
-GHL_LOCATION_ID: ${locationId}
-
-For EACH of the following ${contacts.length} attendants, please:
-1. POST https://services.leadconnectorhq.com/contacts/upsert to get contactId
-2. Send SMS if they have a phone number
-3. Send email if they have an email address
-Replace [FIRST_NAME] with their actual first name in the message.
-
-ATTENDANTS:
-${JSON.stringify(contacts, null, 2)}
-
-SMS TEMPLATE (replace [FIRST_NAME]):
-${smsBody}
-
-EMAIL SUBJECT: ${config.emailSubject}
-EMAIL TEMPLATE (replace [FIRST_NAME]):
-${emailBody}
-
-Report how many were sent successfully.`
-      : `Please send the weekly EVV reminder to all ${contacts.length} active attendants.\n\nATTENDANTS:\n${contacts.map(c=>`${c.name} | Phone: ${c.phone||'N/A'} | Email: ${c.email||'N/A'}`).join('\n')}\n\nSMS (personalize [FIRST_NAME]):\n${smsBody}\n\nEMAIL SUBJECT: ${config.emailSubject}\nEMAIL (personalize [FIRST_NAME]):\n${emailBody}\n\n⚠️ No GHL API key configured. Please add it in tracker → Attendant Roster → ⚙️ Outreach Settings.`;
+    claudeCmd = `Please send the weekly EVV reminder to all ${contacts.length} active attendants.\n\nATTENDANTS:\n${contacts.map(c=>`${c.name} | Phone: ${c.phone||'N/A'} | Email: ${c.email||'N/A'}`).join('\n')}\n\nSMS (personalize [FIRST_NAME]):\n${smsBody}\n\nEMAIL SUBJECT: ${config.emailSubject}\nEMAIL (personalize [FIRST_NAME]):\n${emailBody}\n\nSend these from GoHighLevel → Conversations in the CDS sub-account. The hub never keeps a GoHighLevel key.`;
   } else {
     // Single contact
     const firstName = (data.name || '').split(' ')[0] || 'there';
@@ -6563,29 +6470,7 @@ Report how many were sent successfully.`
       text_message: smsBody
     };
 
-    claudeCmd = apiKey
-      ? `Please send outreach (${type}) to ${data.name} via the GoHighLevel API.
-
-GHL_API_KEY: ${apiKey}
-GHL_LOCATION_ID: ${locationId}
-
-JSON PAYLOAD:
-${JSON.stringify(payload)}
-
-STEP 1 — POST https://services.leadconnectorhq.com/contacts/upsert
-  Body: { "locationId": "${locationId}", "name": "${payload.attendant_name}", "phone": "${payload.attendant_phone}", "email": "${payload.attendant_email}" }
-  → Get contact.id
-
-STEP 2 — Send SMS (if phone present):
-  POST https://services.leadconnectorhq.com/conversations/messages
-  Body: { "type": "SMS", "contactId": "{{contact.id}}", "message": ${JSON.stringify(smsBody)} }
-
-STEP 3 — Send Email (if email present):
-  POST https://services.leadconnectorhq.com/conversations/messages
-  Body: { "type": "Email", "contactId": "{{contact.id}}", "emailFrom": "intake@caringcds.com", "subject": "${config.emailSubject}", "html": ${JSON.stringify(emailBody.replace(/\n/g,'<br>'))} }
-
-Confirm each step succeeded.`
-      : `Please send outreach for ${data.name}:\nNAME: ${data.name}\nEMAIL: ${data.email||'N/A'}\nPHONE: ${data.phone||'N/A'}\nEMAIL SUBJECT: ${config.emailSubject}\nEMAIL:\n${emailBody}\n\nSMS:\n${smsBody}\n\n⚠️ No GHL API key — please add it in tracker → ⚙️ Outreach Settings.`;
+    claudeCmd = `Please send outreach for ${data.name}:\nNAME: ${data.name}\nEMAIL: ${data.email||'N/A'}\nPHONE: ${data.phone||'N/A'}\nEMAIL SUBJECT: ${config.emailSubject}\nEMAIL:\n${emailBody}\n\nSMS:\n${smsBody}\n\nSend these from GoHighLevel → Conversations in the CDS sub-account. The hub never keeps a GoHighLevel key.`;
   }
 
   try { await navigator.clipboard.writeText(claudeCmd); } catch(e) {}
@@ -9829,20 +9714,6 @@ function _ghlSyncReport(report) {
   return html || '<span style="color:var(--gray-600)">Nothing to sync yet.</span>';
 }
 
-function openOutreachSettings() {
-  const s = getData('outreachSettings') || {};
-  document.getElementById('or_api_key').value = s.apiKey || '';
-  document.getElementById('or_location_id').value = s.locationId || '4EFPkajwe0hHrqxvYkZ9';
-  openModal('outreachSettingsModal');
-}
-
-function saveOutreachSettings() {
-  const apiKey = document.getElementById('or_api_key').value.trim();
-  const locationId = document.getElementById('or_location_id').value.trim();
-  setData('outreachSettings', { apiKey, locationId });
-  closeModal('outreachSettingsModal');
-  alert('✅ Outreach settings saved!');
-}
 
 // ============================================================
 // EVV SETTINGS & IMPORT
