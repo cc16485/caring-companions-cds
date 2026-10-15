@@ -23,7 +23,9 @@ const GHL_LOC = env('CDS_GHL_LOCATION_ID');
 const MEDIA_BUCKET = 'cds-directory-media';
 const PROOF_BUCKET = 'cds-screening-proof';
 
-const sql = postgres(env('SUPABASE_DB_URL'), { prepare: false, max: 3 });
+// Close idle connections before the database side drops them, so the first
+// request after a quiet spell never lands on a dead connection.
+const sql = postgres(env('SUPABASE_DB_URL'), { prepare: false, max: 3, idle_timeout: 20, max_lifetime: 60 * 10 });
 const admin = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
 const enc = new TextEncoder();
 const b64url = (b: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
