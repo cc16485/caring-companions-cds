@@ -43,7 +43,8 @@ insert into public.cds_match_settings (key, value) values
   ('required_checks', '["edl","edr","oig","mo_medicaid","age18","id_match"]'::jsonb),
   ('access_days', '45'::jsonb),
   ('medicaid_recheck_days', '30'::jsonb),
-  ('ihs_invites_allowed', 'false'::jsonb)
+  ('ihs_invites_allowed', 'false'::jsonb),
+  ('staff_emails', '["samantha@caringcds.com","samantha@mo-care.com"]'::jsonb)
 on conflict (key) do nothing;
 
 -- ---------- media (photos, videos, screening proof) ----------

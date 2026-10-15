@@ -29,6 +29,7 @@ function clean(row) {
 }
 const addDays = (nowIso, d) => new Date(new Date(nowIso).getTime() + d * 86400000).toISOString();
 const addMin = (nowIso, m) => new Date(new Date(nowIso).getTime() + m * 60000).toISOString();
+const VIDEO_MAX_BYTES = 200 * 1024 * 1024;   // about 2 minutes of phone video
 
 export function createMatch(deps) {
   const { db, crypto, media, ghl, links } = deps;
@@ -503,6 +504,28 @@ export function createMatch(deps) {
       const id = await media.put({ pool_id, kind, mime, data, by: 'caregiver:' + pool_id });
       await q(`update cds_cg_profiles set ${kind}_draft=$2, review_status = case when review_status='approved' then 'draft' else review_status end, updated_at=now() where pool_id=$1`, [pool_id, id]);
       await audit('caregiver:' + pool_id, 'uploaded_' + kind, 'media:' + id);
+      return { ok: true };
+    },
+    // Videos go straight from the phone to private storage (too big to pass
+    // through the server): start gives a one-time upload address, finish checks
+    // the file arrived and puts it up for office review.
+    async startVideoUpload({ link, mime, size }) {
+      const { pool_id } = await caregiverLink(link);
+      await ensureProfile(pool_id);
+      if (!/^video\//.test(String(mime || ''))) fail('Please choose a video.');
+      const n = Number(size) || 0;
+      if (n <= 0) fail('That video could not be read.');
+      if (n > VIDEO_MAX_BYTES) fail('That video is too long. Please keep it under 2 minutes.');
+      const up = await media.signUpload({ pool_id, kind: 'video', mime, by: 'caregiver:' + pool_id });
+      return { media_id: up.media_id, upload_url: up.upload_url };
+    },
+    async finishVideoUpload({ link, media_id }) {
+      const { pool_id } = await caregiverLink(link);
+      const m = await one(`select id from cds_media where id=$1 and pool_id=$2 and kind='video'`, [media_id, pool_id]);
+      if (!m) fail('That video could not be found. Please try again.');
+      if (!(await media.confirm(media_id))) fail('The video didn\'t finish sending. Please try again.');
+      await q(`update cds_cg_profiles set video_draft=$2, review_status = case when review_status='approved' then 'draft' else review_status end, updated_at=now() where pool_id=$1`, [pool_id, media_id]);
+      await audit('caregiver:' + pool_id, 'uploaded_video', 'media:' + media_id);
       return { ok: true };
     },
     async removeVideo({ link }) {
@@ -1226,6 +1249,13 @@ export function createMatch(deps) {
     async handle(role, action, input = {}) {
       const r = ROLES[role];
       if (!r || !Object.prototype.hasOwnProperty.call(r, action)) fail('Unknown request', 404);
+      // Live: signing in to the CDS Hub isn't enough; the email must be on the
+      // office's staff list (setting staff_emails).
+      if (role === 'staff' && deps.mode === 'live') {
+        const list = (await setting('staff_emails')) || [];
+        const me = String(input.staff || '').toLowerCase();
+        if (!me || !list.map(e => String(e).toLowerCase()).includes(me)) fail('This sign-in isn\'t on the CDS office staff list.', 403);
+      }
       return r[action](input);
     },
     roles: ROLES,

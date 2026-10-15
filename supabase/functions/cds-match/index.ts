@@ -1,5 +1,5 @@
 // cds-match: the one server function behind CDS Caregiver Match.
-// NOT DEPLOYED. Phase 1 runs in practice mode until Samantha approves going live.
+// DEPLOYED 2026-10-15 (Checkpoint 1) with messages off; no site page calls it yet.
 //
 // POST { role, action, input }
 //   public    : no sign-in (counts, request access)
@@ -79,6 +79,27 @@ const match = createMatch({
       const rows = await sql`insert into cds_media (pool_id, kind, storage_path, mime, bytes, created_by)
                              values (${pool_id}, ${kind}, ${bucket + '/' + path}, ${mime}, ${bytes.length}, ${by}) returning id`;
       return rows[0].id;
+    },
+    // Big videos: a one-time upload address (valid 2 hours) straight into the
+    // private bucket; the row's size stays empty until confirm() finds the file.
+    async signUpload({ pool_id, kind, mime, by }: { pool_id: string; kind: string; mime: string; by: string }) {
+      const path = `${pool_id}/${kind}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+      const s = await admin.storage.from(MEDIA_BUCKET).createSignedUploadUrl(path);
+      if (s.error || !s.data) throw new Error('Upload link failed: ' + (s.error?.message || ''));
+      const rows = await sql`insert into cds_media (pool_id, kind, storage_path, mime, created_by)
+                             values (${pool_id}, ${kind}, ${MEDIA_BUCKET + '/' + path}, ${mime}, ${by}) returning id`;
+      return { media_id: rows[0].id, upload_url: s.data.signedUrl };
+    },
+    async confirm(id: string) {
+      const rows = await sql`select storage_path from cds_media where id=${id}`;
+      if (!rows[0]) return false;
+      const [bucket, folder, name] = String(rows[0].storage_path).split('/');
+      const l = await admin.storage.from(bucket).list(folder, { search: name, limit: 1 });
+      const f = (l.data || []).find(x => x.name === name);
+      const size = Number(f?.metadata?.size) || 0;
+      if (!size) return false;
+      await sql`update cds_media set bytes=${size} where id=${id}`;
+      return true;
     },
     // Short-lived links only: 10 minutes.
     async url(id: string) {

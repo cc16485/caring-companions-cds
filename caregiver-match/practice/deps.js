@@ -46,6 +46,16 @@ export function practiceDeps(db, { familyBase, caregiverBase }) {
           [pool_id, kind, mime, data, Math.round(String(data).length * 0.75), by]);
         return r.rows[0].id;
       },
+      // Practice stand-in for the one-time storage upload address: the browser
+      // fills practice_data instead of sending the file anywhere.
+      async signUpload({ pool_id, kind, mime, by }) {
+        const r = await db.query(`insert into cds_media (pool_id, kind, mime, created_by) values ($1,$2,$3,$4) returning id`, [pool_id, kind, mime, by]);
+        return { media_id: r.rows[0].id, upload_url: 'practice-upload:' + r.rows[0].id };
+      },
+      async confirm(id) {
+        const r = await db.query('select practice_data from cds_media where id=$1', [id]);
+        return !!(r.rows[0] && r.rows[0].practice_data);
+      },
       async url(id) {
         const r = await db.query('select practice_data from cds_media where id=$1', [id]);
         return r.rows[0] ? r.rows[0].practice_data : null;

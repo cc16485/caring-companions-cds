@@ -201,6 +201,16 @@ ok(t2.caregiver.availability_text.startsWith('Sat') && t2.caregiver.confirmed_te
 await H('caregiver', 'saveProfile', { link: tLink, draft: { about_me: 'Changed text' } });
 const t3 = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
 ok(t3.caregiver.about_me !== 'Changed text', 'profile text changes wait for office approval');
+// direct video upload: start gives an address, finish refuses until the file is there
+await throwsLike(() => H('caregiver', 'startVideoUpload', { link: tLink, mime: 'video/mp4', size: 300 * 1024 * 1024 }), /under 2 minutes/, 'video over 200 MB refused');
+await throwsLike(() => H('caregiver', 'startVideoUpload', { link: tLink, mime: 'image/png', size: 1000 }), /choose a video/, 'non-video refused');
+const vu = await H('caregiver', 'startVideoUpload', { link: tLink, mime: 'video/mp4', size: 5000 });
+ok(vu.media_id && vu.upload_url.startsWith('practice-upload:'), 'start returns a one-time upload address');
+await throwsLike(() => H('caregiver', 'finishVideoUpload', { link: tLink, media_id: vu.media_id }), /didn't finish/, 'finish refused before the file arrives');
+await throwsLike(() => H('caregiver', 'finishVideoUpload', { link: seeded.caregiverLinks.jordan, media_id: vu.media_id }), /could not be found/, 'another caregiver cannot claim the video');
+await db.query('update cds_media set practice_data=$2 where id=$1', [vu.media_id, 'data:video/mp4;base64,AAAA']);
+await H('caregiver', 'finishVideoUpload', { link: tLink, media_id: vu.media_id });
+ok((await db.query('select video_draft from cds_cg_profiles where pool_id=$1', [seeded.ids.teresa])).rows[0].video_draft === vu.media_id, 'finished video waits as a draft for review');
 await H('caregiver', 'withdrawConsent', { link: tLink, kind: 'video' });
 const t4 = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
 ok(!t4.caregiver.video_url, 'withdrawing video consent takes the video down');
@@ -374,6 +384,11 @@ ok(steps && steps.body.includes('$16.57') && steps.body.includes('Troutman Enter
 // live mode with messages off -> held, never sent
 const liveDeps = { ...practiceDeps(db, { familyBase: 'https://x.test/d/', caregiverBase: 'https://x.test/c/' }), mode: 'live', send: async () => { throw new Error('must not send'); } };
 const live = createMatch(liveDeps);
+await throwsLike(() => live.handle('staff', 'invite', { staff: 'linda@caringcds.com', prospect_id: dale.id }), /staff list/, 'live: a Hub sign-in not on the staff list is refused');
+await throwsLike(() => live.handle('staff', 'revealSsn', { staff: 'stranger@example.com', id: seeded.ids.teresa }), /staff list/, 'live: SSN reveal refused for anyone not on the staff list');
+const staffList = (await db.query(`select value from cds_match_settings where key='staff_emails'`)).rows[0].value;
+ok(Array.isArray(staffList) && staffList.includes('samantha@caringcds.com'), 'staff list starts with Samantha only');
+await db.query(`update cds_match_settings set value = value || '["Linda@CaringCDS.com"]'::jsonb where key='staff_emails'`);
 const r = await live.handle('staff', 'invite', { staff: 'linda@caringcds.com', prospect_id: dale.id });
 ok(r.status === 'held' && /switched off/.test(r.error), 'live mode with messages off: held, with a visible reason');
 const lc = await live.handle('family', 'sendCode', { invite: seeded.familyLinks.ann, channel: 'sms' });
