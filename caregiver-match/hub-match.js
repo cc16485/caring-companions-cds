@@ -401,6 +401,7 @@ export function mountHubMatch(el, opts) {
             <span>SSN</span><b>${scr.ssn_last4 ? '•••-••-' + esc(scr.ssn_last4) : 'Not given'}${scr.ssn_on_file ? ' · full number held encrypted until the result is recorded' : scr.ssn_last4 ? ' · full number deleted' : ''}</b></div>
           ${scr.request_form ? `<div class="hm-req"><div class="cm-row between cm-wrap"><b>FCSR Employer Background Screening Request</b><span class="cm-small">Provider type to check: ${esc(scr.request_form.provider_type)}</span></div>
             <div class="hm-req-grid">
+              <span>Employer on the request</span><b>${esc(scr.request_form.employer || '')}</b>
               <span>Last name (current/legal)</span><b>${esc(scr.request_form.last)}</b>
               <span>First name (current/legal)</span><b>${esc(scr.request_form.first)}</b>
               <span>MI</span><b>${esc(scr.request_form.mi || '')}</b>

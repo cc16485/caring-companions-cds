@@ -164,7 +164,7 @@ ok((await pg.query('select count(*)::int n from cds_screening_secret where pool_
 const secret = (await pg.query('select ssn_ciphertext from cds_screening_secret where pool_id=$1', [kayla])).rows[0].ssn_ciphertext;
 ok(!/9000/.test(secret) && secret.includes('.'), 'SSN is stored encrypted, not readable');
 let kdet = await S('caregiver', { id: kayla });
-ok(kdet.screening.request_form && kdet.screening.request_form.first === 'Kayla' && kdet.screening.request_form.dob && kdet.screening.request_form.provider_type === 'Personal Care: CDS/CIL', 'office sees the FCSR request fields ready to copy');
+ok(kdet.screening.request_form && kdet.screening.request_form.first === 'Kayla' && kdet.screening.request_form.dob && /Troutman Enterprises/.test(kdet.screening.request_form.employer), 'office sees the FCSR request fields ready to copy');
 ok(!JSON.stringify(kdet).match(/\d{3}-\d{2}-\d{4}/), 'the full SSN is not in the normal office view');
 const rv = await S('revealSsn', { id: kayla });
 ok(/^9\d{2}-\d{2}-\d{4}$/.test(rv.ssn), 'staff can reveal the full SSN for the FCSR request');
@@ -369,7 +369,7 @@ const ob = (await S('outbox', {})).messages;
 ok(ob.every(m => m.status === 'practice'), 'practice mode: every message recorded as practice, none sent');
 ok(ob.every(m => !/—/.test(m.body)), 'no em dashes in any message');
 const steps = ob.find(m => m.template === 'cg_fcsr_steps');
-ok(steps && steps.body.includes('$16.57') && steps.body.includes('to confirm with FCSR'), 'FCSR message has the fee and the unconfirmed placeholders');
+ok(steps && steps.body.includes('$16.57') && steps.body.includes('Troutman Enterprises, LLC') && steps.body.includes('registration type: to confirm with FCSR'), 'FCSR message has the fee, the employer name, and the one remaining placeholder');
 
 // live mode with messages off -> held, never sent
 const liveDeps = { ...practiceDeps(db, { familyBase: 'https://x.test/d/', caregiverBase: 'https://x.test/c/' }), mode: 'live', send: async () => { throw new Error('must not send'); } };

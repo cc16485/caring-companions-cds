@@ -9,9 +9,10 @@ export const OFFICE_PHONE = '417-218-2888';
 export const OFFICE_TOLL_FREE = '866-863-5151';
 const SIGN_OFF = 'Caring Companions CDS\n' + OFFICE_PHONE + ' (toll free ' + OFFICE_TOLL_FREE + ')';
 
-// Filled in after the Phase 0 call to the FCSR line. Until then the message
-// shows the bracketed text so nobody can send it by mistake looking finished.
-export const FCSR_EMPLOYER = '[employer name: to confirm with FCSR]';
+// Employer the FCSR screening runs under (Samantha, 2026-10-15: "right now").
+export const FCSR_EMPLOYER = 'Troutman Enterprises, LLC (DBA Caring Companions In-Home Senior Care)';
+// Still to confirm with the FCSR line. Until then the message shows the
+// bracketed text so nobody can send it by mistake looking finished.
 export const FCSR_REG_TYPE = '[registration type: to confirm with FCSR]';
 
 export const TEMPLATES = {

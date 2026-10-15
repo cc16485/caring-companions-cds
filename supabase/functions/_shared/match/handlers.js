@@ -13,7 +13,7 @@
 // }
 
 import * as R from './rules.js';
-import { TEMPLATES, fill, CONSENT_WORDING, FCSR_EXPLAINER, PROVIDER_CHOICE } from './messages.js';
+import { TEMPLATES, fill, CONSENT_WORDING, FCSR_EXPLAINER, PROVIDER_CHOICE, FCSR_EMPLOYER } from './messages.js';
 
 export class MatchError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -672,7 +672,7 @@ export function createMatch(deps) {
           eligible: c.screening.eligible, findings: c.screening.findings, missing: c.screening.missing,
           legal_name: [scr.legal_first, scr.legal_middle, scr.legal_last, scr.legal_suffix].filter(Boolean).join(' '), dob: scr.dob,
           request_form: scr.authorization_signed_at ? { last: [scr.legal_last, scr.legal_suffix].filter(Boolean).join(' '), first: scr.legal_first, mi: (scr.legal_middle || '').slice(0, 1).toUpperCase(),
-            dob: scr.dob ? String(scr.dob).slice(0, 10) : null, other_names: scr.other_names || '', provider_type: 'Personal Care: CDS/CIL' } : null,
+            dob: scr.dob ? String(scr.dob).slice(0, 10) : null, other_names: scr.other_names || '', provider_type: 'Personal Care: CDS/CIL (confirm with FCSR)', employer: FCSR_EMPLOYER } : null,
           ssn_last4: scr.ssn_last4, authorization_signed_at: scr.authorization_signed_at,
           ssn_on_file: !!(await one('select 1 as x from cds_screening_secret where pool_id=$1', [id])),
           follow_up: scr.follow_up, follow_up_due: scr.follow_up_due,
