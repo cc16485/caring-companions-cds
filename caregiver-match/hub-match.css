@@ -1,0 +1,80 @@
+/* CDS Hub · Caregiver Match. Uses the .cm base styles (match.css) plus these. */
+.hm-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+.hm-tile{font:inherit;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:2px;cursor:pointer;color:inherit}
+.hm-tile:hover{border-color:var(--teal)}
+.hm-tile .v{font-size:1.6rem;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums;line-height:1.1}
+.hm-tile .l{font-size:.8rem;color:var(--ink-soft);line-height:1.3}
+.hm-tile.attn{border-color:var(--honey);background:#fffaf1}
+.hm-board{display:grid;grid-template-columns:repeat(5,minmax(200px,1fr));gap:10px;overflow-x:auto;padding-bottom:6px}
+.hm-lane{background:#f2f0e9;border-radius:12px;padding:10px;display:grid;gap:8px;align-content:start;min-width:200px}
+.hm-lane h3{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;margin:0}
+.hm-ticket{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:5px;font-size:.9rem}
+.hm-ticket b{color:var(--navy)}
+.hm-ticket.late{border-left:4px solid var(--honey)}
+.hm-next{font-size:.8rem;color:#1c5f5b;background:var(--teal-pale);border-radius:6px;padding:4px 7px}
+.hm-form{display:grid;gap:8px;border-top:1px dashed var(--line);padding-top:8px}
+.hm-table{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+.hm-table table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:720px}
+.hm-table.tight table{min-width:520px;font-size:.85rem}
+.hm-table th,.hm-table td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.hm-table th{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);background:#f7f5f0}
+.hm-table tr:last-child td{border-bottom:0}
+.hm-table tr.done td:first-child b{color:var(--teal-deep)}
+.hm-table tr.sub td:first-child{padding-left:22px}
+.hm-click{cursor:pointer}
+.hm-click:hover td{background:#f8fbfb}
+.hm-warn{color:var(--bad);font-weight:600}
+.hm-three{display:grid;gap:14px;grid-template-columns:1fr;align-items:start}
+@media (min-width:900px){.hm-three{grid-template-columns:1fr 1fr}.hm-three > .hm-scr{grid-column:1 / -1;order:-1}}
+.hm-kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.88rem}
+.hm-kv span{color:var(--ink-soft)}
+.hm-kv b{font-weight:600;overflow-wrap:anywhere}
+.hm-banner{border-radius:10px;padding:10px 12px;font-size:.9rem;background:#fbf0dc;color:#5d3a06}
+.hm-banner.ok{background:#e6f3ea;color:#1f5a37}
+.hm-banner.bad{background:#f8e6e3;color:#7a2219}
+.hm-fig{margin:0;display:grid;gap:4px;font-size:.75rem;color:var(--ink-soft);text-align:center}
+.hm-fig img{width:96px;height:96px;border-radius:12px;object-fit:cover}
+.hm-draft{background:#f7f5f0;border-radius:10px;padding:10px 12px;display:grid;gap:4px}
+.hm-draft p{margin:0}
+.hm-sform{display:grid;gap:8px;margin-top:6px}
+.hm-date{font:inherit;min-height:40px;border:1.6px solid var(--line);border-radius:8px;padding:0 8px}
+.hm-body{white-space:pre-wrap;font-family:inherit;font-size:.88rem;background:#f7f5f0;border-radius:8px;padding:10px;margin:8px 0 0}
+.hm-linkbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+/* eligibility review */
+.hm-elig td{font-size:.86rem}
+.hm-fours{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
+.hm-four{display:grid;grid-template-columns:28px 1fr;gap:2px 10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.hm-four span{grid-row:span 2;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#efece6;color:var(--ink-soft);font-weight:800}
+.hm-four b{font-size:.84rem;color:var(--navy);line-height:1.25}
+.hm-four small{font-size:.78rem;color:var(--ink-soft)}
+.hm-four.on{border-color:#bfe0cc;background:#f3faf5}
+.hm-four.on span{background:#2e7d4f;color:#fff}
+.hm-next-box{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#fdf3e1;border:1px solid #f3d9a8;border-radius:14px;padding:12px 16px}
+.hm-next-box > div{display:grid;gap:2px}
+.hm-next-box b{color:var(--navy);font-size:1.05rem}
+.hm-esteps{display:grid;gap:10px}
+.hm-estep{background:#fff;border:1px solid var(--line);border-radius:14px;padding:0}
+.hm-estep > summary{display:flex;gap:12px;align-items:center;padding:14px 16px;cursor:pointer;list-style:none;min-height:56px}
+.hm-estep > summary::-webkit-details-marker{display:none}
+.hm-estep .num{width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:800;flex:none;font-size:.9rem}
+.hm-estep.done .num{background:#2e7d4f}
+.hm-estep > summary b{color:var(--navy)}
+.hm-ebody{padding:0 16px 16px;display:grid;gap:10px}
+.hm-checks{display:grid;gap:6px;background:#f7f5f0;border-radius:10px;padding:10px 12px;font-size:.88rem}
+.hm-paths{display:grid;gap:10px}
+@media (min-width:760px){.hm-paths{grid-template-columns:1fr 1fr}}
+.hm-paths .cm-card{gap:8px}
+.hm-shield{color:#7a2219}
+details.hm-estep[open]{border-color:var(--teal)}
+.hm-ready{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:.9rem}
+.hm-ready li{display:flex;gap:10px;align-items:center}
+.hm-ready li span{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:.75rem;font-weight:800;flex:none}
+.hm-ready li.ok span{background:#2e7d4f;border-color:#2e7d4f;color:#fff}
+.hm-ready li:not(.ok){color:var(--ink-soft)}
+.hm-fam-ctx{gap:4px}
+.hm-req{display:grid;gap:8px;background:#f3f8fb;border:1px solid #cfe1ea;border-radius:12px;padding:12px 14px}
+.hm-req > .cm-row b{color:var(--navy)}
+.hm-req-grid{display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:.92rem;align-items:center}
+.hm-req-grid span{color:var(--ink-soft)}
+.hm-req-grid b{font-variant-numeric:tabular-nums;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+@media (max-width:560px){.hm-req-grid{grid-template-columns:1fr}}

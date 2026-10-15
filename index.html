@@ -2406,6 +2406,9 @@
   </div>
 </div>
 
+<!-- ==================== CAREGIVER MATCH (findcdscaregivers.com) ==================== -->
+<div id="page-caregivermatch" class="page"><div id="cm_root"></div></div>
+
 <!-- ==================== BACKUP ATTENDANT POOL ==================== -->
 <div id="page-backuppool" class="page">
   <div class="section-header">
@@ -4424,6 +4427,7 @@ const SECTIONS = [
       { page: 'profile',        label: 'Consumer Profile' } ] },
   { id: 'attendants', label: '🧑‍🤝‍🧑 Attendants',  tabs: [
       { page: 'attendants',     label: 'Roster' },
+      { page: 'caregivermatch', label: 'Caregiver Match' },
       { page: 'backuppool',     label: 'Caregiver Pool' },
       { page: 'evvcorrections', label: 'EVV Corrections' } ] },
   { id: 'money',      label: '💵 Money',       tabs: [
@@ -4537,7 +4541,44 @@ function showPage(id) {
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'backuppool') renderBackupPool();
+  if (id === 'caregivermatch') renderCaregiverMatch();
   if (id === 'profile') renderProfile();
+}
+
+// Caregiver Match: the private caregiver directory office screens. Everything
+// goes through the cds-match server as staff with this Hub sign-in; the server
+// also checks the email is on its staff list.
+let _cmMounted = false;
+async function renderCaregiverMatch() {
+  if (_cmMounted) return;
+  const root = document.getElementById('cm_root');
+  if (!document.getElementById('cm_css')) {
+    ['caregiver-match/match.css', 'caregiver-match/hub-match.css'].forEach((h, i) => {
+      const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = h + '?v=1'; if (!i) l.id = 'cm_css'; document.head.appendChild(l);
+    });
+  }
+  root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading Caregiver Match…</div>';
+  try {
+    const { mountHubMatch } = await import('./caregiver-match/hub-match.js?v=1');
+    const api = async (action, input = {}) => {
+      const { data } = await _db.auth.getSession();
+      const jwt = data && data.session ? data.session.access_token : '';
+      let r;
+      try {
+        r = await fetch(SUPABASE_URL + '/functions/v1/cds-match', { method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt },
+          body: JSON.stringify({ role: 'staff', action, input }) });
+      } catch { throw new Error('Caregiver Match could not be reached. Check the connection and try again.'); }
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || 'Caregiver Match could not be reached. Try Refresh.');
+      return body;
+    };
+    root.innerHTML = '';
+    mountHubMatch(root, { api });
+    _cmMounted = true;
+  } catch (e) {
+    root.innerHTML = '<div style="padding:24px;color:#a8342a">Caregiver Match could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
+  }
 }
 
 function showConsumerTab(tab) {

@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>family view</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="assets/site.css"><link rel="stylesheet" href="assets/match/match.css"></head>
+<body style="background:#fbfaf7"><div id="app"></div>
+<script type="module">
+import { practice } from './assets/match/api.js';
+import { mountCaregiver } from './assets/match/caregiver-app.js';
+import { mountFamily } from './assets/match/family-app.js';
+const P = await practice(); const u = new URLSearchParams(location.search); const who = u.get('who');
+window.__P = P;
+if ('family' === 'caregiver') mountCaregiver(document.getElementById('app'), { link: u.get('c') || P.meta.caregiverLinks[who || 'teresa'], view: u.get('view') || 'home' });
+else mountFamily(document.getElementById('app'), { invite: u.get('i') || P.meta.familyLinks[who || 'ruth'] });
+</script></body></html>
