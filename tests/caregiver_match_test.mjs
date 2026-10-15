@@ -369,7 +369,7 @@ const ob = (await S('outbox', {})).messages;
 ok(ob.every(m => m.status === 'practice'), 'practice mode: every message recorded as practice, none sent');
 ok(ob.every(m => !/—/.test(m.body)), 'no em dashes in any message');
 const steps = ob.find(m => m.template === 'cg_fcsr_steps');
-ok(steps && steps.body.includes('$16.57') && steps.body.includes('Troutman Enterprises, LLC') && steps.body.includes('registration type: to confirm with FCSR'), 'FCSR message has the fee, the employer name, and the one remaining placeholder');
+ok(steps && steps.body.includes('$16.57') && steps.body.includes('Troutman Enterprises, LLC') && steps.body.includes('Personal Care, In-Home Services') && !/to confirm/.test(steps.body), 'FCSR message is complete: fee, employer and registration type, no placeholders');
 
 // live mode with messages off -> held, never sent
 const liveDeps = { ...practiceDeps(db, { familyBase: 'https://x.test/d/', caregiverBase: 'https://x.test/c/' }), mode: 'live', send: async () => { throw new Error('must not send'); } };

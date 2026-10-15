@@ -11,9 +11,9 @@ const SIGN_OFF = 'Caring Companions CDS\n' + OFFICE_PHONE + ' (toll free ' + OFF
 
 // Employer the FCSR screening runs under (Samantha, 2026-10-15: "right now").
 export const FCSR_EMPLOYER = 'Troutman Enterprises, LLC (DBA Caring Companions In-Home Senior Care)';
-// Still to confirm with the FCSR line. Until then the message shows the
-// bracketed text so nobody can send it by mistake looking finished.
-export const FCSR_REG_TYPE = '[registration type: to confirm with FCSR]';
+// Registration type: the same one Caring Companions applicants use under this
+// employer (approved for CC 2026-10-14; set for CDS 2026-10-15).
+export const FCSR_REG_TYPE = 'Personal Care, In-Home Services';
 
 export const TEMPLATES = {
   cg_fcsr_steps: {
