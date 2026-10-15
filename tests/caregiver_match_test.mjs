@@ -202,7 +202,7 @@ await H('caregiver', 'saveProfile', { link: tLink, draft: { about_me: 'Changed t
 const t3 = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
 ok(t3.caregiver.about_me !== 'Changed text', 'profile text changes wait for office approval');
 // direct video upload: start gives an address, finish refuses until the file is there
-await throwsLike(() => H('caregiver', 'startVideoUpload', { link: tLink, mime: 'video/mp4', size: 300 * 1024 * 1024 }), /under 2 minutes/, 'video over 200 MB refused');
+await throwsLike(() => H('caregiver', 'startVideoUpload', { link: tLink, mime: 'video/mp4', size: 51 * 1024 * 1024 }), /limit is 50 MB/, 'video over 50 MB refused before upload');
 await throwsLike(() => H('caregiver', 'startVideoUpload', { link: tLink, mime: 'image/png', size: 1000 }), /choose a video/, 'non-video refused');
 const vu = await H('caregiver', 'startVideoUpload', { link: tLink, mime: 'video/mp4', size: 5000 });
 ok(vu.media_id && vu.upload_url.startsWith('practice-upload:'), 'start returns a one-time upload address');
