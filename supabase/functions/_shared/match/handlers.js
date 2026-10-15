@@ -29,7 +29,7 @@ function clean(row) {
 }
 const addDays = (nowIso, d) => new Date(new Date(nowIso).getTime() + d * 86400000).toISOString();
 const addMin = (nowIso, m) => new Date(new Date(nowIso).getTime() + m * 60000).toISOString();
-const VIDEO_MAX_BYTES = 200 * 1024 * 1024;   // about 2 minutes of phone video
+const VIDEO_MAX_BYTES = 50 * 1024 * 1024;   // the CDS project's storage limit per file
 
 export function createMatch(deps) {
   const { db, crypto, media, ghl, links } = deps;
@@ -515,7 +515,7 @@ export function createMatch(deps) {
       if (!/^video\//.test(String(mime || ''))) fail('Please choose a video.');
       const n = Number(size) || 0;
       if (n <= 0) fail('That video could not be read.');
-      if (n > VIDEO_MAX_BYTES) fail('That video is too long. Please keep it under 2 minutes.');
+      if (n > VIDEO_MAX_BYTES) fail('That video file is too big (the limit is 50 MB). Try recording it right here on this page, or record a shorter video, about 1 minute.');
       const up = await media.signUpload({ pool_id, kind: 'video', mime, by: 'caregiver:' + pool_id });
       return { media_id: up.media_id, upload_url: up.upload_url };
     },
