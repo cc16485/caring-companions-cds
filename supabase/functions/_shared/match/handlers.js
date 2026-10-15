@@ -92,6 +92,16 @@ export function createMatch(deps) {
   }
 
   // ---------- messages: every one is recorded, nothing fails silently ----------
+  // While messages are off, the office's own test phones and emails (setting
+  // test_recipients) still get real messages, so the team can test end to end.
+  async function isTestRecipient(channel, to) {
+    const t = (await setting('test_recipients', {})) || {};
+    if (channel === 'sms') {
+      const d = String(to || '').replace(/\D/g, '').slice(-10);
+      return d.length === 10 && (t.phones || []).some(p => String(p).replace(/\D/g, '').slice(-10) === d);
+    }
+    return (t.emails || []).some(e => String(e).trim().toLowerCase() === String(to || '').trim().toLowerCase());
+  }
   async function message({ template, channel, audience, pool_id, prospect_id, to, vars, by, automatic = false }) {
     const t = TEMPLATES[template];
     if (!t) fail('Unknown message');
@@ -103,7 +113,7 @@ export function createMatch(deps) {
     const display = channel === 'sms' ? R.maskPhone(to) : R.maskEmail(to);
     let status, error = null;
     if (deps.mode === 'practice') status = 'practice';
-    else if (!(await setting('messages_live', false))) { status = 'held'; error = 'Messages are switched off until Samantha approves them.'; }
+    else if (!(await setting('messages_live', false)) && !(await isTestRecipient(channel, to))) { status = 'held'; error = 'Messages are switched off until Samantha approves them.'; }
     else {
       try { await deps.send({ channel, to, subject, body }); status = 'sent'; }
       catch (e) { status = 'failed'; error = String(e && e.message || e).slice(0, 300); }
