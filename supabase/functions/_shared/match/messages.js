@@ -22,6 +22,12 @@ export const TEMPLATES = {
     email_subject: 'Your next step: Missouri FCSR registration',
     email: 'Hi {first},\n\nTo become eligible to provide services through Missouri\'s Consumer Directed Services (CDS) program, you must meet the state\'s caregiver screening requirements, including the Family Care Safety Registry (FCSR).\n\nCaring Companions CDS will complete the required FCSR screening. If you are not already registered with the Missouri FCSR, you will need to register yourself. The registration fee is $16, or $16.57 if you register online, which includes the state\'s processing fee. You only register once, so if you are already registered, there is nothing to pay again.\n\nHow to register:\n1. Go to ' + FCSR_REGISTER_URL + ' and choose Registration, then Register Online.\n2. Have your Social Security number, your own email address, and a debit or credit card ready.\n3. For employer, choose ' + FCSR_EMPLOYER + '. For registration type, choose ' + FCSR_REG_TYPE + '.\n4. Pay the one-time fee.\n5. When you\'re done, let us know here: {link}\n\nOfficial instructions: ' + FCSR_HOWTO_URL + '\nQuestions about the state\'s site: FCSR, ' + FCSR_PHONE + ', weekdays 9 to 3.\n\nOnce you are registered, please let us know so we can continue the screening process.\n\n' + SIGN_OFF,
   },
+  // To the office only (setting office_alerts). Approved by Samantha 2026-10-16.
+  office_cg_signup: {
+    audience: 'office', label: 'New caregiver sign-up (office alert)',
+    email_subject: '{flag}{headline}: {name_short}',
+    email: '{name} {did} the CDS caregiver list.\n\nPhone: {phone}\nEmail: {email}\nTown: {town}\nCounties: {counties}\nLooking for: {hours}\nExperience: {experience}\nHas someone to care for: {has}\nAlready registered with FCSR: {fcsr}\n\nNext step: call to say hello within 1 business day, then send the profile link.\nOpen the CDS Hub: https://hub.caringcds.com (Attendants, then Caregiver Match)\n\n' + SIGN_OFF,
+  },
   cg_profile_link: {
     audience: 'caregiver', label: 'Caregiver profile link',
     sms: 'Hi {first}, it\'s Caring Companions CDS. Thanks for joining our caregiver list! Here\'s your private link to finish your profile and state requirements: {link} It works only for you, so please don\'t share it.',
