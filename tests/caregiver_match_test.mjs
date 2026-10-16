@@ -391,6 +391,16 @@ ok(Array.isArray(staffList) && staffList.includes('samantha@caringcds.com'), 'st
 await db.query(`update cds_match_settings set value = value || '["Linda@CaringCDS.com"]'::jsonb where key='staff_emails'`);
 const r = await live.handle('staff', 'invite', { staff: 'linda@caringcds.com', prospect_id: dale.id });
 ok(r.status === 'held' && /switched off/.test(r.error), 'live mode with messages off: held, with a visible reason');
+// test phones: real send while messages are off, everyone else still held
+const sentTo = [];
+const live2 = createMatch({ ...liveDeps, send: async m => { sentTo.push(m.to); } });
+const annPhone = (await db.query(`select g.phone from cds_prospects p join practice_ghl_contacts g on g.id = p.ghl_contact_id where p.first_name='Ann'`)).rows[0].phone;
+await db.query(`insert into cds_match_settings (key, value) values ('test_recipients', $1::jsonb) on conflict (key) do update set value=excluded.value`, [JSON.stringify({ phones: [annPhone], emails: [] })]);
+const tc = await live2.handle('family', 'sendCode', { invite: seeded.familyLinks.ann, channel: 'sms' });
+ok(tc.sent !== false && sentTo.length === 1, 'messages off: a listed test phone still gets a real text');
+const r2 = await live2.handle('staff', 'invite', { staff: 'linda@caringcds.com', prospect_id: dale.id });
+ok(r2.status === 'held' && sentTo.length === 1, 'messages off: anyone not on the test list is still held');
+await db.query(`delete from cds_match_settings where key='test_recipients'`);
 const lc = await live.handle('family', 'sendCode', { invite: seeded.familyLinks.ann, channel: 'sms' });
 ok(lc.sent === false && /call us/.test(lc.message), 'a held code tells the family to call, not silence');
 
