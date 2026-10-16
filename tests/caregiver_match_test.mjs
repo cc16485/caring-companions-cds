@@ -391,8 +391,81 @@ ok(Array.isArray(staffList) && staffList.includes('samantha@caringcds.com'), 'st
 await db.query(`update cds_match_settings set value = value || '["Linda@CaringCDS.com"]'::jsonb where key='staff_emails'`);
 const r = await live.handle('staff', 'invite', { staff: 'linda@caringcds.com', prospect_id: dale.id });
 ok(r.status === 'held' && /switched off/.test(r.error), 'live mode with messages off: held, with a visible reason');
+// test phones: real send while messages are off, everyone else still held
+const sentTo = [];
+const live2 = createMatch({ ...liveDeps, send: async m => { sentTo.push(m.to); } });
+const annPhone = (await db.query(`select g.phone from cds_prospects p join practice_ghl_contacts g on g.id = p.ghl_contact_id where p.first_name='Ann'`)).rows[0].phone;
+await db.query(`insert into cds_match_settings (key, value) values ('test_recipients', $1::jsonb) on conflict (key) do update set value=excluded.value`, [JSON.stringify({ phones: [annPhone], emails: [] })]);
+const tc = await live2.handle('family', 'sendCode', { invite: seeded.familyLinks.ann, channel: 'sms' });
+ok(tc.sent !== false && sentTo.length === 1, 'messages off: a listed test phone still gets a real text');
+const r2 = await live2.handle('staff', 'invite', { staff: 'linda@caringcds.com', prospect_id: dale.id });
+ok(r2.status === 'held' && sentTo.length === 1, 'messages off: anyone not on the test list is still held');
+await db.query(`delete from cds_match_settings where key='test_recipients'`);
 const lc = await live.handle('family', 'sendCode', { invite: seeded.familyLinks.ann, channel: 'sms' });
 ok(lc.sent === false && /call us/.test(lc.message), 'a held code tells the family to call, not silence');
+
+// ---------- caregiver sign-up + office alert (2026-10-16) ----------
+ok(R.COUNTIES.length === 27 && R.COUNTIES.includes('Phelps') && R.COUNTIES.includes('Vernon') && !R.COUNTIES.includes('Howell') && !R.COUNTIES.includes('Miller'), 'the 27 counties match caringcds.com/service-area');
+const signupSql = strip(readFileSync(ROOT + '/caregiver_signup_alert.sql', 'utf8'));
+await pg.exec(signupSql);
+await pg.exec(signupSql);
+ok(true, 'sign-up alert SQL runs twice');
+const alertCfg = (await db.query(`select value from cds_match_settings where key='office_alerts'`)).rows[0].value;
+ok(alertCfg.live === false && alertCfg.emails.length === 4 && alertCfg.emails.includes('zach@mo-care.com'), 'office alerts: 4 addresses, switched off to start');
+const joinIn = { first_name: 'Jane', last_name: 'Tester', phone: '417-555-0100', city: 'Ozark', counties: ['Christian', 'Greene', 'Nowhere'],
+  availability: ['Weekday mornings'], hours_wanted: 'Part time, around 10 to 25 hours a week', experience: 'I have cared for a family member',
+  has_potential_consumer: 'Yes', consumer_name: 'Mom Tester', consumer_relationship: 'Parent', consumer_has_medicaid: 'Yes, active Medicaid',
+  fcsr_registered_answer: 'no', background_ok: true };
+await throwsLike(() => H('public', 'joinList', { ...joinIn, background_ok: false }), /screening box/, 'sign-up needs the screening box');
+await throwsLike(() => H('public', 'joinList', { ...joinIn, counties: ['Nowhere'] }), /county/, 'sign-up needs a real county');
+await throwsLike(() => H('public', 'joinList', { ...joinIn, phone: '555' }), /10-digit/, 'sign-up needs a full phone');
+const j1 = await H('public', 'joinList', joinIn);
+const jRow = (await db.query(`select * from attendant_pool where phone='(417) 555-0100'`)).rows;
+ok(j1.ok && jRow.length === 1 && jRow[0].source === 'findcdscaregivers.com' && jRow[0].status === 'new', 'sign-up saved to the caregiver list');
+ok(JSON.stringify(jRow[0].counties) === '["Christian","Greene"]', 'unknown counties dropped');
+const jTask = (await db.query(`select * from cds_tasks where pool_id=$1 and kind='cg_signup'`, [jRow[0].id])).rows;
+ok(jTask.length === 1 && jTask[0].title.startsWith('Has someone to care for. New caregiver sign-up: Jane Tester, Ozark (Christian, Greene). Has their profile link.') && jTask[0].due_at, 'Hub to-do made by the database: ' + (jTask[0] || {}).title);
+// Straight to their profile: the link opens, already started with what they told us.
+ok(typeof j1.link === 'string' && j1.link.includes('/caregiver/?c='), 'new sign-up gets a private profile link back');
+const sTok = new URL(j1.link).searchParams.get('c');
+const sHome = await H('caregiver', 'home', { link: sTok });
+ok(sHome.first_name === 'Jane' && JSON.stringify(sHome.draft.counties) === '["Christian","Greene"]' && sHome.draft.town === 'Ozark', 'the link opens their profile, started with their town and counties');
+ok(Array.isArray(sHome.checklist) && sHome.checklist.length > 0, 'their checklist loads');
+const jText = (await db.query(`select * from cds_outbox where pool_id=$1 and audience='caregiver'`, [jRow[0].id])).rows;
+ok(jText.length === 1 && jText[0].template === 'cg_profile_link' && jText[0].automatic === true && jText[0].status === 'practice', 'a copy of the link is queued as a text (held while messages are off)');
+const jPool = (await db.query(`select office_reviewed_at from attendant_pool where id=$1`, [jRow[0].id])).rows[0];
+ok(!jPool.office_reviewed_at, 'signing up does not count as office review');
+const sStaff = await S('caregiver', { id: jRow[0].id });
+ok(sStaff.listing.state === 'not_listed', 'nobody is listed just by signing up');
+const jMail = (await db.query(`select * from cds_outbox where pool_id=$1 and audience='office'`, [jRow[0].id])).rows;
+ok(jMail.length === 4 && jMail.every(m => m.status === 'practice'), 'one office email per address, practice mode records only');
+ok(jMail[0].body.startsWith('Has someone to care for. New CDS caregiver sign-up: Jane T.') && jMail[0].body.includes('Yes (parent). Medicaid: Yes, active Medicaid') && !jMail[0].body.includes('Mom Tester'), 'email subject flags it, and leaves out the person they care for');
+ok(jMail.every(m => !/—/.test(m.body)), 'no em dashes in the office email');
+const jAgain = await H('public', 'joinList', { ...joinIn, phone: '(417) 555-0100', city: '' });
+ok(jAgain.repeat === true && !jAgain.link, 'same phone again: NO link on screen (could be someone else)');
+const jRow2 = (await db.query(`select * from attendant_pool where right(regexp_replace(phone,'[^0-9]','','g'),10)='4175550100'`)).rows;
+ok(jRow2.length === 1 && jRow2[0].city === 'Ozark', 'same phone again: one person, blank answers keep what we had');
+ok((await db.query(`select count(*)::int n from cds_tasks where pool_id=$1 and kind='cg_signup' and done_at is null`, [jRow[0].id])).rows[0].n === 2, 'signing up again adds a "signed up again" to-do');
+// A direct insert from the old page (anon) still gets its to-do.
+await pg.exec(`set role anon; insert into attendant_pool (agency_id, first_name, last_name, phone, counties, source, background_ok) values ('caring-companions-cds','Old','Form','4175550111','["Taney"]','findcdscaregivers.com',true); reset role;`).catch(e => ok(false, 'anon insert: ' + e.message));
+const oldT = (await db.query(`select t.title from cds_tasks t join attendant_pool p on p.id=t.pool_id where p.first_name='Old' and p.last_name='Form'`)).rows;
+ok(oldT.length === 1 && /New caregiver sign-up: Old Form \(Taney\)/.test(oldT[0].title), 'direct insert from the old page still makes the to-do');
+// Live with alerts off: held with a reason. Live and on, failing: the to-do says so.
+const liveJ = createMatch({ ...practiceDeps(db, { familyBase: 'https://x.test/d/', caregiverBase: 'https://x.test/c/' }), mode: 'live', send: async () => { throw new Error('GHL down'); } });
+await liveJ.handle('public', 'joinList', { ...joinIn, phone: '4175550122', first_name: 'Held' });
+const held = (await db.query(`select o.status, o.error from cds_outbox o join attendant_pool p on p.id=o.pool_id where p.first_name='Held' and o.audience='office'`)).rows;
+ok(held.length === 4 && held.every(m => m.status === 'held' && /switched off/.test(m.error)), 'live, alerts off: held with a visible reason');
+await db.query(`update cds_match_settings set value = jsonb_set(value, '{live}', 'true') where key='office_alerts'`);
+await liveJ.handle('public', 'joinList', { ...joinIn, phone: '4175550133', first_name: 'Failed' });
+const fT = (await db.query(`select t.title from cds_tasks t join attendant_pool p on p.id=t.pool_id where p.first_name='Failed'`)).rows;
+ok(fT.length === 1 && /Email alert failed, see Messages\.$/.test(fT[0].title), 'a failed email shows on the to-do');
+await db.query(`update cds_match_settings set value = jsonb_set(value, '{live}', 'false') where key='office_alerts'`);
+// Sending the profile link closes the sign-up to-dos.
+await S('markReviewed', { id: jRow[0].id });
+await S('sendProfileLink', { id: jRow[0].id });
+ok((await db.query(`select count(*)::int n from cds_tasks where pool_id=$1 and kind='cg_signup' and done_at is null`, [jRow[0].id])).rows[0].n === 0, 'sending the profile link closes the sign-up to-dos');
+const nb = (await db.query(`select extract(isodow from cds_next_business_4pm('2026-10-16 15:00-05') at time zone 'America/Chicago')::int d, to_char(cds_next_business_4pm('2026-10-16 15:00-05') at time zone 'America/Chicago','HH24:MI') t`)).rows[0];
+ok(nb.d === 1 && nb.t === '16:00', 'Friday sign-up is due Monday 4pm');
 
 console.log(`\n${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);

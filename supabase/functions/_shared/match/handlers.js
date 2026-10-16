@@ -92,6 +92,16 @@ export function createMatch(deps) {
   }
 
   // ---------- messages: every one is recorded, nothing fails silently ----------
+  // While messages are off, the office's own test phones and emails (setting
+  // test_recipients) still get real messages, so the team can test end to end.
+  async function isTestRecipient(channel, to) {
+    const t = (await setting('test_recipients', {})) || {};
+    if (channel === 'sms') {
+      const d = String(to || '').replace(/\D/g, '').slice(-10);
+      return d.length === 10 && (t.phones || []).some(p => String(p).replace(/\D/g, '').slice(-10) === d);
+    }
+    return (t.emails || []).some(e => String(e).trim().toLowerCase() === String(to || '').trim().toLowerCase());
+  }
   async function message({ template, channel, audience, pool_id, prospect_id, to, vars, by, automatic = false }) {
     const t = TEMPLATES[template];
     if (!t) fail('Unknown message');
@@ -103,7 +113,7 @@ export function createMatch(deps) {
     const display = channel === 'sms' ? R.maskPhone(to) : R.maskEmail(to);
     let status, error = null;
     if (deps.mode === 'practice') status = 'practice';
-    else if (!(await setting('messages_live', false))) { status = 'held'; error = 'Messages are switched off until Samantha approves them.'; }
+    else if (!(await setting('messages_live', false)) && !(await isTestRecipient(channel, to))) { status = 'held'; error = 'Messages are switched off until Samantha approves them.'; }
     else {
       try { await deps.send({ channel, to, subject, body }); status = 'sent'; }
       catch (e) { status = 'failed'; error = String(e && e.message || e).slice(0, 300); }
@@ -112,6 +122,47 @@ export function createMatch(deps) {
       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *`,
       [audience, pool_id || null, prospect_id || null, channel, template, display, (subject ? subject + '\n\n' : '') + body, status, error, automatic, by]);
     return row;
+  }
+
+  // Office alert for a caregiver sign-up: one email per address in setting
+  // office_alerts, each recorded in the outbox. Held until office_alerts.live is
+  // true. A failed email is written onto the sign-up to-do so it can't go unseen.
+  async function officeSignupAlert(p, repeat) {
+    const cfg = await setting('office_alerts', { emails: [], live: false });
+    const t = TEMPLATES.office_cg_signup;
+    const counties = (Array.isArray(p.counties) ? p.counties : []).join(', ');
+    const has = p.has_potential_consumer === 'Yes'
+      ? 'Yes' + (p.consumer_relationship ? ' (' + p.consumer_relationship.toLowerCase() + ')' : '') + (p.consumer_has_medicaid ? '. Medicaid: ' + p.consumer_has_medicaid : '')
+      : (p.has_potential_consumer || 'not answered');
+    const vars = {
+      flag: p.has_potential_consumer === 'Yes' ? 'Has someone to care for. ' : '',
+      headline: repeat ? 'Caregiver signed up again' : 'New CDS caregiver sign-up',
+      did: repeat ? 'signed up again for' : 'signed up for',
+      next: repeat ? 'They already had a record with this phone, so their private link was NOT shown on screen. Call to say hello, then send their profile link from the Hub.'
+        : 'They went straight to building their profile. Call to say hello within 1 business day.',
+      name: [p.first_name, p.last_name].filter(Boolean).join(' '),
+      name_short: p.first_name + (p.last_name ? ' ' + p.last_name.slice(0, 1) + '.' : ''),
+      phone: p.phone || 'none', email: p.email || 'none', town: p.city || 'not given', counties: counties || 'none picked',
+      hours: p.hours_wanted || 'not answered', experience: p.experience || 'not answered', has,
+      fcsr: { yes: 'Yes', no: 'No', not_sure: 'Not sure' }[p.fcsr_registered_answer] || 'not answered',
+    };
+    const subject = fill(t.email_subject, vars), body = fill(t.email, vars);
+    let failed = 0;
+    for (const to of (cfg.emails || [])) {
+      let status, error = null;
+      if (deps.mode === 'practice') status = 'practice';
+      else if (!cfg.live) { status = 'held'; error = 'Office alerts are switched off until Samantha turns them on.'; }
+      else {
+        try { await deps.send({ channel: 'email', to, subject, body }); status = 'sent'; }
+        catch (e) { status = 'failed'; error = String(e && e.message || e).slice(0, 300); failed++; }
+      }
+      await q(`insert into cds_outbox (audience, pool_id, channel, template, to_display, body, status, error, automatic, created_by)
+               values ('office',$1,'email','office_cg_signup',$2,$3,$4,$5,true,'public')`,
+        [p.id, R.maskEmail(to), subject + '\n\n' + body, status, error]);
+    }
+    if (failed) await q(`update cds_tasks set title = left(title || ' Email alert failed, see Messages.', 300)
+                         where pool_id=$1 and kind='cg_signup' and done_at is null and title not like '%Email alert failed%'`, [p.id]);
+    return { emails: (cfg.emails || []).length, failed };
   }
 
   // ---------- loading a caregiver with everything the rules need ----------
@@ -192,6 +243,85 @@ export function createMatch(deps) {
         for (const k of (c.profile.approved || {}).counties || []) counts[k] = (counts[k] || 0) + 1;
       }
       return { counts };
+    },
+    // The caregiver sign-up form (findcdscaregivers.com/caregivers/). Saves to
+    // the caregiver list, the database trigger adds the Hub to-do, and the
+    // office gets an email. The same phone signing up again updates the person.
+    async joinList(i) {
+      if (i.website) return { ok: true };   // spam trap field
+      const s = (v, n) => String(v ?? '').trim().slice(0, n);
+      const opt = v => s(v, 300) || null;
+      const first = s(i.first_name, 60), last = s(i.last_name, 60);
+      const digits = String(i.phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+      if (!first || !last) fail('Please add your first and last name.');
+      if (digits.length !== 10) fail('Please give us a 10-digit phone number, with area code.');
+      const counties = (Array.isArray(i.counties) ? i.counties : []).filter(c => R.COUNTIES.includes(c));
+      if (!counties.length) fail('Please pick at least one county you would work in.');
+      const hasSomeone = ['Yes', 'No', 'Not sure'].includes(i.has_potential_consumer) ? i.has_potential_consumer : null;
+      if (!hasSomeone) fail('Please tell us whether you already have someone you would care for.');
+      if (i.background_ok !== true) fail('Please tick the background screening box.');
+      const miles = [10, 20, 30, 45, 100].includes(Number(i.max_miles)) ? Number(i.max_miles) : null;
+      const row = {
+        first_name: first, last_name: last, phone: '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6),
+        email: opt(i.email), city: s(i.city, 60) || null, zip: String(i.zip || '').replace(/\D/g, '').slice(0, 5) || null,
+        counties: JSON.stringify(counties),
+        availability: JSON.stringify((Array.isArray(i.availability) ? i.availability : []).map(a => s(a, 60)).filter(Boolean).slice(0, 12)),
+        hours_wanted: opt(i.hours_wanted), max_miles: miles,
+        has_transport: i.has_transport === true ? true : i.has_transport === false ? false : null,
+        experience: opt(i.experience), experience_notes: s(i.experience_notes, 2000) || null,
+        cert_cpr: i.cert_cpr === true, cert_cna: i.cert_cna === true, cert_other: opt(i.cert_other),
+        worked_here_before: i.worked_here_before === true,
+        has_potential_consumer: hasSomeone,
+        knows_consumer: hasSomeone === 'Yes' ? opt(i.consumer_name) : null,
+        consumer_relationship: hasSomeone === 'Yes' ? opt(i.consumer_relationship) : null,
+        consumer_has_medicaid: hasSomeone === 'Yes' ? opt(i.consumer_has_medicaid) : null,
+        how_heard: opt(i.how_heard), applicant_notes: s(i.applicant_notes, 2000) || null,
+        fcsr_registered_answer: ['yes', 'no', 'not_sure'].includes(i.fcsr_registered_answer) ? i.fcsr_registered_answer : null,
+      };
+      const cols = Object.keys(row);
+      const existing = await one(`select id from attendant_pool where coalesce(archived,false)=false
+        and right(regexp_replace(coalesce(phone,''), '[^0-9]', '', 'g'), 10) = $1 order by submitted_at limit 1`, [digits]);
+      let id;
+      if (existing) {
+        // Keep what we had where the new answer is blank.
+        await q(`update attendant_pool set ${cols.map((c, n) => `${c} = coalesce($${n + 2}${c === 'counties' || c === 'availability' ? '::jsonb' : ''}, ${c})`).join(', ')} where id=$1`,
+          [existing.id, ...cols.map(c => row[c])]);
+        id = existing.id;
+        const today = (await nowIso()).slice(0, 10);
+        await q(`insert into cds_tasks (kind, title, pool_id, dedupe_key, due_at)
+                 values ('cg_signup', $2, $1, $3, cds_next_business_4pm(now())) on conflict (dedupe_key) do nothing`,
+          [id, ('Signed up again: ' + first + ' ' + last + (row.city ? ', ' + row.city : '') + '. Call to say hello, then use Send profile link (their link was not shown on screen).').slice(0, 300), 'cg_signup_again:' + id + ':' + today]);
+        await audit('public', 'caregiver_signup_repeat', 'pool:' + id, {});
+      } else {
+        const r = await one(`insert into attendant_pool (agency_id, source, status, background_ok, show_anonymously, ${cols.join(', ')})
+          values ('caring-companions-cds', 'findcdscaregivers.com', 'new', true, false, ${cols.map((c, n) => '$' + (n + 1) + (c === 'counties' || c === 'availability' ? '::jsonb' : '')).join(', ')}) returning id`,
+          cols.map(c => row[c]));
+        id = r.id;
+        await audit('public', 'caregiver_signup', 'pool:' + id, {});
+      }
+      const p = await one('select * from attendant_pool where id=$1', [id]);
+      const alert = await officeSignupAlert(typeof p.counties === 'string' ? { ...p, counties: JSON.parse(p.counties) } : p, !!existing);
+      // Someone signing up again with a phone we already have never gets a link
+      // on screen: whoever typed the form might not be that person. The office
+      // sends their link to the phone on file instead.
+      if (existing) return { ok: true, repeat: true, alerted: alert.emails > 0 && !alert.failed };
+      // New person: straight to their profile. Start it with what they just told us.
+      await ensureProfile(id);
+      const certs = [i.cert_cpr === true && 'cpr', i.cert_cna === true && 'cna'].filter(Boolean);
+      const { profile: draft } = R.cleanProfileDraft({ town: row.city || '', counties, certs, ...(row.cert_other ? { cert_other: row.cert_other } : {}),
+        ...(row.has_transport !== null ? { has_car: row.has_transport } : {}), ...(miles ? { travel_miles: miles } : {}) });
+      await q('update cds_cg_profiles set draft = draft || $2::jsonb, updated_at=now() where pool_id=$1', [id, JSON.stringify(draft)]);
+      const token = await crypto.token();
+      await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)',
+        [id, await crypto.hash(token), 'sign-up', addDays(await nowIso(), R.CAREGIVER_LINK_DAYS)]);
+      const link = links.caregiver(token);
+      // A copy of the link so they can come back later. Held while messages are off.
+      const m = await message({ template: 'cg_profile_link', channel: 'sms', audience: 'caregiver', pool_id: id, to: p.phone,
+        vars: { first: p.first_name, link }, by: 'sign-up', automatic: true });
+      await q(`update cds_tasks set title = left(replace(title, '. Call to say hello within 1 business day.', '. Has their profile link. Call to say hello within 1 business day.'), 300)
+               where dedupe_key=$1`, ['cg_signup:' + id]);
+      await audit('public', 'caregiver_signup_link', 'pool:' + id, { message: m.status });
+      return { ok: true, alerted: alert.emails > 0 && !alert.failed, link };
     },
     // Step 1 of the request form: only name, phone and town are needed.
     async requestAccess(i) {
@@ -741,6 +871,8 @@ export function createMatch(deps) {
       const link = links.caregiver(token);
       const m = await message({ template: 'cg_profile_link', channel: channel || 'sms', audience: 'caregiver', pool_id: id,
         to: (channel || 'sms') === 'sms' ? pool.phone : pool.email, vars: { first: pool.first_name, link }, by: s });
+      // Sending the profile link means the hello call happened: close the sign-up to-dos.
+      await q(`update cds_tasks set done_at=now(), done_by=$2 where pool_id=$1 and kind='cg_signup' and done_at is null`, [id, s]);
       await audit('staff:' + s, 'sent_profile_link', 'pool:' + id, { status: m.status });
       return { status: m.status, error: m.error, practice_link: deps.mode === 'practice' ? link : undefined };
     },

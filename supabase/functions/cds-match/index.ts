@@ -56,7 +56,10 @@ function dataUrlBytes(data: string) {
 
 const match = createMatch({
   mode: 'live',
-  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
+  // The handlers pass JSON as text and cast it ($n::jsonb). postgres.js sees a
+  // jsonb parameter and JSON-encodes the text again, storing a string instead
+  // of a list or object. Casting through text first keeps it exactly as sent.
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
   crypto: {
     token: async () => b64url(crypto.getRandomValues(new Uint8Array(24))),
     code: async () => String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000)),

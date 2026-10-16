@@ -19,10 +19,10 @@ export const HELP_TYPES = {
   errands: 'Errands and appointments',
 };
 
-// The 27 counties Caring Companions CDS serves.
+// The 27 counties Caring Companions CDS serves (caringcds.com/service-area, checked 2026-10-16).
 export const COUNTIES = ['Barry', 'Barton', 'Benton', 'Camden', 'Cedar', 'Christian', 'Dade', 'Dallas', 'Douglas',
-  'Greene', 'Hickory', 'Howell', 'Jasper', 'Laclede', 'Lawrence', 'McDonald', 'Miller', 'Newton', 'Ozark', 'Polk',
-  'Pulaski', 'St. Clair', 'Stone', 'Taney', 'Texas', 'Webster', 'Wright'];
+  'Greene', 'Hickory', 'Jasper', 'Laclede', 'Lawrence', 'McDonald', 'Newton', 'Ozark', 'Phelps', 'Polk',
+  'Pulaski', 'St. Clair', 'Stone', 'Taney', 'Texas', 'Vernon', 'Webster', 'Wright'];
 
 // Request-access answers (all optional).
 export const PROGRAMS = { ihs: 'I receive in-home services (IHS) now', cds: 'I use CDS now', new: 'I\'m new to both', not_sure: 'Not sure', prefer_not: 'Prefer not to say' };
