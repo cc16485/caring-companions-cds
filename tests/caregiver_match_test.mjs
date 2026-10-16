@@ -53,12 +53,12 @@ ok(anonRow.fcsr_registered_answer === 'not_sure' && anonRow.office_reviewed_at =
 const cgs = (await S('caregivers', {})).caregivers;
 const byName = n => cgs.find(c => c.first_name === n);
 ok(byName('Teresa').eligible && byName('Teresa').listing.state === 'complete', 'Teresa: all checks verified -> Screening complete');
-ok(byName('Marisol').listing.state === 'in_progress' && !byName('Marisol').eligible, 'Marisol: screening pending -> Screening in progress, not eligible');
-ok(byName('Luis').listing.state === 'in_progress', 'Luis: instructions sent -> Screening in progress');
+ok(byName('Marisol').listing.state === 'not_listed' && byName('Marisol').listing.reason === 'Screening in progress' && !byName('Marisol').eligible, 'Marisol: screening pending -> hidden from families until complete');
+ok(byName('Luis').listing.state === 'not_listed' && byName('Luis').listing.reason === 'Screening in progress', 'Luis: instructions sent -> hidden from families until complete');
 ok(byName('Kayla').listing.state === 'not_listed' && /not approved/.test(byName('Kayla').listing.reason), 'Kayla: profile waiting for review -> not listed');
 ok(byName('Denise').listing.state === 'not_listed' && !byName('Denise').reviewed, 'New sign-up (Denise) never appears automatically');
 const ov = (await S('overview', {})).tiles;
-ok(ov.eligible === 3 && ov.listed === 5, 'eligible-attendant count is only fully verified caregivers (3 of 5 listed)');
+ok(ov.eligible === 3 && ov.listed === 3, 'listed = fully verified caregivers only (3), her rule 2026-10-16');
 
 // ---------- family sign-in ----------
 const inv = seeded.familyLinks.dale;
@@ -76,15 +76,15 @@ await throwsLike(() => H('family', 'verifyCode', { invite: inv, code: sc.practic
 
 // ---------- browse ----------
 const all = await H('family', 'browse', { session: sess, filters: {} });
-ok(all.caregivers.length === 5, 'browse shows the 5 listed caregivers');
-ok(all.caregivers.slice(0, 3).every(c => c.section === 'complete') && all.caregivers.slice(3).every(c => c.section === 'in_progress'), 'Screening complete section comes first');
+ok(all.caregivers.length === 3, 'browse shows only the 3 screening-complete caregivers');
+ok(all.caregivers.length === 3 && all.caregivers.every(c => c.section === 'complete'), 'families only see screening-complete caregivers');
 const leak = JSON.stringify(all);
 ok(!/Practice|example\.com|41755|ssn|staff_notes|fcsr|screen_/.test(leak), 'family view has no last names, contacts, or screening data');
 const am = await H('family', 'browse', { session: sess, filters: { county: 'Christian', parts: ['am'] } });
 ok(am.caregivers.map(c => c.first_name).sort().join() === 'Brenda,Teresa', 'filters: Christian County mornings -> Brenda, Teresa (got ' + am.caregivers.map(c => c.first_name) + ')');
 ok(am.caregivers[0].match.reasons.includes('Works in Christian County'), 'match reasons are stated facts');
 const sp = await H('family', 'browse', { session: sess, filters: { language: 'Spanish' } });
-ok(sp.caregivers.map(c => c.first_name).sort().join() === 'Luis,Marisol', 'Spanish speakers found');
+ok(sp.caregivers.length === 0, 'Spanish speakers still in screening stay hidden (got ' + sp.caregivers.map(c => c.first_name) + ')');
 const vid = await H('family', 'browse', { session: sess, filters: { video: true } });
 ok(vid.caregivers.every(c => c.has_video), 'video filter');
 const prof = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
@@ -148,9 +148,12 @@ const fit = await H('family', 'browse', { session: sess, filters: {}, useNeeds: 
 ok(fit.using_needs && fit.caregivers.every(c => c.counties.includes('Christian')), 'matches for your needs: only caregivers who work in the family\'s county');
 const brendaFit = fit.caregivers.find(c => c.first_name === 'Brenda');
 ok(brendaFit && brendaFit.match.reasons.some(r => /memory loss/.test(r)) && brendaFit.match.total === 6, 'fit explains each need (6 needs counted)');
-const luisFit = fit.caregivers.find(c => c.first_name === 'Luis');
-ok(luisFit && luisFit.match.gaps.some(g => /Not listed for/.test(g)), 'gaps are shown as worth-asking-about, not hidden');
-ok(fit.caregivers.length >= 3, 'needs mode never hides caregivers in the county just for a partial fit');
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['sat'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true } });
+const satFit = await H('family', 'browse', { session: sess, filters: {}, useNeeds: true });
+const brendaSat = satFit.caregivers.find(c => c.first_name === 'Brenda');
+ok(brendaSat && brendaSat.match.gaps.some(g => /Not listed for/.test(g)), 'gaps are shown as worth-asking-about, not hidden');
+ok(satFit.caregivers.length === fit.caregivers.length && fit.caregivers.length === 2, 'needs mode never hides caregivers in the county just for a partial fit');
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true } });
 const elg = await S('eligibility', { prospect_id: (await (async () => (await S('prospects', {})).prospects.find(p => p.first_name === 'Dale and June'))()).id });
 ok(elg.saved_caregivers.length === 2 && elg.family_needs.county === 'Christian', 'office sees the family\'s saved caregivers and needs');
 
@@ -185,7 +188,7 @@ kd = await S('caregiver', { id: kayla });
 ok(kd.listing.state === 'complete', 'approved -> Screening complete section');
 await S('recordCheck', { id: kayla, check_key: 'oig', result: 'not_clear', note: 'possible match' });
 kd = await S('caregiver', { id: kayla });
-ok(!kd.screening.eligible && kd.listing.state === 'in_progress', 'a newer not-clear check removes eligibility');
+ok(!kd.screening.eligible && kd.listing.state === 'not_listed', 'a newer not-clear check removes eligibility and the listing');
 ok((await S('tasks', {})).tasks.some(t => t.kind === 'owner_review' && t.pool_id === kayla), 'owner review task created');
 // findings hide the caregiver
 const marisol = seeded.ids.marisol;

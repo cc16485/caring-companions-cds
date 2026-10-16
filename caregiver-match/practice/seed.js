@@ -176,11 +176,11 @@ export async function seed(match, db, { staff = 'linda@caringcds.com', photoFor 
   const cg = Object.fromEntries(CAREGIVERS.map(g => [g.key, g.id]));
   await match.handle('family', 'requestIntro', { session: ruth, pool_id: cg.teresa, how: 'video', preferred_times: 'Weekday mornings' });
   await match.handle('family', 'requestIntro', { session: ruth, pool_id: cg.brenda, how: 'home', preferred_times: 'Any morning' });
-  await match.handle('family', 'requestIntro', { session: ruth, pool_id: cg.luis, how: 'home', preferred_times: 'Evenings' });
-  await match.handle('family', 'requestIntro', { session: ann, pool_id: cg.marisol, how: 'elsewhere', preferred_times: 'Wednesday' });
+  await match.handle('family', 'requestIntro', { session: ruth, pool_id: cg.jordan, how: 'home', preferred_times: 'Evenings' });
+  await match.handle('family', 'requestIntro', { session: ann, pool_id: cg.teresa, how: 'elsewhere', preferred_times: 'Wednesday' });
   // Ruth answered the needs questions and saved a few caregivers.
   await match.handle('family', 'setNeeds', { session: ruth, needs: { county: 'Christian', days: ['mon', 'tue', 'wed', 'thu', 'fri'], parts: ['am'], hours: 20, help: ['personal_care', 'memory_care'], drives: true } });
-  for (const k of ['teresa', 'brenda', 'luis']) await match.handle('family', 'saveCaregiver', { session: ruth, pool_id: cg[k], saved: true });
+  for (const k of ['teresa', 'brenda', 'jordan']) await match.handle('family', 'saveCaregiver', { session: ruth, pool_id: cg[k], saved: true });
 
   const intros = (await S('intros', {})).intros;
   const find = (f, c) => intros.find(i => i.family === f && i.caregiver === c).id;
@@ -191,11 +191,11 @@ export async function seed(match, db, { staff = 'linda@caringcds.com', photoFor 
   await S('updateIntro', { intro_id: find('Ruth', 'Teresa'), status: 'scheduled', meet_at: thu.toISOString(), meet_details: 'Video link: sent the day before (practice).' });
   // Brenda: asked, waiting.
   await S('askCaregiver', { intro_id: find('Ruth', 'Brenda') });
-  // Luis: not available.
-  await S('updateIntro', { intro_id: find('Ruth', 'Luis'), status: 'not_available', note: 'Luis is full this month.' });
-  // Marisol: asked, said yes (office needs to schedule).
-  await S('askCaregiver', { intro_id: find('Ann', 'Marisol') });
-  await C('respondIntro', { link: links.marisol, id: find('Ann', 'Marisol'), answer: 'yes' });
+  // Jordan: not available. (Only screening-complete caregivers can be asked, her rule 2026-10-16.)
+  await S('updateIntro', { intro_id: find('Ruth', 'Jordan'), status: 'not_available', note: 'Jordan is full this month.' });
+  // Teresa and Ann: asked, said yes (office needs to schedule).
+  await S('askCaregiver', { intro_id: find('Ann', 'Teresa') });
+  await C('respondIntro', { link: links.teresa, id: find('Ann', 'Teresa'), answer: 'yes' });
 
   return { caregiverLinks: links, familyLinks: famLinks, ids: cg, families: fam };
 }

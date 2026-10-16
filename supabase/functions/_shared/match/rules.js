@@ -108,7 +108,9 @@ export function screeningSummary(scr, checks, required = DEFAULT_REQUIRED_CHECKS
 // ---------- Directory listing ----------
 
 // Where a caregiver appears. Returns { state, reason }.
-// state: 'not_listed' | 'in_progress' | 'complete'
+// state: 'not_listed' | 'complete'. HER DECISION 2026-10-16: families only see caregivers
+// whose required screening is complete. 'in_progress' is no longer returned; screens keep
+// handling it so older data can't break them.
 export function listingState({ pool, profile, consents, screening }) {
   const no = reason => ({ state: 'not_listed', reason });
   if (!pool || pool.archived) return no('Archived');
@@ -122,7 +124,7 @@ export function listingState({ pool, profile, consents, screening }) {
   if (screening && screening.findings) return no('Screening needs owner review');
   if (screening && screening.eligible) return { state: 'complete', reason: 'Eligible to begin CDS services' };
   const scr = (screening && screening.raw) || {};
-  if (scr.instructions_sent_at || scr.reg_verified_at) return { state: 'in_progress', reason: 'Screening in progress' };
+  if (scr.instructions_sent_at || scr.reg_verified_at) return no('Screening in progress');
   return no('FCSR steps not started');
 }
 
