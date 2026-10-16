@@ -414,12 +414,25 @@ const jRow = (await db.query(`select * from attendant_pool where phone='(417) 55
 ok(j1.ok && jRow.length === 1 && jRow[0].source === 'findcdscaregivers.com' && jRow[0].status === 'new', 'sign-up saved to the caregiver list');
 ok(JSON.stringify(jRow[0].counties) === '["Christian","Greene"]', 'unknown counties dropped');
 const jTask = (await db.query(`select * from cds_tasks where pool_id=$1 and kind='cg_signup'`, [jRow[0].id])).rows;
-ok(jTask.length === 1 && jTask[0].title.startsWith('Has someone to care for. New caregiver sign-up: Jane Tester, Ozark (Christian, Greene)') && jTask[0].due_at, 'Hub to-do made by the database: ' + (jTask[0] || {}).title);
+ok(jTask.length === 1 && jTask[0].title.startsWith('Has someone to care for. New caregiver sign-up: Jane Tester, Ozark (Christian, Greene). Has their profile link.') && jTask[0].due_at, 'Hub to-do made by the database: ' + (jTask[0] || {}).title);
+// Straight to their profile: the link opens, already started with what they told us.
+ok(typeof j1.link === 'string' && j1.link.includes('/caregiver/?c='), 'new sign-up gets a private profile link back');
+const sTok = new URL(j1.link).searchParams.get('c');
+const sHome = await H('caregiver', 'home', { link: sTok });
+ok(sHome.first_name === 'Jane' && JSON.stringify(sHome.draft.counties) === '["Christian","Greene"]' && sHome.draft.town === 'Ozark', 'the link opens their profile, started with their town and counties');
+ok(Array.isArray(sHome.checklist) && sHome.checklist.length > 0, 'their checklist loads');
+const jText = (await db.query(`select * from cds_outbox where pool_id=$1 and audience='caregiver'`, [jRow[0].id])).rows;
+ok(jText.length === 1 && jText[0].template === 'cg_profile_link' && jText[0].automatic === true && jText[0].status === 'practice', 'a copy of the link is queued as a text (held while messages are off)');
+const jPool = (await db.query(`select office_reviewed_at from attendant_pool where id=$1`, [jRow[0].id])).rows[0];
+ok(!jPool.office_reviewed_at, 'signing up does not count as office review');
+const sStaff = await S('caregiver', { id: jRow[0].id });
+ok(sStaff.listing.state === 'not_listed', 'nobody is listed just by signing up');
 const jMail = (await db.query(`select * from cds_outbox where pool_id=$1 and audience='office'`, [jRow[0].id])).rows;
 ok(jMail.length === 4 && jMail.every(m => m.status === 'practice'), 'one office email per address, practice mode records only');
 ok(jMail[0].body.startsWith('Has someone to care for. New CDS caregiver sign-up: Jane T.') && jMail[0].body.includes('Yes (parent). Medicaid: Yes, active Medicaid') && !jMail[0].body.includes('Mom Tester'), 'email subject flags it, and leaves out the person they care for');
 ok(jMail.every(m => !/—/.test(m.body)), 'no em dashes in the office email');
-await H('public', 'joinList', { ...joinIn, phone: '(417) 555-0100', city: '' });
+const jAgain = await H('public', 'joinList', { ...joinIn, phone: '(417) 555-0100', city: '' });
+ok(jAgain.repeat === true && !jAgain.link, 'same phone again: NO link on screen (could be someone else)');
 const jRow2 = (await db.query(`select * from attendant_pool where right(regexp_replace(phone,'[^0-9]','','g'),10)='4175550100'`)).rows;
 ok(jRow2.length === 1 && jRow2[0].city === 'Ozark', 'same phone again: one person, blank answers keep what we had');
 ok((await db.query(`select count(*)::int n from cds_tasks where pool_id=$1 and kind='cg_signup' and done_at is null`, [jRow[0].id])).rows[0].n === 2, 'signing up again adds a "signed up again" to-do');
@@ -430,7 +443,7 @@ ok(oldT.length === 1 && /New caregiver sign-up: Old Form \(Taney\)/.test(oldT[0]
 // Live with alerts off: held with a reason. Live and on, failing: the to-do says so.
 const liveJ = createMatch({ ...practiceDeps(db, { familyBase: 'https://x.test/d/', caregiverBase: 'https://x.test/c/' }), mode: 'live', send: async () => { throw new Error('GHL down'); } });
 await liveJ.handle('public', 'joinList', { ...joinIn, phone: '4175550122', first_name: 'Held' });
-const held = (await db.query(`select o.status, o.error from cds_outbox o join attendant_pool p on p.id=o.pool_id where p.first_name='Held'`)).rows;
+const held = (await db.query(`select o.status, o.error from cds_outbox o join attendant_pool p on p.id=o.pool_id where p.first_name='Held' and o.audience='office'`)).rows;
 ok(held.length === 4 && held.every(m => m.status === 'held' && /switched off/.test(m.error)), 'live, alerts off: held with a visible reason');
 await db.query(`update cds_match_settings set value = jsonb_set(value, '{live}', 'true') where key='office_alerts'`);
 await liveJ.handle('public', 'joinList', { ...joinIn, phone: '4175550133', first_name: 'Failed' });

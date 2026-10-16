@@ -26,7 +26,7 @@ export const TEMPLATES = {
   office_cg_signup: {
     audience: 'office', label: 'New caregiver sign-up (office alert)',
     email_subject: '{flag}{headline}: {name_short}',
-    email: '{name} {did} the CDS caregiver list.\n\nPhone: {phone}\nEmail: {email}\nTown: {town}\nCounties: {counties}\nLooking for: {hours}\nExperience: {experience}\nHas someone to care for: {has}\nAlready registered with FCSR: {fcsr}\n\nNext step: call to say hello within 1 business day, then send the profile link.\nOpen the CDS Hub: https://hub.caringcds.com (Attendants, then Caregiver Match)\n\n' + SIGN_OFF,
+    email: '{name} {did} the CDS caregiver list.\n\nPhone: {phone}\nEmail: {email}\nTown: {town}\nCounties: {counties}\nLooking for: {hours}\nExperience: {experience}\nHas someone to care for: {has}\nAlready registered with FCSR: {fcsr}\n\nNext step: {next}\nOpen the CDS Hub: https://hub.caringcds.com (Attendants, then Caregiver Match)\n\n' + SIGN_OFF,
   },
   cg_profile_link: {
     audience: 'caregiver', label: 'Caregiver profile link',

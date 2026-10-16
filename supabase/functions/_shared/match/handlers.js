@@ -128,6 +128,8 @@ export function createMatch(deps) {
       flag: p.has_potential_consumer === 'Yes' ? 'Has someone to care for. ' : '',
       headline: repeat ? 'Caregiver signed up again' : 'New CDS caregiver sign-up',
       did: repeat ? 'signed up again for' : 'signed up for',
+      next: repeat ? 'They already had a record with this phone, so their private link was NOT shown on screen. Call to say hello, then send their profile link from the Hub.'
+        : 'They went straight to building their profile. Call to say hello within 1 business day.',
       name: [p.first_name, p.last_name].filter(Boolean).join(' '),
       name_short: p.first_name + (p.last_name ? ' ' + p.last_name.slice(0, 1) + '.' : ''),
       phone: p.phone || 'none', email: p.email || 'none', town: p.city || 'not given', counties: counties || 'none picked',
@@ -278,7 +280,7 @@ export function createMatch(deps) {
         const today = (await nowIso()).slice(0, 10);
         await q(`insert into cds_tasks (kind, title, pool_id, dedupe_key, due_at)
                  values ('cg_signup', $2, $1, $3, cds_next_business_4pm(now())) on conflict (dedupe_key) do nothing`,
-          [id, ('Signed up again: ' + first + ' ' + last + (row.city ? ', ' + row.city : '') + '. Call to say hello within 1 business day.').slice(0, 300), 'cg_signup_again:' + id + ':' + today]);
+          [id, ('Signed up again: ' + first + ' ' + last + (row.city ? ', ' + row.city : '') + '. Call to say hello, then use Send profile link (their link was not shown on screen).').slice(0, 300), 'cg_signup_again:' + id + ':' + today]);
         await audit('public', 'caregiver_signup_repeat', 'pool:' + id, {});
       } else {
         const r = await one(`insert into attendant_pool (agency_id, source, status, background_ok, show_anonymously, ${cols.join(', ')})
@@ -289,7 +291,27 @@ export function createMatch(deps) {
       }
       const p = await one('select * from attendant_pool where id=$1', [id]);
       const alert = await officeSignupAlert(typeof p.counties === 'string' ? { ...p, counties: JSON.parse(p.counties) } : p, !!existing);
-      return { ok: true, alerted: alert.emails > 0 && !alert.failed };
+      // Someone signing up again with a phone we already have never gets a link
+      // on screen: whoever typed the form might not be that person. The office
+      // sends their link to the phone on file instead.
+      if (existing) return { ok: true, repeat: true, alerted: alert.emails > 0 && !alert.failed };
+      // New person: straight to their profile. Start it with what they just told us.
+      await ensureProfile(id);
+      const certs = [i.cert_cpr === true && 'cpr', i.cert_cna === true && 'cna'].filter(Boolean);
+      const { profile: draft } = R.cleanProfileDraft({ town: row.city || '', counties, certs, ...(row.cert_other ? { cert_other: row.cert_other } : {}),
+        ...(row.has_transport !== null ? { has_car: row.has_transport } : {}), ...(miles ? { travel_miles: miles } : {}) });
+      await q('update cds_cg_profiles set draft = draft || $2::jsonb, updated_at=now() where pool_id=$1', [id, JSON.stringify(draft)]);
+      const token = await crypto.token();
+      await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)',
+        [id, await crypto.hash(token), 'sign-up', addDays(await nowIso(), R.CAREGIVER_LINK_DAYS)]);
+      const link = links.caregiver(token);
+      // A copy of the link so they can come back later. Held while messages are off.
+      const m = await message({ template: 'cg_profile_link', channel: 'sms', audience: 'caregiver', pool_id: id, to: p.phone,
+        vars: { first: p.first_name, link }, by: 'sign-up', automatic: true });
+      await q(`update cds_tasks set title = left(replace(title, '. Call to say hello within 1 business day.', '. Has their profile link. Call to say hello within 1 business day.'), 300)
+               where dedupe_key=$1`, ['cg_signup:' + id]);
+      await audit('public', 'caregiver_signup_link', 'pool:' + id, { message: m.status });
+      return { ok: true, alerted: alert.emails > 0 && !alert.failed, link };
     },
     // Step 1 of the request form: only name, phone and town are needed.
     async requestAccess(i) {
