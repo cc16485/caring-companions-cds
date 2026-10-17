@@ -596,7 +596,7 @@ export function createMatch(deps) {
           : c.screening.findings ? 'You aren\'t listed right now. Our office will call you about next steps.'
           : ({ 'Waiting for office review': 'Our office will call you soon to get started.', 'Profile not approved yet': c.profile.review_status === 'submitted' ? 'Your profile is with our office for review.' : 'Finish the steps below and send your profile for review.',
                'No listing consent': 'Give your OK to be listed on the last step.', 'Paused': 'You paused introductions. Turn them back on any time.', 'Not accepting introductions': 'You paused introductions. Turn them back on any time.',
-               'Caregiver removed their listing': 'You removed your listing. You can set it up again any time.', 'FCSR steps not started': 'Finish the state requirements step to be listed.' }[c.listing.reason] || 'Finish the steps below to be listed.'),
+               'Caregiver removed their listing': 'You removed your listing. You can set it up again any time.', 'FCSR steps not started': 'Finish the state requirements step to be listed.', 'Screening in progress': 'Your screening is in progress. Families will see your profile as soon as it\'s complete.' }[c.listing.reason] || 'Finish the steps below to be listed.'),
         intros: intros.map(i => ({ id: i.id, family: i.first_name, town: i.town, how: R.INTRO_HOW[i.how], preferred_times: i.preferred_times,
           status: i.status, meet_at: i.status === 'scheduled' ? i.meet_at : null, meet_details: i.status === 'scheduled' ? i.meet_details : null })),
       };
