@@ -21,7 +21,8 @@ const countyOf = c => { c = String(c || '').trim(); return !c ? '' : /county/i.t
 const first = s => String(s || '').trim().split(/\s+/)[0] || '';
 
 // deps: { db: { query(text, params) -> { rows } }, now?: () => ms,
-//         ghl?: { contactUrl({phone, email}) -> url|null, texts({phone, email}) -> {ok, messages:[{body, at}]} } }
+//         ghl?: { contactUrl({contactId, phone, email}) -> url|null, texts({contactId, phone, email}) -> {ok, messages:[{body, at}]} } }
+//         contactId is the lead's linked GoHighLevel contact (site_leads.ghl_contact_id) when there is one.
 export function createLeadLink(deps) {
   const now = () => (deps.now ? deps.now() : Date.now());
   const q = async (t, p) => (await deps.db.query(t, p)).rows;
@@ -45,7 +46,7 @@ export function createLeadLink(deps) {
     const name = R.siteLeadName(lead);
     let theirTexts = null, contactUrl = null;
     if (deps.ghl) {
-      const who = { phone: lead.phone, email: lead.email };
+      const who = { contactId: lead.ghl_contact_id || null, phone: lead.phone, email: lead.email };
       try { contactUrl = await deps.ghl.contactUrl(who); } catch { contactUrl = null; }
       try { theirTexts = await deps.ghl.texts(who); } catch { theirTexts = { ok: false, messages: [] }; }
     }

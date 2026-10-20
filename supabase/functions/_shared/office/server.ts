@@ -2,6 +2,7 @@
 // (CDS sub-account only) and the schedule's secret check. 2026-10-19.
 import postgres from 'npm:postgres@3.4.4';
 import { createLeadAlerts } from './lead-alerts.js';
+import { createLeadGhl, checkBody } from './lead-ghl.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const GHL = 'https://services.leadconnectorhq.com';
@@ -30,6 +31,37 @@ export const jobs = createLeadAlerts({
     await ghl('/conversations/messages', channel === 'sms'
       ? { type: 'SMS', contactId, message: text }
       : { type: 'Email', contactId, subject, html: html || text.replace(/\n/g, '<br>') });
+  },
+});
+
+// Website leads into GoHighLevel (2026-10-20): read-only search; create sends ONLY the four
+// fields checkBody() allows. Creating is reached only when setting lead_ghl.live is true.
+function cdsOnly() {
+  if (!env('CDS_GHL_TOKEN') || env('CDS_GHL_LOCATION_ID') !== CDS_LOCATION) throw new Error('GoHighLevel is not set to the CDS sub-account on the server');
+}
+export const leadGhl = createLeadGhl({
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
+  ghl: {
+    async search(query: string) {
+      cdsOnly();
+      const r = await fetch(GHL + '/contacts/?' + new URLSearchParams({ locationId: CDS_LOCATION, query, limit: '20' }),
+        { headers: { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-07-28', Accept: 'application/json' } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error('GoHighLevel search ' + r.status);
+      return (j.contacts ?? []) as Record<string, unknown>[];
+    },
+    async create(body: Record<string, unknown>) {
+      cdsOnly();
+      const r = await fetch(GHL + '/contacts/', { method: 'POST', body: JSON.stringify({ locationId: CDS_LOCATION, ...checkBody(body) }),
+        headers: { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-07-28', 'Content-Type': 'application/json', Accept: 'application/json' } });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j?.contact?.id) return j.contact.id;
+      // already there (duplicate setting on): link that contact, change nothing
+      const dup = j?.meta?.contactId;
+      const err = new Error('GoHighLevel create ' + r.status + ': ' + (j.message || '')) as Error & { contactId?: string };
+      if (dup) err.contactId = String(dup);
+      throw err;
+    },
   },
 });
 

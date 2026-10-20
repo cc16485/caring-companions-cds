@@ -37,14 +37,15 @@ async function findContact(who: { phone?: string; email?: string }): Promise<any
 const link = createLeadLink({
   db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
   ghl: {
-    async contactUrl(who: { phone?: string; email?: string }) {
+    async contactUrl(who: { contactId?: string | null; phone?: string; email?: string }) {
+      if (who.contactId) return APP + '/contacts/detail/' + encodeURIComponent(who.contactId);
       const c = await findContact(who);
       return c?.id ? APP + '/contacts/detail/' + encodeURIComponent(String(c.id)) : null;
     },
     // Their latest texts to us (inbound only). If the key may not read conversations,
     // say so and the page shows "Open the conversation in GoHighLevel" instead.
-    async texts(who: { phone?: string; email?: string }) {
-      const c = await findContact(who);
+    async texts(who: { contactId?: string | null; phone?: string; email?: string }) {
+      const c = who.contactId ? { id: who.contactId } : await findContact(who);
       if (!c?.id) return { ok: true, messages: [] };
       const s = await ghlGet('/conversations/search?' + new URLSearchParams({ locationId: CDS_LOCATION, contactId: String(c.id) }));
       if (s.status === 401 || s.status === 403) return { ok: false, messages: [] };
