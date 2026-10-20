@@ -1,14 +1,17 @@
 // cds-wellsky: receives the WellSky report text from the daily CDS check (2026-10-19).
-// The morning task on Samantha's Mac runs two WellSky reports in her logged-in Chrome
+// The morning task on Samantha's Mac runs three WellSky reports in her logged-in Chrome
 // and posts each one here straight from the WellSky page (wellsky/pull.js), so the
 // report never passes through anything else. Logic: _shared/office/wellsky-ingest.js.
 //
-// POST { kind: 'shifts' | 'auths', text } or { kind: 'failed', why }, with header
-// x-wellsky-key = secret WELLSKY_INGEST_KEY (kept on the Mac in cds-security, never in
-// this public repo). The only browser origin allowed is the WellSky reports site.
-// Writes only agency_data 'wellskyCheck'. Never sends a message to anyone.
+// From the WellSky page (no key, origin must be the WellSky reports site): POST a report
+// { kind: 'shifts' | 'auths' | 'open' | 'failed' | 'ping', ... } and get back a receipt; it is
+// only parked (table wellsky_inbox). From the Mac (header x-wellsky-key = secret
+// WELLSKY_INGEST_KEY, kept in cds-security, never in this public repo): { kind: 'confirm',
+// receipt } uses the parked report; { kind: 'failed', why } and { kind: 'ping' } as before.
+// The key never goes into a web page (2026-10-20).
+// Writes only wellsky_inbox and agency_data 'wellskyCheck'. Never sends a message to anyone.
 import postgres from 'npm:postgres@3.4.4';
-import { ingest } from '../_shared/office/wellsky-ingest.js';
+import { ingest, submit, confirm } from '../_shared/office/wellsky-ingest.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const ORIGIN = 'https://troutman.clearcareonline.com';
@@ -32,9 +35,19 @@ Deno.serve(async (req: Request) => {
   const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...h, 'Content-Type': 'application/json' } });
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: h });
   if (req.method !== 'POST') return json({ ok: false, error: 'POST only' }, 405);
-  if (!same(req.headers.get('x-wellsky-key') ?? '', env('WELLSKY_INGEST_KEY'))) return json({ ok: false, error: 'not allowed' }, 401);
+  const key = req.headers.get('x-wellsky-key');
   try {
-    return json(await ingest({ db }, await req.json().catch(() => ({}))));
+    const body = await req.json().catch(() => ({}));
+    // No key (the WellSky page, 2026-10-20): the report is only parked and a receipt
+    // comes back. Nothing is used until the Mac confirms the receipt with the key.
+    if (key === null) {
+      if (req.headers.get('origin') !== ORIGIN) return json({ ok: false, error: 'not allowed' }, 401);
+      const r = await submit({ db }, body);
+      return json(r, r.ok ? 200 : 400);
+    }
+    if (!same(key, env('WELLSKY_INGEST_KEY'))) return json({ ok: false, error: 'not allowed' }, 401);
+    if (body && body.kind === 'confirm') return json(await confirm({ db }, body.receipt));
+    return json(await ingest({ db }, body));
   } catch (e) {
     console.error(e);
     return json({ ok: false, error: 'the hub could not save it' }, 500);

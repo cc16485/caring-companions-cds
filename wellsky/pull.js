@@ -6,13 +6,15 @@
 //   https://troutman.clearcareonline.com/reports/clientauthorizations/ KIND = 'auths'
 //   https://troutman.clearcareonline.com/reports/custom/extreme/#/saved/carelogs/202552   KIND = 'open'
 //     (her saved Custom Report "CDS Daily Check - Care Logs", 2026-10-20: shifts never clocked out)
-// The task puts three lines in front of it: const KIND = '...'; const KEY = '...'; const FN = '...';
-// (KEY lives on the Mac in cds-security/wellsky_ingest.key, never in this public repo.)
+// The task puts one line in front of it: const KIND = '...'; const FN = '...';
+// There is NO key here (2026-10-20): the hub only parks what this sends and returns a
+// receipt; the task then confirms that receipt from the Mac with the key, which stays in
+// cds-security/wellsky_ingest.key and never goes into a web page.
 //
 // It fills the report form the way a person would (CDS: Consumer tag, select all,
 // a date range), runs it, waits for WellSky to build it, and posts the page text
-// straight to the hub's cds-wellsky function. Anything that goes wrong is posted as a
-// failed run with the reason, so the hub shows it. It reads WellSky; it never changes it.
+// straight to the hub's cds-wellsky function, which returns a receipt for the task to
+// confirm. Anything that goes wrong is posted as a failed run with the reason, so the hub shows it. It reads WellSky; it never changes it.
 //   schedules:      first day of last month to the last day of this month
 //                   (last month gives each attendant's usual shift length)
 //   authorizations: first day of this month to the last day of next month
@@ -20,7 +22,7 @@
 await (async () => {
   const send = async body => {
     try {
-      const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-wellsky-key': KEY }, body: JSON.stringify(body) });
+      const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       return await r.json().catch(() => ({ ok: false, error: 'the hub answered ' + r.status }));
     } catch (e) { return { ok: false, error: 'could not reach the hub: ' + e.message }; }
   };

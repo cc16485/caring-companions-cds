@@ -8,7 +8,7 @@ import path from 'path';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pgPath = process.env.PGLITE || '/Users/samantha/Claude/Projects/.pglite/node_modules/@electric-sql/pglite/dist/index.js';
 const { PGlite } = await import(pgPath);
-const { ingest, AGENCY_ID } = await import(ROOT + '/supabase/functions/_shared/office/wellsky-ingest.js');
+const { ingest, submit, confirm, AGENCY_ID, INBOX_MAX_PER_HOUR } = await import(ROOT + '/supabase/functions/_shared/office/wellsky-ingest.js');
 await import(ROOT + '/supabase/functions/_shared/office/cds-rules.js');
 const W = globalThis.CDSWellSky, R = globalThis.CDSRules;
 
@@ -165,7 +165,7 @@ const db = { query: async (t, p) => pg.query(t, p) };
 const saved = async () => (await pg.query(`select data_value v from agency_data where agency_id=$1 and data_key='wellskyCheck'`, [AGENCY_ID])).rows[0]?.v;
 eq((await pg.query(`select value->>'live' l from cds_match_settings where key='wellsky_check'`)).rows[0].l, 'false', 'starts in practice, and running the SQL twice is safe');
 let t0 = Date.parse('2026-10-19T11:30:00Z');
-eq([await ingest({ db, now: () => 0 }, { kind: 'ping' }), await saved()], [{ ok: true, saved: false, live: false, kinds: ['shifts', 'auths', 'open'] }, undefined], 'a ping saves nothing and names the steps it knows');
+eq([await ingest({ db, now: () => 0 }, { kind: 'ping' }), await saved()], [{ ok: true, saved: false, live: false, kinds: ['shifts', 'auths', 'open', 'receipts'] }, undefined], 'a ping saves nothing and names the steps it knows');
 const res = await ingest({ db, now: () => t0 }, { kind: 'shifts', text: shiftsText });
 eq([res.ok, res.saved, res.live, res.consumers, res.shifts], [true, true, false, 2, 22], 'a schedule report is saved');
 await ingest({ db, now: () => t0 + 6e4 }, { kind: 'auths', text: authText });
@@ -187,6 +187,43 @@ eq((await ingest({ db, now: () => t0 }, { kind: 'drop table' })).why, 'the task 
 await pg.exec(`update cds_match_settings set value = jsonb_set(value, '{live}', 'true') where key='wellsky_check'`);
 await ingest({ db, now: () => t0 }, { kind: 'shifts', text: shiftsText });
 eq((await saved()).live, true, 'live follows the setting');
+
+// ---------- receipts: the key never goes into the WellSky page (2026-10-20) ----------
+await pg.exec(`do $$ begin
+  if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
+  if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if; end $$;`);
+const INBOX = readFileSync(ROOT + '/wellsky_inbox.sql', 'utf8').replace(/notify pgrst[^;]*;/g, '');
+await pg.exec(INBOX); await pg.exec(INBOX);
+const inbox = async () => (await pg.query('select receipt, kind, created_at from wellsky_inbox')).rows;
+await pg.exec(`update cds_match_settings set value = jsonb_set(value, '{live}', 'false') where key='wellsky_check'`);
+await pg.exec(`delete from agency_data where data_key='wellskyCheck'`);
+const sub = await submit({ db }, { kind: 'shifts', text: shiftsText });
+ok(sub.ok && /^[0-9a-f]{36}$/.test(sub.receipt), 'a report from the page is parked and a receipt comes back');
+eq([(await inbox()).length, await saved()], [1, undefined], 'parked only: nothing reaches the hub card before it is confirmed');
+const conf = await confirm({ db }, sub.receipt);
+eq([conf.ok, conf.confirmed, conf.saved, conf.consumers], [true, true, true, 2], 'confirming the receipt saves the report');
+eq([(await inbox()).length, (await saved()).shifts.consumers.length], [0, 2], 'the parked copy is deleted once used');
+eq((await confirm({ db }, sub.receipt)).ok, false, 'a receipt works once only');
+eq((await confirm({ db }, 'not-a-receipt')).error, 'not a receipt', 'junk is refused');
+const old = await submit({ db }, { kind: 'auths', text: authText });
+await pg.query(`update wellsky_inbox set created_at = now() - interval '61 minutes' where receipt = $1`, [old.receipt]);
+eq((await confirm({ db }, old.receipt)).ok, false, 'a receipt over an hour old is refused');
+await submit({ db }, { kind: 'ping' });
+eq((await inbox()).map(r => r.kind), ['ping'], 'anything over an hour old is cleared on the next drop-off');
+eq((await submit({ db }, { kind: 'confirm', receipt: 'x' })).error, 'not a WellSky report', 'the page cannot confirm anything itself');
+eq((await submit({ db }, { kind: 'shifts', text: 'x'.repeat(3e6 + 10) })).error, 'too big', 'oversized drop-offs are refused');
+const pingR = (await inbox())[0].receipt;
+eq(await confirm({ db }, pingR), { ok: true, saved: false, confirmed: true, kind: 'ping' }, 'a confirmed ping saves nothing (installer proof)');
+for (let i = 0; i < INBOX_MAX_PER_HOUR; i++) await submit({ db }, { kind: 'ping' });
+eq((await submit({ db }, { kind: 'ping' })).error, 'too many waiting', 'a flood of drop-offs is capped');
+await pg.exec('delete from wellsky_inbox');
+const f = await submit({ db }, { kind: 'failed', why: 'Schedule report: WellSky did not open the report page' });
+const fc = await confirm({ db }, f.receipt);
+eq([fc.ok, fc.recorded, (await saved()).lastRun.why], [false, true, 'Schedule report: WellSky did not open the report page'], 'a failure from the page is recorded once confirmed, and the reply says so');
+const o = await submit({ db }, openBody);
+eq((await confirm({ db }, o.receipt)).open, 3, 'the open shift report goes through receipts too');
+const grants = (await pg.query(`select grantee from information_schema.role_table_grants where table_name='wellsky_inbox' and grantee in ('anon','authenticated')`)).rows;
+eq(grants.length, 0, 'the public and the hub page cannot read or write the holding table');
 
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);
