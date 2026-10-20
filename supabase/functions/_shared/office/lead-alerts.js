@@ -17,6 +17,7 @@
 //
 // No em dashes in anything a person reads (her rule).
 import './cds-rules.js';
+import './wellsky.js';
 import { maskPhone, maskEmail } from '../match/rules.js';
 const R = globalThis.CDSRules;
 
@@ -254,8 +255,14 @@ export function createLeadAlerts(deps) {
     const calls = await callsFor(siteLeads.map(r => r.id));
     // Central noon today, read in the server's own (UTC) clock, so "today" is Missouri's today.
     const noon = new Date(Date.UTC(c.y, c.m - 1, c.d, 12));
+    // The daily WellSky check joins the email only once it is live (setting wellsky_check.live).
+    const wcfg = await setting('wellsky_check', null);
+    const ws = wcfg && wcfg.live === true ? await store(['wellskyCheck', 'wellskyReviewed']) : {};
+    const wellskyItems = wcfg && wcfg.live === true
+      ? globalThis.CDSWellSky.items(Object.assign({}, ws.wellskyCheck || { lastRun: { ok: false, why: 'never ran' } }, { live: true }), ws.wellskyReviewed || {}, noon)
+      : [];
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
-                                   attendantWages: s.attendantWages || {}, siteLeads, calls }, noon);
+                                   attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems }, noon);
     const pipeline = s.pipeline || [];
     const extra = {
       evv: (await one(`select count(*)::int n from evv_submissions where agency_id=$1 and not coalesce(processed,false)`, [AGENCY_ID])).n,
