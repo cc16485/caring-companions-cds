@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=1"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=2"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
      so a PDF carrying the consumer's SSN never passes through anything of ours
      on its way to being cut up. Deferred: nothing on load needs it. -->
@@ -4645,8 +4645,24 @@ function isKnownHash(t) {
             document.getElementById('page-' + t));
 }
 
+// From the lead link page (hub.caringcds.com/lead/): #lead=<website lead id>&intake=referral|pccp
+// opens that lead with the right intake questions. 2026-10-19.
+async function openLeadFromLink(hash) {
+  const h = new URLSearchParams(hash);
+  const siteId = h.get('lead') || '', intake = h.get('intake') === 'pccp' ? 'pccp' : 'referral';
+  if (!/^[0-9a-f-]{36}$/i.test(siteId)) return false;
+  let p = getData('pipeline').find(x => x.siteLeadId === siteId);
+  if (!p) { await importWebsiteLeads(); p = getData('pipeline').find(x => x.siteLeadId === siteId); }
+  if (!p) { showPage('pipeline'); alert('That lead is not in Leads. It may have been archived.'); return true; }
+  openLeadProfile(p.id);
+  openAddPipeline(intake, p.id);
+  return true;
+}
+
 function applyHashRoute() {
-  const target = location.hash.replace('#', '').trim().toLowerCase();
+  const raw = location.hash.replace('#', '').trim();
+  if (/^lead=/i.test(raw)) { openLeadFromLink(raw); return true; }
+  const target = raw.toLowerCase();
   if (!target || !isKnownHash(target)) return false;
   showPage(target);
   return true;
@@ -5239,7 +5255,7 @@ function openAddPipeline(type, existingId){
   updatePipelineModalFields();
   const title = document.getElementById('addPipelineTitle');
   if (title) title.textContent = _plEditId
-    ? 'Answers for the HCBS-1'
+    ? (type === 'pccp' ? 'Transferring to us from another agency' : 'Answers for the HCBS-1')
     : (type === 'pccp' ? 'Transferring to us from another agency' :
        type === 'referral' ? 'New to the CDS programme' :
        'A lead, still deciding');
@@ -5262,6 +5278,10 @@ function openAddPipeline(type, existingId){
       set('pl_nfirst', p.firstName || bits[0]);
       set('pl_nlast', p.lastName || (bits.length > 1 ? bits[bits.length - 1] : ''));
       set('pl_ndob', p.dob); set('pl_ndcn', p.dcn);
+      // the transfer questions use their own boxes
+      set('pl_first', p.firstName || bits[0]);
+      set('pl_last', p.lastName || (bits.length > 1 ? bits[bits.length - 1] : ''));
+      set('pl_dob', p.dob);
     }
   }
   openModal('addPipelineModal');
@@ -5507,7 +5527,22 @@ function closePipelineContact(id) {
 // no matter how often the page is opened.
 // Website leads whose office alert did not send (site_leads.alert_failed), for the Dashboard.
 let _leadAlertFailures = [];
-async function importWebsiteLeads() {
+// Calls logged from the lead link page (table cds_lead_calls). A logged call counts as
+// reaching the lead, the same as moving its status or adding a note.
+let _leadCalls = [];
+async function loadLeadCalls() {
+  if (!_db) return;
+  const { data, error } = await _db.from('cds_lead_calls').select('*').order('at', { ascending: false }).limit(500);
+  if (!error && data) _leadCalls = data;
+}
+// One import at a time: sign-in, the Leads page and a link from the lead page can all
+// ask at once, and two at once would each add the same new lead.
+let _importingLeads = null;
+function importWebsiteLeads() {
+  if (!_importingLeads) _importingLeads = _importWebsiteLeads().finally(() => { _importingLeads = null; });
+  return _importingLeads;
+}
+async function _importWebsiteLeads() {
   if (!_db) return 0;
 
   const pipeline = getData('pipeline');
@@ -5519,6 +5554,7 @@ async function importWebsiteLeads() {
     .eq('archived', false)
     .order('submitted_at', { ascending: false });
 
+  await loadLeadCalls();
   if (error || !data || !data.length) return 0;
   _leadAlertFailures = data.filter(r => r.alert_failed);
 
@@ -5648,6 +5684,15 @@ function renderLeadProfile(){
     row('Leaving', p.leavingAgency) + row('Why switching', p.whySwitching) +
     row('Where they are', ({ready:'Wants to switch now', shopping:'Calling around', unsure:'Unsure'})[p.readiness]) +
     '</div>';
+
+  // ---- calls logged from the lead link page (the new-lead text) ----
+  const OUT = { connected: 'We talked', voicemail: 'Voicemail', no_answer: 'No answer', wrong_number: 'Wrong number' };
+  const logged = p.siteLeadId ? _leadCalls.filter(c => c.site_lead_id === p.siteLeadId) : [];
+  if (logged.length) html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
+    '<b style="color:var(--primary)">Calls logged from the text link</b>' +
+    logged.map(c => '<div style="font-size:13px;padding:4px 0">' + esc(c.by_name) + ', ' + esc(OUT[c.outcome] || c.outcome) + ', ' +
+      esc(new Date(c.at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) +
+      (c.note ? '<div class="field-note">' + esc(c.note) + '</div>' : '') + '</div>').join('') + '</div>';
 
   // ---- what the automation has already said. Top of the page on purpose. ----
   const said = NUDGE_LOG.filter(([k]) => t[k]);
@@ -10621,12 +10666,12 @@ function renderDailyRoutine() {
   // uses, so the Dashboard and the email always say the same thing.
   const steps = CDSRules.dailyRoutine({
     consumers: getData('consumers'), pipeline: getData('pipeline'),
-    authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages')
+    authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages'), calls: _leadCalls
   });
 
   // A new-lead alert that did not reach the office is shown in red until
   // somebody calls that lead. Nothing fails silently.
-  const failedAlerts = (_leadAlertFailures || []).filter(r => CDSRules.siteLeadWaiting(r, getData('pipeline')));
+  const failedAlerts = (_leadAlertFailures || []).filter(r => CDSRules.siteLeadWaiting(r, getData('pipeline'), _leadCalls));
   const failedHtml = failedAlerts.map(r =>
     '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>The new lead alert for ' +
     esc(CDSRules.siteLeadName(r)) + ' did not send.</strong> Call them from Leads. ' +
