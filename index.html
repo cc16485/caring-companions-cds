@@ -27,6 +27,8 @@
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=3"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=2"></script>
+<!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
+<script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
      so a PDF carrying the consumer's SSN never passes through anything of ours
      on its way to being cut up. Deferred: nothing on load needs it. -->
@@ -1173,6 +1175,9 @@
   <div class="alert alert-warn">
     ⚠️ <strong>LEIE screening must be done MONTHLY</strong> for all employees and attendants. FCSR screening is required before hire and annually (recommended). EDL check required before hire and every quarter. Attendant cannot be the consumer's spouse. <strong>If attendant has lived outside Missouri in the last 5 years → fingerprint-based background check required</strong> (see below).
   </div>
+
+  <!-- Check against WellSky (2026-10-20): drawn by renderAttendantCheck() -->
+  <div id="attendantCheck"></div>
 
   <div class="card">
     <div class="card-title"><span class="icon">🔍</span> Attendant Screening Status</div>
@@ -5063,6 +5068,99 @@ function saveTaxSetup() {
 // ============================================================
 // ATTENDANTS
 // ============================================================
+// ============================================================
+// CHECK AGAINST WELLSKY (2026-10-20, Samantha: "build the daily attendant check against
+// WellSky in practice first"). WellSky says who is working and for whom (the 6:30am
+// WellSky check's schedule, agency_data 'wellskyCheck'); this list keeps the checks.
+// The rules are in cds-attendant-check.js, shared with the 8am email. Every change here
+// is a person's click; nothing is changed in WellSky or anywhere else.
+// ============================================================
+let _acLast = null;
+function _acWho() { const el = document.getElementById('header_user'); return (el && el.textContent) || ''; }
+function _acReview(key, rec) {
+  const r = Object.assign({}, getObj('attendantCheckReviewed'));
+  r[key] = Object.assign({ by: _acWho(), at: new Date().toISOString() }, rec);
+  setObj('attendantCheckReviewed', r);
+}
+function renderAttendantCheck(note) {
+  const host = document.getElementById('attendantCheck');
+  if (!host || typeof CDSAttendantCheck !== 'object') return;
+  const A = CDSAttendantCheck;
+  const r = _acLast = A.compare({ attendants: getData('attendants'), shifts: getObj('wellskyCheck').shifts,
+                                  reviewed: getObj('attendantCheckReviewed'), now: new Date() });
+  const btn = (label, call, cls) => '<button class="btn btn-sm ' + (cls || 'btn-outline') + '" style="font-size:11.5px;margin:2px 4px 2px 0" onclick="' + call + '">' + esc(label) + '</button>';
+  const row = (text, buttons) => '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;padding:7px 0;border-top:1px solid var(--gray-200);font-size:13px">' +
+    '<div style="flex:1;min-width:220px">' + text + '</div><div>' + buttons + '</div></div>';
+  const head = t => '<div style="font-weight:700;font-size:13px;margin:12px 0 2px;color:var(--primary)">' + esc(t) + '</div>';
+  let h = '<div class="card" style="border-left:4px solid var(--accent, #54bdb8)">' +
+    '<div class="card-title"><span class="icon">🔄</span> Check against WellSky</div>';
+  if (!r.ok) {
+    host.innerHTML = h + '<div style="font-size:13px;color:var(--gray-600)">The WellSky check has not sent a schedule yet, so there is nothing to compare with.</div></div>';
+    return;
+  }
+  h += '<div style="font-size:12.5px;color:var(--gray-600)">From this morning\'s WellSky schedule (' + esc(A.short(r.from)) + ' to ' + esc(A.short(r.to)) + '). ' +
+       'WellSky says who is working; this list keeps the checks. Nothing changes until you click.</div>';
+  if (r.stale) h += '<div class="alert alert-danger" style="font-size:12.5px;margin-top:8px"><div>The WellSky check last ran ' +
+       esc(new Date(r.at || 0).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) + ', so this may be out of date.</div></div>';
+  if (note) h += '<div style="font-size:12.5px;color:var(--success);font-weight:600;margin-top:8px">' + esc(note) + '</div>';
+  const others = getData('attendants').filter(a => a.status !== 'inactive');
+  if (r.missing.length) {
+    h += head('Working in WellSky, not on this list');
+    h += r.missing.map(m => m.inactive
+      ? row('<strong>' + esc(m.name) + '</strong> is marked inactive here but ' + esc(m.what) + '.', btn('Mark active', "acActive('" + m.id + "')", 'btn-primary'))
+      : row('<strong>' + esc(m.name) + '</strong> ' + esc(m.what) + '.',
+          btn('Add to Attendants', "acAdd('" + m.key + "')", 'btn-primary') +
+          (others.length ? '<select style="font-size:11.5px;padding:3px" onchange="acSame(\'' + m.key + '\', this.value)"><option value="">Same person as…</option>' +
+            others.map(a => '<option value="' + esc(a.id) + '">' + esc(a.name) + '</option>').join('') + '</select>' : '') +
+          btn('Not an attendant', "acNotOurs('" + m.key + "')"))).join('');
+  }
+  if (r.quiet.length) {
+    h += head('On this list, no shifts in WellSky since ' + A.short(r.from));
+    h += r.quiet.map(q => row('<strong>' + esc(q.name) + '</strong>', btn('Mark inactive', "acInactive('" + q.id + "')") + btn('Still active', "acStill('" + q.key + "')"))).join('');
+    h += '<div style="font-size:11.5px;color:var(--gray-600);margin-top:2px">Still active hides them here for 30 days.</div>';
+  }
+  if (r.different.length) {
+    h += head('Working for a different consumer');
+    h += r.different.map(d => row('<strong>' + esc(d.name) + '</strong>: this list says ' + esc(d.listSays || 'nobody') + '. WellSky shows shifts for ' + esc(d.wellsky.join(' and ')) + '.',
+      btn('Update to match WellSky', "acUpdate('" + d.key + "')", 'btn-primary') + btn('Leave as is', "acLeave('" + d.key + "')"))).join('');
+  }
+  if (!r.missing.length && !r.quiet.length && !r.different.length)
+    h += '<div style="font-size:12.5px;color:var(--success);margin-top:8px">✓ Everyone on this list matches WellSky.</div>';
+  host.innerHTML = h + '</div>';
+}
+const _acFind = (list, key) => (_acLast && _acLast[list] || []).find(x => x.key === key);
+function acAdd(key) {
+  const m = _acFind('missing', key); if (!m) return;
+  const list = getData('attendants');
+  list.push({ id: Date.now().toString(), name: m.name, wellskyName: m.raw, email: '', phone: '', fcsrNum: '', consumer: m.consumers.join(', '),
+    hiredate: '', fcsrDate: '', edlDate: '', leieDate: '', empeon: '', outOfState: '', everify: '', spouseCheck: '', contract: '', evv: '',
+    status: 'active', welcomeSent: false, welcomeSentDate: '', addedFrom: 'WellSky', addedBy: _acWho(), addedAt: new Date().toISOString() });
+  setData('attendants', list);
+  renderAttendants(); updateDashboard();
+  renderAttendantCheck('Added ' + m.name + '. Their FCSR, EDL, LEIE and contract show as missing until they are done.');
+}
+function acSame(key, id) {
+  const m = _acFind('missing', key); if (!m || !id) return;
+  const list = getData('attendants'); const a = list.find(x => x.id === id); if (!a) return;
+  a.wellskyName = m.raw; setData('attendants', list);
+  renderAttendants(); renderAttendantCheck(a.name + ' is now matched to "' + m.raw + '" in WellSky.');
+}
+function acNotOurs(key) { _acReview('missing:' + key, { choice: 'not-attendant' }); renderAttendantCheck(); }
+function acActive(id) { const list = getData('attendants'); const a = list.find(x => x.id === id); if (!a) return; a.status = 'active'; setData('attendants', list); renderAttendants(); updateDashboard(); }
+function acInactive(id) { const list = getData('attendants'); const a = list.find(x => x.id === id); if (!a) return; a.status = 'inactive'; setData('attendants', list); renderAttendants(); updateDashboard(); renderAttendantCheck(a.name + ' is marked inactive.'); }
+function acStill(key) {
+  const until = new Date(Date.now() + CDSAttendantCheck.STILL_ACTIVE_DAYS * 864e5);
+  _acReview('quiet:' + key, { choice: 'still-active', until: until.getFullYear() + '-' + String(until.getMonth() + 1).padStart(2, '0') + '-' + String(until.getDate()).padStart(2, '0') });
+  renderAttendantCheck();
+}
+function acUpdate(key) {
+  const d = _acFind('different', key); if (!d) return;
+  const list = getData('attendants'); const a = list.find(x => x.id === d.id); if (!a) return;
+  a.consumer = d.wellsky.join(', '); setData('attendants', list); renderAttendants();
+  renderAttendantCheck(a.name + ' now serves ' + d.wellsky.join(' and ') + ', as in WellSky.');
+}
+function acLeave(key) { const d = _acFind('different', key); if (!d) return; _acReview('different:' + key, { choice: 'leave', sig: d.sig }); renderAttendantCheck(); }
+
 function addAttendant() {
   const name = document.getElementById('a_name').value.trim();
   if (!name) { alert('Attendant name is required.'); return; }
@@ -5101,6 +5199,7 @@ function addAttendant() {
 }
 
 function renderAttendants() {
+  renderAttendantCheck();
   const attendants = getData('attendants');
   const tbody = document.getElementById('attendantTableBody');
   const now = new Date();
