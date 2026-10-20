@@ -4,6 +4,8 @@
 // Chrome and runs this code there, once per report:
 //   https://troutman.clearcareonline.com/reports/schedules/            KIND = 'shifts'
 //   https://troutman.clearcareonline.com/reports/clientauthorizations/ KIND = 'auths'
+//   https://troutman.clearcareonline.com/reports/custom/extreme/#/saved/carelogs/202552   KIND = 'open'
+//     (her saved Custom Report "CDS Daily Check - Care Logs", 2026-10-20: shifts never clocked out)
 // The task puts three lines in front of it: const KIND = '...'; const KEY = '...'; const FN = '...';
 // (KEY lives on the Mac in cds-security/wellsky_ingest.key, never in this public repo.)
 //
@@ -23,17 +25,57 @@ await (async () => {
     } catch (e) { return { ok: false, error: 'could not reach the hub: ' + e.message }; }
   };
   const failed = why => send({ kind: 'failed', why: (KIND === 'shifts' ? 'Schedule report: ' : 'Authorizations report: ') + why });
+  const pad = n => String(n).padStart(2, '0');
+  const us = d => pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + d.getFullYear();
+  const now = new Date();
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // Her saved Custom Report. It is run the way a person runs it (new dates, Run Report),
+  // then its own data is read back from WellSky and only the shifts still In Progress
+  // are sent, with no addresses, phones or anything else.
+  if (KIND === 'open') {
+    const failedOpen = why => send({ kind: 'failed', why: 'Open shift report: ' + why });
+    if (location.host !== 'troutman.clearcareonline.com' || location.pathname !== '/reports/custom/extreme/' || !/#\/saved\/carelogs\/\d+/.test(location.hash))
+      return failedOpen('WellSky did not open the saved report (it may need logging in again).');
+    let dates = [];
+    for (let i = 0; i < 20 && dates.length < 2; i++) { await sleep(1000); dates = [...document.querySelectorAll('input.hasDatepicker')]; }
+    const run = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === 'Run Report');
+    if (dates.length < 2 || !run || !window.jQuery) return failedOpen('the saved report did not load its date boxes.');
+    const recent = async () => { const r = await fetch('/api/reports/recent/data', { credentials: 'include' }); return r.ok ? r.json() : []; };
+    const before = Math.max(0, ...(await recent()).filter(x => x.report_key === 'carelogs').map(x => x.id));
+    const from = us(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 45)), to = us(now);
+    window.jQuery(dates[0]).val(from).trigger('input').trigger('change');
+    window.jQuery(dates[1]).val(to).trigger('input').trigger('change');
+    run.click();
+    let got = null;
+    for (let i = 0; i < 80 && !got; i++) {
+      await sleep(3000);
+      const mine = (await recent()).filter(x => x.report_key === 'carelogs' && x.id > before && x.status === 2);
+      if (mine.length) {
+        const r = await fetch('/api/reports/data/' + mine[0].id, { credentials: 'include' }).catch(() => null);
+        if (r && r.ok) got = await r.json();
+      }
+    }
+    if (!got) return failedOpen('WellSky did not finish building the report within 4 minutes.');
+    let rows;
+    try { rows = JSON.parse(got.data); } catch (e) { return failedOpen('WellSky sent the report in a shape this check does not know.'); }
+    const filters = JSON.stringify((got.json_options && got.json_options.filters) || []);
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 6e4).toISOString().slice(0, 19);
+    const res = await send({ kind: 'open', from, to, total: Array.isArray(rows) ? rows.length : -1, pulledLocal: local,
+      report: { name: got.report_name, cdsFilter: filters.includes('CDS: Consumer') },
+      rows: (Array.isArray(rows) ? rows : []).filter(r => r && r.status === 'In Progress')
+        .map(r => ({ consumer: r.patient__profile, attendant: r.caregiver__profile, clockIn: r._clock_in, status: r.status })) });
+    return Object.assign({ from, to }, res);
+  }
+
   const page = { shifts: '/reports/schedules/', auths: '/reports/clientauthorizations/' }[KIND];
-  if (!page) return { ok: false, error: 'KIND must be shifts or auths' };
+  if (!page) return { ok: false, error: 'KIND must be shifts, auths or open' };
   if (location.host !== 'troutman.clearcareonline.com' || location.pathname !== page)
     return failed('WellSky did not open the report page (it may need logging in again).');
   const fm = document.getElementById('report-form');
   const $ = window.jQuery;
   if (!fm || !$) return failed('the WellSky report form was not on the page (it may need logging in again).');
 
-  const pad = n => String(n).padStart(2, '0');
-  const us = d => pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + '/' + d.getFullYear();
-  const now = new Date();
   const first = (y, m) => new Date(y, m, 1), last = (y, m) => new Date(y, m + 1, 0);
   const from = KIND === 'shifts' ? us(first(now.getFullYear(), now.getMonth() - 1)) : us(first(now.getFullYear(), now.getMonth()));
   const to = KIND === 'shifts' ? us(last(now.getFullYear(), now.getMonth())) : us(last(now.getFullYear(), now.getMonth() + 1));

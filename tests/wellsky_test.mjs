@@ -126,6 +126,35 @@ const steps = R.dailyRoutine({ consumers: [], pipeline: [], authorizations: {}, 
 eq(steps[1].items.length, 5, 'the lines join step 2, Protect the money');
 eq(R.dailyRoutine({ consumers: [], pipeline: [], authorizations: {}, attendantWages: {} }, now)[1].items.length, 0, 'no WellSky lines when none are handed in');
 
+// ---------- shifts never clocked out (her saved Custom Report, 2026-10-20) ----------
+const openBody = { kind: 'open', from: '09/05/2026', to: '10/20/2026', total: 5, pulledLocal: '2026-10-20T06:31:10',
+  report: { name: 'CDS Daily Check - Care Logs', cdsFilter: true },
+  rows: [
+    { consumer: 'Able Ann', attendant: 'Bea Baker', clockIn: '2026-09-05T17:52:00.123456', status: 'In Progress' },
+    { consumer: 'Carr Cal', attendant: 'Dee Dunn', clockIn: '2026-10-19T08:07:00.5', status: 'In Progress' },
+    { consumer: 'Eads Em', attendant: 'Gil Gray', clockIn: '2026-10-20T05:58:00', status: 'In Progress' },   // this morning: may be working
+    { consumer: 'Ford Fay', attendant: 'Hal Hunt', clockIn: 'yesterday', status: 'In Progress' }] };
+const O = W.parseOpenReport(openBody);
+eq([O.rows.length, O.unread.length, O.total], [3, 1, 5], 'In Progress rows read; a row without a clock-in time is counted, not dropped quietly');
+const opens = W.openShifts(O, {});
+eq(opens.map(o => [o.consumer, o.days]), [['Able Ann', 44], ['Carr Cal', 0]], 'open more than 12 hours = never clocked out; oldest first; this morning\'s shift is left alone');
+eq(opens[0].why, 'clocked in Sep 5, 5:52 PM, never clocked out (44 days ago)', 'the reason says when');
+eq(opens[1].why, 'clocked in Oct 19, 8:07 AM, never clocked out', 'under a day: no day count');
+eq(W.openShifts(O, { [opens[0].key]: { at: 'x' } }).length, 1, 'a never-clocked-out shift marked checked stops showing');
+let t2 = '';
+try { W.parseOpenReport(Object.assign({}, openBody, { report: { name: 'Something else', cdsFilter: true } })); } catch (e) { t2 = e.message; }
+ok(/was not the one read/.test(t2), 'a renamed or different saved report is refused');
+t2 = '';
+try { W.parseOpenReport(Object.assign({}, openBody, { report: { name: 'CDS Daily Check - Care Logs', cdsFilter: false } })); } catch (e) { t2 = e.message; }
+ok(/CDS: Consumer/.test(t2), 'the report losing its CDS filter is refused');
+const withOpen = Object.assign({}, fresh, { open: Object.assign({ at: new Date(2026, 9, 19, 6, 32).toISOString() }, O) });
+const IO = W.items(withOpen, {}, now);
+eq(IO[1].t, 'Practice: 2 shifts never clocked out (still In Progress in WellSky)', 'the Dashboard line, right after long shifts');
+eq(IO[1].people[0], { name: 'Able Ann', why: 'Bea Baker, clocked in Sep 5, 5:52 PM, never clocked out (44 days ago)' }, 'who and why for an open shift');
+ok(IO[1].bad, 'open shifts are red');
+const staleOpen = Object.assign({}, withOpen, { open: Object.assign({}, withOpen.open, { at: new Date(2026, 9, 17, 6, 0).toISOString() }) });
+ok(/has not run since Oct 17/.test(W.items(staleOpen, {}, now)[0].t), 'once the open report is in use, it going stale is red too');
+
 // ---------- saving, on a local Postgres copy ----------
 const pg = new PGlite();
 await pg.exec(`create table agency_data (id uuid primary key default gen_random_uuid(), agency_id text, data_key text, data_value jsonb, unique (agency_id, data_key));
@@ -136,7 +165,7 @@ const db = { query: async (t, p) => pg.query(t, p) };
 const saved = async () => (await pg.query(`select data_value v from agency_data where agency_id=$1 and data_key='wellskyCheck'`, [AGENCY_ID])).rows[0]?.v;
 eq((await pg.query(`select value->>'live' l from cds_match_settings where key='wellsky_check'`)).rows[0].l, 'false', 'starts in practice, and running the SQL twice is safe');
 let t0 = Date.parse('2026-10-19T11:30:00Z');
-eq([await ingest({ db, now: () => 0 }, { kind: 'ping' }), await saved()], [{ ok: true, saved: false, live: false }, undefined], 'a ping saves nothing');
+eq([await ingest({ db, now: () => 0 }, { kind: 'ping' }), await saved()], [{ ok: true, saved: false, live: false, kinds: ['shifts', 'auths', 'open'] }, undefined], 'a ping saves nothing and names the steps it knows');
 const res = await ingest({ db, now: () => t0 }, { kind: 'shifts', text: shiftsText });
 eq([res.ok, res.saved, res.live, res.consumers, res.shifts], [true, true, false, 2, 22], 'a schedule report is saved');
 await ingest({ db, now: () => t0 + 6e4 }, { kind: 'auths', text: authText });
@@ -149,6 +178,11 @@ await ingest({ db, now: () => t0 }, { kind: 'failed', why: 'Chrome was not open'
 eq((await saved()).lastRun.why, 'Chrome was not open', 'the task can report its own failure');
 eq((await ingest({ db, now: () => t0 }, { kind: 'shifts', text: 'Schedules by Client\nDate Range: 10/01/2026 - 10/31/2026\n' })).why,
    'the schedule report listed no CDS consumers', 'an empty report is a failure, not a quiet nothing');
+const ro = await ingest({ db, now: () => t0 }, openBody);
+eq([ro.ok, ro.careLogs, ro.open, ro.unread], [true, 5, 3, 1], 'the open shift report is saved');
+eq((await saved()).open.rows.length, 3, 'saved next to the other two');
+eq((await ingest({ db, now: () => t0 }, Object.assign({}, openBody, { report: { name: 'Other', cdsFilter: true } }))).saved, false, 'the wrong saved report is not saved');
+eq((await saved()).open.rows.length, 3, 'and the last good one is kept');
 eq((await ingest({ db, now: () => t0 }, { kind: 'drop table' })).why, 'the task sent something that is not a WellSky report', 'unknown kinds are refused');
 await pg.exec(`update cds_match_settings set value = jsonb_set(value, '{live}', 'true') where key='wellsky_check'`);
 await ingest({ db, now: () => t0 }, { kind: 'shifts', text: shiftsText });

@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=3"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=1"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=2"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
      so a PDF carrying the consumer's SSN never passes through anything of ours
      on its way to being cut up. Deferred: nothing on load needs it. -->
@@ -7858,6 +7858,7 @@ function renderWellSky() {
   const today = W.isoLocal(now);
   const problems = W.items(check, reviewed, now).filter(i => /has not run|did not finish/.test(i.t));
   const longs = W.longShifts(check.shifts, reviewed, today);
+  const opens = W.openShifts(check.open, reviewed);
   const pulledOn = check.auths && check.auths.at ? W.isoLocal(new Date(check.auths.at)) : today;
   const hours = W.hoursThisMonth(check.auths, check.shifts, pulledOn);
   const unread = ((check.shifts && check.shifts.unread) || []).length + ((check.auths && check.auths.unread) || []).length;
@@ -7872,6 +7873,18 @@ function renderWellSky() {
     (unread ? '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:10px">' + unread +
       ' line(s) in the WellSky reports could not be read, so a shift or authorization may be missing here. Tell Claude.</div>' : '') +
 
+    (check.open
+      ? '<div style="font-weight:600;margin:6px 0">Shifts never clocked out</div>' +
+        (opens.length
+          ? '<div style="color:var(--gray-600);margin-bottom:6px">Still "In Progress" in WellSky more than 12 hours after clocking in, ' +
+            'so the visit is not billed or paid until it is fixed. Fix the clock-out with an EVV correction, then mark it checked.</div>' +
+            '<div class="table-wrap"><table><thead><tr><th>Consumer</th><th>Attendant</th><th>Clocked in</th><th>Open for</th><th></th></tr></thead><tbody>' +
+            opens.map(o => '<tr><td>' + esc(o.consumer) + '</td><td>' + esc(o.attendant) + '</td><td>' + esc(o.when) + '</td><td><strong>' +
+              esc(o.days >= 1 ? o.days + ' day' + (o.days === 1 ? '' : 's') : 'under a day') + '</strong></td><td><button class="btn btn-outline btn-sm" style="font-size:11px" data-k="' +
+              esc(o.key) + '" onclick="markShiftChecked(this.dataset.k)">Checked</button></td></tr>').join('') +
+            '</tbody></table></div>'
+          : '<div style="color:var(--success);margin-bottom:6px">✓ Every shift in the last 45 days was clocked out.</div>')
+      : '') +
     '<div style="font-weight:600;margin:6px 0">Long shifts to check before payroll</div>' +
     (longs.length
       ? '<div style="color:var(--gray-600);margin-bottom:6px">Over 8 hours, or more than twice what that attendant usually works ' +

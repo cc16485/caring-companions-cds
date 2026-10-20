@@ -4,6 +4,8 @@
 // body = { kind: 'shifts' | 'auths', text }   one report's page text, read with wellsky.js
 //      | { kind: 'failed', why }              the morning task could not get a report
 //      | { kind: 'ping' }                     the installer checking the key; saves nothing
+//      | { kind: 'open', report, from, to, total, pulledLocal, rows }   her saved Custom Report's
+//        shifts still In Progress (never clocked out), 2026-10-20; read with wellsky.js parseOpenReport
 // Saves into agency_data 'wellskyCheck' (one key, merged): { live, shifts, auths, lastRun }.
 // A report that cannot be read is NOT saved over the last good one; it is recorded as
 // a failed run, which the Dashboard and the 8am email show in red (no silent failures).
@@ -33,8 +35,15 @@ export async function ingest(deps, body) {
 
   const kind = body && body.kind;
   // The installer's check that the key works; saves nothing.
-  if (kind === 'ping') return { ok: true, saved: false, live };
+  if (kind === 'ping') return { ok: true, saved: false, live, kinds: ['shifts', 'auths', 'open'] };
   if (kind === 'failed') return failed(body.why);
+  if (kind === 'open') {
+    let o;
+    try { o = W.parseOpenReport(body); }
+    catch (e) { return failed(e && e.wellsky ? e.message : 'the open shift report could not be read'); }
+    await save({ open: Object.assign({ at }, o), lastRun: { at, kind, ok: true, why: '' } });
+    return { ok: true, saved: true, live, kind, careLogs: o.total, open: o.rows.length, unread: o.unread.length };
+  }
   if (kind !== 'shifts' && kind !== 'auths') return failed('the task sent something that is not a WellSky report');
   const text = String(body.text || '');
   if (!text || text.length > MAX_TEXT) return failed('the ' + (kind === 'shifts' ? 'schedule' : 'authorizations') + ' report came back empty or far too big');
