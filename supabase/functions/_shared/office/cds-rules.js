@@ -131,7 +131,7 @@
   }
   const followDue = (p, todayIso) => !!(p && p.followup && p.followup <= todayIso && !CLOSED.includes(p.status));
 
-  // "Do this first, every morning". data = { consumers, pipeline, authorizations, attendantWages, siteLeads?, calls? }.
+  // "Do this first, every morning". data = { consumers, pipeline, authorizations, attendantWages, siteLeads?, calls?, wellskyItems? }.
   // Items carry the page to open (go), whether it is red (bad) and, for people
   // waiting, their names, so the email can say who.
   function dailyRoutine(data, now) {
@@ -175,7 +175,7 @@
         noAuth   && { t: noAuth + ' active consumer' + (noAuth !== 1 ? 's have' : ' has') + ' no authorization on file', go: 'authorizations', bad: true },
         expired  && { t: plural(expired, 'authorization', 'authorizations') + ' expired', go: 'authorizations', bad: true },
         expiring && { t: expiring + ' expiring within 60 days', go: 'authorizations' }
-      ].filter(Boolean),
+      ].filter(Boolean).concat(data.wellskyItems || []),   // the daily WellSky check (wellsky.js items)
       clear: 'Every consumer has a current authorization.'
     });
 
