@@ -121,6 +121,8 @@ export function morningEmail(steps, extra, nowMs) {
   const also = [
     extra.alertFailures?.length && { t: extra.alertFailures.length + ' new lead alert' + (extra.alertFailures.length !== 1 ? 's' : '') + ' did not send', go: 'pipeline', bad: true,
                                      people: extra.alertFailures.map(f => ({ name: f.name, why: f.why })) },
+    extra.ghlFailures?.length && { t: extra.ghlFailures.length + ' lead' + (extra.ghlFailures.length !== 1 ? 's' : '') + ' could not be added to GoHighLevel', go: 'pipeline', bad: true,
+                                   people: extra.ghlFailures.map(f => ({ name: f.name, why: f.why })) },
     extra.evv        && { t: extra.evv + ' EVV correction form' + (extra.evv !== 1 ? 's' : '') + ' to review', go: 'evvcorrections' },
     extra.signups    && { t: extra.signups + ' caregiver sign-up' + (extra.signups !== 1 ? 's' : '') + ' to call', go: 'caregivermatch' },
     extra.heldFailed && { t: extra.heldFailed + ' message' + (extra.heldFailed !== 1 ? 's' : '') + ' held or failed', go: 'caregivermatch', bad: true },
@@ -269,6 +271,8 @@ export function createLeadAlerts(deps) {
       signups: (await one(`select count(*)::int n from cds_tasks where kind='cg_signup' and done_at is null`)).n,
       heldFailed: (await one(`select count(*)::int n from cds_outbox where status in ('held','failed') and created_at > now() - interval '1 day'`)).n,
       alertFailures: siteLeads.filter(r => r.alert_failed && R.siteLeadWaiting(r, pipeline, calls)).map(r => ({ name: R.siteLeadName(r), why: r.alert_failed })),
+      // website leads that could not be added to GoHighLevel (lead-ghl.js), once it is trying
+      ghlFailures: siteLeads.filter(r => String(r.ghl_status || '').startsWith('failed')).map(r => ({ name: R.siteLeadName(r), why: String(r.ghl_status).replace(/^failed: /, '') })),
     };
     const m = morningEmail(steps, extra, t);
     const results = [];
