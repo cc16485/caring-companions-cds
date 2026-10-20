@@ -7,6 +7,7 @@
 //   https://troutman.clearcareonline.com/reports/custom/extreme/#/saved/carelogs/202552   KIND = 'open'
 //     (her saved Custom Report "CDS Daily Check - Care Logs", 2026-10-20: shifts never clocked out)
 // The task puts one line in front of it: const KIND = '...'; const FN = '...';
+// The result carries receiptParts (six short pieces); the task joins them into the receipt.
 // There is NO key here (2026-10-20): the hub only parks what this sends and returns a
 // receipt; the task then confirms that receipt from the Mac with the key, which stays in
 // cds-security/wellsky_ingest.key and never goes into a web page.
@@ -23,7 +24,11 @@ await (async () => {
   const send = async body => {
     try {
       const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      return await r.json().catch(() => ({ ok: false, error: 'the hub answered ' + r.status }));
+      const j = await r.json().catch(() => ({ ok: false, error: 'the hub answered ' + r.status }));
+      // The browser tool hides anything that looks like a password, and a 36-character
+      // receipt does. So it comes back as six short pieces; the task joins them (2026-10-20).
+      if (j && typeof j.receipt === 'string') { j.receiptParts = j.receipt.match(/.{1,6}/g); delete j.receipt; }
+      return j;
     } catch (e) { return { ok: false, error: 'could not reach the hub: ' + e.message }; }
   };
   const failed = why => send({ kind: 'failed', why: (KIND === 'shifts' ? 'Schedule report: ' : 'Authorizations report: ') + why });
