@@ -35,7 +35,7 @@ export async function ingest(deps, body) {
 
   const kind = body && body.kind;
   // The installer's check that the key works; saves nothing.
-  if (kind === 'ping') return { ok: true, saved: false, live };
+  if (kind === 'ping') return { ok: true, saved: false, live, kinds: ['shifts', 'auths', 'open'] };
   if (kind === 'failed') return failed(body.why);
   if (kind === 'open') {
     let o;
