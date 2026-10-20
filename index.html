@@ -24,6 +24,8 @@
   window.__applyEmbedFlags();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
+<script src="supabase/functions/_shared/office/cds-rules.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
      so a PDF carrying the consumer's SSN never passes through anything of ours
      on its way to being cut up. Deferred: nothing on load needs it. -->
@@ -5503,6 +5505,8 @@ function closePipelineContact(id) {
 //
 // siteLeadId is what stops duplicates: a row is imported once and never again,
 // no matter how often the page is opened.
+// Website leads whose office alert did not send (site_leads.alert_failed), for the Dashboard.
+let _leadAlertFailures = [];
 async function importWebsiteLeads() {
   if (!_db) return 0;
 
@@ -5516,6 +5520,7 @@ async function importWebsiteLeads() {
     .order('submitted_at', { ascending: false });
 
   if (error || !data || !data.length) return 0;
+  _leadAlertFailures = data.filter(r => r.alert_failed);
 
   const fresh = data.filter(r => !already.has(r.id));
   if (!fresh.length) return 0;
@@ -5543,7 +5548,8 @@ async function importWebsiteLeads() {
       source: r.source ? 'Website — ' + r.source : 'Website',
       status: 'new',
       followup: '', stateSubmit: '', currentAgency: '', dcn: '', hours: '',
-      notes: detail ? [{ date: (r.submitted_at || '').split('T')[0], text: detail }] : [],
+      // fromForm: this note is the family's own words, not a call (cds-rules.js leadWaiting).
+      notes: detail ? [{ date: (r.submitted_at || '').split('T')[0], text: detail, fromForm: true }] : [],
       addedAt: r.submitted_at || new Date().toISOString(),
       fromWebsite: true,
       onboardingSent: false, welcomeSent: false
@@ -6852,53 +6858,13 @@ function profChip(label, state, detail) {
 // register, so the hub can work it out: bucket each consumer's attendant wages
 // by calendar quarter and say who has crossed and who is close.
 function desThreshold(consumerName) {
-  const entries = (getObj('attendantWages').entries || [])
-    .filter(e => e.consumer === consumerName);
-  if (!entries.length) return { known: false };
-
-  // Bucket by the calendar quarter the pay period falls in. The period reads
-  // like "07/19/2026 - 07/25/2026"; the start date decides the quarter.
-  const byQuarter = {};
-  let estimated = false;
-  entries.forEach(e => {
-    const first = String(e.period || '').split('-')[0].trim();
-    const parts = first.split('/');
-    if (parts.length < 3) return;
-    const y = +parts[2], m = +parts[0];
-    if (!y || !m) return;
-    const q = 'Q' + (Math.floor((m - 1) / 3) + 1) + ' ' + y;
-    // Gross is what DES counts. It is derived from each run's gross/net ratio,
-    // so fall back to net and say so rather than silently under-reporting.
-    const amt = (e.gross != null) ? e.gross : (estimated = true, e.net || 0);
-    byQuarter[q] = (byQuarter[q] || 0) + amt;
-  });
-
-  const order = Object.keys(byQuarter).sort((a, b) => {
-    const [qa, ya] = a.split(' '), [qb, yb] = b.split(' ');
-    return (+ya - +yb) || (+qa.slice(1) - +qb.slice(1));
-  });
-  if (!order.length) return { known: false };
-
-  const crossed = order.find(q => byQuarter[q] >= 1000);
-  const latest  = order[order.length - 1];
-
-  return {
-    known: true, estimated, byQuarter, quarters: order,
-    crossed: crossed || null,
-    crossedAmount: crossed ? byQuarter[crossed] : 0,
-    latestQuarter: latest,
-    latestAmount: byQuarter[latest],
-    shortfall: crossed ? 0 : Math.max(0, 1000 - byQuarter[latest])
-  };
+  // The rule itself lives in cds-rules.js (shared with the morning email).
+  return CDSRules.desThreshold(getObj('attendantWages').entries || [], consumerName);
 }
 
 // The 90-day EIN clock, expressed the way someone acting on it needs it.
 function einClock(c) {
-  const start = (c.cdsStartDate || '').trim();
-  if (!start) return { known: false };
-  const due = new Date(new Date(start + 'T12:00:00').getTime() + 90 * 864e5);
-  const days = Math.round((due - new Date()) / 864e5);
-  return { known: true, due: due.toISOString().slice(0, 10), days };
+  return CDSRules.einClock(c);   // rule in cds-rules.js
 }
 
 // Agency-wide: who has crossed $1,000 and is still not registered with DES, and
@@ -6972,54 +6938,7 @@ function renderComplianceClocks() {
 // single date with nothing watching it, which is the easier of the two to lose
 // — it comes round once a year and nothing nags.
 function ongoingRequirements(c) {
-  const today = new Date(); today.setHours(12, 0, 0, 0);
-  const iso = d => d.toISOString().slice(0, 10);
-  const monthKey = d => d.toISOString().slice(0, 7);
-
-  // ── monthly contact ──
-  const contacts = (c.contacts && typeof c.contacts === 'object') ? c.contacts : {};
-  const months = Object.keys(contacts).sort();
-  const thisMonth = monthKey(today);
-  const doneThisMonth = !!contacts[thisMonth];
-  // How many of the last 12 months were actually logged? That is the number an
-  // auditor asks for, not "when did you last speak to them".
-  // Only count months the consumer was actually with us. Someone who started
-  // last month has not "missed" the eleven before it, and a false count is how
-  // a real alert gets ignored.
-  const startedKey = ((c.cdsStartDate || c.empeonStartDate || '').trim() || '').slice(0, 7);
-  const last12 = [];
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const k = monthKey(d);
-    if (startedKey && k < startedKey) continue;
-    last12.push({ month: k, done: !!contacts[k], log: contacts[k] || null });
-  }
-  const missed = last12.filter(m => !m.done && m.month < thisMonth).length;
-
-  // ── annual face-to-face ──
-  // Anchor on the last visit if there is one, otherwise on when they started,
-  // because the first visit is due within 365 days of the care plan.
-  const visits = Array.isArray(c.homeVisits) ? c.homeVisits.slice()
-               : (c.homeVisitDate ? [{ date: c.homeVisitDate, by: '', notes: '' }] : []);
-  visits.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const lastVisit = visits[0] || null;
-  const anchor = (lastVisit && lastVisit.date) || (c.cdsStartDate || '').trim() || (c.empeonStartDate || '').trim();
-
-  let visitDue = null, visitDays = null;
-  if (anchor) {
-    const d = new Date(anchor + 'T12:00:00');
-    d.setDate(d.getDate() + 365);
-    visitDue = iso(d);
-    visitDays = Math.round((d - today) / 864e5);
-  }
-
-  return {
-    monthly: { doneThisMonth, thisMonth, last12, missed, everLogged: months.length },
-    annual:  { visits, lastVisit, anchor, due: visitDue, days: visitDays,
-               overdue: visitDays !== null && visitDays < 0,
-               soon: visitDays !== null && visitDays >= 0 && visitDays <= 45,
-               known: !!anchor }
-  };
+  return CDSRules.ongoingRequirements(c);   // rule in cds-rules.js
 }
 
 // Agency-wide view of the two recurring duties. Both are case-file evidence,
@@ -10698,80 +10617,21 @@ function renderDailyRoutine() {
   const host = document.getElementById('dailyRoutine');
   if (!host) return;
 
-  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
-  const steps = [];
-
-  // 1. Anything the state can act on.
-  let einLate = 0, einSoon = 0, desDue = 0;
-  consumers.forEach(c => {
-    const st = taxStatus(c);
-    if (!(st.exempt || (st.inFusion && st.uploaded))) {
-      const k = einClock(c);
-      if (k.known && k.days < 0) einLate++; else if (k.known && k.days <= 21) einSoon++;
-    }
-    if (!c.desRegistered) { const d = desThreshold(c.name); if (d.known && d.crossed) desDue++; }
-  });
-  steps.push({
-    n: 1, title: 'Clear anything the state is waiting on',
-    items: [
-      einLate && { t: einLate + ' consumer' + (einLate !== 1 ? 's' : '') + ' past the 90-day EIN deadline', go: 'taxcompliance', bad: true },
-      einSoon && { t: einSoon + ' inside three weeks of it', go: 'taxcompliance' },
-      desDue  && { t: desDue + ' past $1,000 in a quarter and not registered with DES', go: 'taxcompliance', bad: true }
-    ].filter(Boolean),
-    clear: 'Nothing outstanding with the state.'
+  // The four steps come from cds-rules.js, the same file the 8am morning email
+  // uses, so the Dashboard and the email always say the same thing.
+  const steps = CDSRules.dailyRoutine({
+    consumers: getData('consumers'), pipeline: getData('pipeline'),
+    authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages')
   });
 
-  // 2. Money already earned or about to be lost.
-  const { records } = getAuths();
-  const today = new Date();
-  const auths = Object.values(records);
-  const expired = auths.filter(a => a.planEnd && new Date(a.planEnd + 'T12:00:00') < today).length;
-  const expiring = auths.filter(a => {
-    if (!a.planEnd) return false;
-    const d = Math.round((new Date(a.planEnd + 'T12:00:00') - today) / 864e5);
-    return d >= 0 && d <= 60;
-  }).length;
-  const noAuth = consumers.filter(c => !auths.some(a =>
-    String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase())).length;
-  steps.push({
-    n: 2, title: 'Protect the money',
-    items: [
-      noAuth   && { t: noAuth + ' active consumer' + (noAuth !== 1 ? 's have' : ' has') + ' no authorization on file', go: 'authorizations', bad: true },
-      expired  && { t: expired + ' authorization' + (expired !== 1 ? 's' : '') + ' expired', go: 'authorizations', bad: true },
-      expiring && { t: expiring + ' expiring within 60 days', go: 'authorizations' }
-    ].filter(Boolean),
-    clear: 'Every consumer has a current authorization.'
-  });
-
-  // 3. The recurring duties that fail silently.
-  let visitsOverdue = 0, monthDue = 0;
-  consumers.forEach(c => {
-    const r = ongoingRequirements(c);
-    if (r.annual.overdue) visitsOverdue++;
-    if (!r.monthly.doneThisMonth) monthDue++;
-  });
-  steps.push({
-    n: 3, title: 'Keep the case files clean',
-    items: [
-      visitsOverdue && { t: visitsOverdue + ' annual face-to-face visit' + (visitsOverdue !== 1 ? 's' : '') + ' overdue', go: 'consumers', bad: true },
-      monthDue      && { t: monthDue + ' monthly contact' + (monthDue !== 1 ? 's' : '') + ' not yet logged this month', go: 'consumers' }
-    ].filter(Boolean),
-    clear: 'Contacts and visits are up to date.'
-  });
-
-  // 4. People waiting to hear from someone.
-  const pipeline = getData('pipeline');
-  const newWeb = pipeline.filter(p => p.fromWebsite && p.status === 'new').length;
-  const followDue = pipeline.filter(p => p.followup && p.followup <= new Date().toISOString().slice(0, 10)
-                                    && !PIPELINE_CLOSED_STATUSES.includes(p.status)).length;
-  steps.push({
-    n: 4, title: 'Call the people waiting',
-    items: [
-      newWeb    && { t: newWeb + ' new enquiry' + (newWeb !== 1 ? 'ies' : '') + ' from the website, never contacted', go: 'pipeline', bad: true },
-      followDue && { t: followDue + ' follow-up' + (followDue !== 1 ? 's' : '') + ' due today or overdue', go: 'pipeline' }
-    ].filter(Boolean),
-    clear: 'Nobody is waiting on a call.'
-  });
+  // A new-lead alert that did not reach the office is shown in red until
+  // somebody calls that lead. Nothing fails silently.
+  const failedAlerts = (_leadAlertFailures || []).filter(r => CDSRules.siteLeadWaiting(r, getData('pipeline')));
+  const failedHtml = failedAlerts.map(r =>
+    '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>The new lead alert for ' +
+    esc(CDSRules.siteLeadName(r)) + ' did not send.</strong> Call them from Leads. ' +
+    '<a href="#" onclick="showPage(\'pipeline\');return false" style="color:inherit;font-weight:600;text-decoration:underline">open Leads</a>' +
+    '<div style="font-size:11.5px;margin-top:4px">' + esc(r.alert_failed || '') + '</div></div></div>').join('');
 
   const totalOpen = steps.reduce((t, s) => t + s.items.length, 0);
 
@@ -10786,6 +10646,7 @@ function renderDailyRoutine() {
           ? 'Work down the list. Everything else can wait until it is clear.'
           : 'Nothing outstanding. This is what a clear morning looks like.') +
       '</div>' +
+      failedHtml +
       steps.map(st =>
         '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--gray-200)">' +
           '<span style="flex:none;width:26px;height:26px;border-radius:50%;background:' +
@@ -12101,6 +11962,9 @@ function initApp() {
   renderCorrections();
   updateDashboard();
   _enableRealtime();
+  // Pull new website leads in at sign-in, not only when someone opens Leads,
+  // so the Dashboard and the lead alerts agree on who is still waiting.
+  importWebsiteLeads().then(() => { renderPipeline(); updateDashboard(); }).catch(() => {});
 
   // Checkbox change → mark done class
   document.querySelectorAll('.checklist input[type="checkbox"]').forEach(cb => {
