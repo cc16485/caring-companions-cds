@@ -1,8 +1,9 @@
 // The daily CDS check from WellSky (2026-10-19, Samantha: "build the daily CDS check in
 // practice mode with the 8 hour / 2x usual long-shift rule").
 //
-// WellSky Personal Care has no API. Every morning a task on Samantha's Mac runs two
-// WellSky reports in her logged-in Chrome (wellsky/pull.js) and posts the report text
+// WellSky's Connect API is paid and not set up. Every morning a task on Samantha's Mac runs three
+// WellSky reports in her logged-in Chrome (wellsky/pull.js; the third, 2026-10-20, is her saved
+// Custom Report for shifts never clocked out) and posts the report text
 // to the cds-wellsky server function, which reads it with this file and saves the
 // result as agency_data 'wellskyCheck'. The hub page and the 8am email read it back
 // with this same file, so they can never disagree.
@@ -26,6 +27,8 @@
   const MIN_HISTORY = 5;        // fewer earlier shifts than this: only the 8 hour rule applies
   const LOOKBACK_DAYS = 14;     // long shifts older than this are payroll's problem already
   const STALE_HOURS = 26;       // a daily pull older than this means the check stopped running
+  const OPEN_HOURS = 12;        // still "In Progress" this long after clocking in = never clocked out
+  const OPEN_REPORT = 'CDS Daily Check - Care Logs';   // her saved Custom Report (2026-10-20)
   const LOW_SHARE = 0.25;       // under a quarter used ...
   const LOW_FROM_DAY = 15;      // ... after the middle of the month
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -120,6 +123,50 @@
     return { from, to: iso(range[2]), consumers, unread };
   }
 
+  // Her saved Custom Report "CDS Daily Check - Care Logs" (Reports > Custom, Care Logs,
+  // filtered to the CDS: Consumer tag). Unlike the schedule report it lists shifts that
+  // were clocked into and never clocked out: status "In Progress", no clock-out. The
+  // morning code reads the report's own data in WellSky and sends only those rows:
+  //   { report: { name, cdsFilter }, from, to, total, pulledLocal, rows: [{ consumer, attendant, clockIn, status }] }
+  // Times are WellSky's own local (Central) clock with no time zone, e.g. 2026-09-05T17:52:00.123.
+  const NAIVE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+  function parseOpenReport(body) {
+    if (!body || !body.report || body.report.name !== OPEN_REPORT)
+      fail('The saved WellSky report "' + OPEN_REPORT + '" was not the one read (renamed or deleted?).');
+    if (!body.report.cdsFilter) fail('The saved WellSky report "' + OPEN_REPORT + '" no longer filters to the CDS: Consumer tag.');
+    if (!Array.isArray(body.rows) || typeof body.total !== 'number') fail('The open shift report came back in a shape this check does not know.');
+    if (!NAIVE.test(String(body.pulledLocal || ''))) fail('The open shift report has no time it was read.');
+    const rows = [], unread = [];
+    body.rows.forEach(r => {
+      if (r && r.status === 'In Progress' && NAIVE.test(String(r.clockIn || '')) && r.consumer && r.attendant)
+        rows.push({ consumer: String(r.consumer).slice(0, 80), attendant: String(r.attendant).slice(0, 80), clockIn: String(r.clockIn).slice(0, 19) });
+      else unread.push(String((r && r.status) || 'row').slice(0, 40));
+    });
+    return { from: String(body.from || ''), to: String(body.to || ''), total: body.total, pulledLocal: String(body.pulledLocal).slice(0, 19), rows, unread };
+  }
+
+  // Shifts still "In Progress" more than 12 hours after clocking in: the attendant
+  // never clocked out, so the visit is neither billed nor paid until it is fixed.
+  const asUtc = naive => Date.parse(naive.slice(0, 19) + 'Z');
+  function whenNaive(naive) {
+    const h = +naive.slice(11, 13), mi = naive.slice(14, 16);
+    return short(naive.slice(0, 10)) + ', ' + ((h % 12) || 12) + ':' + mi + ' ' + (h < 12 ? 'AM' : 'PM');
+  }
+  const openKey = r => 'open|' + r.consumer + '|' + r.clockIn.slice(0, 16);
+  function openShifts(open, reviewed) {
+    if (!open || !open.rows) return [];
+    const at = asUtc(open.pulledLocal);
+    return open.rows
+      .filter(r => at - asUtc(r.clockIn) > OPEN_HOURS * 36e5)
+      .filter(r => !(reviewed && reviewed[openKey(r)]))
+      .map(r => {
+        const days = Math.floor((at - asUtc(r.clockIn)) / DAY);
+        return { key: openKey(r), consumer: r.consumer, attendant: r.attendant, clockIn: r.clockIn, when: whenNaive(r.clockIn), days,
+                 why: 'clocked in ' + whenNaive(r.clockIn) + ', never clocked out' + (days >= 1 ? ' (' + plural(days, 'day', 'days') + ' ago)' : '') };
+      })
+      .sort((a, b) => a.clockIn.localeCompare(b.clockIn));
+  }
+
   // ---------- the rules ----------
 
   // Hours under the personal care authorization. The ILW case management and financial
@@ -201,7 +248,8 @@
     const today = isoLocal(now);
     const tag = check.live ? '' : 'Practice: ';
     const out = [];
-    const okAt = Math.min(Date.parse((check.shifts && check.shifts.at) || 0) || 0, Date.parse((check.auths && check.auths.at) || 0) || 0);
+    const okAt = Math.min(Date.parse((check.shifts && check.shifts.at) || 0) || 0, Date.parse((check.auths && check.auths.at) || 0) || 0,
+                          check.open ? (Date.parse(check.open.at || 0) || 0) : Infinity);
     if (!okAt || now - okAt > STALE_HOURS * 36e5) {
       out.push({ t: tag + 'The WellSky check has not run ' + (okAt ? 'since ' + short(isoLocal(new Date(okAt))) : 'yet') +
                     '. Log in to WellSky in Chrome and leave the Mac on.' + (check.lastRun.ok ? '' : ' Last try: ' + check.lastRun.why),
@@ -212,6 +260,9 @@
     const long = longShifts(check.shifts, reviewed, today);
     if (long.length) out.push({ t: tag + plural(long.length, 'long shift', 'long shifts') + ' to check before payroll', go: 'authorizations', bad: true,
                                 people: long.map(s => ({ name: s.consumer, why: short(s.date) + ', ' + s.attendant + ', ' + s.why })) });
+    const open = openShifts(check.open, reviewed);
+    if (open.length) out.push({ t: tag + plural(open.length, 'shift', 'shifts') + ' never clocked out (still In Progress in WellSky)', go: 'authorizations', bad: true,
+                                people: open.map(s => ({ name: s.consumer, why: s.attendant + ', ' + s.why })) });
     const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
     const h = hoursThisMonth(check.auths, check.shifts, pulledOn);
     const over = h.filter(x => x.status === 'over' || x.status === 'booked-over');
@@ -227,6 +278,6 @@
     return out;
   }
 
-  root.CDSWellSky = { parseShiftReport, parseAuthReport, longShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
-                      LONG_HOURS, LONG_FACTOR, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS };
+  root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
+                      LONG_HOURS, LONG_FACTOR, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
