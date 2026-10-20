@@ -18,6 +18,7 @@
 // No em dashes in anything a person reads (her rule).
 import './cds-rules.js';
 import './wellsky.js';
+import './cds-attendant-check.js';
 import { maskPhone, maskEmail } from '../match/rules.js';
 const R = globalThis.CDSRules;
 
@@ -123,6 +124,7 @@ export function morningEmail(steps, extra, nowMs) {
                                      people: extra.alertFailures.map(f => ({ name: f.name, why: f.why })) },
     extra.ghlFailures?.length && { t: extra.ghlFailures.length + ' lead' + (extra.ghlFailures.length !== 1 ? 's' : '') + ' could not be added to GoHighLevel', go: 'pipeline', bad: true,
                                    people: extra.ghlFailures.map(f => ({ name: f.name, why: f.why })) },
+    ...(extra.attendantItems || []),   // the daily attendant check against WellSky, once live (2026-10-20)
     extra.evv        && { t: extra.evv + ' EVV correction form' + (extra.evv !== 1 ? 's' : '') + ' to review', go: 'evvcorrections' },
     extra.signups    && { t: extra.signups + ' caregiver sign-up' + (extra.signups !== 1 ? 's' : '') + ' to call', go: 'caregivermatch' },
     extra.heldFailed && { t: extra.heldFailed + ' message' + (extra.heldFailed !== 1 ? 's' : '') + ' held or failed', go: 'caregivermatch', bad: true },
@@ -266,7 +268,16 @@ export function createLeadAlerts(deps) {
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
                                    attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems }, noon);
     const pipeline = s.pipeline || [];
+    // The attendant check against WellSky joins the email only once setting attendant_check.live is true.
+    const acfg = await setting('attendant_check', null);
+    let attendantItems = [];
+    if (acfg && acfg.live === true) {
+      const ac = await store(['attendants', 'wellskyCheck', 'attendantCheckReviewed']);
+      attendantItems = globalThis.CDSAttendantCheck.items(globalThis.CDSAttendantCheck.compare({ attendants: ac.attendants || [],
+        shifts: (ac.wellskyCheck || {}).shifts, reviewed: ac.attendantCheckReviewed || {}, now: noon }));
+    }
     const extra = {
+      attendantItems,
       evv: (await one(`select count(*)::int n from evv_submissions where agency_id=$1 and not coalesce(processed,false)`, [AGENCY_ID])).n,
       signups: (await one(`select count(*)::int n from cds_tasks where kind='cg_signup' and done_at is null`)).n,
       heldFailed: (await one(`select count(*)::int n from cds_outbox where status in ('held','failed') and created_at > now() - interval '1 day'`)).n,
