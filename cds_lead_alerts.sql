@@ -2,7 +2,7 @@
 -- new-lead alerts and morning email first", then "build it in practice mode").
 --
 -- 1. Every lead from caringcds.com or findcdscaregivers.com (table site_leads) gets
---    an email to the office at once, and a text in text hours (weekdays 8am to 6pm
+--    an email to the office at once, and a text in text hours (weekdays 9am to 4pm
 --    Central). A lead outside those hours gets its text when they open.
 -- 2. If nobody has called after 30 minutes of text hours, one reminder text.
 -- 3. A morning email at 8am Central on weekdays, the Dashboard's "Do this first" list.
@@ -62,7 +62,7 @@ begin
         jsonb_build_object('name', 'Samantha', 'email', 'samantha@mo-care.com', 'phone', null),
         jsonb_build_object('name', 'Krystal',  'email', 'krystal@mo-care.com',  'phone', null)),
       'text_days', jsonb_build_array(1, 2, 3, 4, 5),
-      'text_from', 8, 'text_until', 18,
+      'text_from', 9, 'text_until', 16,   -- CDS office hours (her call 2026-10-19)
       'reminder_minutes', 30,
       'started_at', now()), 'cds_lead_alerts.sql');
   end if;

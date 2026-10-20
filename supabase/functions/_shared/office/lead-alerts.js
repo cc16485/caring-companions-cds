@@ -10,7 +10,7 @@
 // 'failed', and a failed lead alert is written onto the lead (site_leads.alert_failed)
 // so the Dashboard shows it in red. Nothing fails silently (her rule).
 //
-// TEXT HOURS: weekdays 8am to 6pm Central (settings text_days, text_from, text_until).
+// TEXT HOURS: weekdays 9am to 4pm Central, CDS office hours (her call 2026-10-19) (settings text_days, text_from, text_until).
 // Emails go any hour; a lead outside text hours gets its text when they open.
 // REMINDER: one more text when nobody has called after 30 minutes of text hours.
 // "Called" = the lead's status in Leads moved off New, or somebody added a note.
@@ -37,10 +37,10 @@ export function chi(ms) {
 }
 export function inTextHours(ms, cfg) {
   const c = chi(ms);
-  return (cfg.text_days || [1, 2, 3, 4, 5]).includes(c.dow) && c.h >= (cfg.text_from ?? 8) && c.h < (cfg.text_until ?? 18);
+  return (cfg.text_days || [1, 2, 3, 4, 5]).includes(c.dow) && c.h >= (cfg.text_from ?? 9) && c.h < (cfg.text_until ?? 16);
 }
 // Minutes of text hours between two moments (a lead that came in at 7pm Friday
-// has had 0 minutes of them until 8am Monday).
+// has had 0 minutes of them until 9am Monday).
 export function textMinutesBetween(fromMs, toMs, cfg) {
   let n = 0;
   const start = Math.ceil(fromMs / 60000) * 60000;

@@ -37,6 +37,7 @@ ok(true, 'SQL runs twice');
 const old = (await pg.query(`select * from site_leads where first_name='Old'`)).rows[0];
 ok(old.alert_at && old.alert_texted_at && old.reminder_at, 'a lead already on file is marked handled, so turning alerts on never sends about it');
 const cfg0 = (await pg.query(`select value from cds_match_settings where key='lead_alerts'`)).rows[0].value;
+ok(cfg0.text_from === 9 && cfg0.text_until === 16, 'texts only in CDS office hours, 9am to 4pm');
 ok(cfg0.live === false && cfg0.recipients.map(r => r.email).join() === 'samantha@mo-care.com,krystal@mo-care.com', 'lead alerts start in practice, to Samantha and Krystal');
 const mcfg0 = (await pg.query(`select value from cds_match_settings where key='morning_email'`)).rows[0].value;
 ok(mcfg0.live === false && mcfg0.hour === 8, 'morning email starts in practice, 8am');
@@ -96,21 +97,35 @@ eq(rem.find(m => m.to_display !== 'Krystal').body,
    'Still waiting: Mary Smith (CDS lead) came in 31 minutes ago and nobody has called yet. Call 417-555-0123. hub.caringcds.com/#pipeline', 'the reminder text');
 at('2026-10-19T20:31:00Z'); await jobs.run(); eq((await outbox(a.id)).length, 6, 'only one reminder, ever');
 
-// B. Friday 7:12pm: email now, text Monday 8am, reminder Monday 8:30.
+// B. Friday 7:12pm: email now, text Monday 9am, reminder Monday 9:30.
 at('2026-10-24T00:12:00Z');
 const b = await lead({ first: 'John', last: 'Doe', phone: '417-555-0199', county: 'Polk County' });
 r = await jobs.run();
 ob = await outbox(b.id);
 ok(ob.length === 2 && ob.every(m => m.channel === 'email'), 'after hours: emails only');
 at('2026-10-24T17:00:00Z'); await jobs.run(); eq((await outbox(b.id)).length, 2, 'Saturday noon: no texts');
-at('2026-10-26T13:00:00Z'); await jobs.run();   // Mon 8:00am CDT
+at('2026-10-26T13:00:00Z'); await jobs.run(); eq((await outbox(b.id)).length, 2, 'Monday 8am: still no texts (office opens at 9)');
+at('2026-10-26T14:00:00Z'); await jobs.run();   // Mon 9:00am CDT
 ob = await outbox(b.id);
 eq(ob.filter(m => m.template === 'lead_alert_text' && m.to_display !== 'Krystal')[0]?.body,
-   'New CDS lead: John Doe, Polk County. Came in 7:12pm Fri. Call 417-555-0199. hub.caringcds.com/#pipeline', 'the 8am text says when it came in');
-at('2026-10-26T13:29:00Z'); await jobs.run(); eq((await outbox(b.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'no reminder at 8:29');
-at('2026-10-26T13:30:00Z'); await jobs.run();
+   'New CDS lead: John Doe, Polk County. Came in 7:12pm Fri. Call 417-555-0199. hub.caringcds.com/#pipeline', 'the 9am text says when it came in');
+at('2026-10-26T14:29:00Z'); await jobs.run(); eq((await outbox(b.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'no reminder at 9:29');
+at('2026-10-26T14:30:00Z'); await jobs.run();
 eq((await outbox(b.id)).filter(m => m.template === 'lead_reminder_text' && m.to_display !== 'Krystal')[0]?.body,
-   'Still waiting: John Doe (CDS lead) came in at 7:12pm Fri and nobody has called yet. Call 417-555-0199. hub.caringcds.com/#pipeline', 'Monday 8:30 reminder');
+   'Still waiting: John Doe (CDS lead) came in at 7:12pm Fri and nobody has called yet. Call 417-555-0199. hub.caringcds.com/#pipeline', 'Monday 9:30 reminder');
+
+// 4pm is closing: a lead at 3:45pm gets its text, its reminder waits until 9:15 next morning.
+at('2026-10-26T20:45:00Z');
+const late = await lead({ first: 'Lia', last: 'Ng', phone: '417-555-0170' });
+await jobs.run();
+eq((await outbox(late.id)).filter(m => m.template === 'lead_alert_text').length, 2, '3:45pm lead is texted');
+at('2026-10-26T21:20:00Z'); await jobs.run();
+eq((await outbox(late.id)).filter(m => m.template === 'lead_reminder_text').length, 0, '4:20pm: no reminder after closing');
+at('2026-10-27T14:14:00Z'); await jobs.run();
+eq((await outbox(late.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'next day 9:14: 29 office minutes, no reminder yet');
+at('2026-10-27T14:15:00Z'); await jobs.run();
+eq((await outbox(late.id)).filter(m => m.template === 'lead_reminder_text').length, 2, 'next day 9:15: reminder');
+await pg.query(`update site_leads set archived = true where id = $1`, [late.id]);
 
 // C. Somebody called (status moved off New): no reminder. A note also counts.
 at('2026-10-26T15:00:00Z');
