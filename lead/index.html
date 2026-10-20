@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>New CDS lead · Caring Companions CDS</title>
+<link rel="icon" href="../cds-icon-192.png">
+<link rel="apple-touch-icon" href="../cds-apple-touch-icon.png">
+<!-- The CDS lead link page (2026-10-19). Opened from a new-lead text or email; the
+     private link (?k=) is the key, for one lead and one person, 7 days. Everything it
+     shows comes from the server function cds-lead-link. No em dashes (her rule). -->
+<style>
+  :root{ --navy:#0D365F; --teal:#54bdb8; --teal-dark:#2f8f8a; --red:#b42318; --green:#1f7a4d; --gray:#57606a; --line:#e3e8ee; --bg:#f6f8fa; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:#1f2a36; font:16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding:16px 16px 40px; }
+  main{ max-width:520px; margin:0 auto; }
+  h1{ font-size:22px; color:var(--navy); margin:4px 0 0; }
+  .sub{ color:var(--gray); font-size:14px; margin-bottom:14px; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px; }
+  h2{ font-size:13px; color:var(--navy); margin:0 0 8px; text-transform:uppercase; letter-spacing:.05em; }
+  .big{ font-size:21px; font-weight:800; color:var(--navy); }
+  .note{ color:var(--gray); font-size:13.5px; margin-top:6px; }
+  .k{ font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--gray); margin-top:12px; }
+  .said{ background:#F1F5F9; border-radius:10px; padding:9px 12px; margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .facts{ margin-top:8px; font-size:15px; }
+  .late{ display:inline-block; margin-top:8px; background:#FDECEA; color:var(--red); font-weight:800; border-radius:8px; padding:4px 9px; font-size:14px; }
+  .ok{ display:inline-block; margin-top:8px; background:#E7F5EE; color:var(--green); font-weight:800; border-radius:8px; padding:4px 9px; font-size:14px; }
+  a.btn, button{ display:block; width:100%; text-align:center; font:inherit; font-size:16px; font-weight:800; padding:13px; border-radius:11px; border:0; margin-top:10px; text-decoration:none; cursor:pointer; }
+  .primary{ background:var(--navy); color:#fff; }
+  .teal{ background:var(--teal); color:#06302e; }
+  .btn.quiet, button.quiet{ background:#fff; color:var(--navy); border:2px solid var(--navy); }
+  button:disabled{ opacity:.6; }
+  .reasons{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .reasons label{ border:2px solid var(--line); border-radius:10px; padding:10px; font-weight:700; display:flex; gap:8px; align-items:center; }
+  .reasons input{ width:18px; height:18px; }
+  textarea{ width:100%; margin-top:10px; font:inherit; font-size:15px; padding:10px; border:2px solid var(--line); border-radius:10px; resize:vertical; }
+  .err{ color:var(--red); font-weight:700; margin-top:8px; }
+  .done{ color:var(--green); font-weight:800; margin-top:8px; }
+  ul.calls{ margin:6px 0 0; padding-left:18px; font-size:14px; color:var(--gray); }
+</style>
+</head>
+<body>
+<main>
+  <h1>New CDS lead</h1>
+  <div class="sub" id="who">Caring Companions CDS</div>
+  <div id="app"><div class="card">Loading…</div></div>
+</main>
+<script>
+const FN = 'https://siivpekcaryeyttszwav.supabase.co/functions/v1/cds-lead-link';
+const K = new URLSearchParams(location.search).get('k') || '';
+const LEADS = 'https://hub.caringcds.com/#pipeline';
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+let D = null, busy = false;
+
+async function call(action, extra) {
+  const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ k: K, action }, extra || {})) });
+  let j = null; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((j && j.error) || 'Something went wrong. Open Leads in the CDS hub.');
+  return j;
+}
+
+function render(msg, good) {
+  const app = document.getElementById('app');
+  if (!D) {
+    app.innerHTML = '<div class="card"><div class="err">' + esc(msg || 'This link has expired. Open Leads in the CDS hub.') + '</div>' +
+      '<a class="btn primary" href="' + LEADS + '">Open Leads in the CDS hub</a></div>';
+    return;
+  }
+  document.getElementById('who').textContent = 'For ' + D.me + ' · Caring Companions CDS';
+  let h = '<div class="card"><div class="big">' + esc(D.name) + '</div>' +
+    '<div class="note">Came in ' + esc(D.came_in) + ' from ' + esc(D.source) + '</div>' +
+    (D.last
+      ? '<span class="ok">' + (D.last.talked ? 'Reached' : 'Tried') + ': ' + esc(D.last.by) + ', ' + esc(D.last.outcome) + ', ' + esc(D.last.at) + '</span>'
+      : '<span class="late">' + esc(D.open_minutes) + ' min, nobody has called</span>');
+  const facts = [D.who && 'Who needs care: ' + D.who, D.medicaid && 'Medicaid: ' + D.medicaid, D.county].filter(Boolean);
+  if (facts.length) h += '<div class="facts">' + esc(facts.join(' · ')) + '</div>';
+  if (D.wrote) h += '<div class="k">They wrote</div><div class="said">' + esc(D.wrote) + '</div>';
+  const tt = D.their_texts;
+  if (tt && tt.ok && tt.messages && tt.messages.length) {
+    h += '<div class="k">Their texts to us</div>' + tt.messages.map(m => '<div class="said">' + esc(m.body) + '</div>').join('');
+  } else if (tt && tt.ok === false && D.contact_url) {
+    h += '<div class="k">Their texts to us</div><a class="btn quiet" href="' + esc(D.contact_url) + '">Open the conversation in GoHighLevel</a>';
+  }
+  if (D.calls && D.calls.length > 1) h += '<div class="k">Calls so far</div><ul class="calls">' +
+    D.calls.map(c => '<li>' + esc(c.by) + ', ' + esc(c.outcome) + ', ' + esc(c.at) + (c.note ? ': ' + esc(c.note) : '') + '</li>').join('') + '</ul>';
+  h += '</div>';
+
+  // Call. The button that rings your phone first comes once the GoHighLevel
+  // workflow is copied into the CDS sub-account; until then, GoHighLevel itself.
+  h += '<div class="card"><h2>Call</h2>' +
+    (D.contact_url
+      ? '<a class="btn teal" href="' + esc(D.contact_url) + '">Call ' + esc(D.first) + ' in GoHighLevel</a>' +
+        '<div class="note">Call from there so it goes out on the CDS line, (417) 218-2888.</div>'
+      : '<div class="note">' + esc(D.first) + ' is not in GoHighLevel yet. Call from the CDS line, (417) 218-2888, using the number in Leads.</div>' +
+        '<a class="btn quiet" href="' + LEADS + '">Open Leads in the CDS hub</a>') +
+    '</div>';
+
+  h += '<div class="card"><h2>What happened?</h2><div class="reasons">' +
+    [['connected','We talked'], ['voicemail','Voicemail'], ['no_answer','No answer'], ['wrong_number','Wrong number']]
+      .map(o => '<label><input type="radio" name="why" value="' + o[0] + '"> ' + o[1] + '</label>').join('') +
+    '</div><textarea id="note" rows="2" maxlength="300" placeholder="Anything worth remembering? (optional)"></textarea>' +
+    '<button class="primary" id="bCalled">Log the call</button>' +
+    '<div class="note">Logging the call stops the reminder for everyone. It goes on the lead as you.</div>' +
+    '<div class="' + (good ? 'done' : 'err') + '" id="msg">' + esc(msg || '') + '</div></div>';
+
+  h += '<div class="card"><h2>Intake questions</h2>' +
+    '<a class="btn primary" href="' + esc(D.intake.referral) + '">New to CDS (HCBS-1 referral)</a>' +
+    '<a class="btn quiet" href="' + esc(D.intake.pccp) + '">Already in CDS, transferring to us</a>' +
+    '<div class="note">Opens this lead in the CDS hub with the right questions. You sign in once on this phone.</div></div>';
+
+  app.innerHTML = h;
+  document.getElementById('bCalled').onclick = logCall;
+}
+
+async function logCall() {
+  if (busy) return;
+  const w = document.querySelector('input[name=why]:checked');
+  const el = document.getElementById('msg');
+  if (!w) { el.className = 'err'; el.textContent = 'Pick what happened first.'; return; }
+  busy = true; document.getElementById('bCalled').disabled = true;
+  try {
+    const j = await call('called', { outcome: w.value, note: (document.getElementById('note') || {}).value || '' });
+    D = await call('view');
+    render(j.message || 'Logged. The reminder is stopped.', true);
+  } catch (e) {
+    el.className = 'err'; el.textContent = e.message;
+    document.getElementById('bCalled').disabled = false;
+  }
+  busy = false;
+}
+
+(async () => { try { D = await call('view'); render(); } catch (e) { D = null; render(e.message); } })();
+</script>
+</body>
+</html>

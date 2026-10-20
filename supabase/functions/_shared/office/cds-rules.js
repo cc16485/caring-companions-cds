@@ -111,21 +111,27 @@
   const FORM_NOTE = /^(Who needs care|Medicaid|They said): /;
   const isFormNote = n => !!n && (n.fromForm || FORM_NOTE.test(String(n.text || '')));
 
-  // A website lead is waiting until its status moves off New or someone adds a note.
-  function leadWaiting(p) {
+  // A call logged from the lead link page (table cds_lead_calls) also counts.
+  const calledFor = (calls, siteLeadId) => !!siteLeadId && (calls || []).some(c => c && c.site_lead_id === siteLeadId);
+
+  // A website lead is waiting until its status moves off New, someone adds a note,
+  // or someone logs a call from the link page.
+  function leadWaiting(p, calls) {
     if (!p || !p.fromWebsite || p.status !== 'new') return false;
+    if (calledFor(calls, p.siteLeadId)) return false;
     const notes = Array.isArray(p.notes) ? p.notes : [];
     return !notes.some(n => !isFormNote(n));
   }
   // Same question for a site_leads row, which may not be in the pipeline yet.
-  function siteLeadWaiting(row, pipeline) {
+  function siteLeadWaiting(row, pipeline, calls) {
     if (!row || row.archived) return false;
+    if (calledFor(calls, row.id)) return false;
     const p = (pipeline || []).find(x => x && x.siteLeadId === row.id);
-    return p ? leadWaiting(p) : true;
+    return p ? leadWaiting(p, calls) : true;
   }
   const followDue = (p, todayIso) => !!(p && p.followup && p.followup <= todayIso && !CLOSED.includes(p.status));
 
-  // "Do this first, every morning". data = { consumers, pipeline, authorizations, attendantWages }.
+  // "Do this first, every morning". data = { consumers, pipeline, authorizations, attendantWages, siteLeads?, calls? }.
   // Items carry the page to open (go), whether it is red (bad) and, for people
   // waiting, their names, so the email can say who.
   function dailyRoutine(data, now) {
@@ -191,8 +197,9 @@
     const pipeline = data.pipeline || [];
     // The server also hands over website leads the page has not pulled in yet
     // (nobody has opened the hub since they came in). They are waiting too.
-    const notPulled = (data.siteLeads || []).filter(r => r && !r.archived && !pipeline.some(p => p && p.siteLeadId === r.id));
-    const waiting = pipeline.filter(leadWaiting).map(p => ({ name: p.name, county: p.county || '', at: p.addedAt || p.firstContact || '' }))
+    const calls = data.calls || [];
+    const notPulled = (data.siteLeads || []).filter(r => r && !r.archived && !pipeline.some(p => p && p.siteLeadId === r.id) && !calledFor(calls, r.id));
+    const waiting = pipeline.filter(p => leadWaiting(p, calls)).map(p => ({ name: p.name, county: p.county || '', at: p.addedAt || p.firstContact || '' }))
       .concat(notPulled.map(r => ({ name: siteLeadName(r), county: r.county || '', at: r.submitted_at || '' })));
     const follow = pipeline.filter(p => followDue(p, todayIso));
     steps.push({

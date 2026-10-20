@@ -13,6 +13,8 @@ const R = globalThis.CDSRules;
 
 let pass = 0, failN = 0;
 const ok = (c, m) => { if (c) pass++; else { failN++; console.log('FAIL', m); } };
+// Every link is different; K() swaps the 16-character key for KKK so the words can be compared.
+const K = s => String(s ?? '').replace(/\?k=[0-9A-Za-z]{16}\b/g, '?k=KKK');
 const eq = (a, b, m) => ok(a === b, m + '\n   got:  ' + JSON.stringify(a) + '\n   want: ' + JSON.stringify(b));
 
 // ---------- database ----------
@@ -33,6 +35,9 @@ await pg.exec(`
   insert into site_leads (agency_id, source, first_name, last_name, phone, submitted_at) values ('caring-companions-cds','caringcds.com','Old','Lead','4175550000', now() - interval '20 days');`);
 const SQL = strip(readFileSync(ROOT + '/cds_lead_alerts.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
+await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
+await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
 ok(true, 'SQL runs twice');
 const old = (await pg.query(`select * from site_leads where first_name='Old'`)).rows[0];
 ok(old.alert_at && old.alert_texted_at && old.reminder_at, 'a lead already on file is marked handled, so turning alerts on never sends about it');
@@ -80,21 +85,26 @@ eq(ob.length, 4, '2 emails + 2 texts recorded');
 ok(ob.every(m => m.status === 'practice' && m.audience === 'office'), 'all practice, all office');
 eq(sent.length, 0, 'practice: nothing sent');
 const smsS = ob.find(m => m.channel === 'sms' && m.to_display !== 'Krystal');
-eq(smsS.body, 'New CDS lead: Mary Smith, Greene County. Call 417-555-0123. hub.caringcds.com/#pipeline', 'the new lead text');
+eq(K(smsS.body), 'New CDS lead: Mary Smith, Greene County. Tap to see what they wrote and call: hub.caringcds.com/lead/?k=KKK', 'the new lead text');
 const smsK = ob.find(m => m.channel === 'sms' && m.to_display === 'Krystal');
 eq(smsK.error, 'No phone on file for Krystal yet', 'Krystal has no phone yet: recorded, not skipped silently');
 const em = ob.find(m => m.channel === 'email');
 eq(em.body.split('\n')[0], 'New CDS lead: Mary Smith, Greene County', 'email subject');
 ok(em.body.includes('A new lead just came in from caringcds.com.') && em.body.includes('Who needs care: My mother') &&
-   em.body.includes('Has Medicaid: Yes') && em.body.includes('Came in: Mon, Oct 19, 2:00pm') && em.body.includes('Nothing was sent to the family.'), 'email body');
+   em.body.includes('Has Medicaid: Yes') && em.body.includes('Came in: Mon, Oct 19, 2:00pm') && em.body.includes('Nothing was sent to the family.') &&
+   /See what they wrote, log the call and start the intake questions: https:\/\/hub\.caringcds\.com\/lead\/\?k=[0-9A-Za-z]{16}/.test(em.body), 'email body with the private link');
+const links = (await pg.query(`select * from cds_lead_links where site_lead_id=$1`, [a.id])).rows;
+eq(links.length, 4, 'one private link per person per email and text sent (Krystal has no phone, so no text link)');
+ok(links.every(l => /^[0-9a-f]{64}$/.test(l.token_hash)) && !JSON.stringify(links).includes(em.body.match(/\?k=([0-9A-Za-z]{16})/)[1]), 'only a fingerprint of each link is stored');
+ok(links.every(l => Math.round((Date.parse(l.expires_at) - NOW) / 864e5) === 7), 'links last 7 days');
 r = await jobs.run(); eq((await outbox(a.id)).length, 4, 'running again sends nothing twice');
 at('2026-10-19T19:29:00Z'); await jobs.run(); eq((await outbox(a.id)).length, 4, 'no reminder at 29 minutes');
 at('2026-10-19T19:31:00Z'); r = await jobs.run();
 ob = await outbox(a.id);
 const rem = ob.filter(m => m.template === 'lead_reminder_text');
 eq(rem.length, 2, 'reminder at 31 minutes to both');
-eq(rem.find(m => m.to_display !== 'Krystal').body,
-   'Still waiting: Mary Smith (CDS lead) came in 31 minutes ago and nobody has called yet. Call 417-555-0123. hub.caringcds.com/#pipeline', 'the reminder text');
+eq(K(rem.find(m => m.to_display !== 'Krystal').body),
+   'Still waiting: Mary Smith (CDS lead) came in 31 minutes ago and nobody has called yet. Tap to call: hub.caringcds.com/lead/?k=KKK', 'the reminder text');
 at('2026-10-19T20:31:00Z'); await jobs.run(); eq((await outbox(a.id)).length, 6, 'only one reminder, ever');
 
 // B. Friday 7:12pm: email now, text Monday 9am, reminder Monday 9:30.
@@ -107,12 +117,12 @@ at('2026-10-24T17:00:00Z'); await jobs.run(); eq((await outbox(b.id)).length, 2,
 at('2026-10-26T13:00:00Z'); await jobs.run(); eq((await outbox(b.id)).length, 2, 'Monday 8am: still no texts (office opens at 9)');
 at('2026-10-26T14:00:00Z'); await jobs.run();   // Mon 9:00am CDT
 ob = await outbox(b.id);
-eq(ob.filter(m => m.template === 'lead_alert_text' && m.to_display !== 'Krystal')[0]?.body,
-   'New CDS lead: John Doe, Polk County. Came in 7:12pm Fri. Call 417-555-0199. hub.caringcds.com/#pipeline', 'the 9am text says when it came in');
+eq(K(ob.filter(m => m.template === 'lead_alert_text' && m.to_display !== 'Krystal')[0]?.body),
+   'New CDS lead: John Doe, Polk County. Came in 7:12pm Fri. Tap to see what they wrote and call: hub.caringcds.com/lead/?k=KKK', 'the 9am text says when it came in');
 at('2026-10-26T14:29:00Z'); await jobs.run(); eq((await outbox(b.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'no reminder at 9:29');
 at('2026-10-26T14:30:00Z'); await jobs.run();
-eq((await outbox(b.id)).filter(m => m.template === 'lead_reminder_text' && m.to_display !== 'Krystal')[0]?.body,
-   'Still waiting: John Doe (CDS lead) came in at 7:12pm Fri and nobody has called yet. Call 417-555-0199. hub.caringcds.com/#pipeline', 'Monday 9:30 reminder');
+eq(K((await outbox(b.id)).filter(m => m.template === 'lead_reminder_text' && m.to_display !== 'Krystal')[0]?.body),
+   'Still waiting: John Doe (CDS lead) came in at 7:12pm Fri and nobody has called yet. Tap to call: hub.caringcds.com/lead/?k=KKK', 'Monday 9:30 reminder');
 
 // 4pm is closing: a lead at 3:45pm gets its text, its reminder waits until 9:15 next morning.
 at('2026-10-26T20:45:00Z');
@@ -131,14 +141,17 @@ await pg.query(`update site_leads set archived = true where id = $1`, [late.id])
 at('2026-10-26T15:00:00Z');
 const c = await lead({ first: 'Ann', last: 'Lee', phone: '417-555-0142' });
 const d = await lead({ first: 'Bo', last: 'Park', phone: '417-555-0143' });
+const f = await lead({ first: 'Cy', last: 'Ray', phone: '417-555-0144' });
 await jobs.run();
 await pipeline([
   { id: 'web-' + c.id, siteLeadId: c.id, name: 'Ann Lee', fromWebsite: true, status: 'contacted', notes: [] },
   { id: 'web-' + d.id, siteLeadId: d.id, name: 'Bo Park', fromWebsite: true, status: 'new',
     notes: [{ date: '2026-10-26', text: 'They said: hi', fromForm: true }, { date: '2026-10-26', text: 'Left a voicemail' }] }]);
+await pg.query(`insert into cds_lead_calls (site_lead_id, by_name, by_email, outcome, at) values ($1,'Krystal','krystal@mo-care.com','voicemail',$2)`, [f.id, new Date(NOW).toISOString()]);
 at('2026-10-26T15:40:00Z'); await jobs.run();
 eq((await outbox(c.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'called (status moved): no reminder');
 eq((await outbox(d.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'note added: no reminder');
+eq((await outbox(f.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'call logged from the link page: no reminder');
 ok((await pg.query(`select reminder_at from site_leads where id=$1`, [c.id])).rows[0].reminder_at, 'reminder marked done so it never comes later');
 
 // D. Live: real sends, and a failure is written onto the lead for the Dashboard.
@@ -191,7 +204,7 @@ for (const want of [
   '   2 new lead alerts did not send',
   '   2 EVV correction forms to review',
   'Sent to Samantha and Krystal every weekday at 8am. Nothing here goes to families.']) ok(body.includes(want), 'morning email has: ' + want);
-ok(!body.includes('Ann Lee') && !body.includes('Bo Park'), 'people already called are not listed');
+ok(!body.includes('Ann Lee') && !body.includes('Bo Park') && !body.includes('Cy Ray'), 'people already called are not listed (status, note or a logged call)');
 ok(/      Old Lead, came in [A-Z][a-z]{2} \d{1,2}\n/.test(body), 'a lead older than 6 days shows its date, not a weekday');
 eq((await jobs.morning()).skipped, 'already sent today', 'only one a day');
 at('2026-10-27T14:00:00Z'); eq((await jobs.morning()).skipped, 'not 8am on a weekday in Central time', '9am: nothing (the winter schedule)');

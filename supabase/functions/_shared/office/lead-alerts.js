@@ -22,6 +22,19 @@ const R = globalThis.CDSRules;
 
 export const AGENCY_ID = 'caring-companions-cds';
 export const HUB = 'https://hub.caringcds.com/';
+// Each text and email carries a private link to that one lead for that one person
+// (the lead link page, 2026-10-19). Only a fingerprint of it is stored; 7 days.
+export const LINK = 'hub.caringcds.com/lead/?k=';
+export const LINK_DAYS = 7;
+const B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+export function newToken() {
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(b, x => B62[x % 62]).join('');   // 16 characters, about 95 bits
+}
+export async function tokenHash(t) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(t)));
+  return Array.from(new Uint8Array(d), x => x.toString(16).padStart(2, '0')).join('');
+}
 const TZ = 'America/Chicago';
 const noDash = s => String(s ?? '').replace(/\s*[—―–]\s*/g, ', ');
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -64,22 +77,22 @@ export function dayLong(ms) {
 // ---------- the words ----------
 const countyOf = r => { const c = String((r && typeof r === 'object' ? r.county : r) || '').trim(); return !c ? '' : /county/i.test(c) ? c : c + ' County'; };
 const fromWhere = r => String(r.source || '').trim() || 'the website';
-const callLine = r => r.phone ? 'Call ' + r.phone + '.' : (r.email ? 'No phone given, email ' + r.email + '.' : 'No phone or email given, see Leads.');
-
-export function leadText(r, nowMs) {
+// The phone number is left out of the texts on purpose: the link page has it, and
+// nobody should call a lead from their own cell by habit (her call 2026-10-19).
+export function leadText(r, nowMs, link) {
   const name = R.siteLeadName(r), county = countyOf(r);
   const late = nowMs && r.submitted_at && (nowMs - Date.parse(r.submitted_at)) > 60 * 60000;
   return noDash('New CDS lead: ' + name + (county ? ', ' + county : '') + '.' +
-    (late ? ' Came in ' + whenShort(Date.parse(r.submitted_at)) + '.' : '') +
-    ' ' + callLine(r) + ' hub.caringcds.com/#pipeline');
+    (late ? ' Came in ' + whenShort(Date.parse(r.submitted_at)) + '.' : '')) +
+    ' Tap to see what they wrote and call: ' + (link || 'hub.caringcds.com/#pipeline');
 }
-export function reminderText(r, nowMs) {
+export function reminderText(r, nowMs, link) {
   const at = Date.parse(r.submitted_at);
   const ago = (nowMs - at) < 90 * 60000 ? Math.round((nowMs - at) / 60000) + ' minutes ago' : 'at ' + whenShort(at);
-  return noDash('Still waiting: ' + R.siteLeadName(r) + ' (CDS lead) came in ' + ago + ' and nobody has called yet. ' +
-    callLine(r) + ' hub.caringcds.com/#pipeline');
+  return noDash('Still waiting: ' + R.siteLeadName(r) + ' (CDS lead) came in ' + ago + ' and nobody has called yet.') +
+    ' Tap to call: ' + (link || 'hub.caringcds.com/#pipeline');
 }
-export function leadEmail(r) {
+export function leadEmail(r, link) {
   const name = R.siteLeadName(r), county = countyOf(r);
   const at = Date.parse(r.submitted_at);
   const subject = noDash('New CDS lead: ' + name + (county ? ', ' + county : '')).slice(0, 180);
@@ -90,11 +103,14 @@ export function leadEmail(r) {
   ];
   const intro = 'A new lead just came in from ' + fromWhere(r) + '.';
   const foot = 'Sent to the CDS office only. Nothing was sent to the family.';
-  const text = [intro, '', ...rows.map(([k, v]) => k + ': ' + noDash(v)), '', 'Open Leads in the CDS hub: ' + HUB + '#pipeline', '', foot].join('\n');
+  const page = link ? 'https://' + link : HUB + '#pipeline';
+  const text = [intro, '', ...rows.map(([k, v]) => k + ': ' + noDash(v)), '',
+    (link ? 'See what they wrote, log the call and start the intake questions: ' : 'Open Leads in the CDS hub: ') + page, '', foot].join('\n');
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2a36">` +
     `<p>${esc(intro)}</p><table style="border-collapse:collapse">` +
     rows.map(([k, v]) => `<tr><td style="padding:3px 14px 3px 0;color:#57606a;vertical-align:top">${esc(k)}</td><td style="padding:3px 0"><b>${esc(noDash(v))}</b></td></tr>`).join('') +
-    `</table><p><a href="${HUB}#pipeline" style="background:#0D365F;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;display:inline-block">Open Leads in the CDS hub</a></p>` +
+    `</table><p><a href="${esc(page)}" style="background:#0D365F;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;display:inline-block">${link ? 'Open this lead' : 'Open Leads in the CDS hub'}</a></p>` +
+    (link ? `<p style="color:#57606a;font-size:13px">See what they wrote, log the call and start the intake questions. This link is just for you and works for 7 days.</p>` : '') +
     `<p style="color:#57606a">${esc(foot)}</p></div>`;
   return { subject, text, html };
 }
@@ -173,11 +189,21 @@ export function createLeadAlerts(deps) {
     const why = bad.map(r => (r.channel === 'sms' ? 'text' : 'email') + ' to ' + r.toName + (r.error ? ' (' + r.error + ')' : '')).join('; ');
     await q('update site_leads set alert_failed = left(coalesce(alert_failed || \'; \', \'\') || $2, 1000) where id=$1', [lead.id, 'Did not send: ' + why]);
   }
+  // A private link for this person to this lead (practice too, so the words are real).
+  async function linkFor(lead, p) {
+    if (!p || !p.email) return null;
+    const t = newToken();
+    await q(`insert into cds_lead_links (token_hash, site_lead_id, person_name, person_email, expires_at)
+             values ($1,$2,$3,$4,$5)`, [await tokenHash(t), lead.id, p.name || p.email, String(p.email).toLowerCase(),
+             new Date(now() + LINK_DAYS * 864e5).toISOString()]);
+    return LINK + t;
+  }
+  const callsFor = async ids => ids.length ? q('select site_lead_id, outcome, at from cds_lead_calls where site_lead_id = any($1)', [ids]) : [];
   const claim = (col, id) => one(`update site_leads set ${col} = $2 where id=$1 and ${col} is null returning id`, [id, new Date(now()).toISOString()]);
 
-  async function texts(cfg, lead, template, body) {
+  async function texts(cfg, lead, template, words) {
     const out = [];
-    for (const p of cfg.recipients || []) out.push(await deliver({ live: !!cfg.live, lead, channel: 'sms', to: p.phone, toName: p.name, template, text: body }));
+    for (const p of cfg.recipients || []) out.push(await deliver({ live: !!cfg.live, lead, channel: 'sms', to: p.phone, toName: p.name, template, text: words(await linkFor(lead, p)) }));
     return out;
   }
 
@@ -190,23 +216,23 @@ export function createLeadAlerts(deps) {
     const leads = await q(`select * from site_leads where agency_id=$1 and not coalesce(archived,false) and submitted_at >= $2 order by submitted_at`, [AGENCY_ID, since]);
     if (!leads.length) return { ok: true, live, leads: 0, emailed: 0, texted: 0, reminded: 0 };
     const pipeline = ((await store(['pipeline'])).pipeline) || [];
+    const calls = await callsFor(leads.map(l => l.id));
     const sum = { ok: true, live, leads: leads.length, emailed: 0, texted: 0, reminded: 0 };
     for (const lead of leads) {
-      const waiting = R.siteLeadWaiting(lead, pipeline);
+      const waiting = R.siteLeadWaiting(lead, pipeline, calls);
       const results = [];
       if (!lead.alert_at) {
         if (!(await claim('alert_at', lead.id))) continue;
-        const m = leadEmail(lead);
-        for (const p of cfg.recipients || []) results.push(await deliver({ live, lead, channel: 'email', to: p.email, toName: p.name, template: 'lead_alert_email', ...m }));
+        for (const p of cfg.recipients || []) results.push(await deliver({ live, lead, channel: 'email', to: p.email, toName: p.name, template: 'lead_alert_email', ...leadEmail(lead, await linkFor(lead, p)) }));
         sum.emailed++;
-        if (open && (await claim('alert_texted_at', lead.id))) { results.push(...await texts(cfg, lead, 'lead_alert_text', leadText(lead, t))); sum.texted++; }
+        if (open && (await claim('alert_texted_at', lead.id))) { results.push(...await texts(cfg, lead, 'lead_alert_text', l => leadText(lead, t, l))); sum.texted++; }
       } else if (!lead.alert_texted_at && open) {
         if (!(await claim('alert_texted_at', lead.id))) continue;
-        if (waiting) { results.push(...await texts(cfg, lead, 'lead_alert_text', leadText(lead, t))); sum.texted++; }
+        if (waiting) { results.push(...await texts(cfg, lead, 'lead_alert_text', l => leadText(lead, t, l))); sum.texted++; }
       } else if (lead.alert_texted_at && !lead.reminder_at && open
                  && textMinutesBetween(Date.parse(lead.submitted_at), t, cfg) >= (cfg.reminder_minutes || 30)) {
         if (!(await claim('reminder_at', lead.id))) continue;
-        if (waiting) { results.push(...await texts(cfg, lead, 'lead_reminder_text', reminderText(lead, t))); sum.reminded++; }
+        if (waiting) { results.push(...await texts(cfg, lead, 'lead_reminder_text', l => reminderText(lead, t, l))); sum.reminded++; }
       }
       await noteFailures(lead, results);
     }
@@ -225,16 +251,17 @@ export function createLeadAlerts(deps) {
     if (!mine && !force) return { ok: true, skipped: 'already sent today' };
     const s = await store(['consumers', 'pipeline', 'authorizations', 'attendantWages']);
     const siteLeads = await q('select * from site_leads where agency_id=$1 and not coalesce(archived,false)', [AGENCY_ID]);
+    const calls = await callsFor(siteLeads.map(r => r.id));
     // Central noon today, read in the server's own (UTC) clock, so "today" is Missouri's today.
     const noon = new Date(Date.UTC(c.y, c.m - 1, c.d, 12));
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
-                                   attendantWages: s.attendantWages || {}, siteLeads }, noon);
+                                   attendantWages: s.attendantWages || {}, siteLeads, calls }, noon);
     const pipeline = s.pipeline || [];
     const extra = {
       evv: (await one(`select count(*)::int n from evv_submissions where agency_id=$1 and not coalesce(processed,false)`, [AGENCY_ID])).n,
       signups: (await one(`select count(*)::int n from cds_tasks where kind='cg_signup' and done_at is null`)).n,
       heldFailed: (await one(`select count(*)::int n from cds_outbox where status in ('held','failed') and created_at > now() - interval '1 day'`)).n,
-      alertFailures: siteLeads.filter(r => r.alert_failed && R.siteLeadWaiting(r, pipeline)).map(r => ({ name: R.siteLeadName(r), why: r.alert_failed })),
+      alertFailures: siteLeads.filter(r => r.alert_failed && R.siteLeadWaiting(r, pipeline, calls)).map(r => ({ name: R.siteLeadName(r), why: r.alert_failed })),
     };
     const m = morningEmail(steps, extra, t);
     const results = [];
