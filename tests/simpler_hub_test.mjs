@@ -1,0 +1,129 @@
+// Simpler hub (2026-10-21): her month-10 face-to-face rule, the first-shift
+// checklist, and that every old hash (live GoHighLevel menu links) still opens
+// a real page in the right section.
+//   node tests/simpler_hub_test.mjs
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import vm from 'vm';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+await import(ROOT + '/supabase/functions/_shared/office/cds-rules.js');
+const R = globalThis.CDSRules;
+
+let pass = 0, fail = 0;
+const ok = (cond, name) => { if (cond) pass++; else { fail++; console.log('FAIL', name); } };
+const at = d => new Date(d + 'T12:00:00');
+
+// ── face-to-face: warned at month 10 ──
+{
+  const c = { id: '1', name: 'Ruth Caldwell', cdsStartDate: '2025-03-01', homeVisits: [{ date: '2025-12-18' }] };
+  ok(!R.ongoingRequirements(c, at('2026-10-17')).annual.soon, 'not soon the day before month 10');
+  ok(R.ongoingRequirements(c, at('2026-10-18')).annual.soon, 'soon on the month-10 day');
+  ok(R.ongoingRequirements(c, at('2026-10-18')).annual.monthTen === '2026-10-18', 'monthTen date');
+  ok(R.ongoingRequirements(c, at('2026-12-18')).annual.soon, 'still soon on the due day');
+  const late = R.ongoingRequirements(c, at('2026-12-19')).annual;
+  ok(late.overdue && !late.soon, 'overdue the day after, and no longer soon');
+  ok(!R.ongoingRequirements(c, at('2026-08-20')).annual.soon, 'month 8 is not soon (the old 45-day rule would also say no)');
+  ok(R.ongoingRequirements(c, at('2026-10-25')).annual.soon, 'about 54 days left is soon (the old 45-day rule said no)');
+  // no visit: counts from the start date
+  const n = { id: '2', name: 'New Person', cdsStartDate: '2026-01-10' };
+  ok(R.ongoingRequirements(n, at('2026-11-10')).annual.soon, 'no visit yet: month 10 from the start date');
+  ok(!R.ongoingRequirements(n, at('2026-11-09')).annual.soon, 'no visit yet: not before month 10');
+}
+
+// ── the routine: step 3 names visits in their last 2 months ──
+{
+  const consumers = [{ id: '1', name: 'Ruth Caldwell', cdsStartDate: '2025-03-01', homeVisits: [{ date: '2025-12-18' }], contacts: { '2026-10': { at: 'x' } } }];
+  const steps = R.dailyRoutine({ consumers, pipeline: [] }, at('2026-10-21'));
+  ok(steps.length === 4, 'the server (no firstShiftOf) still gets four steps');
+  const s3 = steps.find(s => s.n === 3);
+  ok(s3.items.some(i => /face-to-face visit in the last 2 months, book it now/.test(i.t)), 'step 3 has the 2-months-left line');
+  ok(!s3.items.some(i => i.bad && /last 2 months/.test(i.t)), '2-months-left is not red');
+}
+
+// ── first-shift checklist ──
+{
+  const newId = String(Date.parse('2026-10-22T15:00:00Z'));
+  const oldId = String(Date.parse('2026-01-05T15:00:00Z'));
+  const c = { id: newId, name: 'Gus Tolliver', cdsStartDate: '2026-10-27' };
+  let p = R.firstShiftPrep(c, null);
+  ok(p.applies && p.total === 6 && p.done === 0 && !p.ready, 'a new consumer gets the 6-step checklist');
+  ok(p.steps.filter(s => s.beforeStart).map(s => s.k).join() === 'authWellSky,tasksWellSky', 'WellSky steps are marked before the start date');
+  ok(!R.firstShiftPrep({ id: oldId, name: 'Old One', cdsStartDate: '2025-01-01' }, null).applies, 'an existing consumer is left alone');
+  ok(R.firstShiftPrep({ id: oldId, name: 'Old One', firstShiftPrep: {} }, null).applies, 'unless the office started a checklist');
+  const all = {}; R.PREP_STEPS.forEach(s => { all[s.k] = { at: 'x' }; });
+  p = R.firstShiftPrep(Object.assign({}, c, { firstShiftPrep: all }), null);
+  ok(p.ready && p.done === 6, 'all six ticked is ready');
+  p = R.firstShiftPrep(c, '2026-10-27');
+  ok(!p.late && !p.needsReason, 'first shift on the start date is not late');
+  p = R.firstShiftPrep(c, '2026-10-30');
+  ok(p.late && p.needsReason, 'first shift after the start date needs a reason');
+  p = R.firstShiftPrep(Object.assign({}, c, { lateStart: { reason: 'Waiting on FCSR' } }), '2026-10-30');
+  ok(p.late && !p.needsReason, 'a saved reason clears it');
+  ok(R.LATE_REASONS.includes('Waiting on FCSR') && R.LATE_REASONS.includes('Other'), 'reasons list');
+
+  const steps = R.dailyRoutine({ consumers: [c], pipeline: [], firstShiftOf: () => null }, at('2026-10-21'));
+  const s5 = steps.find(s => s.n === 5);
+  ok(s5 && s5.items.length === 1 && /not ready for the first shift/.test(s5.items[0].t), 'Today step 5: not ready');
+  ok(!s5.items[0].bad, 'not red before the start date');
+  const s5late = R.dailyRoutine({ consumers: [c], pipeline: [], firstShiftOf: () => null }, at('2026-10-28')).find(s => s.n === 5);
+  ok(s5late.items[0].bad, 'red once the start date has passed');
+  const s5why = R.dailyRoutine({ consumers: [c], pipeline: [], firstShiftOf: () => '2026-10-30' }, at('2026-10-31')).find(s => s.n === 5);
+  ok(s5why.items.length === 1 && /late start needs a reason/.test(s5why.items[0].t) && s5why.items[0].bad, 'Today step 5: late start needs a reason');
+  const s5done = R.dailyRoutine({ consumers: [Object.assign({}, c, { firstShiftPrep: all })], pipeline: [], firstShiftOf: () => null }, at('2026-10-21')).find(s => s.n === 5);
+  ok(s5done.items.length === 0, 'ready consumers leave step 5 clear');
+}
+
+// ── every old hash still lands on a real page ──
+{
+  const html = readFileSync(ROOT + '/index.html', 'utf8');
+  const a = html.indexOf('const SECTIONS = ['), b = html.indexOf('function renderMainTabs(');
+  const ctx = {};
+  vm.runInNewContext(html.slice(a, b) + ';this.out={SECTIONS,PAGE_TO_SECTION,SECTION_DEFAULT,PAGE_ALIASES,STACKED,STACK_HOME};', ctx);
+  const { SECTIONS, PAGE_TO_SECTION, SECTION_DEFAULT, PAGE_ALIASES, STACKED, STACK_HOME } = ctx.out;
+  const pages = new Set([...html.matchAll(/id="page-([a-z0-9]+)"/g)].map(m => m[1]));
+  const guideSubs = ['calendar', 'compliance', 'onboarding', 'reference'];
+  // the same steps showPage takes
+  const resolve = id => {
+    if (PAGE_ALIASES[id]) id = PAGE_ALIASES[id];
+    if (id === 'roster') return { page: 'attendants', section: PAGE_TO_SECTION.roster };
+    if (SECTION_DEFAULT[id] && !pages.has(id)) id = SECTION_DEFAULT[id];
+    if (STACK_HOME[id]) id = STACK_HOME[id];
+    const page = id === 'pipeline' ? 'consumers' : guideSubs.includes(id) ? 'guides' : id;
+    return { page, section: PAGE_TO_SECTION[id] };
+  };
+  const OLD = ['dashboard', 'consumers', 'pipeline', 'attendants', 'evvcorrections', 'automations', 'guides', 'calendar',
+               'compliance', 'onboarding', 'reference', 'quarterly', 'financials', 'statesubmissions', 'payroll', 'taxcompliance',
+               'authorizations', 'careplans', 'profile', 'caregivermatch', 'backuppool', 'caregiverpool', 'activeattendants',
+               'leads', 'money'];
+  const NEW = ['today', 'help', 'switches', 'roster', 'leadprofile'];
+  const want = { dashboard: 'today', pipeline: 'leads', statesubmissions: 'leads', leads: 'leads', attendants: 'attendants',
+                 evvcorrections: 'attendants', automations: 'switches', guides: 'help', quarterly: 'money', financials: 'money',
+                 payroll: 'money', money: 'money', consumers: 'consumers', taxcompliance: 'consumers', profile: 'consumers',
+                 caregiverpool: 'attendants', backuppool: 'attendants', today: 'today', help: 'help', switches: 'switches', roster: 'attendants' };
+  OLD.concat(NEW).forEach(h => {
+    const r = resolve(h);
+    ok(pages.has(r.page), '#' + h + ' opens a real page (' + r.page + ')');
+    ok(SECTIONS.some(s => s.id === r.section), '#' + h + ' lights a real section (' + r.section + ')');
+    if (want[h]) ok(r.section === want[h], '#' + h + ' is in ' + want[h] + ' (got ' + r.section + ')');
+  });
+  ok(resolve('attendants').page === 'activeattendants', 'the GoHighLevel Attendants link opens Active Attendants');
+  ok(resolve('statesubmissions').page === 'consumers', 'State Submissions opens the Leads screen');
+  ok(resolve('financials').page === 'payroll', 'Financials opens the Money screen');
+  ok(resolve('backuppool').page === 'caregivermatch', 'the old pool opens the Caregiver List');
+  Object.entries(STACKED).forEach(([k, v]) => v.forEach(x => ok(pages.has(x) && pages.has(k === 'pipeline' ? 'consumers' : k), 'stacked ' + k + ' + ' + x)));
+  SECTIONS.forEach(s => s.tabs.forEach(t => ok(pages.has(t.page) || guideSubs.includes(t.page), 'tab ' + t.label + ' has a page')));
+  ok(SECTIONS.length === 7 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,money,help,switches', 'the seven sections, in order');
+  const tabCount = SECTIONS.reduce((t, s) => t + s.tabs.length, 0);
+  ok(tabCount <= 11, 'fewer tabs than before (' + tabCount + ', was 22)');
+  ok(!/—/.test(html.slice(a, b)), 'no em dashes in the new menu');
+  // The WellSky attendant check card now lives on Active Attendants.
+  const aa = html.indexOf('id="page-activeattendants"');
+  ok(html.indexOf('id="attendantCheck"') > aa && html.indexOf('id="attendantCheck"') < aa + 400, 'attendant check card is on Active Attendants');
+  ok((html.match(/id="attendantCheck"/g) || []).length === 1, 'only one attendant check card');
+  // Inside GoHighLevel our header and main tabs are hidden on every link.
+  ok(/html\.embedded \.header, html\.embedded #mainTabs \{ display:none !important; \}/.test(html), 'GoHighLevel mode hides header and main tabs');
+}
+
+console.log(pass + ' passed, ' + fail + ' failed');
+if (fail) process.exit(1);

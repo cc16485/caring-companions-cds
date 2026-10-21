@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=3"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=4"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=3"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -35,7 +35,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
 <style>
   :root {
     /* Caring Companions brand colors */
@@ -408,6 +408,85 @@
   z-index:2 !important;
 }
 
+
+/* ── 2026-10-21 simpler, cuter hub (her mockup) ────────────────────────────
+   Warm cream page, soft cards with no borders, pill buttons and pill tabs,
+   a serif for page titles. Inside GoHighLevel the side menu is the main
+   menu, so our header and main tabs are hidden there (any link, any hash). */
+:root { --cute-cream:#fbf8f2; --cute-honey:#F0A63A; --cute-honey-deep:#C17A12; --cute-honey-pale:#fdf1dc;
+        --cute-teal:#1F7A8C; --cute-teal-pale:#EAF4F6; --cute-ink:#16283a;
+        --cute-shadow:0 1px 2px rgba(13,54,95,.06), 0 6px 20px rgba(13,54,95,.06); }
+body { background: var(--cute-cream) !important; }
+html.embedded .header, html.embedded #mainTabs { display:none !important; }
+.card, .stat-card { border-radius:20px !important; box-shadow:var(--cute-shadow) !important; border-top:0; }
+.btn { border-radius:999px !important; padding-left:18px; padding-right:18px; }
+.btn-sm { padding-left:12px; padding-right:12px; }
+.section-title, .cute-title { font-family:'Fraunces', Georgia, serif !important; font-weight:600 !important; color:#0D365F; letter-spacing:-.2px; }
+.section-title { font-size:24px !important; }
+.alert { border-radius:14px !important; }
+input, select, textarea { border-radius:10px; }
+
+/* Main menu outside GoHighLevel: pills on navy. */
+.tabs { padding:10px 14px !important; gap:6px !important; align-items:center !important; }
+.tabs .tab { border-radius:999px !important; background:transparent !important; color:rgba(255,255,255,.82) !important;
+             box-shadow:none !important; padding:8px 18px !important; font-weight:600 !important; }
+.tabs .tab:hover { background:rgba(255,255,255,.12) !important; color:#fff !important; }
+.tabs .tab.active { background:var(--cute-honey-pale) !important; color:#0D365F !important; font-weight:700 !important;
+                    padding-top:8px !important; margin-bottom:0 !important; box-shadow:none !important; }
+.tabs .tab.tab-quiet:first-of-type, .tabs .tab-quiet { font-weight:500 !important; }
+.tabs .tab-quiet { margin-left:0; }
+.tabs .tab:not(.tab-quiet) + .tab-quiet { margin-left:auto !important; }
+
+/* Section tabs: a cream strip with pills (the only menu inside GoHighLevel). */
+.section-nav { background:transparent !important; padding:16px 24px 0 !important; gap:8px !important; align-items:center !important; }
+.section-nav button { background:#fff !important; color:#3d4b5a !important; border:1px solid #ece7dc !important;
+                      border-radius:999px !important; padding:9px 18px !important; box-shadow:none !important;
+                      font-size:14px !important; font-weight:500 !important; min-height:40px; }
+.section-nav button:hover { background:var(--cute-teal-pale) !important; }
+.section-nav button.on { background:#0D365F !important; color:#fff !important; border-color:#0D365F !important; font-weight:600 !important;
+                         padding:9px 18px !important; margin:0 !important; box-shadow:none !important; }
+.section-nav .nav-lead { font-size:13px; color:#55677a; margin-right:2px; }
+
+/* Stacked pages (Leads, Money, Caregiver List) read as one screen. */
+.page.stacked { margin-top:28px; padding-top:24px; border-top:2px dashed #ece7dc; }
+.quiet-links { margin:18px 4px; font-size:13.5px; display:flex; gap:18px; flex-wrap:wrap; }
+.quiet-links a { color:var(--cute-teal); }
+
+/* Today */
+.today-hello { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+.today-hello h1 { margin:0; font-family:'Fraunces', Georgia, serif; font-weight:600; color:#0D365F; font-size:30px; }
+.today-hello .sub { color:#55677a; font-size:14px; }
+.cute-more > summary { cursor:pointer; color:var(--cute-teal); font-size:14px; font-weight:500; padding:10px 4px; list-style:none; }
+.cute-more > summary::-webkit-details-marker { display:none; }
+
+/* Consumer profile */
+.cp-next { background:var(--cute-teal-pale); border-radius:16px; padding:16px 18px; display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; margin-top:16px; }
+.cp-next.warn { background:var(--cute-honey-pale); }
+.cp-pair { display:grid; grid-template-columns:repeat(auto-fit, minmax(270px, 1fr)); gap:14px; margin-top:14px; }
+.cp-box { border:1px solid #ece7dc; border-radius:16px; padding:16px 18px; background:#fff; }
+.cp-box.warn { border-color:#f0d7a8; background:#fffaf0; }
+.cp-box.bad { border-color:#f1c2bd; background:#fdf3f2; }
+.cp-box h4 { margin:0 0 2px; color:#0D365F; font-size:15px; }
+.cp-months { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 4px; }
+.cp-months span { display:inline-flex; align-items:center; justify-content:center; min-width:40px; height:30px; border-radius:9px; font-size:12px; font-weight:600; }
+.cp-months .y { background:var(--cute-teal-pale); color:#103D47; }
+.cp-months .n { background:#fff; color:#7a4a05; border:2px dashed var(--cute-honey-deep); }
+.cp-months .f { background:#f6f4ee; color:#a49c8e; }
+.cp-bar { height:10px; border-radius:999px; background:#f2f0e9; overflow:hidden; margin:10px 0 6px; }
+.cp-bar > div { height:100%; border-radius:999px; }
+.cp-pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; background:var(--cute-teal-pale); color:#103D47; }
+.cp-pill.warn { background:var(--cute-honey-pale); color:#7a4a05; }
+.cp-pill.bad { background:#fbe3e0; color:#922b21; }
+.cp-tabs { display:flex; flex-wrap:wrap; gap:4px; border-bottom:1px solid #ece7dc; margin:22px 0 6px; }
+.cp-tabs button { min-height:44px; padding:0 14px; background:none; border:0; border-bottom:3px solid transparent; font:500 14px 'Poppins', sans-serif; color:#55677a; cursor:pointer; }
+.cp-tabs button.on { border-bottom-color:var(--cute-teal); color:#0D365F; font-weight:600; }
+.cp-line { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 16px; padding:11px 0; border-top:1px solid #f1ede4; font-size:14px; }
+.cp-line > span:first-child { color:#55677a; }
+.cp-check { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-top:1px solid #f1ede4; cursor:pointer; font-size:14px; }
+.cp-check input { width:22px; height:22px; margin:1px 0 0; accent-color:var(--cute-teal); flex:none; }
+.cp-reasons { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.cp-reasons button { min-height:40px; padding:0 14px; border-radius:999px; border:1px solid #e4d3b0; background:#fff; font:500 14px 'Poppins', sans-serif; cursor:pointer; color:#3d4b5a; }
+.cp-reasons button.on { background:#0D365F; border-color:#0D365F; color:#fff; }
 </style>
 </head>
 <body>
@@ -457,13 +536,22 @@
 
 <!-- ==================== DASHBOARD ==================== -->
 <div id="page-dashboard" class="page active">
-  <div class="section-header">
-    <div class="section-title">Agency Overview</div>
-    <span id="dashDate" style="font-size:13px;color:var(--gray-600)"></span>
+  <div class="today-hello">
+    <svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="10" fill="#F0A63A"/><g stroke="#F0A63A" stroke-width="3" stroke-linecap="round"><line x1="24" y1="4" x2="24" y2="9"/><line x1="24" y1="39" x2="24" y2="44"/><line x1="4" y1="24" x2="9" y2="24"/><line x1="39" y1="24" x2="44" y2="24"/><line x1="10" y1="10" x2="13.5" y2="13.5"/><line x1="34.5" y1="34.5" x2="38" y2="38"/><line x1="38" y1="10" x2="34.5" y2="13.5"/><line x1="13.5" y1="34.5" x2="10" y2="38"/></g></svg>
+    <div>
+      <h1 id="todayHello">Good morning</h1>
+      <div class="sub"><span id="dashDate"></span><span id="todayCounts"></span></div>
+    </div>
   </div>
 
   <div id="cdsGoal" style="margin-bottom:18px"></div>
   <div id="dailyRoutine" style="margin-bottom:18px"></div>
+  <div id="todayComing" style="margin-bottom:18px"></div>
+
+  <!-- Everything below was the old Dashboard. Kept (updateDashboard fills these
+       ids), folded away so Today is one list. 2026-10-21. -->
+  <details class="cute-more">
+  <summary>More numbers and reference</summary>
 
   <div class="alert alert-warn">
     ⚠️ <strong>EVV Hard Launch Phase I — April 1, 2026:</strong> Claims validation is now active via Sandata EVV Aggregator. All visits must be documented via <strong>WellSky Personal Care</strong> (our EVV vendor). Claims without matching EVV data may be denied. EVV corrections must be submitted by <strong>Saturday 11:59 PM</strong> each week.
@@ -666,6 +754,7 @@
       <span class="tag">Senate Bill 710 (Tax Penalties)</span>
     </div>
   </div>
+  </details>
 </div>
 
 <!-- ==================== CONSUMERS ==================== -->
@@ -958,8 +1047,11 @@
 <!-- ==================== PAYROLL & WAGES ==================== -->
 <div id="page-payroll" class="page">
   <div class="section-header">
-    <div class="section-title">💵 Payroll &amp; Wages</div>
-    <button class="btn btn-outline" onclick="renderPayroll()" style="font-size:12px">↻ Refresh</button>
+    <div class="section-title">Money</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="renderPayroll()" style="font-size:12px">↻ Refresh</button>
+      <button class="btn btn-primary" onclick="showPage('quarterly')">Start quarterly report</button>
+    </div>
   </div>
 
   <div id="payrollAlerts"></div>
@@ -1178,8 +1270,7 @@
     ⚠️ <strong>LEIE screening must be done MONTHLY</strong> for all employees and attendants. FCSR screening is required before hire and annually (recommended). EDL check required before hire and every quarter. Attendant cannot be the consumer's spouse. <strong>If attendant has lived outside Missouri in the last 5 years → fingerprint-based background check required</strong> (see below).
   </div>
 
-  <!-- Check against WellSky (2026-10-20): drawn by renderAttendantCheck() -->
-  <div id="attendantCheck"></div>
+  <!-- The WellSky attendant check card moved to Active Attendants (2026-10-21). -->
 
   <div class="card">
     <div class="card-title"><span class="icon">🔍</span> Attendant Screening Status</div>
@@ -2285,9 +2376,22 @@
 <!-- ==================== AUTOMATIONS ==================== -->
 <div id="page-automations" class="page">
   <div class="section-header">
-    <div class="section-title">🤖 Outreach Automations</div>
+    <div class="section-title">Switches</div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-outline" onclick="renderAutomations()" style="font-size:12px">↻ Refresh</button>
+    </div>
+  </div>
+  <p style="font-size:14px;color:#55677a;margin:-4px 0 16px">Your on/off switches. Called Switches so it is never mixed up with GoHighLevel's own Settings.</p>
+
+  <!-- Backup, Restore and Sign Out live here too: inside GoHighLevel the
+       header they used to sit in is hidden (2026-10-21). -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">This hub</div>
+    <div style="font-size:13.5px;color:#55677a;margin-bottom:12px">Signed in as <b id="sw_user"></b>.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="exportData()" title="Download all data as a backup file">Backup</button>
+      <button class="btn btn-outline" onclick="document.getElementById('importFileInput').click()" title="Restore data from a backup file">Restore</button>
+      <button class="btn btn-outline" onclick="signOut()">Sign out</button>
     </div>
   </div>
 
@@ -2316,6 +2420,10 @@
     <div id="ghlSyncResult" style="font-size:13px"></div>
   </div>
 
+  <!-- The old outreach tools only ever wrote out instructions; folded away
+       2026-10-21 rather than deleted. -->
+  <details class="cute-more">
+  <summary>Old outreach tools</summary>
   <!-- PENDING OUTREACHES -->
   <div class="card" style="margin-bottom:20px">
     <div class="card-title">⚠️ Pending Outreaches</div>
@@ -2360,6 +2468,7 @@
       <p style="font-size:13px;color:var(--gray-600)">No outreaches logged yet.</p>
     </div>
   </div>
+  </details>
 </div>
 
 
@@ -2427,7 +2536,12 @@
 <!-- ==================== CAREGIVER MATCH (findcdscaregivers.com) ==================== -->
 <div id="page-caregivermatch" class="page"><div id="cm_root"></div></div>
 <!-- Active Attendants (2026-10-21): new applications + the Roster in one list, each opening a profile. -->
-<div id="page-activeattendants" class="page"><div id="hp_root"></div></div>
+<div id="page-activeattendants" class="page">
+  <!-- Check against WellSky (2026-10-20): drawn by renderAttendantCheck() -->
+  <div id="attendantCheck"></div>
+  <div id="hp_root"></div>
+  <p class="quiet-links"><a href="#roster" onclick="showPage('roster');return false">Old roster and monthly LEIE log</a></p>
+</div>
 
 <!-- ==================== BACKUP ATTENDANT POOL ==================== -->
 <div id="page-backuppool" class="page">
@@ -4369,6 +4483,8 @@ function _enableRealtime() {
           if (id === 'dashboard')    updateDashboard();
           if (id === 'consumers')    { renderConsumers(); renderPipeline(); }
           if (id === 'attendants')   renderAttendants();
+          if (id === 'activeattendants') renderAttendantCheck();
+          if (id === 'profile')      renderProfile();
           if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); }
           if (id === 'quarterly')    renderQuarterlyReport();
           if (id === 'financials')   renderFinancials();
@@ -4434,64 +4550,79 @@ function importData(event) {
 // Six sections following the CDS lifecycle, rather than thirteen equals in a bar
 // that scrolled sideways. Every page div stays exactly where it is; only the
 // navigation layer changed, so nothing that referenced a page id had to move.
+// 2026-10-21 simpler hub (her "yes" to the mockup): 7 sections, fewer tabs.
+// Pages are stacked rather than moved (Leads = pipeline + state submissions,
+// Money = payroll + financials, Caregiver List = match + old pool), so every
+// page div and every old hash still works. Old hashes are live GoHighLevel
+// menu links: never make her edit GoHighLevel first.
 const SECTIONS = [
-  { id: 'dashboard',  label: '📊 Dashboard',   tabs: [] },
-  { id: 'leads',      label: '🔮 Leads',       tabs: [
-      { page: 'pipeline',         label: 'Pipeline' },
-      { page: 'statesubmissions', label: 'State Submissions' } ] },
-  { id: 'consumers',  label: '👥 Consumers',   tabs: [
-      { page: 'consumers',      label: 'Active Consumers' },
+  { id: 'today',      label: 'Today',       tabs: [] },
+  { id: 'leads',      label: 'Leads',       tabs: [] },
+  { id: 'consumers',  label: 'Consumers',   chips: true, tabs: [
+      { page: 'consumers',      label: 'Everyone' },
       { page: 'taxcompliance',  label: 'Tax & EIN' },
-      { page: 'authorizations', label: 'Authorizations' },
-      { page: 'careplans',      label: 'Care Plan Days' },
-      { page: 'profile',        label: 'Consumer Profile' } ] },
-  { id: 'attendants', label: '🧑‍🤝‍🧑 Attendants',  tabs: [
+      { page: 'authorizations', label: 'Hours & authorizations' },
+      { page: 'careplans',      label: 'Care plans' } ] },
+  { id: 'attendants', label: 'Attendants',  tabs: [
       { page: 'activeattendants', label: 'Active Attendants' },
-      { page: 'attendants',     label: 'Roster' },
-      { page: 'caregivermatch', label: 'Caregiver Match' },
-      { page: 'backuppool',     label: 'Caregiver Pool' },
-      { page: 'evvcorrections', label: 'EVV Corrections' } ] },
-  { id: 'money',      label: '💵 Money',       tabs: [
-      { page: 'payroll',    label: 'Payroll & Wages' },
-      { page: 'financials', label: 'Financials' },
-      { page: 'quarterly',  label: 'Quarterly Report' } ] },
-  { id: 'guides',     label: '📚 Guides',      tabs: [
-      { page: 'onboarding',  label: 'Onboarding' },
+      { page: 'caregivermatch',   label: 'Caregiver List' },
+      { page: 'evvcorrections',   label: 'EVV Forms' } ] },
+  { id: 'money',      label: 'Money',       tabs: [] },
+  { id: 'help',       label: 'Help',        quiet: true, tabs: [
+      { page: 'calendar',    label: 'Deadlines' },
       { page: 'compliance',  label: 'Compliance' },
-      { page: 'calendar',    label: 'Calendar' },
-      { page: 'reference',   label: 'Reference' },
-      { page: 'automations', label: 'Automations' } ] }
+      { page: 'onboarding',  label: 'Onboarding' },
+      { page: 'reference',   label: 'Reference' } ] },
+  { id: 'switches',   label: 'Switches',    quiet: true, tabs: [] }
 ];
 
 // page id -> section id. Built from SECTIONS so the two can never drift.
 const PAGE_TO_SECTION = (() => {
-  const m = { dashboard: 'dashboard' };
+  const m = {};
   SECTIONS.forEach(sec => sec.tabs.forEach(t => { m[t.page] = sec.id; }));
-  // aliases: old hashes that are live GHL menu links, plus section ids used bare
-  m.guides = 'guides';
-  m.leads = 'leads';
-  m.money = 'money';
-  m.caregiverpool = 'attendants';
+  // Pages with no tab of their own, and section ids used bare.
+  Object.assign(m, {
+    dashboard: 'today', today: 'today',
+    pipeline: 'leads', statesubmissions: 'leads', leadprofile: 'leads', leads: 'leads',
+    profile: 'consumers',
+    attendants: 'attendants', roster: 'attendants', backuppool: 'attendants', caregiverpool: 'attendants',
+    payroll: 'money', financials: 'money', quarterly: 'money', money: 'money',
+    guides: 'help', help: 'help',
+    automations: 'switches', switches: 'switches'
+  });
   return m;
 })();
 
 // Landing page when a section is opened by name rather than a specific page.
-const SECTION_DEFAULT = { dashboard: 'dashboard', leads: 'pipeline', consumers: 'consumers',
-                          attendants: 'attendants', money: 'payroll', guides: 'onboarding' };
+const SECTION_DEFAULT = { today: 'dashboard', dashboard: 'dashboard', leads: 'pipeline', consumers: 'consumers',
+                          attendants: 'activeattendants', money: 'payroll', help: 'calendar', guides: 'calendar',
+                          switches: 'automations' };
 
 // Spellings that are not themselves page ids, kept because they are live links.
+// #attendants is the GoHighLevel "Attendants" link: it now opens Active
+// Attendants. The old roster is still there as #roster (linked from a profile).
 const PAGE_ALIASES = {
-  caregiverpool: 'backuppool',
-  // Bare #guides used to land on the section with no sub-tab lit. Resolve it to
-  // the first guide so the strip always shows where you are.
-  guides: 'onboarding'
+  caregiverpool: 'caregivermatch',
+  backuppool: 'caregivermatch',
+  guides: 'calendar', help: 'calendar',
+  today: 'dashboard',
+  switches: 'automations',
+  attendants: 'activeattendants'
 };
+
+// Pages shown together, one above the other, so a section is one screen.
+const STACKED = {
+  pipeline: ['statesubmissions'],
+  caregivermatch: ['backuppool'],
+  payroll: ['financials']
+};
+const STACK_HOME = { statesubmissions: 'pipeline', financials: 'payroll' };
 
 function renderMainTabs(activeSection) {
   const bar = document.getElementById('mainTabs');
   if (!bar) return;
   bar.innerHTML = SECTIONS.map(sec =>
-    '<div class="tab' + (sec.id === activeSection ? ' active' : '') +
+    '<div class="tab' + (sec.quiet ? ' tab-quiet' : '') + (sec.id === activeSection ? ' active' : '') +
     '" onclick="showPage(\'' + (SECTION_DEFAULT[sec.id] || sec.id) + '\')">' + sec.label + '</div>').join('');
 }
 
@@ -4499,23 +4630,31 @@ function renderSectionNav(activeSection, activePage) {
   const nav = document.getElementById('sectionNav');
   if (!nav) return;
   const sec = SECTIONS.find(x => x.id === activeSection);
+  nav.classList.toggle('chips', !!(sec && sec.chips));
   if (!sec || !sec.tabs.length) { nav.innerHTML = ''; return; }
-  nav.innerHTML = sec.tabs.map(t =>
+  nav.innerHTML = (sec.chips ? '<span class="nav-lead">Show</span>' : '') + sec.tabs.map(t =>
     '<button class="' + (t.page === activePage ? 'on' : '') +
     '" onclick="showPage(\'' + t.page + '\')">' + esc(t.label) + '</button>').join('');
 }
 
 function showPage(id) {
   if (PAGE_ALIASES[id]) id = PAGE_ALIASES[id];
+  // The old roster has no tab now; #roster opens it (the page id is 'attendants').
+  const roster = id === 'roster';
   // A bare section name (#leads, #money) opens that section's first page.
-  if (SECTION_DEFAULT[id] && !document.getElementById('page-' + id)) id = SECTION_DEFAULT[id];
+  if (!roster && SECTION_DEFAULT[id] && !document.getElementById('page-' + id)) id = SECTION_DEFAULT[id];
+  // A stacked page opens its whole screen, scrolled to that part.
+  const scrollTo = STACK_HOME[id] ? id : null;
+  if (STACK_HOME[id]) id = STACK_HOME[id];
   // Hide all .page divs
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   // Unhighlight all tabs
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
 
   // If pipeline requested, redirect to consumers page + activate pipeline sub-tab
-  if (id === 'pipeline') {
+  if (roster) {
+    document.getElementById('page-attendants').classList.add('active');
+  } else if (id === 'pipeline') {
     document.getElementById('page-consumers').classList.add('active');
     showConsumerTab('pipeline');
   } else if (id === 'consumers') {
@@ -4527,25 +4666,35 @@ function showPage(id) {
   } else if (id === 'calendar' || id === 'compliance' || id === 'onboarding' || id === 'reference') {
     document.getElementById('page-guides').classList.add('active');
     showGuideTab(id);
-  } else if (id === 'guides') {
-    document.getElementById('page-guides').classList.add('active');
-    showGuideTab('onboarding'); // default guide sub-tab
   } else {
     const pageEl = document.getElementById('page-' + id);
     if (pageEl) pageEl.classList.add('active');
   }
+  (STACKED[id] || []).forEach(x => {
+    const el = document.getElementById('page-' + x);
+    if (el) el.classList.add('active', 'stacked');
+  });
+  if (scrollTo) setTimeout(() => {
+    const el = document.getElementById('page-' + scrollTo);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 60);
 
   // Highlight by section id, not by position. The old code indexed into the tab
   // bar by array position, which silently broke the moment a tab was added.
-  const section = PAGE_TO_SECTION[id] || 'dashboard';
+  const section = PAGE_TO_SECTION[roster ? 'roster' : id] || 'today';
   renderMainTabs(section);
-  renderSectionNav(section, id);
+  renderSectionNav(section, roster ? 'activeattendants' : id);
 
   if (id === 'dashboard') updateDashboard();
-  if (id === 'automations') renderAutomations();
+  if (id === 'automations') {
+    renderAutomations();
+    const u = document.getElementById('sw_user');
+    if (u) u.textContent = (document.getElementById('header_user') || {}).textContent || '';
+  }
   if (id === 'careplans') loadCarePlanPrefs();
   if (id === 'quarterly') renderQuarterlyReport();
-  if (id === 'financials') renderFinancials();
+  if (id === 'financials' || id === 'payroll') renderFinancials();
+  if (roster) renderAttendants();
   if (id === 'consumers' || id === 'pipeline') {
     renderConsumers();
     renderOngoingRequirements();
@@ -4561,9 +4710,9 @@ function showPage(id) {
   if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); renderComplianceClocks(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
-  if (id === 'backuppool') renderBackupPool();
+  if (id === 'backuppool' || id === 'caregivermatch') renderBackupPool();
   if (id === 'caregivermatch') renderCaregiverMatch();
-  if (id === 'activeattendants') renderActiveAttendants();
+  if (id === 'activeattendants') { renderActiveAttendants(); renderAttendantCheck(); }
   if (id === 'profile') renderProfile();
 }
 
@@ -4594,7 +4743,7 @@ async function renderActiveAttendants() {
     const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=1');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
-      openRoster: () => showPage('attendants'), openMatch: () => showPage('caregivermatch') });
+      openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch') });
     _hpMounted = true;
   } catch (e) {
     root.innerHTML = '<div style="padding:24px;color:#a8342a">Active Attendants could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
@@ -4987,6 +5136,7 @@ function saveContactLog() {
 
   closeModal('contactLogModal');
   renderConsumers();
+  if (document.getElementById('page-profile').classList.contains('active')) renderProfile();
   updateDashboard();
 
   if (log.dhssFlag) {
@@ -7095,7 +7245,7 @@ function openProfile(id) {
 
 const PROFILE_BACK_LABEL = {
   consumers: 'Consumers', taxcompliance: 'Tax & EIN', payroll: 'Payroll & Wages',
-  authorizations: 'Authorizations', dashboard: 'Dashboard', statesubmissions: 'State Submissions',
+  authorizations: 'Hours & authorizations', dashboard: 'Today', statesubmissions: 'Leads',
   financials: 'Financials'
 };
 
@@ -7236,11 +7386,11 @@ function renderOngoingRequirements() {
       '<div style="margin-top:6px;font-size:12px">An auditor counts the months, not the last call.</div></div>';
   }
   if (visitSoon.length) {
-    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Annual visit due within 45 days:</strong> ' +
-      visitSoon.map(x => esc(x.c.name) + ' (' + x.r.annual.days + ' days)').join(', ') + '</div>';
+    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Face-to-face visit, 2 months left (book it now):</strong> ' +
+      visitSoon.map(x => '<a href="#" onclick="openProfile(\'' + x.c.id + '\');return false" style="color:inherit;font-weight:600">' + esc(x.c.name) + '</a> (due ' + esc(_niceDay(x.r.annual.due)) + ')').join(', ') + '</div>';
   }
   if (monthDue.length) {
-    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Monthly contact not yet logged this month for ' +
+    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Check-in call not yet logged this month for ' +
       monthDue.length + ':</strong> ' + monthDue.map(x => esc(x.c.name)).join(', ') + '</div>';
   }
   if (!html) {
@@ -7694,89 +7844,172 @@ function renderProfile() {
       return (!c.desRegistered && d.known && d.crossed) ? 'DES registration (passed $1,000 in ' + d.crossed + ')' : ''; })()
   ].filter(Boolean);
 
+  // ── 2026-10-21: one card, one next step, the details behind tabs ──
+  const req = ongoingRequirements(c);
+  const fs = firstShiftOf(c);
+  const prep = CDSRules.firstShiftPrep(c, fs);
+  const thisMonth = req.monthly.thisMonth;
+  const monthName = k => MONTHS[Number(k.slice(5, 7)) - 1];
+  const btn = (label, js, quiet) => '<button class="btn ' + (quiet ? 'btn-outline' : 'btn-primary') + '" onclick="' + js + '">' + label + '</button>';
+
+  // The one next step, most urgent first.
+  let next;
+  if (prep.needsReason) next = { warn: true, t: 'Write down why the first shift was late', d: 'Started ' + _niceDay(fs) + ', start date was ' + _niceDay(prep.start) + '. Pick a reason below.', b: '' };
+  else if (prep.applies && !fs && !prep.ready) next = { warn: !!(prep.start && prep.start <= new Date().toISOString().slice(0, 10)),
+    t: 'Get ready for the first shift: ' + prep.done + ' of ' + prep.total + ' done', d: prep.start ? 'Start date ' + _niceDay(prep.start) + '. The checklist is below.' : 'No start date yet. Add it in Tax setup.', b: '' };
+  else if (req.annual.overdue) next = { warn: true, t: 'Face-to-face visit overdue', d: 'Was due ' + _niceDay(req.annual.due) + '. It has to be in person.', b: btn('Log the visit', "logAnnualVisit('" + c.id + "')") };
+  else if (!req.monthly.doneThisMonth) next = { t: new Date(thisMonth + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long' }) + ' check-in call', d: 'One call every month to check in. ' + (req.monthly.missed ? req.monthly.missed + ' missed in the last year.' : ''), b: btn('Log the call', "openContactLog('" + c.id + "','" + thisMonth + "')") };
+  else if (req.annual.soon) next = { warn: true, t: 'Book the face-to-face visit', d: '2 months left. Due by ' + _niceDay(req.annual.due) + '.', b: btn('Log the visit', "logAnnualVisit('" + c.id + "')") };
+  else if (outstanding.length) next = { warn: true, t: 'Still needed: ' + outstanding[0], d: outstanding.length > 1 ? 'Also: ' + outstanding.slice(1).join(', ') + '.' : '', b: btn('Tax setup', "openTaxSetup('" + c.id + "')") };
+  else next = { t: 'Nothing due right now', d: 'This month\'s call is done and the visit is not due yet. Nice work.', b: '' };
+
+  // Monthly check-in calls, oldest month first.
+  const months = req.monthly.last12.slice().reverse().map(m =>
+    '<span class="' + (m.done ? 'y' : 'n') + '" title="' + monthName(m.month) + (m.done ? ': called' : ': no call logged') + '">' + monthName(m.month) + '</span>').join('');
+  const calledCount = req.monthly.last12.filter(m => m.done).length;
+  const callBox = '<div class="cp-box' + (req.monthly.missed >= 2 ? ' bad' : '') + '"><h4>Monthly check-in call</h4>' +
+    '<div style="font-size:13px;color:#55677a">One call every month to check in with ' + esc(c.name.split(/[\s,]+/)[0]) + '</div>' +
+    (req.monthly.last12.length ? '<div class="cp-months" role="list" aria-label="Check-in calls by month">' + months + '</div>' +
+      '<div style="font-size:13px;color:#55677a;margin-bottom:10px">' + calledCount + ' of ' + req.monthly.last12.length + (req.monthly.last12.length === 1 ? ' month' : ' months') + ' called' +
+      (req.monthly.doneThisMonth ? '. ' + monthName(thisMonth) + ' is done.' : '. ' + monthName(thisMonth) + ' still needed.') + '</div>'
+      : '<div style="font-size:13px;color:#55677a;margin:10px 0">No months to show yet.</div>') +
+    btn(req.monthly.doneThisMonth ? 'See this month\'s call' : 'Log the call', "openContactLog('" + c.id + "','" + thisMonth + "')", req.monthly.doneThisMonth) + '</div>';
+
+  // Face-to-face visit: once a year, warned at month 10.
+  const A = req.annual;
+  let visitBox;
+  if (!A.known) visitBox = '<div class="cp-box warn"><h4>Face-to-face visit</h4><div style="font-size:13px;color:#55677a;margin:6px 0 12px">No visit or start date on file to count from.</div>' + btn('Log the visit', "logAnnualVisit('" + c.id + "')") + '</div>';
+  else {
+    const spent = Math.min(100, Math.max(0, Math.round((365 - A.days) / 365 * 100)));
+    const tone = A.overdue ? 'bad' : A.soon ? 'warn' : '';
+    const pill = A.overdue ? '<span class="cp-pill bad">Overdue</span>' : A.soon ? '<span class="cp-pill warn">' + (A.days > 31 ? '2 months left' : A.days + ' days left') + '</span>' : '<span class="cp-pill">On track</span>';
+    visitBox = '<div class="cp-box ' + tone + '"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline"><h4>Face-to-face visit</h4>' + pill + '</div>' +
+      '<div style="font-size:13px;color:#55677a">' + (A.lastVisit ? 'Last visit ' + esc(_niceDay(A.lastVisit.date)) + '. ' : 'No visit logged yet, counting from the start date. ') +
+      (A.overdue ? 'Was due ' : 'Next one due by ') + esc(_niceDay(A.due)) + '.</div>' +
+      '<div class="cp-bar"><div style="width:' + spent + '%;background:' + (A.overdue ? '#c0392b' : A.soon ? '#C17A12' : '#1F7A8C') + '"></div></div>' +
+      '<div style="font-size:12.5px;color:#55677a;margin-bottom:10px">' + (A.overdue ? 'Must be in person.' : 'The office is told at month 10, on ' + esc(_niceDay(A.monthTen)) + '.') + '</div>' +
+      btn('Log the visit', "logAnnualVisit('" + c.id + "')", !(A.overdue || A.soon)) + '</div>';
+  }
+
+  // Before the first shift (her checklist), and why it started late.
+  let prepCard = '';
+  if (prep.applies && !fs) {
+    prepCard = '<div class="cp-box" style="margin-top:14px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">' +
+      '<h4>Before the first shift</h4><span style="font-size:13px;color:#55677a">' + prep.done + ' of ' + prep.total + ' done' + (prep.start ? ' · start date ' + esc(_niceDay(prep.start)) : '') + '</span></div>' +
+      prep.steps.map(st => '<label class="cp-check"><input type="checkbox"' + (st.done ? ' checked' : '') + ' onchange="prepToggle(\'' + c.id + '\',\'' + st.k + '\',this.checked)">' +
+        '<span style="flex:1"><b style="font-weight:600">' + esc(st.t) + '</b>' +
+        (st.k === 'shiftStyle' ? '<span style="display:block;margin-top:6px">' +
+          ['set', 'asneeded'].map(v => '<button type="button" class="btn btn-sm ' + (prep.shiftStyle === v ? 'btn-primary' : 'btn-outline') + '" style="margin-right:6px" onclick="event.preventDefault();prepShiftStyle(\'' + c.id + '\',\'' + v + '\')">' +
+            (v === 'set' ? 'Set shifts' : 'Shifts as needed') + '</button>').join('') + '</span>' : '') +
+        '</span>' + (st.beforeStart && !st.done ? '<span class="cp-pill warn">Before ' + (prep.start ? esc(_niceDay(prep.start)) : 'the start date') + '</span>' : '') + '</label>').join('') +
+      '</div>';
+  }
+  let lateCard = '';
+  if (prep.applies && prep.late) {
+    const L = c.lateStart || {};
+    lateCard = '<div class="cp-box warn" style="margin-top:14px"><h4>Why did the first shift start late?</h4>' +
+      '<div style="font-size:13px;color:#55677a">First shift ' + esc(_niceDay(fs)) + ', start date ' + esc(_niceDay(prep.start)) + '. Saved here for an audit.</div>' +
+      '<div class="cp-reasons">' + CDSRules.LATE_REASONS.map(r => '<button type="button" class="' + (L.reason === r ? 'on' : '') + '" onclick="lateReason(\'' + c.id + '\',this.textContent)">' + esc(r) + '</button>').join('') + '</div>' +
+      '<label for="late_note" style="display:block;font-size:13px;color:#55677a;margin:12px 0 4px">Note (what happened and when it cleared)</label>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><input id="late_note" type="text" value="' + esc(L.note || '') + '" placeholder="For example: FCSR result came back Oct 30" style="flex:1 1 260px;padding:10px 12px;border:1px solid #e4e1d8">' +
+      btn('Save note', "lateNote('" + c.id + "')", true) + '</div>' +
+      (L.reason ? '<div style="font-size:12.5px;color:#55677a;margin-top:8px">Saved by ' + esc(L.by || 'someone') + (L.at ? ' on ' + esc(_niceDay(L.at.slice(0, 10))) : '') + '.</div>' : '') +
+      '</div>';
+  }
+
+  // Tabs
+  const tab = _profTab;
+  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['notes', 'Notes']]
+    .map(([k, l]) => '<button type="button" class="' + (tab === k ? 'on' : '') + '" onclick="_profTab=\'' + k + '\';renderProfile()">' + l + '</button>').join('');
+  const line = (k, v) => '<div class="cp-line"><span>' + k + '</span><span>' + v + '</span></div>';
+  let body = '';
+  if (tab === 'overview') body =
+    line('Phone', esc(c.phone || 'none on file')) +
+    line('Attendant' + (attendants.length === 1 ? '' : 's'), attendants.length ? attendants.map(esc).join(', ') : 'none in payroll yet') +
+    line('Start date', c.cdsStartDate ? esc(_niceDay(c.cdsStartDate)) : 'not on file') +
+    (fs ? line('First shift (WellSky)', esc(_niceDay(fs))) : '') +
+    (prep.shiftStyle ? line('Shifts', prep.shiftStyle === 'set' ? 'Set shifts' : 'Shifts as needed') : '') +
+    line('Authorization', !auth ? '<span style="color:var(--danger)">nothing on file</span>' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'ends ' + esc(_niceDay(auth.planEnd)) + ' (' + daysLeft + ' days)')) +
+    line('Tax and EIN', outstanding.length ? '<span style="color:#9C6410">' + outstanding.length + ' thing' + (outstanding.length === 1 ? '' : 's') + ' still needed</span>' : 'all set');
+  else if (tab === 'hours') body =
+    (auth
+      ? line('Prior authorization', esc(auth.priorAuth || 'none')) + line('Code', esc(auth.procedureCode || 'none')) +
+        line('Period', esc(auth.planStart) + ' to ' + esc(auth.planEnd)) +
+        line('Units a month', authUnits === null ? 'not printed on it' : String(authUnits)) +
+        (plan && authUnits !== null && plan.monthlyUnits !== authUnits
+          ? '<div class="alert alert-warn" style="font-size:13px;margin-top:10px">The care plan totals ' + plan.monthlyUnits + ' units a month against ' + authUnits + ' authorized.</div>' : '')
+      : '<p style="font-size:14px;color:var(--danger);margin:12px 0"><strong>No authorization on file.</strong></p>') +
+    line('Care plan', plan ? plan.monthlyUnits + ' units a month' : 'no calendar on file') +
+    '<div style="margin-top:12px">' + btn('Care plan', "openCarePlan('" + c.id + "')", true) + '</div>';
+  else if (tab === 'tax') body =
+    '<div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));margin-top:10px">' + chips + '</div>' +
+    '<div style="margin-top:12px">' + btn('Tax setup', "openTaxSetup('" + c.id + "')", true) + '</div>';
+  else if (tab === 'money') body =
+    line('Billed, all time', fmt(billed) + ' (' + myInv.length + ' invoices)') +
+    line('Attendant wages, all time', wages ? fmt(wages) : 'no wage detail') +
+    line('Kept after wages', wages && billed ? fmt(margin) + ' (' + Math.round(margin / billed * 100) + '%)' : 'needs both sides') +
+    (wages && billed && (margin < 0 || margin / billed > 0.6)
+      ? '<div class="alert alert-warn" style="margin-top:10px;font-size:13px">Treat this with care: invoices count on the day they were raised, so one consumer\'s figure swings. The Money page has the agency figure.</div>' : '');
+  else body = c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>';
+
   host.innerHTML =
-    // header
-    '<div class="card" style="margin-bottom:16px">' +
-      '<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">' +
-        '<div style="flex:1;min-width:240px">' +
-          '<div style="font-size:22px;font-weight:700;color:var(--primary)">' + esc(c.name) + '</div>' +
-          '<div style="font-size:12.5px;color:var(--gray-600);margin-top:4px">' +
-            (c.dcn ? 'DCN ' + esc(c.dcn) : 'no DCN') +
-            (c.county ? ' · ' + esc(c.county) + ' County' : '') +
-            (c.phone ? ' · ' + esc(c.phone) : '') +
-            (c.email ? ' · ' + esc(c.email) : '') +
-          '</div>' +
-          (c.empeonStartDate ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:3px">Empeon start ' +
-            esc(c.empeonStartDate) + (c.empeonErCode ? ' · job code ' + esc(c.empeonErCode) : '') + '</div>' : '') +
-        '</div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-          '<button class="btn btn-outline" style="font-size:12px" onclick="openTaxSetup(\'' + c.id + '\')">Tax setup</button>' +
-          '<button class="btn btn-outline" style="font-size:12px" onclick="openCarePlan(\'' + c.id + '\')">Care plan</button>' +
-        '</div>' +
+    '<div class="card" style="padding:26px">' +
+      '<div class="cute-title" style="font-size:30px">' + esc(c.name) + '</div>' +
+      '<div style="font-size:13.5px;color:#55677a;margin-top:4px">' +
+        [c.county ? esc(c.county) + ' County' : '', c.dcn ? 'DCN ' + esc(c.dcn) : '', attendants.length ? 'Attendant: ' + attendants.map(esc).join(', ') : ''].filter(Boolean).join(' · ') +
       '</div>' +
-      (outstanding.length
-        ? '<div class="alert alert-warn" style="margin-top:14px;font-size:12.5px">⚠️ <strong>Outstanding:</strong> ' +
-          outstanding.join(', ') + '.</div>'
-        : '<div class="alert alert-success" style="margin-top:14px;font-size:12.5px">✅ <strong>Nothing outstanding</strong> ' +
-          'on the tax, Fusion and authorization requirements.</div>') +
-    '</div>' +
+      '<div class="cp-next' + (next.warn ? ' warn' : '') + '"><div style="flex:1 1 300px"><div style="font-weight:600;color:#0D365F">Next step: ' + esc(next.t) + '</div>' +
+        (next.d ? '<div style="font-size:13px;color:#55677a">' + esc(next.d) + '</div>' : '') + '</div>' + next.b + '</div>' +
+      prepCard + lateCard +
+      '<div class="cp-pair">' + callBox + visitBox + '</div>' +
+      '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
+      '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
+        '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
+        '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a></div>' +
+    '</div>';
+}
 
-    // obligations
-    '<div class="card" style="margin-bottom:16px">' +
-      '<div class="card-title"><span class="icon">✅</span> Where this consumer stands</div>' +
-      '<div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">' + chips + '</div>' +
-    '</div>' +
-
-    // money
-    '<div class="card" style="margin-bottom:16px">' +
-      '<div class="card-title"><span class="icon">💵</span> Money, everything to date</div>' +
-      '<div class="grid-4" style="margin-bottom:12px">' +
-        '<div class="stat-card blue"><div class="stat-label">💰 Billed</div><div class="stat-value">' + fmt(billed) +
-          '</div><div class="stat-sub">' + myInv.length + ' invoices</div></div>' +
-        '<div class="stat-card warn"><div class="stat-label">👷 Wages</div><div class="stat-value">' +
-          (wages ? fmt(wages) : '—') + '</div><div class="stat-sub">' +
-          (wages ? attendants.length + ' attendant' + (attendants.length === 1 ? '' : 's') : 'no wage detail') + '</div></div>' +
-        '<div class="stat-card ' + (margin > 0 ? 'green' : 'red') + '"><div class="stat-label">📊 Margin</div>' +
-          '<div class="stat-value">' + (wages ? fmt(margin) : '—') + '</div><div class="stat-sub">' +
-          (wages && billed ? Math.round(margin / billed * 100) + '% of billed' : 'needs both sides') + '</div></div>' +
-        '<div class="stat-card blue"><div class="stat-label">📑 Units/month</div><div class="stat-value">' +
-          (authUnits === null ? '—' : authUnits) + '</div><div class="stat-sub">' +
-          (plan ? 'plan says ' + plan.monthlyUnits : 'authorized') + '</div></div>' +
-      '</div>' +
-      (attendants.length ? '<div style="font-size:12.5px"><strong>Attendants:</strong> ' +
-        attendants.map(esc).join(', ') + '</div>' : '') +
-      // A single consumer's margin swings on when their invoices happened to be
-      // raised, so a negative figure here is usually billing lag rather than a loss.
-      // The agency-wide figure is the trustworthy one.
-      (wages && billed && (margin < 0 || margin / billed > 0.6)
-        ? '<div class="alert alert-warn" style="margin-top:12px;font-size:12.5px">⚠️ <strong>Treat this margin with ' +
-          'care.</strong> Invoices are counted on the date they were raised, and for one consumer that timing swings ' +
-          'the figure hard. Work not yet invoiced shows as a loss. Compare against the agency margin on the ' +
-          'Financials page before drawing a conclusion about this consumer.</div>'
-        : '') +
-    '</div>' +
-
-    // authorization detail
-    '<div class="card" style="margin-bottom:16px">' +
-      '<div class="card-title"><span class="icon">📑</span> Authorization</div>' +
-      (auth
-        ? '<div style="font-size:12.5px;line-height:1.9">' +
-          '<strong>Prior authorization</strong> ' + esc(auth.priorAuth || '—') +
-          ' · <strong>code</strong> ' + esc(auth.procedureCode || '—') +
-          '<br><strong>Period</strong> ' + esc(auth.planStart) + ' to ' + esc(auth.planEnd) +
-          ' · <strong>' + (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : daysLeft + ' days left') + '</strong>' +
-          (auth.format === 'units-not-stated' ? '<br><em>This authorization prints no unit figures.</em>' : '') +
-          (plan && authUnits !== null && plan.monthlyUnits !== authUnits
-            ? '<br><span style="color:var(--warn)"><strong>Plan and authorization disagree:</strong> the calendar totals ' +
-              plan.monthlyUnits + ' units a month against ' + authUnits + ' authorized.</span>' : '') +
-          '</div>'
-        : '<p style="font-size:13px;color:var(--danger)"><strong>No authorization on file.</strong> Nothing currently ' +
-          'authorises this service.</p>') +
-    '</div>' +
-
-    // notes
-    (c.notes ? '<div class="card"><div class="card-title"><span class="icon">📝</span> Notes</div>' +
-      '<div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap">' + esc(c.notes) + '</div></div>' : '');
+let _profTab = 'overview';
+// Her first-shift checklist (2026-10-21). Saved on the consumer record.
+function _prepSave(cid, fn) {
+  const list = getData('consumers');
+  const c = list.find(x => x.id === cid);
+  if (!c) return;
+  c.firstShiftPrep = Object.assign({}, c.firstShiftPrep);
+  fn(c);
+  setData('consumers', list);
+  renderProfile(); updateDashboard();
+}
+function prepToggle(cid, k, on) {
+  _prepSave(cid, c => {
+    if (on) c.firstShiftPrep[k] = { at: new Date().toISOString(), by: _acWho() };
+    else delete c.firstShiftPrep[k];
+  });
+}
+function prepShiftStyle(cid, v) {
+  _prepSave(cid, c => {
+    c.firstShiftPrep.shiftStyleChoice = v;
+    c.firstShiftPrep.shiftStyle = { at: new Date().toISOString(), by: _acWho() };
+  });
+}
+function lateReason(cid, reason) {
+  const list = getData('consumers');
+  const c = list.find(x => x.id === cid);
+  if (!c) return;
+  const noteEl = document.getElementById('late_note');
+  c.lateStart = Object.assign({}, c.lateStart, { reason, note: noteEl ? noteEl.value.trim() : ((c.lateStart || {}).note || ''),
+                                                at: new Date().toISOString(), by: _acWho() });
+  setData('consumers', list);
+  renderProfile(); updateDashboard();
+}
+function lateNote(cid) {
+  const list = getData('consumers');
+  const c = list.find(x => x.id === cid);
+  const el = document.getElementById('late_note');
+  if (!c || !el) return;
+  c.lateStart = Object.assign({}, c.lateStart, { note: el.value.trim(), at: new Date().toISOString(), by: _acWho() });
+  setData('consumers', list);
+  renderProfile(); updateDashboard();
 }
 
 // ============================================================
@@ -11100,7 +11333,8 @@ function renderDailyRoutine() {
   const steps = CDSRules.dailyRoutine({
     consumers: getData('consumers'), pipeline: getData('pipeline'),
     authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages'), calls: _leadCalls,
-    wellskyItems: CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date())
+    wellskyItems: CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date()),
+    firstShiftOf
   });
 
   // A new-lead alert that did not reach the office is shown in red until
@@ -11144,10 +11378,74 @@ function renderDailyRoutine() {
     '</div>';
 }
 
+// First worked WellSky shift for a hub consumer (yyyy-mm-dd), or null. Same
+// saved list the goal card reads; names match in either order.
+function firstShiftOf(c) {
+  if (!c || typeof CDSWellSky !== 'object') return null;
+  const check = getObj('wellskyCheck'), sh = check.shifts;
+  const pulledOn = sh && sh.at ? CDSWellSky.isoLocal(new Date(sh.at)) : '';
+  const first = CDSWellSky.mergeFirstShifts(getObj('firstShifts'), sh, pulledOn);
+  const keys = [c.name, c.wellskyName].filter(Boolean).map(CDSWellSky.nameKey);
+  let best = null;
+  Object.keys(first.people || {}).forEach(n => {
+    if (keys.includes(CDSWellSky.nameKey(n))) {
+      const d = first.people[n].date;
+      if (!best || d < best) best = d;
+    }
+  });
+  return best;
+}
+
+// The top of Today: hello, a one-line count, and what is coming up.
+function renderTodayTop() {
+  const hello = document.getElementById('todayHello');
+  if (hello) {
+    const h = new Date().getHours();
+    const email = ((document.getElementById('header_user') || {}).textContent || '').trim();
+    const first = email.split('@')[0].split(/[._-]/)[0];
+    const name = first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : '';
+    hello.textContent = (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (name ? ', ' + name : '');
+  }
+  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged' && c.status !== 'inactive');
+  const counts = document.getElementById('todayCounts');
+  if (counts) {
+    const att = getData('attendants').filter(a => a.status !== 'inactive').length;
+    counts.textContent = ' · ' + consumers.length + ' consumer' + (consumers.length === 1 ? '' : 's') +
+      ' · ' + att + ' attendant' + (att === 1 ? '' : 's');
+  }
+  const host = document.getElementById('todayComing');
+  if (!host) return;
+  const rows = [];
+  const soon = consumers.map(c => ({ c, r: ongoingRequirements(c).annual })).filter(x => x.r.soon && !x.r.overdue)
+    .sort((a, b) => a.r.days - b.r.days);
+  soon.forEach(x => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill warn">' +
+    (x.r.days > 31 ? '2 months left' : x.r.days + ' days left') + '</span> Face-to-face visit for <b>' + esc(x.c.name) +
+    '</b>, due by ' + esc(_niceDay(x.r.due)) + '</span><a href="#" onclick="openProfile(\'' + x.c.id + '\');return false">Book it</a></div>'));
+  const callsLeft = consumers.filter(c => !ongoingRequirements(c).monthly.doneThisMonth).length;
+  if (callsLeft) rows.push('<div class="cp-line"><span style="color:var(--cute-ink)">Monthly check-in calls: ' + callsLeft +
+    ' consumer' + (callsLeft === 1 ? ' still needs' : 's still need') + ' this month\'s call</span>' +
+    '<a href="#consumers" onclick="showPage(\'consumers\');return false">See who</a></div>');
+  consumers.forEach(c => {
+    const p = CDSRules.firstShiftPrep(c, firstShiftOf(c));
+    if (p.applies && !p.firstShift && p.start) rows.push('<div class="cp-line"><span style="color:var(--cute-ink)">' +
+      '<b>' + esc(c.name) + '</b> starts ' + esc(_niceDay(p.start)) + ': ' + p.done + ' of ' + p.total + ' ready for the first shift</span>' +
+      '<a href="#" onclick="openProfile(\'' + c.id + '\');return false">Open</a></div>');
+  });
+  host.innerHTML = rows.length ? '<div class="card"><div class="cute-title" style="font-size:19px;margin-bottom:6px">Coming up</div>' + rows.join('') + '</div>' : '';
+}
+function _niceDay(iso) {
+  if (!iso) return '';
+  const d = new Date(String(iso).slice(0, 10) + 'T12:00:00');
+  // The year only when it is not this year (a visit due next year must say so).
+  return d.toLocaleDateString('en-US', d.getFullYear() === new Date().getFullYear()
+    ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function updateDashboard() {
   // keep the morning list in step with everything else the dashboard shows
   try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   try { renderCdsGoal(); } catch (e) { console.error('cds goal:', e); }
+  try { renderTodayTop(); } catch (e) { console.error('today top:', e); }
   const consumers = getData('consumers').filter(c => c.status !== 'inactive');
   const attendants = getData('attendants').filter(a => a.status !== 'inactive');
   const now = new Date();

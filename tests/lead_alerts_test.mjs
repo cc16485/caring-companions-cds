@@ -195,7 +195,7 @@ for (const want of [
   '   1 active consumer has no authorization on file',
   '   1 expiring within 60 days',
   '3. Keep the case files clean',
-  '   1 monthly contact not yet logged this month',
+  '   1 monthly check-in call not yet logged this month',
   '4. Call the people waiting',
   '   5 new enquiries from the website, never contacted',
   '      Eve Fox, came in 11:00am Mon',

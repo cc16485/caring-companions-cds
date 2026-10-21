@@ -86,18 +86,23 @@
     visits.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const lastVisit = visits[0] || null;
     const anchor = (lastVisit && lastVisit.date) || (c.cdsStartDate || '').trim() || (c.empeonStartDate || '').trim();
-    let visitDue = null, visitDays = null;
+    let visitDue = null, visitDays = null, monthTen = null;
     if (anchor) {
       const d = new Date(anchor + 'T12:00:00');
       d.setDate(d.getDate() + 365);
       visitDue = iso(d);
       visitDays = Math.round((d - today) / DAY);
+      // Her rule (2026-10-21): tell the office at month 10, when 2 months are left.
+      const t = new Date(anchor + 'T12:00:00');
+      t.setMonth(t.getMonth() + 10);
+      monthTen = iso(t);
     }
     return {
       monthly: { doneThisMonth, thisMonth, last12, missed, everLogged: months.length },
       annual:  { visits, lastVisit, anchor, due: visitDue, days: visitDays,
                  overdue: visitDays !== null && visitDays < 0,
-                 soon: visitDays !== null && visitDays >= 0 && visitDays <= 45,
+                 soon: visitDays !== null && visitDays >= 0 && iso(today) >= monthTen,
+                 monthTen,
                  known: !!anchor }
     };
   }
@@ -179,17 +184,19 @@
       clear: 'Every consumer has a current authorization.'
     });
 
-    let visitsOverdue = 0, monthDue = 0;
+    let visitsOverdue = 0, visitsSoon = 0, monthDue = 0;
     consumers.forEach(c => {
       const r = ongoingRequirements(c, now);
       if (r.annual.overdue) visitsOverdue++;
+      else if (r.annual.soon) visitsSoon++;
       if (!r.monthly.doneThisMonth) monthDue++;
     });
     steps.push({
       n: 3, title: 'Keep the case files clean',
       items: [
         visitsOverdue && { t: plural(visitsOverdue, 'annual face-to-face visit', 'annual face-to-face visits') + ' overdue', go: 'consumers', bad: true },
-        monthDue      && { t: plural(monthDue, 'monthly contact', 'monthly contacts') + ' not yet logged this month', go: 'consumers' }
+        visitsSoon    && { t: plural(visitsSoon, 'face-to-face visit', 'face-to-face visits') + ' in the last 2 months, book ' + (visitsSoon === 1 ? 'it' : 'them') + ' now', go: 'consumers' },
+        monthDue      && { t: plural(monthDue, 'monthly check-in call', 'monthly check-in calls') + ' not yet logged this month', go: 'consumers' }
       ].filter(Boolean),
       clear: 'Contacts and visits are up to date.'
     });
@@ -212,7 +219,53 @@
       ].filter(Boolean),
       clear: 'Nobody is waiting on a call.'
     });
+
+    // Only the hub knows first shifts (data.firstShiftOf); the email skips this step.
+    if (typeof data.firstShiftOf === 'function') {
+      const prep = consumers.map(c => ({ c, p: firstShiftPrep(c, data.firstShiftOf(c)) })).filter(x => x.p.applies);
+      const notReady = prep.filter(x => !x.p.firstShift && !x.p.ready);
+      const why = prep.filter(x => x.p.needsReason);
+      steps.push({
+        n: 5, title: 'Get new consumers ready for the first shift',
+        items: [
+          notReady.length && { t: plural(notReady.length, 'new consumer', 'new consumers') + ' not ready for the first shift yet', go: 'consumers',
+                               bad: notReady.some(x => x.p.start && x.p.start <= todayIso),
+                               people: notReady.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.start })) },
+          why.length && { t: plural(why.length, 'late start needs', 'late starts need') + ' a reason written down', go: 'consumers', bad: true,
+                          people: why.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.firstShift })) }
+        ].filter(Boolean),
+        clear: 'New consumers are ready.'
+      });
+    }
     return steps;
+  }
+
+  // Her checklist (2026-10-21) for a new consumer between approval and the first
+  // shift. The authorization and tasks must be in WellSky before the start date.
+  const PREP_STEPS = [
+    { k: 'carePlan',     t: 'Get the care plan' },
+    { k: 'tasks',        t: 'Get the list of tasks' },
+    { k: 'shiftStyle',   t: 'Ask: set shifts, or shifts as needed?' },
+    { k: 'authWellSky',  t: 'Put the authorization in WellSky', beforeStart: true },
+    { k: 'tasksWellSky', t: 'Put the tasks in WellSky', beforeStart: true },
+    { k: 'toldClockIn',  t: 'Tell them they can call us for help with the first clock-in' }
+  ];
+  const LATE_REASONS = ['Waiting on FCSR', 'Waiting on EDL', 'Attendant paperwork', 'Authorization not in yet', 'Consumer not ready', 'Other'];
+  const PREP_FROM = Date.parse('2026-10-21T00:00:00-05:00');
+
+  // firstShift = yyyy-mm-dd of the first worked WellSky shift, or null.
+  // Applies to consumers added from 2026-10-21 (the hub's id is the time it was
+  // added), or anyone the office has started a checklist for.
+  function firstShiftPrep(c, firstShift) {
+    const prep = (c && c.firstShiftPrep) || {};
+    const applies = !!c && (Number(c.id) >= PREP_FROM || !!c.firstShiftPrep);
+    const steps = PREP_STEPS.map(s => Object.assign({}, s, { done: !!prep[s.k] }));
+    const done = steps.filter(s => s.done).length;
+    const start = String((c && c.cdsStartDate) || '').trim();
+    const late = !!(firstShift && start && firstShift > start);
+    return { applies, steps, done, total: steps.length, ready: done === steps.length,
+             shiftStyle: prep.shiftStyleChoice || '', start, firstShift: firstShift || null, late,
+             needsReason: applies && late && !(c.lateStart && c.lateStart.reason) };
   }
 
   // The name the hub gives a website lead when it imports it.
@@ -224,5 +277,5 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isFormNote, siteLeadName, CLOSED };
+                    dailyRoutine, isFormNote, siteLeadName, CLOSED, firstShiftPrep, PREP_STEPS, LATE_REASONS };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
