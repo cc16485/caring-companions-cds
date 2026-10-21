@@ -17,6 +17,7 @@
 // 8am email. This job never contacts anyone.
 import './wellsky.js';
 const W = globalThis.CDSWellSky;
+import { readReport, mergeFirstFromAnalytics } from './wellsky-analytics.js';
 
 export const AGENCY_ID = 'caring-companions-cds';
 const MAX_TEXT = 3e6;
@@ -37,7 +38,8 @@ export async function ingest(deps, body) {
 
   const kind = body && body.kind;
   // The installer's check that the key works; saves nothing.
-  if (kind === 'ping') return { ok: true, saved: false, live, kinds: ['shifts', 'auths', 'open', 'receipts'] };
+  if (kind === 'ping') return { ok: true, saved: false, live, kinds: ['shifts', 'auths', 'open', 'receipts', 'analytics'] };
+  if (kind === 'analytics' || kind === 'analytics_missing') return analytics(q, save, at, body);
   if (kind === 'failed') return failed(body.why);
   if (kind === 'open') {
     let o;
@@ -66,6 +68,38 @@ export async function ingest(deps, body) {
              on conflict (agency_id, data_key) do update set data_value = excluded.data_value`, [AGENCY_ID, JSON.stringify(next)]);
   }
   return { ok: true, saved: true, live, kind, consumers: r.consumers.length, [kind === 'shifts' ? 'shifts' : 'authorizations']: counted, unread: r.unread.length };
+}
+
+// ---------- WellSky Analytics reports by email (2026-10-21) ----------
+// The Google script in samantha@mo-care.com posts each emailed report (see
+// wellsky-analytics.js). Saved beside the Chrome reports in 'wellskyCheck' as
+// analytics.firstLast / analytics.authLogs, with its own analyticsRun, so the Chrome check
+// keeps working untouched while both run side by side. First and Last Carelog also feeds
+// 'firstShifts' (the 40 new consumers goal). { kind: 'analytics_missing', why } is the
+// script saying a report did not arrive by 7am, which shows in red (no silent failures).
+async function analytics(q, save, at, body) {
+  const report = String(body.report || '').slice(0, 80);
+  const failed = async why => {
+    why = String(why || 'unknown reason').replace(/\s+/g, ' ').slice(0, 300);
+    await save({ analyticsRun: { at, report, ok: false, why } });
+    return { ok: false, saved: false, recorded: true, why };
+  };
+  if (body.kind === 'analytics_missing') return failed(body.why || 'a WellSky Analytics email did not arrive');
+  let r;
+  try { r = readReport(body); }
+  catch (e) { return failed(e && e.wellsky ? e.message : 'the "' + report + '" email could not be read'); }
+  const received = /^\d{4}-\d{2}-\d{2}T/.test(String(body.received || '')) ? String(body.received).slice(0, 24) : at;
+  const cur = (await q(`select data_value v from agency_data where agency_id = $1 and data_key = 'wellskyCheck'`, [AGENCY_ID]))[0];
+  const prevA = (cur && cur.v && cur.v.analytics) || {};
+  const part = r.which === 'firstLast' ? { at, received, consumers: r.consumers, unread: r.unread } : { at, received, shifts: r.shifts, unread: r.unread };
+  await save({ analytics: Object.assign({}, prevA, { [r.which]: part }), analyticsRun: { at, report, ok: true, why: '' } });
+  if (r.which === 'firstLast') {
+    const prev = (await q(`select data_value from agency_data where agency_id = $1 and data_key = 'firstShifts'`, [AGENCY_ID]))[0];
+    const next = mergeFirstFromAnalytics(prev && prev.data_value, r);
+    await q(`insert into agency_data (agency_id, data_key, data_value) values ($1, 'firstShifts', $2::jsonb)
+             on conflict (agency_id, data_key) do update set data_value = excluded.data_value`, [AGENCY_ID, JSON.stringify(next)]);
+  }
+  return { ok: true, saved: true, report, consumers: r.consumers ? r.consumers.length : undefined, shifts: r.shifts ? r.shifts.length : undefined, unread: r.unread.length };
 }
 
 // ---------- receipts (2026-10-20) ----------

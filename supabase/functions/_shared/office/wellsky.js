@@ -243,11 +243,21 @@
   // Nothing at all until the first pull has happened, so the office is not told about
   // a check that was never switched on.
   function items(check, reviewed, now) {
-    if (!check || !check.lastRun) return [];
+    if (!check || (!check.lastRun && !check.analyticsRun)) return [];
     now = now || new Date();
     const today = isoLocal(now);
     const tag = check.live ? '' : 'Practice: ';
     const out = [];
+    // The WellSky Analytics reports by email (2026-10-21): red when a report did not arrive
+    // or could not be read, or when none has come in for over a day.
+    if (check.analyticsRun) {
+      const a = check.analytics || {};
+      const got = Math.min(Date.parse((a.firstLast && a.firstLast.at) || 0) || 0, Date.parse((a.authLogs && a.authLogs.at) || 0) || 0);
+      if (!check.analyticsRun.ok) out.push({ t: tag + 'WellSky email report problem: ' + check.analyticsRun.why, go: 'authorizations', bad: true });
+      else if (!got || now - got > STALE_HOURS * 36e5)
+        out.push({ t: tag + 'The WellSky email reports have not all arrived ' + (got ? 'since ' + short(isoLocal(new Date(got))) : 'yet') + '. Check Reports > Analytics > Schedules in WellSky.', go: 'authorizations', bad: true });
+    }
+    if (!check.lastRun) return out;
     const okAt = Math.min(Date.parse((check.shifts && check.shifts.at) || 0) || 0, Date.parse((check.auths && check.auths.at) || 0) || 0,
                           check.open ? (Date.parse(check.open.at || 0) || 0) : Infinity);
     if (!okAt || now - okAt > STALE_HOURS * 36e5) {

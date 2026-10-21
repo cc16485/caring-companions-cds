@@ -165,7 +165,7 @@ const db = { query: async (t, p) => pg.query(t, p) };
 const saved = async () => (await pg.query(`select data_value v from agency_data where agency_id=$1 and data_key='wellskyCheck'`, [AGENCY_ID])).rows[0]?.v;
 eq((await pg.query(`select value->>'live' l from cds_match_settings where key='wellsky_check'`)).rows[0].l, 'false', 'starts in practice, and running the SQL twice is safe');
 let t0 = Date.parse('2026-10-19T11:30:00Z');
-eq([await ingest({ db, now: () => 0 }, { kind: 'ping' }), await saved()], [{ ok: true, saved: false, live: false, kinds: ['shifts', 'auths', 'open', 'receipts'] }, undefined], 'a ping saves nothing and names the steps it knows');
+eq([await ingest({ db, now: () => 0 }, { kind: 'ping' }), await saved()], [{ ok: true, saved: false, live: false, kinds: ['shifts', 'auths', 'open', 'receipts', 'analytics'] }, undefined], 'a ping saves nothing and names the steps it knows');
 const res = await ingest({ db, now: () => t0 }, { kind: 'shifts', text: shiftsText });
 eq([res.ok, res.saved, res.live, res.consumers, res.shifts], [true, true, false, 2, 22], 'a schedule report is saved');
 await ingest({ db, now: () => t0 + 6e4 }, { kind: 'auths', text: authText });
