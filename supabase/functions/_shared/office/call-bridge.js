@@ -96,7 +96,8 @@ export function createCallBridge(deps) {
   }
 
   const record = (me, action, target, detail) =>
-    q(`insert into cds_audit (actor, action, target, detail) values ($1,$2,$3,$4::jsonb)`, [me, action, target, JSON.stringify(detail)]);
+    q(`insert into cds_audit (at, actor, action, target, detail) values ($1,$2,$3,$4,$5::jsonb)`,
+      [new Date(now()).toISOString(), me, action, target, JSON.stringify(detail)]);
 
   // person: { email, name } from their lead link. lead: the site_leads row.
   async function ring(person, lead) {
