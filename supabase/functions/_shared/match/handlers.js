@@ -781,7 +781,7 @@ export function createMatch(deps) {
     async overview({ staff: s }) {
       who(s);
       const now = await nowIso();
-      const ids = await q('select id from attendant_pool where coalesce(archived,false)=false');
+      const ids = await q("select id from attendant_pool where coalesce(archived,false)=false and (coalesce(source,'') <> 'apply' or exists (select 1 from cds_packets k where k.pool_id = attendant_pool.id and k.list_choice = 'join'))");
       let listed = 0, complete = 0, toReview = 0, stale = 0, notReviewed = 0;
       for (const { id } of ids) {
         const c = await loadCaregiver(id);
@@ -803,7 +803,8 @@ export function createMatch(deps) {
     async caregivers({ staff: s }) {
       who(s);
       const now = await nowIso();
-      const ids = await q('select id from attendant_pool where coalesce(archived,false)=false order by submitted_at desc');
+      // Applicants with a consumer (caringcds.com/apply) show here only if they chose to be listed.
+      const ids = await q("select id from attendant_pool where coalesce(archived,false)=false and (coalesce(source,'') <> 'apply' or exists (select 1 from cds_packets k where k.pool_id = attendant_pool.id and k.list_choice = 'join')) order by submitted_at desc");
       const out = [];
       for (const { id } of ids) out.push(await staffCaregiverRow(await loadCaregiver(id), now));
       return { caregivers: out };

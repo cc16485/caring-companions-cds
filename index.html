@@ -12861,9 +12861,12 @@ async function renderBackupPool() {
   if (!_db) { table.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Database not connected.</p>'; return; }
   table.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Loading…</p>';
 
+  // Applicants from caringcds.com/apply already have a consumer: they live in
+  // Attendants > Active Attendants (Applying), not in this pool (her call 2026-10-21).
   const { data, error } = await _db.from('attendant_pool')
     .select('*')
     .eq('agency_id', AGENCY_ID)
+    .or('source.is.null,source.neq.apply')
     .order('submitted_at', { ascending: false });
 
   if (error) {
