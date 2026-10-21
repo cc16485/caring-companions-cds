@@ -9,6 +9,9 @@
 // WELLSKY_INGEST_KEY, kept in cds-security, never in this public repo): { kind: 'confirm',
 // receipt } uses the parked report; { kind: 'failed', why } and { kind: 'ping' } as before.
 // The key never goes into a web page (2026-10-20).
+// From Google (header x-wellsky-key = secret WELLSKY_GOOGLE_KEY, 2026-10-21): only
+// { kind: 'analytics' | 'analytics_missing' | 'ping' }, the WellSky Analytics reports that
+// arrive by email (wellsky/google-script.gs, _shared/office/wellsky-analytics.js).
 // Writes only wellsky_inbox and agency_data 'wellskyCheck' and 'firstShifts'. Never sends a message to anyone.
 import postgres from 'npm:postgres@3.4.4';
 import { ingest, submit, confirm } from '../_shared/office/wellsky-ingest.js';
@@ -44,6 +47,13 @@ Deno.serve(async (req: Request) => {
       if (req.headers.get('origin') !== ORIGIN) return json({ ok: false, error: 'not allowed' }, 401);
       const r = await submit({ db }, body);
       return json(r, r.ok ? 200 : 400);
+    }
+    // The Google script in samantha@mo-care.com (2026-10-21) has its own key, which can only
+    // hand over the emailed WellSky Analytics reports (or say one did not arrive).
+    const google = env('WELLSKY_GOOGLE_KEY');
+    if (google && same(key, google)) {
+      if (!body || !['analytics', 'analytics_missing', 'ping'].includes(body.kind)) return json({ ok: false, error: 'not allowed' }, 401);
+      return json(await ingest({ db }, body));
     }
     if (!same(key, env('WELLSKY_INGEST_KEY'))) return json({ ok: false, error: 'not allowed' }, 401);
     if (body && body.kind === 'confirm') return json(await confirm({ db }, body.receipt));
