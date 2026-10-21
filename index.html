@@ -2289,6 +2289,9 @@
     </div>
   </div>
 
+  <!-- Switches (2026-10-20): drawn by renderSwitches() from the cds-switches server function -->
+  <div id="switchesCard"></div>
+
   <!-- GHL CONTACT SYNC -->
   <div class="card" style="margin-bottom:20px">
     <div class="card-title"><span class="icon">🔄</span> GoHighLevel Contact Sync</div>
@@ -5161,6 +5164,79 @@ function acUpdate(key) {
 }
 function acLeave(key) { const d = _acFind('different', key); if (!d) return; _acReview('different:' + key, { choice: 'leave', sig: d.sig }); renderAttendantCheck(); }
 
+// ============================================================
+// SWITCHES (2026-10-20, Samantha: "only me can change them for now (Zach in March, Krystal view
+// only), and include the Caregiver Match messages switch with the stronger warning"). What runs on
+// its own in the CDS hub. Read and changed through the cds-switches server function, which checks
+// who is signed in and records every change. The confirm step is inside the row, not a pop-up,
+// because pop-ups can be blocked when the hub is open inside GoHighLevel.
+// ============================================================
+let _swData = null, _swAsk = '', _swNote = null;
+async function _swCall(body) {
+  const { data } = await _db.auth.getSession();
+  const jwt = data && data.session ? data.session.access_token : '';
+  let r;
+  try {
+    r = await fetch(SUPABASE_URL + '/functions/v1/cds-switches', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt }, body: JSON.stringify(body) });
+  } catch (e) { throw new Error('The switches could not be reached. Check the connection and try again.'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'The switches could not be reached.');
+  return j;
+}
+async function renderSwitches(reload) {
+  const host = document.getElementById('switchesCard');
+  if (!host || !_db) return;
+  if (!_swData || reload !== false) {
+    host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div><div style="font-size:13px;color:var(--gray-600)">Loading…</div></div>';
+    try { _swData = await _swCall({ action: 'list' }); }
+    catch (e) { host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div><div class="alert alert-danger" style="font-size:13px"><div>' + esc(e.message) + '</div></div></div>'; return; }
+  }
+  const d = _swData;
+  const when = iso => iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  const pill = on => '<span class="badge ' + (on ? 'badge-green' : 'badge-gray') + '" style="min-width:34px;text-align:center">' + (on ? 'On' : 'Off') + '</span>';
+  const rows = d.switches.map(s => {
+    const lastLine = s.last ? (s.last.by ? 'Last changed by ' + s.last.by + ', ' + when(s.last.at) + '.' : 'Set up by an install script, ' + when(s.last.at) + '.') : '';
+    let right;
+    if (!s.ready) right = '<span style="font-size:12px;color:var(--gray-600)">Not set up yet</span>';
+    else if (!d.canChange) right = pill(s.on);
+    else if (_swAsk === s.key) right = pill(s.on);
+    else right = pill(s.on) + ' <button class="btn btn-sm ' + (s.on ? 'btn-outline' : 'btn-primary') + '" style="font-size:11.5px;margin-left:6px" onclick="swAsk(\'' + s.key + '\')">' + (s.on ? 'Turn off' : 'Turn on') + '</button>';
+    let h = '<div style="padding:10px 0;border-top:1px solid var(--gray-200)">' +
+      '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">' +
+        '<div style="flex:1;min-width:240px"><div style="font-weight:700;font-size:13.5px">' + esc(s.label) + (s.warn ? ' ⚠️' : '') + '</div>' +
+        '<div style="font-size:12.5px;color:var(--gray-800);margin-top:2px">' + esc(s.does) + '</div>' +
+        (s.warn ? '<div style="font-size:12.5px;color:var(--danger);font-weight:600;margin-top:2px">' + esc(s.warn) + '</div>' : '') +
+        (lastLine ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:3px">' + esc(lastLine) + '</div>' : '') + '</div>' +
+        '<div style="white-space:nowrap">' + right + '</div></div>';
+    if (_swAsk === s.key) {
+      const turnOn = !s.on;
+      h += '<div class="alert ' + (s.warn && turnOn ? 'alert-danger' : 'alert-warn') + '" style="font-size:13px;margin-top:8px"><div>' +
+        '<strong>Turn ' + (turnOn ? 'on' : 'off') + ' ' + esc(s.label) + '?</strong><br>' + esc(turnOn ? s.confirmOn : s.confirmOff) +
+        '<div style="margin-top:8px"><button class="btn btn-sm ' + (turnOn ? 'btn-primary' : 'btn-outline') + '" onclick="swSet(\'' + s.key + '\',' + turnOn + ')">Turn ' + (turnOn ? 'on' : 'off') + '</button> ' +
+        '<button class="btn btn-sm btn-outline" onclick="swAsk(\'\')">Cancel</button></div></div></div>';
+    }
+    if (_swNote && _swNote.key === s.key) h += '<div style="font-size:12.5px;margin-top:6px;font-weight:600;color:' + (_swNote.bad ? 'var(--danger)' : 'var(--success)') + '">' + esc(_swNote.text) + '</div>';
+    return h + '</div>';
+  }).join('');
+  host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
+    '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
+    rows + '</div>';
+}
+function swAsk(key) { _swAsk = key; _swNote = null; renderSwitches(false); }
+async function swSet(key, on) {
+  _swAsk = '';
+  try {
+    const r = await _swCall({ action: 'set', key, on });
+    // "Done. Turned off by Samantha at 2:14 PM."
+    _swNote = { key, text: r.message.replace(/\.$/, '') + ' at ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '.', bad: false };
+    await renderSwitches(true);
+  } catch (e) {
+    _swNote = { key, text: 'Could not change it: ' + e.message.replace(/\s*Nothing changed\.?\s*$/, '').replace(/\.$/, '') + '. Nothing changed.', bad: true };
+    renderSwitches(false);
+  }
+}
+
 function addAttendant() {
   const name = document.getElementById('a_name').value.trim();
   if (!name) { alert('Attendant name is required.'); return; }
@@ -6730,6 +6806,7 @@ function clearOutreachLog() {
 // AUTOMATIONS TAB
 // ============================================================
 function renderAutomations() {
+  renderSwitches();
   renderPendingOutreaches();
   renderQuickSendGrid();
   renderOutreachLog();
