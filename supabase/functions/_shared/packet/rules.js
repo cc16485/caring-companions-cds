@@ -127,8 +127,12 @@ export function status(p, forms, scr, profile) {
   else if (scr && scr.findings) { label = 'FCSR findings'; tone = 'r'; next = 'Owner review of the FCSR findings.'; }
   else if (!clear) { label = 'Run EDL and FCSR'; tone = 'r'; next = 'Run the checks: ' + ((scr && scr.missing) || []).filter(m => !/^Identity/.test(m)).join(', ') + '.'; }
   else if (!p.empeon_invited_at) { label = 'Send Empeon invite'; tone = 'r'; next = 'Checks are clear. Send the Empeon invite (Copy for Empeon).'; }
-  else if (!s2 || !p.empeon_done_at || !p.call_slot) { label = 'Finishing onboarding'; tone = 'b'; next = 'Waiting on them: ' + [!s2 && 'sign their papers', !p.empeon_done_at && 'finish Empeon', !p.call_slot && 'book the ID check'].filter(Boolean).join(', ') + '.'; }
-  else if (!p.id_checked_at) { label = 'ID check booked'; tone = 'y'; next = '5-minute ID check ' + p.call_slot + ': see their ID live, then I-9 Section 2 in Empeon.'; }
-  else { label = 'Finish in Empeon'; tone = 'r'; next = [!p.i9_done_at && 'Complete I-9 Section 2 in Empeon', !(forms.contract && forms.contract.countersigned_at) && 'countersign the contract'].filter(Boolean).join(', then ') + '.'; }
+  else {
+    const them = [!s2 && 'sign their papers', !p.empeon_done_at && 'finish Empeon', !p.orientation_done_at && 'finish the orientation', !p.call_slot && 'book the ID check'].filter(Boolean);
+    const us = [!p.i9_done_at && 'complete I-9 Section 2 in Empeon', !(forms.contract && forms.contract.countersigned_at) && s2 && 'countersign the contract'].filter(Boolean);
+    if (p.call_slot && !p.id_checked_at) { label = 'ID check booked'; tone = 'y'; next = '5-minute ID check ' + p.call_slot + ': see their ID live, then I-9 Section 2 in Empeon.' + (them.length ? ' Still waiting on them to ' + them.join(', ') + '.' : ''); }
+    else if (p.id_checked_at && us.length) { label = 'Finish in Empeon'; tone = 'r'; next = us.join(', then ').replace(/^./, c => c.toUpperCase()) + '.' + (them.length ? ' Still waiting on them to ' + them.join(', ') + '.' : ''); }
+    else { label = 'Finishing onboarding'; tone = 'b'; next = them.length ? 'Waiting on them to ' + them.join(', ') + '.' : 'Waiting on the last steps.'; }
+  }
   return { label, tone, next, active, step1: s1, checksClear: clear, step2Open: s1 && clear, step2Signed: s2, steps, now: nextStep ? nextStep.key : null };
 }

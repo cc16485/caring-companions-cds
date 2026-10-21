@@ -36,6 +36,8 @@ function tenAm(iso, n) {
 
 export function createPacket(h) {
   const { q, one, nowIso, audit, setting, crypto, links, ensureProfile, caregiverLink, loadCaregiver, R, fail, deps } = h;
+  // Office to-dos close themselves when their step is done.
+  const closeTasks = (poolId, kind, by) => q(`update cds_tasks set done_at=now(), done_by=$3 where pool_id=$1 and kind=$2 and done_at is null`, [poolId, kind, by || 'packet']);
 
   // ---------- sending (every message lands in the outbox, nothing fails silently) ----------
   async function send({ template, channel, audience, pool_id, to, vars, by }) {
@@ -313,6 +315,7 @@ export function createPacket(h) {
       await q(`update cds_packets set ${col[0]}=coalesce(${col[0]}, now()), ${col[1]}=coalesce(${col[1]}, $2), updated_at=now() where pool_id=$1`, [pool_id, staff]);
       if (what === 'id_checked') await q(`insert into cds_screening_checks (pool_id, check_key, result, checked_on, note, recorded_by)
         values ($1,'id_match','clear', (now() at time zone 'America/Chicago')::date, 'Seen on the 5-minute ID video call', $2)`, [pool_id, staff]);
+      await closeTasks(pool_id, { empeon_invited: 'packet_empeon', id_checked: 'packet_call' }[what] || '-', staff);
       await audit('staff:' + staff, 'packet_' + what, 'pool:' + pool_id, {});
       const y = await load(pool_id);
       if (y.st.active && !y.p.active_at) { await q('update cds_packets set active_at=now() where pool_id=$1', [pool_id]); await audit('system', 'packet_active', 'pool:' + pool_id, {}); }
@@ -361,6 +364,7 @@ export function createPacket(h) {
       // Step 2 opens: tell them once.
       if (x.st.step2Open && !x.p.step2_opened_at) {
         await q('update cds_packets set step2_opened_at=now() where pool_id=$1', [pool_id]);
+        await closeTasks(pool_id, 'packet_checks', 'checks clear');
         const token = await crypto.token();
         await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)', [pool_id, await crypto.hash(token), 'packet-step2', addDays(now, R.CAREGIVER_LINK_DAYS)]);
         const link = packetLink(token);
