@@ -65,6 +65,9 @@ export const leadGhl = createLeadGhl({
   },
 });
 
+// For jobs that only read and write the database (cds-oig). Same JSON fix as above.
+export const db = { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) };
+
 // Called only by the schedule (header x-cron-secret = secret CDS_JOB_SECRET).
 export function scheduled(handler: (body: Record<string, unknown>) => Promise<unknown>) {
   return async (req: Request) => {
