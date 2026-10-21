@@ -3,7 +3,7 @@
 // shares the caregiver's private link, their attendant_pool row, the sealed SSN
 // (cds_screening_secret), the FCSR steps and the outbox with Caregiver Match.
 //
-// Public  : applyStart (the one link everyone forwards: findcdscaregivers.com/apply)
+// Public  : applyStart (the one link everyone forwards: caringcds.com/apply)
 // Attendant (their private link): packet, packetSave, packetEsign, packetIdentity,
 //           packetSign, packetBookCall, packetSelf (orientation / Empeon done)
 // Office  : packetList, packetGet, packetMark, packetCountersign, packetCopy
@@ -66,6 +66,9 @@ export function createPacket(h) {
     await ensureProfile(poolId);
     await q(`insert into cds_packets (pool_id, via, consumer_name) values ($1,$2,$3) on conflict (pool_id) do nothing`, [poolId, via, consumer || null]);
   }
+  // Her call 2026-10-21: the packet lives on caringcds.com (caringcds.com/apply/?c=...),
+  // the agency's own site; findcdscaregivers.com is only the directory profile.
+  const packetLink = token => (links.packet ? links.packet(token) : links.caregiver(token) + '&view=packet');
   // Date of birth on file and the SSN sealed.
   const identityDone = async (poolId, scr) => !!(scr && scr.dob) && !!(await one('select 1 as y from cds_screening_secret where pool_id=$1', [poolId]));
   const nameOf = (pool) => [pool.first_name, pool.last_name].filter(Boolean).join(' ');
@@ -91,7 +94,7 @@ export function createPacket(h) {
         await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)',
           [existing.id, await crypto.hash(token), 'apply-repeat', addDays(now, R.CAREGIVER_LINK_DAYS)]);
         await send({ template: 'att_link', channel: 'sms', audience: 'caregiver', pool_id: existing.id, to: existing.phone,
-          vars: { first: existing.first_name, link: links.caregiver(token) + '&view=packet' }, by: 'apply' });
+          vars: { first: existing.first_name, link: packetLink(token) }, by: 'apply' });
         await audit('public', 'packet_start_repeat', 'pool:' + existing.id, {});
         return { ok: true, repeat: true, message: 'We already have you on file, so we texted your private link to the phone number we have. Questions? Call (417) 218-2888.' };
       }
@@ -104,7 +107,7 @@ export function createPacket(h) {
       const token = await crypto.token();
       await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)',
         [r.id, await crypto.hash(token), 'apply', addDays(now, R.CAREGIVER_LINK_DAYS)]);
-      const link = links.caregiver(token) + '&view=packet';
+      const link = packetLink(token);
       await send({ template: 'att_link', channel: 'sms', audience: 'caregiver', pool_id: r.id, to: fmtPhone(d), vars: { first, link }, by: 'apply' });
       // Not finished in 2 and 4 days: one reminder each, daytime only.
       await q('update cds_packets set reminders = $2::jsonb where pool_id=$1',
@@ -360,7 +363,7 @@ export function createPacket(h) {
         await q('update cds_packets set step2_opened_at=now() where pool_id=$1', [pool_id]);
         const token = await crypto.token();
         await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)', [pool_id, await crypto.hash(token), 'packet-step2', addDays(now, R.CAREGIVER_LINK_DAYS)]);
-        const link = links.caregiver(token) + '&view=packet';
+        const link = packetLink(token);
         await send({ template: 'att_step2_open', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first, link } });
         await send({ template: 'att_step2_open', channel: 'email', audience: 'caregiver', pool_id, to: pool.email, vars: { first, link } });
         await h.task('packet_empeon', ('Checks clear: send the Empeon invite to ' + nameOf(pool) + ' (Copy for Empeon).').slice(0, 300), { pool_id }, 'packet_empeon:' + pool_id,
@@ -378,7 +381,7 @@ export function createPacket(h) {
         if (r.kind === 'step1') {
           const token = await crypto.token();
           await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)', [pool_id, await crypto.hash(token), 'packet-reminder', addDays(now, R.CAREGIVER_LINK_DAYS)]);
-          await send({ template: 'att_step1_reminder', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first, link: links.caregiver(token) + '&view=packet' } });
+          await send({ template: 'att_step1_reminder', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first, link: packetLink(token) } });
         } else await send({ template: 'att_orient_reminder', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first } });
         r.sent_at = now; changed = true; sent++;
       }

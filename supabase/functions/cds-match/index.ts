@@ -19,7 +19,8 @@ import { createMatch, MatchError } from '../_shared/match/handlers.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const SITE = env('CDS_MATCH_SITE') || 'https://findcdscaregivers.com';
-const ALLOWED_ORIGINS = [SITE, 'https://hub.caringcds.com', 'https://www.findcdscaregivers.com'];
+// caringcds.com hosts the attendant packet (caringcds.com/apply, 2026-10-21).
+const ALLOWED_ORIGINS = [SITE, 'https://hub.caringcds.com', 'https://www.findcdscaregivers.com', 'https://caringcds.com', 'https://www.caringcds.com'];
 const GHL = 'https://services.leadconnectorhq.com';
 const GHL_LOC = env('CDS_GHL_LOCATION_ID');
 const MEDIA_BUCKET = 'cds-directory-media';
@@ -140,7 +141,8 @@ const match = createMatch({
     await ghlFetch('/conversations/messages', { method: 'POST', body: JSON.stringify({ type: channel === 'sms' ? 'SMS' : 'Email',
       contactId: contact.contact?.id, message: body, ...(channel === 'email' ? { subject, html: body.replace(/\n/g, '<br>') } : {}) }) });
   },
-  links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}` },
+  links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}`,
+           packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}` },
 });
 
 function cors(origin: string | null) {

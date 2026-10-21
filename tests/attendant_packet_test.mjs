@@ -45,7 +45,7 @@ const tokenOf = link => new URL(link).searchParams.get('c');
 await refuses(() => H('public', 'applyStart', { first_name: 'Jordan', last_name: 'Ellis', phone: '417-555-0142', email: 'j@x.test' }), /who you will care for/, 'consumer name required');
 await refuses(() => H('public', 'applyStart', { consumer_name: 'Ruth Ellis', first_name: 'Jordan', last_name: 'Ellis', phone: '555-0142', email: 'j@x.test' }), /10-digit/, 'phone checked');
 const st = await H('public', 'applyStart', { consumer_name: 'Ruth Ellis', first_name: 'Jordan', last_name: 'Ellis', phone: '(417) 555-0142', email: 'J@X.test' });
-ok(st.ok && /view=packet/.test(st.link), 'new attendant gets their private link on screen');
+ok(st.ok && /[?&]c=/.test(st.link), 'new attendant gets their private link on screen');
 const link = tokenOf(st.link);
 const pool = (await pg.query(`select * from attendant_pool where first_name='Jordan'`)).rows[0];
 ok(pool.source === 'apply' && pool.knows_consumer === 'Ruth Ellis' && pool.email === 'j@x.test', 'attendant_pool row made (source apply)');
