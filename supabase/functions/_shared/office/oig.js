@@ -132,6 +132,8 @@ export function checkPerson(person, rows) {
   return { result: matches.length ? 'possible_match' : 'clear', matches };
 }
 
+export class OigError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
+
 // ---------- the database side ----------
 // deps: { db: { query(text, params) -> { rows } }, now?: () => ms, fetchList?: () => { text, lastModified }, minPeople?: number }
 export function createOig(deps) {
@@ -236,12 +238,86 @@ export function createOig(deps) {
     return { ok: true, live: isLive, file_month: run.file_month, checked: out.length, possible: out.filter(x => x.result === 'possible_match').length, failed: failedN, people: out };
   }
 
-  // Every attendant not marked inactive on the hub's Attendants list. Reads the list, never writes it.
+  // Every attendant not marked inactive on the hub's Attendants list (read, never written), and
+  // everyone who signed Step 1 of the new application (caringcds.com/apply), by their legal name.
   async function recheckAll() {
     const r = await one(`select data_value from agency_data where agency_id=$1 and data_key='attendants'`, [AGENCY_ID]);
     const list = (r && Array.isArray(r.data_value) ? r.data_value : []).filter(a => a && a.status !== 'inactive' && String(a.name || '').trim());
-    return check({ source: 'recheck', people: list.map(a => ({ ref: 'attendant:' + a.id, name: a.name, ...splitName(a.name), dob: a.dob, state: a.state })) });
+    const pools = await q(`select p.id, p.first_name, p.last_name, s.legal_first, s.legal_middle, s.legal_last, s.dob::text dob, k.answers->>'state' state
+      from cds_packets k join attendant_pool p on p.id = k.pool_id left join cds_screening s on s.pool_id = p.id
+      where k.step1_signed_at is not null and not coalesce(p.archived, false) order by p.last_name, p.first_name`);
+    return check({ source: 'recheck', people: [
+      ...list.map(a => ({ ref: 'attendant:' + a.id, name: a.name, ...splitName(a.name), dob: a.dob, state: a.state })),
+      ...pools.map(p => ({ ref: 'pool:' + p.id, first: p.legal_first || p.first_name, middle: p.legal_middle || '', last: p.legal_last || p.last_name,
+        name: [p.legal_first || p.first_name, p.legal_last || p.last_name].join(' '), dob: p.dob, state: p.state || 'MO' }))] });
   }
 
-  return { importList, download, checkPerson: checkPersonDb, check, recheckAll, live };
+  // ---------- the hub (signed-in office) ----------
+  // Who may decide a possible match: the Caregiver Match staff list and the switch owners.
+  async function staffList() {
+    const rows = await q(`select key, value from cds_match_settings where key in ('staff_emails','switch_owners')`);
+    return [...new Set(rows.flatMap(r => Array.isArray(r.value) ? r.value : []).map(e => String(e).trim().toLowerCase()))];
+  }
+  async function mustBeStaff(email) {
+    if (!(await staffList()).includes(String(email || '').toLowerCase())) throw new OigError('This sign-in is not on the CDS office staff list.', 403);
+  }
+
+  // What the hub card shows: the list month, the last recheck, possible matches nobody has decided,
+  // and each person's latest result (so the Roster can count an automatic clear as this month's OIG).
+  const ts = v => v == null ? null : new Date(v).toISOString();
+  async function officeList(email) {
+    await mustBeStaff(email);
+    const run = await latest();
+    const lastFail = await one(`select started_at, error from cds_oig_runs where status='failed' order by started_at desc limit 1`);
+    const recheck = await one(`select max(checked_at) at from cds_oig_results where source='recheck'`);
+    const latestRows = await q(`select distinct on (person_ref) id, person_ref, person, result, matches, checked_at, file_month, source, review, reviewed_by, reviewed_at
+      from cds_oig_results order by person_ref, checked_at desc`);
+    latestRows.forEach(r => { r.checked_at = ts(r.checked_at); r.reviewed_at = ts(r.reviewed_at); });
+    const open = latestRows.filter(r => r.result === 'possible_match' && !r.review)
+      .sort((a, b) => String(a.checked_at).localeCompare(String(b.checked_at)));
+    const people = {};
+    for (const r of latestRows) people[r.person_ref] = { result: r.result, review: r.review || null, checked_at: r.checked_at, file_month: r.file_month };
+    return { live: await live(),
+      list: run ? { file_month: run.file_month, loaded_at: ts(run.finished_at), people: run.row_count } : null,
+      failed: lastFail && (!run || ts(lastFail.started_at) > ts(run.finished_at)) ? { at: ts(lastFail.started_at), error: lastFail.error } : null,
+      last_recheck: recheck && ts(recheck.at),
+      open: open.map(r => ({ id: r.id, ref: r.person_ref, person: r.person, checked_at: r.checked_at, file_month: r.file_month, source: r.source, matches: r.matches })),
+      people };
+  }
+
+  // A person decides: 'not_them' or 'is_them'. Closes the to-do. For someone from the new
+  // application, the decision is also their OIG check (clear or not clear), recorded as that person.
+  async function review(email, { id, decision } = {}) {
+    await mustBeStaff(email);
+    email = String(email).toLowerCase();
+    if (!['not_them', 'is_them'].includes(decision)) throw new OigError('Pick Not them or This is them.');
+    const r = await one(`select id, person_ref, person, file_month, review from cds_oig_results where id::text=$1 and result='possible_match'`, [String(id || '')]);
+    if (!r) throw new OigError('That OIG match was not found. Refresh and try again.', 404);
+    if (r.review) throw new OigError('Someone already decided this one. Refresh to see it.', 409);
+    const at = now();
+    const done = await one(`update cds_oig_results set review=$2, reviewed_by=$3, reviewed_at=$4 where id=$1 and review is null returning id`, [r.id, decision, email, at]);
+    if (!done) throw new OigError('Someone already decided this one. Refresh to see it.', 409);
+    await q(`update cds_tasks set done_at=$2, done_by=$3 where dedupe_key=$1 and done_at is null`, ['oig:' + r.person_ref + ':' + r.file_month, at, email]);
+    const name = [r.person && r.person.first, r.person && r.person.last].filter(Boolean).join(' ');
+    if (r.person_ref.startsWith('pool:')) {
+      await q(`insert into cds_screening_checks (pool_id, check_key, result, checked_on, note, recorded_by)
+               values ($1::uuid, 'oig', $2, (($3::timestamptz) at time zone 'America/Chicago')::date, $4, $5)`,
+        [r.person_ref.slice(5), decision === 'not_them' ? 'clear' : 'not_clear', at,
+         (decision === 'not_them' ? 'Not them: reviewed the OIG possible match (' : 'This is them: on the OIG exclusion list (') + r.file_month + ')', email]);
+    }
+    await q(`insert into cds_audit (actor, action, target, detail) values ($1, 'oig_review', $2, $3::jsonb)`,
+      [email, r.person_ref, JSON.stringify({ decision, result_id: r.id, file_month: r.file_month })]);
+    return { ok: true, decision, ref: r.person_ref, message: decision === 'not_them'
+      ? 'Saved. ' + name + ' is not the person on the OIG list.'
+      : 'Saved as a match. Someone on the OIG list cannot be paid with Medicaid money, so ' + name + ' cannot work CDS shifts.' };
+  }
+
+  async function office(email, body) {
+    const action = String((body && body.action) || 'list');
+    if (action === 'list') return officeList(email);
+    if (action === 'review') return review(email, body);
+    throw new OigError('Unknown request');
+  }
+
+  return { importList, download, checkPerson: checkPersonDb, check, recheckAll, live, office };
 }

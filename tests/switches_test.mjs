@@ -36,14 +36,14 @@ const s = createSwitches({ db: { query: (t, p) => pg.query(t, p) }, now: () => T
 let v = await s.handle('krystal@mo-care.com', { action: 'list' });
 ok(v.canChange === false, 'Krystal sees the switches but cannot change them');
 eq(v.switches.map(x => x.label), ['New lead alerts', '8am morning email', 'Website leads into GoHighLevel', 'Attendant check in the morning email',
-  'WellSky check in the morning email', 'Caregiver sign-up alerts', 'Attendant application alerts', 'Attendant application texts', 'Caregiver Match messages'], 'the nine switches, in order');
+  'WellSky check in the morning email', 'Caregiver sign-up alerts', 'Attendant application alerts', 'Attendant application texts', 'Automatic OIG check', 'Caregiver Match messages'], 'the ten switches, in order');
 eq(v.switches.map(x => [x.key, x.ready, x.on]), [['lead_alerts', true, true], ['morning_email', true, true], ['lead_ghl', true, true],
-  ['attendant_check', true, false], ['wellsky_check', false, false], ['office_alerts', true, false], ['packet_alerts', false, false], ['packet_messages', false, false], ['messages_live', true, false]], 'states (WellSky and the packet not set up in this copy)');
+  ['attendant_check', true, false], ['wellsky_check', false, false], ['office_alerts', true, false], ['packet_alerts', false, false], ['packet_messages', false, false], ['oig_check', false, false], ['messages_live', true, false]], 'states (WellSky and the packet not set up in this copy)');
 eq(v.switches[0].does, 'Emails Samantha, Krystal and Zach the moment a website lead comes in. Texts them weekdays 9am to 4pm, plus one reminder after 30 minutes if nobody has called.', 'lead alerts wording from the real setting');
 eq(v.switches[1].does, 'Emails the "Do this first" list to Samantha and Krystal at 8am on weekdays.', 'morning email wording');
 eq(v.switches[5].does, 'Emails Samantha and Krystal and Zach when someone signs up on findcdscaregivers.com.'.replace('Samantha and Krystal and Zach', 'Samantha, Krystal and Zach'), 'sign-up alerts wording (two samantha addresses said once)');
-eq(v.switches[8].warn, 'This one reaches caregivers and families.', 'the stronger warning');
-eq(v.switches[8].confirmOn, 'From now on, texts and emails written in Caregiver Match go to real caregivers and families.', 'messages confirm wording');
+eq(v.switches[9].warn, 'This one reaches caregivers and families.', 'the stronger warning');
+eq(v.switches[9].confirmOn, 'From now on, texts and emails written in Caregiver Match go to real caregivers and families.', 'messages confirm wording');
 ok(v.switches[0].last && v.switches[0].last.by === '' && v.switches[0].last.script, 'before any change: says it was set by an install script');
 
 // ---------- who can change ----------

@@ -78,8 +78,10 @@ await pg.exec(strip(readFileSync(ROOT + '/cds_public_insert_lock.sql', 'utf8')))
 await pg.exec(strip(readFileSync(ROOT + '/caregiver_match_phase1.sql', 'utf8')));
 await pg.exec(`create table agency_data (id uuid primary key default gen_random_uuid(), agency_id text, data_key text, data_value jsonb, unique (agency_id, data_key));
   do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
+await pg.exec(strip(readFileSync(ROOT + '/caregiver_signup_alert.sql', 'utf8')));
 const SQL = strip(readFileSync(ROOT + '/oig_check.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
+await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));
 ok(true, 'the SQL runs twice');
 eq((await pg.query(`select value from cds_match_settings where key='oig_check'`)).rows[0].value, { live: false }, 'starts in practice');
 
@@ -165,6 +167,77 @@ imp = await oig.download();
 eq([imp.ok, imp.file_month, imp.people], [true, '2026-11', 6], 'the November list loads');
 eq(await count(`select count(*)::int n from cds_oig_leie`), 6, 'and replaces October');
 eq((await oig.checkPerson({ first: 'Megan', last: 'Smith', dob: '1990-01-05' })).result, 'clear', 'someone taken off the list no longer matches');
+
+// ---------- the monthly recheck also covers the new application (caringcds.com/apply) ----------
+const pool = (await pg.query(`insert into attendant_pool (agency_id, first_name, last_name, phone) values ('caring-companions-cds','Bob','Jones','4175550111') returning id`)).rows[0].id;
+const pool2 = (await pg.query(`insert into attendant_pool (agency_id, first_name, last_name, phone) values ('caring-companions-cds','Nobody','Here','4175550112') returning id`)).rows[0].id;
+await pg.query(`insert into cds_packets (pool_id, step1_signed_at, answers) values ($1, now(), '{"state":"MO"}'), ($2, null, '{}')`, [pool, pool2]);
+await pg.query(`insert into cds_screening (pool_id, legal_first, legal_last, dob) values ($1, 'Robert', 'Jones', '1966-11-11')`, [pool]);
+NOW = Date.parse('2026-12-11T13:00:00Z');
+download = async () => ({ text: CSV, lastModified: 'Wed, 09 Dec 2026 12:00:00 GMT' });
+await oig.download();
+c = await oig.recheckAll();
+const poolRow = c.people.find(p => p.ref === 'pool:' + pool);
+eq([poolRow && poolRow.name, poolRow && poolRow.result, poolRow && poolRow.matches[0].strength], ['Robert Jones', 'possible_match', 'strong'], 'someone who signed Step 1 is rechecked by legal name and birth date');
+ok(!c.people.some(p => p.ref === 'pool:' + pool2), 'someone who has not signed Step 1 is not rechecked');
+
+// ---------- the hub card: list and decide ----------
+await pg.query(`insert into cds_match_settings (key, value) values ('switch_owners', '["samantha@mo-care.com"]'::jsonb) on conflict (key) do update set value = excluded.value`);
+await pg.query(`update cds_match_settings set value = '["samantha@caringcds.com","krystal@mo-care.com"]'::jsonb where key='staff_emails'`);
+const offRefuses = async (fn, want, m) => { try { await fn(); ok(false, m + ' (did not refuse)'); } catch (e) { eq([e.message, e.status], want, m); } };
+await offRefuses(() => oig.office('someone@gmail.com', { action: 'list' }), ['This sign-in is not on the CDS office staff list.', 403], 'only the office staff list sees the card');
+let card = await oig.office('Krystal@mo-care.com', { action: 'list' });
+eq([card.live, card.list.file_month, card.list.people, card.failed], [true, '2026-12', 7, null], 'the card: list month, people, no failure');
+ok(card.last_recheck && card.last_recheck.startsWith('2026-12-11'), 'the card: last recheck');
+eq(card.open.map(o => o.ref).sort(), ['attendant:a1', 'attendant:a4', 'packet:1', 'pool:' + pool].sort(), 'open possible matches, latest result per person (packet:1 from October is still waiting)');
+eq(card.open[0].ref, 'packet:1', 'oldest first');
+eq(card.people['attendant:a2'].result, 'clear', 'each person\'s latest result, for the Roster');
+const forPool = card.open.find(o => o.ref === 'pool:' + pool);
+await offRefuses(() => oig.office('krystal@mo-care.com', { action: 'review', id: forPool.id, decision: 'maybe' }), ['Pick Not them or This is them.', 400], 'only the two answers');
+await offRefuses(() => oig.office('krystal@mo-care.com', { action: 'review', id: '00000000-0000-0000-0000-000000000000', decision: 'not_them' }), ['That OIG match was not found. Refresh and try again.', 404], 'an unknown match');
+const taskOpen = async ref => count(`select count(*)::int n from cds_tasks where dedupe_key like $1 and done_at is null`, ['oig:' + ref + ':%']);
+eq(await taskOpen('pool:' + pool), 1, 'live: the Robert Jones to-do is open');
+let rv = await oig.office('krystal@mo-care.com', { action: 'review', id: forPool.id, decision: 'not_them' });
+eq(rv.message, 'Saved. Robert Jones is not the person on the OIG list.', 'Not them wording');
+await offRefuses(() => oig.office('samantha@mo-care.com', { action: 'review', id: forPool.id, decision: 'is_them' }), ['Someone already decided this one. Refresh to see it.', 409], 'decided once');
+eq(await taskOpen('pool:' + pool), 0, 'deciding closes the to-do');
+const chkRow = (await pg.query(`select check_key, result, checked_on::text d, recorded_by, note from cds_screening_checks where pool_id=$1`, [pool])).rows;
+eq(chkRow, [{ check_key: 'oig', result: 'clear', d: '2026-12-11', recorded_by: 'krystal@mo-care.com', note: 'Not them: reviewed the OIG possible match (2026-12)' }], 'for an applicant it is recorded as their OIG check, as that person');
+const aud = (await pg.query(`select actor, action, target, detail->>'decision' d from cds_audit where action='oig_review'`)).rows;
+eq(aud, [{ actor: 'krystal@mo-care.com', action: 'oig_review', target: 'pool:' + pool, d: 'not_them' }], 'every decision is in the audit log');
+const forA1 = card.open.find(o => o.ref === 'attendant:a1');
+rv = await oig.office('samantha@mo-care.com', { action: 'review', id: forA1.id, decision: 'is_them' });
+eq(rv.message, 'Saved as a match. Someone on the OIG list cannot be paid with Medicaid money, so Robert Jones cannot work CDS shifts.', 'This is them wording');
+eq(await count(`select count(*)::int n from cds_screening_checks where note like 'This is them%'`), 0, 'a Roster attendant has no screening record to write (the Roster is changed by a person)');
+card = await oig.office('samantha@mo-care.com', { action: 'list' });
+eq(card.open.map(o => o.ref), ['packet:1', 'attendant:a4'], 'decided matches leave the card');
+eq([card.people['attendant:a1'].review, card.people['pool:' + pool].review], ['is_them', 'not_them'], 'and show as decided');
+ok(!/[—–]/.test(JSON.stringify(card) + rv.message), 'no em dashes');
+
+// ---------- the card's words ----------
+const H = await import(ROOT + '/caregiver-match/hub-oig.js');
+let w = H.cardWords(card, new Date('2026-12-14T15:00:00Z'));
+eq(w.people[0].we[3], ['Checked', 'Oct 11 (application)'], 'an application check');
+eq(w.people[0].them[0].why, 'Same name and same birth date', 'strong first');
+ok(w.people[0].them[0].strong, 'strong is marked');
+eq(w.lines, ['Runs by itself. The December OIG list is loaded (7 people, Dec 11).', 'Everyone was last rechecked Dec 11. Next recheck Jan 11.'], 'card lines (on)');
+eq([w.practice, w.bad, w.clear, w.people.map(p => p.title)], [false, null, null, ['Mary Smith may be on the OIG list', 'Maria De La Cruz may be on the OIG list']], 'two to look at');
+eq(w.people[1].we, [['Name', 'Maria De La Cruz'], ['Born', 'not given'], ['State', 'not given'], ['Checked', 'Dec 11 (monthly recheck)']], 'we checked');
+eq(w.people[1].them[0], { why: 'Same name, no birth date to compare', strong: false, rows: [['Name', 'Maria De La Cruz'], ['Born', '7/4/1975'], ['Lives', 'Saint Louis, MO'], ['Job', 'Personal Care Provid'], ['Excluded since', '2/2/2022']] }, 'the OIG side');
+w = H.cardWords({ live: false, list: null, failed: null, last_recheck: null, open: [], people: {} }, new Date('2026-10-21T15:00:00Z'));
+eq([w.practice, w.bad, w.clear, w.lines], [true, 'The OIG list is not loaded yet. Check exclusions.oig.hhs.gov by hand until it is.', 'No possible matches. Nobody to look at.',
+  ['The first monthly recheck of everyone is Nov 11.', 'Practice: results show here, but they do not count as anyone\'s OIG check yet and make no to-dos.']], 'card in practice, nothing loaded');
+w = H.cardWords({ live: true, list: card.list, failed: { at: '2027-01-11T11:00:00Z', error: 'x' }, last_recheck: null, open: [], people: {} }, new Date('2027-01-11T15:00:00Z'));
+eq(w.bad, 'The OIG list did not download on Jan 11. Last month\'s list is still in use. If this stays, check exclusions.oig.hhs.gov by hand.', 'a failed download shows');
+eq(H.nextRun(new Date(2026, 9, 10)), 'Oct 11', 'next run before the 11th');
+const cardSrc = readFileSync(ROOT + '/caregiver-match/hub-oig.js', 'utf8');
+ok(!/[—–]/.test(cardSrc.replace(/\/\/.*$/gm, '')), 'no em dashes on the card');
+ok(!/confirm\(|alert\(/.test(cardSrc), 'the card never uses a pop-up');
+for (const t of ['Not them', 'This is them', 'Yes, save', 'Cancel', 'IS the person on the OIG list? They cannot work CDS shifts.',
+  'is NOT the person on the OIG list? Only if the birth date or other details are clearly different.', 'How to decide: compare the birth date, city and job.'])
+  ok(cardSrc.includes(t), 'card says: ' + t);
+const hub = readFileSync(ROOT + '/index.html', 'utf8');
+ok(hub.includes('<div id="oigCard"></div>') && hub.includes("/functions/v1/cds-oig") && hub.includes('oigPeople:'), 'the hub mounts the card on Active Attendants');
 
 console.log(`\n${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);
