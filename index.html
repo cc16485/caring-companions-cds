@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=3"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=2"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=3"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -461,6 +461,7 @@
     <span id="dashDate" style="font-size:13px;color:var(--gray-600)"></span>
   </div>
 
+  <div id="cdsGoal" style="margin-bottom:18px"></div>
   <div id="dailyRoutine" style="margin-bottom:18px"></div>
 
   <div class="alert alert-warn">
@@ -10939,6 +10940,122 @@ function loadQuarterStatus() {
 // not any single screen, it is knowing what to do first. This is one prescribed
 // sequence, ordered by consequence: things the state can act on, then money,
 // then people waiting on a call. Work top to bottom and stop when it is clean.
+// ---------- 40 new CDS consumers (2026-10-20) ----------
+// Samantha: "I want the goals to look just like the cds consumer cute houses look in the
+// other caring companions client goals page." The same street of houses as the CC Hub's
+// Client Goals tab, but counted for her: a house lights up when a new consumer's attendant
+// works the FIRST shift in WellSky (her rule). The rules are in wellsky.js (newConsumers);
+// the server keeps each first shift in 'firstShifts'. This card only reads, except
+// "Leave out", which saves to 'cdsGoal'.
+function _cgHouse(lit) {
+  const dash = lit ? '' : ' stroke-dasharray="3 3"';
+  return '<svg class="cg-house' + (lit ? ' lit' : '') + '" viewBox="0 0 40 40" aria-hidden="true">' +
+    '<path d="M5 19 L20 6 L35 19" fill="' + (lit ? '#2a7d78' : 'none') + '" stroke="#0e3860" stroke-width="2" stroke-linejoin="round"' + dash + '/>' +
+    '<rect x="9" y="18" width="22" height="17" rx="1.5" fill="' + (lit ? '#fff' : 'none') + '" stroke="#0e3860" stroke-width="2"' + dash + '/>' +
+    (lit ? '<rect x="12.5" y="21.5" width="6" height="6" rx="1" fill="#F0A63A"/><rect x="22" y="25" width="5.5" height="10" rx="1" fill="#0e3860"/>' : '') +
+    '</svg>';
+}
+function _cgCheer(p) {
+  if (p >= 100) return 'Every house on the street has its lights on.';
+  if (p >= 75) return 'The street is filling up. Just a few dark windows left.';
+  if (p >= 50) return 'Half the street is lit.';
+  if (p >= 25) return 'The neighborhood is growing.';
+  return 'Every new consumer turns on another light.';
+}
+const _cgDay = ymd => new Date(ymd + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function _cgStyles() {
+  if (document.getElementById('cgCss')) return;
+  const st = document.createElement('style'); st.id = 'cgCss';
+  st.textContent = `
+.cg-card{background:#fff;border:1px solid var(--gray-300);border-radius:16px;padding:18px 20px;box-shadow:0 1px 0 rgba(13,54,95,.04);}
+.cg-head{display:flex;gap:12px;align-items:center;margin-bottom:10px;}
+.cg-title{font-size:16.5px;font-weight:800;color:var(--primary);}
+.cg-note{font-size:12.5px;color:var(--gray-600);}
+.cg-big{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin:4px 0 2px;}
+.cg-num{font-size:44px;font-weight:800;color:var(--primary);letter-spacing:-.03em;line-height:1;}
+.cg-of{font-size:15px;font-weight:700;color:#55677a;}
+.cg-pct{margin-left:auto;background:#EAF4F6;color:#14606F;font-weight:800;border-radius:999px;padding:4px 12px;font-size:14px;}
+.cg-pct.won{background:#F0A63A;color:#3D2600;}
+.cg-cheer{font-size:13.5px;font-weight:700;color:#8A4E0C;margin:2px 0 8px;}
+.cg-street{display:flex;flex-wrap:wrap;gap:8px 4px;padding:12px;background:#EAF4F6;border-radius:14px;margin:6px 0 8px;align-items:flex-end;}
+.cg-house{width:38px;height:38px;opacity:.55;border-bottom:4px solid #CADDD9;padding-bottom:1px;transition:transform .25s;}
+.cg-house.lit{opacity:1;}
+.cg-house.lit:hover{transform:translateY(-3px);}
+.cg-house.pop{animation:cgPop .7s cubic-bezier(.2,1.6,.4,1);}
+.cg-togo{font-size:14px;background:#faf9f6;border-radius:10px;padding:9px 12px;margin:8px 0;}
+.cg-togo.won{background:#FFF4E3;color:#5C3A06;}
+.cg-who{font-size:13px;margin:8px 0 0;display:grid;gap:4px;}
+.cg-who b{color:var(--primary);}
+.cg-link{background:none;border:0;color:var(--success);font-size:12px;text-decoration:underline;cursor:pointer;padding:0;margin-left:6px;}
+.cg-foot{font-size:12px;color:#8a978f;border-top:1px solid var(--gray-300);margin-top:12px;padding-top:10px;}
+@keyframes cgPop{0%{transform:scale(.4)}100%{transform:scale(1)}}
+@media (max-width:600px){.cg-card{padding:14px;}.cg-num{font-size:36px;}.cg-house{width:32px;height:32px;}}
+@media (prefers-reduced-motion:reduce){.cg-house.pop{animation:none;}}
+`;
+  document.head.appendChild(st);
+}
+// The saved first shifts, plus whatever this morning's report shows, so the card is right
+// even on a morning the server has not caught up yet.
+function _cgResult() {
+  const check = getObj('wellskyCheck'), sh = check.shifts;
+  const pulledOn = sh && sh.at ? CDSWellSky.isoLocal(new Date(sh.at)) : '';
+  const first = CDSWellSky.mergeFirstShifts(getObj('firstShifts'), sh, pulledOn);
+  return { r: CDSWellSky.newConsumers(first, getData('consumers'), getObj('cdsGoal')), hasData: !!(sh || first.from) };
+}
+function renderCdsGoal() {
+  const host = document.getElementById('cdsGoal');
+  if (!host) return;
+  _cgStyles();
+  const { r, hasData } = _cgResult();
+  const pc = Math.round(r.count / r.target * 100), left = Math.max(0, r.target - r.count);
+  let streets = '';
+  for (let i = 0; i < Math.max(r.target, r.count); i++) {
+    const p = r.people[i];
+    streets += p ? '<span title="' + esc(p.name + ', first shift ' + _cgDay(p.date)) + '">' + _cgHouse(true) + '</span>' : _cgHouse(false);
+  }
+  const daysLeft = (Date.parse(r.by + 'T12:00:00') - Date.now()) / 864e5;
+  let togo;
+  if (!left) togo = '<div class="cg-togo won"><b>Goal reached!</b>' + (r.count > r.target ? ' ' + (r.count - r.target) + ' past the goal.' : '') + '</div>';
+  else if (daysLeft > 0) togo = '<div class="cg-togo"><b>' + left + ' more to go.</b> By ' + _cgDay(r.by) + ', that is about <b>' +
+    Math.max(1, Math.round(left / Math.max(daysLeft / 30.4, 1))) + ' a month</b> (about ' + Math.max(1, Math.round(left / Math.max(daysLeft / 7, 1))) + ' a week).</div>';
+  else togo = '<div class="cg-togo"><b>' + left + ' more to go.</b> The goal date (' + _cgDay(r.by) + ') has passed.</div>';
+  const who = r.people.map(p => '<div><b>' + esc(p.name) + '</b> first shift ' + esc(_cgDay(p.date)) + (p.attendant ? ', attendant ' + esc(p.attendant) : '') +
+    ' <button class="cg-link" data-k="' + esc(p.key) + '" onclick="cdsGoalLeaveOut(this.dataset.k, true)">Not a new consumer? Leave out</button></div>').join('');
+  const out = r.leftOut.map(p => '<div style="color:var(--gray-600)">Left out: ' + esc(p.name) +
+    ' <button class="cg-link" data-k="' + esc(p.key) + '" onclick="cdsGoalLeaveOut(this.dataset.k, false)">Put back</button></div>').join('');
+  host.innerHTML = '<div class="cg-card"><div class="cg-head">' +
+    '<svg width="34" height="34" viewBox="0 0 40 40" aria-hidden="true"><path d="M5 19 L20 6 L35 19" fill="#54bdb8" stroke="#0e3860" stroke-width="2" stroke-linejoin="round"/><rect x="9" y="18" width="22" height="17" rx="1.5" fill="#fff" stroke="#0e3860" stroke-width="2"/><rect x="22" y="25" width="5.5" height="10" rx="1" fill="#0e3860"/></svg>' +
+    '<div><div class="cg-title">New CDS consumers</div><div class="cg-note">Counted from WellSky when an attendant works the first shift. Goal: ' + r.target + ' by ' +
+    esc(new Date(r.by + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })) + '.</div></div></div>' +
+    '<div class="cg-big"><span class="cg-num">' + r.count + '</span><span class="cg-of"> of ' + r.target + ' new consumers</span><span class="cg-pct' + (pc >= 100 ? ' won' : '') + '">' + pc + '%</span></div>' +
+    '<div class="cg-cheer">' + esc(_cgCheer(pc)) + '</div>' +
+    '<div class="cg-street" id="cgStreet">' + streets + '</div>' + togo +
+    (who || out ? '<div class="cg-who">' + who + out + '</div>' : '') +
+    '<div class="cg-foot">' + (hasData ? '' : '<b style="color:var(--danger)">Waiting for the first WellSky check, so nothing can be counted yet.</b> ') +
+    'Counts consumers new since ' + esc(_cgDay(r.from)) + ', 2026. Anyone who was already your consumer before then never counts, even after a break. Updated every morning by the WellSky check.</div></div>';
+  // A house lit since this computer last looked pops in.
+  try {
+    const seen = Number(localStorage.getItem('cdsGoalSeen') || 'NaN');
+    if (Number.isFinite(seen) && r.count > seen) {
+      const lit = host.querySelectorAll('.cg-house.lit');
+      for (let i = seen; i < lit.length; i++) lit[i].classList.add('pop');
+    }
+    localStorage.setItem('cdsGoalSeen', String(r.count));
+  } catch (e) {}
+}
+function cdsGoalLeaveOut(key, leave) {
+  const p = _cgResult().r;
+  const person = p.people.concat(p.leftOut).find(x => x.key === key);
+  if (!person) return;
+  if (leave && !confirm('Leave ' + person.name + ' out of the 40? Do this only if they are not a new consumer.')) return;
+  const g = Object.assign({}, getObj('cdsGoal'));
+  g.leftOut = Object.assign({}, g.leftOut);
+  if (leave) g.leftOut[key] = { at: new Date().toISOString(), by: _acWho() };
+  else delete g.leftOut[key];
+  setObj('cdsGoal', g);
+  renderCdsGoal();
+}
+
 function renderDailyRoutine() {
   const host = document.getElementById('dailyRoutine');
   if (!host) return;
@@ -10995,6 +11112,7 @@ function renderDailyRoutine() {
 function updateDashboard() {
   // keep the morning list in step with everything else the dashboard shows
   try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
+  try { renderCdsGoal(); } catch (e) { console.error('cds goal:', e); }
   const consumers = getData('consumers').filter(c => c.status !== 'inactive');
   const attendants = getData('attendants').filter(a => a.status !== 'inactive');
   const now = new Date();

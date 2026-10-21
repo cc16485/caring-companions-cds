@@ -9,7 +9,7 @@
 // WELLSKY_INGEST_KEY, kept in cds-security, never in this public repo): { kind: 'confirm',
 // receipt } uses the parked report; { kind: 'failed', why } and { kind: 'ping' } as before.
 // The key never goes into a web page (2026-10-20).
-// Writes only wellsky_inbox and agency_data 'wellskyCheck'. Never sends a message to anyone.
+// Writes only wellsky_inbox and agency_data 'wellskyCheck' and 'firstShifts'. Never sends a message to anyone.
 import postgres from 'npm:postgres@3.4.4';
 import { ingest, submit, confirm } from '../_shared/office/wellsky-ingest.js';
 
