@@ -24,7 +24,7 @@ function setUp() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('morning').timeBased().atHour(6).nearMinute(20).everyDays(1).inTimezone('America/Chicago').create();
   ScriptApp.newTrigger('lateCheck').timeBased().atHour(7).nearMinute(30).everyDays(1).inTimezone('America/Chicago').create();
-  GmailApp.createLabel(LABEL);
+  if (!GmailApp.getUserLabelByName(LABEL)) GmailApp.createLabel(LABEL);
   var r = post({ kind: 'ping' });
   Logger.log(r.ok ? 'Ready. The hub accepted the key.' : 'The hub did not accept the key: ' + (r.error || r.why || 'unknown'));
   morning();
