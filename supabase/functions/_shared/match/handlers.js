@@ -14,6 +14,7 @@
 
 import * as R from './rules.js';
 import { TEMPLATES, fill, CONSENT_WORDING, FCSR_EXPLAINER, PROVIDER_CHOICE, FCSR_EMPLOYER } from './messages.js';
+import { createPacket } from '../packet/handlers.js';
 
 export class MatchError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -1376,7 +1377,12 @@ export function createMatch(deps) {
     },
   };
 
-  const ROLES = { public: pub, family, caregiver, staff };
+  // The attendant packet (2026-10-21): same link, pool row and screening records.
+  const packet = createPacket({ q, one, nowIso, audit, setting, task, crypto, links, ensureProfile, caregiverLink, loadCaregiver, R, fail, deps });
+  Object.assign(pub, packet.pub); Object.assign(caregiver, packet.att); Object.assign(staff, packet.office);
+  // 'job' is only reachable with the schedule's secret (checked in the edge function).
+  const job = { packetJob: () => packet.packetJob() };
+  const ROLES = { public: pub, family, caregiver, staff, job };
   return {
     async handle(role, action, input = {}) {
       const r = ROLES[role];

@@ -2425,6 +2425,8 @@
 
 <!-- ==================== CAREGIVER MATCH (findcdscaregivers.com) ==================== -->
 <div id="page-caregivermatch" class="page"><div id="cm_root"></div></div>
+<!-- Active Attendants (2026-10-21): new applications + the Roster in one list, each opening a profile. -->
+<div id="page-activeattendants" class="page"><div id="hp_root"></div></div>
 
 <!-- ==================== BACKUP ATTENDANT POOL ==================== -->
 <div id="page-backuppool" class="page">
@@ -4443,6 +4445,7 @@ const SECTIONS = [
       { page: 'careplans',      label: 'Care Plan Days' },
       { page: 'profile',        label: 'Consumer Profile' } ] },
   { id: 'attendants', label: '🧑‍🤝‍🧑 Attendants',  tabs: [
+      { page: 'activeattendants', label: 'Active Attendants' },
       { page: 'attendants',     label: 'Roster' },
       { page: 'caregivermatch', label: 'Caregiver Match' },
       { page: 'backuppool',     label: 'Caregiver Pool' },
@@ -4559,6 +4562,7 @@ function showPage(id) {
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'backuppool') renderBackupPool();
   if (id === 'caregivermatch') renderCaregiverMatch();
+  if (id === 'activeattendants') renderActiveAttendants();
   if (id === 'profile') renderProfile();
 }
 
@@ -4566,6 +4570,36 @@ function showPage(id) {
 // goes through the cds-match server as staff with this Hub sign-in; the server
 // also checks the email is on its staff list.
 let _cmMounted = false;
+// Active Attendants: same staff sign-in and server as Caregiver Match.
+async function cdsMatchApi(action, input = {}) {
+  const { data } = await _db.auth.getSession();
+  const jwt = data && data.session ? data.session.access_token : '';
+  let r;
+  try {
+    r = await fetch(SUPABASE_URL + '/functions/v1/cds-match', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt },
+      body: JSON.stringify({ role: 'staff', action, input }) });
+  } catch { throw new Error('The CDS server could not be reached. Check the connection and try again.'); }
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || 'The CDS server could not be reached. Try Refresh.');
+  return body;
+}
+let _hpMounted = false;
+async function renderActiveAttendants() {
+  if (_hpMounted) return;
+  const root = document.getElementById('hp_root');
+  root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
+  try {
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=1');
+    root.innerHTML = '';
+    mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
+      openRoster: () => showPage('attendants'), openMatch: () => showPage('caregivermatch') });
+    _hpMounted = true;
+  } catch (e) {
+    root.innerHTML = '<div style="padding:24px;color:#a8342a">Active Attendants could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
+  }
+}
+
 async function renderCaregiverMatch() {
   if (_cmMounted) return;
   const root = document.getElementById('cm_root');

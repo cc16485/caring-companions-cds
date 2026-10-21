@@ -8,6 +8,8 @@
 //   staff     : Authorization: Bearer <CDS Hub sign-in>; the email comes from
 //               the verified sign-in, never from the request body.
 //
+//   job       : x-cron-secret = CDS_JOB_SECRET (the attendant packet's reminders, 2026-10-21)
+//
 // Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_URL (built in),
 //          CDS_GHL_TOKEN, CDS_GHL_LOCATION_ID, CDS_MATCH_SSN_KEY (64 hex chars),
 //          CDS_MATCH_SITE (https://findcdscaregivers.com)
@@ -17,7 +19,8 @@ import { createMatch, MatchError } from '../_shared/match/handlers.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const SITE = env('CDS_MATCH_SITE') || 'https://findcdscaregivers.com';
-const ALLOWED_ORIGINS = [SITE, 'https://hub.caringcds.com', 'https://www.findcdscaregivers.com'];
+// caringcds.com hosts the attendant packet (caringcds.com/apply, 2026-10-21).
+const ALLOWED_ORIGINS = [SITE, 'https://hub.caringcds.com', 'https://www.findcdscaregivers.com', 'https://caringcds.com', 'https://www.caringcds.com'];
 const GHL = 'https://services.leadconnectorhq.com';
 const GHL_LOC = env('CDS_GHL_LOCATION_ID');
 const MEDIA_BUCKET = 'cds-directory-media';
@@ -138,7 +141,8 @@ const match = createMatch({
     await ghlFetch('/conversations/messages', { method: 'POST', body: JSON.stringify({ type: channel === 'sms' ? 'SMS' : 'Email',
       contactId: contact.contact?.id, message: body, ...(channel === 'email' ? { subject, html: body.replace(/\n/g, '<br>') } : {}) }) });
   },
-  links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}` },
+  links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}`,
+           packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}` },
 });
 
 function cors(origin: string | null) {
@@ -157,6 +161,14 @@ Deno.serve(async req => {
     const i: Record<string, unknown> = { ...input };
     delete i.staff; delete i.session;
     if (role === 'family') i.session = req.headers.get('x-cds-session') || undefined;
+    // Signatures record where they came from, from the request, never the body.
+    delete i.ip; delete i.agent;
+    if (role === 'caregiver') { i.ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim(); i.agent = req.headers.get('user-agent') || ''; }
+    // The packet job (reminders, Step 2 opening) runs on the schedule's secret only.
+    if (role === 'job') {
+      const secret = env('CDS_JOB_SECRET');
+      if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'not allowed' }, 401);
+    }
     if (role === 'staff') {
       const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
       const u = await admin.auth.getUser(jwt);
