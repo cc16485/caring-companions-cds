@@ -104,12 +104,16 @@ const oigRow = (await pg.query(`select * from cds_screening_checks where pool_id
 ok(oigRow.length === 1 && oigRow[0].result === 'clear' && oigRow[0].recorded_by === 'oig-automatic', 'OIG ran itself at Step 1: clear, recorded');
 ok((await pg.query(`select count(*)::int n from cds_oig_results where person_ref=$1`, ['pool:' + pool.id])).rows[0].n === 1, 'OIG result saved for the audit trail');
 const t1 = (await pg.query(`select * from cds_tasks where pool_id=$1`, [pool.id])).rows;
-ok(t1.length === 1 && /Run EDL and FCSR for Jordan Ellis/.test(t1[0].title) && t1[0].due_at, 'office to-do: run EDL and FCSR, due next business day 4pm');
+ok(t1.length === 1 && /^Consumer waiting: Run EDL and FCSR for Jordan Ellis/.test(t1[0].title) && t1[0].due_at, 'office to-do is marked Consumer waiting');
+{ const hrs = (new Date(t1[0].due_at) - Date.now()) / 36e5; ok(hrs > 0 && hrs <= 72, 'urgent: due today 4pm or the next weekday at noon (' + hrs.toFixed(1) + ' hr)'); }
+const inMatch = (await S('caregivers', {})).caregivers.map(c => c.first_name);
+ok(inMatch.includes('Jordan'), 'an applicant who chose "list me" is in Caregiver Match');
 const ob1 = (await outbox()).filter(o => o.pool_id === pool.id);
 const office = ob1.filter(o => o.audience === 'office');
 ok(office.filter(o => o.channel === 'email').length === 3, 'office alert emailed to Samantha, Krystal, Zach');
 ok(office.every(o => /OIG: clear, checked automatically/.test(o.body)), 'office alert says OIG is already clear');
 ok(office.every(o => o.status === 'practice') && office.every(o => !o.body.includes('912')), 'office alerts practice only, never an SSN');
+ok(office.every(o => /^Consumer waiting: Step 1 signed/.test(o.body)), 'alert subject starts with Consumer waiting');
 const after = ob1.filter(o => o.template === 'packet_att_after_step1');
 ok(after.length === 2 && after.every(o => /orientation/.test(o.body) && /handbook/.test(o.body)), 'attendant gets orientation + handbook by text and email');
 ok(!JSON.stringify(ob1).includes('—'), 'no em dashes in any message');
@@ -178,6 +182,7 @@ ok(/Approve their profile/.test(fin.status.next), 'listed path: reminds the offi
 // ---------- reminders ----------
 const st2 = await H('public', 'applyStart', { consumer_name: 'Gene Porter', first_name: 'Brenda', last_name: 'Cole', phone: '4175550105', email: 'b@x.test' });
 const bpool = (await pg.query(`select id from attendant_pool where first_name='Brenda'`)).rows[0].id;
+ok(!(await S('caregivers', {})).caregivers.some(c => c.first_name === 'Brenda'), 'an applicant with a consumer who has not chosen "list me" stays out of Caregiver Match');
 await pg.query(`update cds_packets set reminders = jsonb_build_array(jsonb_build_object('kind','step1','due_at', now() - interval '1 minute')) where pool_id=$1`, [bpool]);
 job = await H('job', 'packetJob', {});
 const hr = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date());

@@ -74,11 +74,16 @@ export function mountHubPacket(el, opts) {
     draw();
   }
   function rows() {
-    const pk = list.map(a => ({ kind: 'packet', id: a.pool_id, name: a.name, label: a.label, tone: a.tone, active: a.active,
-      meta: [a.consumer, a.next].filter(Boolean).join(' · ') }));
+    // A consumer is waiting on every applicant from caringcds.com/apply: those go first,
+    // oldest first, with how long it has been (her call 2026-10-21: these are urgent).
+    const ago = iso => { if (!iso) return ''; const h = Math.round((Date.now() - new Date(iso)) / 36e5); return h < 1 ? 'just now' : h < 24 ? h + ' hr ago' : Math.round(h / 24) + (Math.round(h / 24) === 1 ? ' day ago' : ' days ago'); };
+    const pk = list.map(a => ({ kind: 'packet', id: a.pool_id, name: a.name, label: a.label, tone: a.tone, active: a.active, waiting: a.consumer_waiting,
+      since: a.step1_at || a.started_at,
+      meta: a.consumer_waiting ? ['Consumer waiting: ' + a.consumer, a.step1_at ? 'Step 1 signed ' + ago(a.step1_at) : 'started ' + ago(a.started_at), a.next].filter(Boolean).join(' · ')
+        : [a.consumer, a.next].filter(Boolean).join(' · ') }));
     const ro = roster().map(a => { const d = rosterDue(a, autoOig(a.id)); return { kind: 'roster', id: a.id, name: a.name, label: d.label, tone: d.tone, active: true,
       meta: [a.consumer, 'From the Roster'].filter(Boolean).join(' · ') }; });
-    return { active: [...pk.filter(r => r.active), ...ro].sort((x, y) => x.name.localeCompare(y.name)), applying: pk.filter(r => !r.active) };
+    return { active: [...pk.filter(r => r.active), ...ro].sort((x, y) => x.name.localeCompare(y.name)), applying: pk.filter(r => !r.active).sort((x, y) => (y.waiting - x.waiting) || String(x.since).localeCompare(String(y.since))) };
   }
   function draw() {
     if (open) return;
@@ -87,7 +92,7 @@ export function mountHubPacket(el, opts) {
       <div class="tabs"><button class="${tab === 'active' ? 'on' : ''}" data-tab="active">Active (${r.active.length})</button><button class="${tab === 'applying' ? 'on' : ''}" data-tab="applying">Applying (${r.applying.length})</button>
       <button data-act="reload" class="pill-btn">Refresh</button></div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
-      ${show.length ? show.map(x => `<button class="row" data-open="${x.kind}:${esc(x.id)}"><b>${esc(x.name)}</b><span class="pill ${x.tone}">${esc(x.label)}</span><span class="meta">${esc(x.meta)}</span></button>`).join('')
+      ${show.length ? show.map(x => `<button class="row" data-open="${x.kind}:${esc(x.id)}"${x.waiting ? ' style="border-left:5px solid #b42318"' : ''}><b>${esc(x.name)}</b><span class="pill ${x.tone}">${esc(x.label)}</span><span class="meta">${esc(x.meta)}</span></button>`).join('')
         : `<p class="small">${tab === 'applying' ? 'Nobody is applying right now. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.' : 'No active attendants yet.'}</p>`}
       <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Attendants from the Roster show their recheck dates; edit them on the Roster.</p>`;
   }

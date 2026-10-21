@@ -27,6 +27,17 @@ function officeHours(iso) {
   const wd = chicago(iso, { weekday: 'short' }), hr = +chicago(iso, { hour: 'numeric', hourCycle: 'h23' });
   return !['Sat', 'Sun'].includes(wd) && hr >= 9 && hr < 16;
 }
+// Due time for a consumer-linked applicant: today 4pm Central if it is a weekday before 2pm,
+// otherwise noon on the next weekday.
+function urgentDue(iso) {
+  const at = (d, h) => { const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    const off = chicago(d.toISOString(), { timeZoneName: 'shortOffset' }).match(/GMT([+-]\d+)/); return new Date(ymd + 'T' + String(h - (off ? +off[1] : -6)).padStart(2, '0') + ':00:00Z').toISOString(); };
+  const now = new Date(iso), wd = chicago(iso, { weekday: 'short' }), hr = +chicago(iso, { hour: 'numeric', hourCycle: 'h23' });
+  if (!['Sat', 'Sun'].includes(wd) && hr < 14) return at(now, 16);
+  let d = new Date(now.getTime() + 86400000);
+  while (['Sat', 'Sun'].includes(chicago(d.toISOString(), { weekday: 'short' }))) d = new Date(d.getTime() + 86400000);
+  return at(d, 12);
+}
 // 10am Central, n days after iso (rounded to that day's 10am).
 function tenAm(iso, n) {
   const d = new Date(new Date(iso).getTime() + n * 86400000);
@@ -49,7 +60,7 @@ export function createPacket(h) {
     const sw = await setting(audience === 'office' ? 'packet_alerts' : 'packet_messages', { live: false });
     let status, error = null;
     if (deps.mode === 'practice') status = 'practice';
-    else if (!sw.live) { status = 'held'; error = 'Attendant packet messages are switched off until Samantha turns them on.'; }
+    else if (!sw.live) { status = 'held'; error = audience === 'office' ? 'Attendant application alerts are switched off (Switches card).' : 'Attendant application texts are switched off (Switches card).'; }
     else { try { await deps.send({ channel, to, subject, body }); status = 'sent'; } catch (e) { status = 'failed'; error = String(e && e.message || e).slice(0, 300); } }
     return one(`insert into cds_outbox (audience, pool_id, channel, template, to_display, body, status, error, automatic, created_by)
       values ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) returning id, status`,
@@ -270,8 +281,10 @@ export function createPacket(h) {
       const { profile: draft } = R.cleanProfileDraft({ town: a.city || '' });
       await q('update cds_cg_profiles set draft = draft || $2::jsonb, updated_at=now() where pool_id=$1', [poolId, JSON.stringify(draft)]);
     }
-    await h.task('packet_checks', ('Run EDL and FCSR for ' + name + ' (Step 1 signed' + (x.p.consumer_name ? ', for ' + x.p.consumer_name : '') + ').').slice(0, 300),
-      { pool_id: poolId }, 'packet_checks:' + poolId, (await one('select cds_next_business_4pm(now()) as d')).d);
+    // A consumer is waiting on this attendant: due today by 4pm when signed before 2pm on a
+    // weekday, otherwise by noon the next weekday (her call 2026-10-21: these are urgent).
+    await h.task('packet_checks', ((x.p.consumer_name ? 'Consumer waiting: ' : '') + 'Run EDL and FCSR for ' + name + ' (Step 1 signed' + (x.p.consumer_name ? ', for ' + x.p.consumer_name : '') + ').').slice(0, 300),
+      { pool_id: poolId }, 'packet_checks:' + poolId, x.p.consumer_name ? urgentDue(now) : (await one('select cds_next_business_4pm(now()) as d')).d);
     // OIG runs itself (cds-oig, 2026-10-21): name + birth date against this month's list.
     // A clear result is recorded as the OIG check only when the OIG switch is on; a possible
     // match is never decided by software (the OIG module makes the office to-do).
@@ -290,7 +303,7 @@ export function createPacket(h) {
         } else oigLine = 'OIG: clear on the automatic check (practice, not recorded yet). Check it with EDL.';
       } else if (me && me.ok) oigLine = 'OIG: POSSIBLE MATCH on the OIG list. Look at it before anything else.';
     } catch (e) { /* the list isn't loaded or the check failed: the office runs OIG by hand */ }
-    const v = { name, for: x.p.consumer_name ? ' for ' + x.p.consumer_name : '',
+    const v = { name, for: x.p.consumer_name ? ' for ' + x.p.consumer_name : '', urgent: x.p.consumer_name ? 'Consumer waiting: ' : '',
       oig: oigLine,
       fcsr: { yes: 'already registered (no fee)', no: 'NOT registered yet: they get the registration steps', notsure: 'not sure' }[a.fcsr] || 'not answered',
       list: x.p.list_choice === 'join' ? 'yes, wants to be listed' : 'no, works for their consumer only' };
@@ -315,7 +328,8 @@ export function createPacket(h) {
                             join attendant_pool a on a.id=k.pool_id where coalesce(a.archived,false)=false order by k.created_at desc limit 300`);
       const out = [];
       for (const r of rows) { const x = await load(r.pool_id); out.push({ pool_id: r.pool_id, name: [r.first_name, r.last_name].join(' '), consumer: r.consumer_name,
-        label: x.st.label, tone: x.st.tone, next: x.st.next, active: x.st.active, list_choice: x.p.list_choice }); }
+        label: x.st.label, tone: x.st.tone, next: x.st.next, active: x.st.active, list_choice: x.p.list_choice,
+        consumer_waiting: !!r.consumer_name && !x.st.active, started_at: x.p.created_at, step1_at: x.p.step1_signed_at }); }
       return { attendants: out };
     },
     async packetGet({ staff, pool_id }) {
