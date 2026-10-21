@@ -16,6 +16,7 @@
 import { FORMS, STEP1, STEP2, CONTRACT_PARTS, formText, COMPANY, HANDBOOK_URL, ORIENTATION_URL } from './forms.js';
 import * as P from './rules.js';
 import { PACKET_TEMPLATES, fill } from './messages.js';
+import { CONSENT_WORDING } from '../match/messages.js';
 
 const addDays = (iso, d) => new Date(new Date(iso).getTime() + d * 86400000).toISOString();
 const digits10 = v => String(v ?? '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
@@ -149,6 +150,9 @@ export function createPacket(h) {
         orientation_done: !!x.p.orientation_done_at, empeon_done: !!x.p.empeon_done_at, call_slot: x.p.call_slot,
         call_slots: x.st.step2Open && !x.p.call_slot ? P.callSlots(x.now) : [],
         handbook_url: HANDBOOK_URL, orientation_url: ORIENTATION_URL,
+        listing_consent: CONSENT_WORDING.profile.text,
+        profile: { photo: !!(x.c.profile && (x.c.profile.photo_draft || x.c.profile.photo_approved)), draft: (x.c.profile && x.c.profile.draft) || {},
+          consent: R.hasConsent(x.c.consents || [], 'profile'), review_status: x.c.profile && x.c.profile.review_status },   // the wording approved for Caregiver Match (2026-10-15)
       };
     },
     async packetSave({ link, answers }) {
