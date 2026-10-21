@@ -24,6 +24,7 @@ await pg.exec(strip(readFileSync(ROOT + '/caregiver_match_phase1.sql', 'utf8')))
 await pg.exec(strip(readFileSync(ROOT + '/caregiver_signup_alert.sql', 'utf8')));
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
 await pg.exec(`insert into cds_match_settings (key, value, updated_by) values ('lead_alerts', '{"recipients":[{"name":"Samantha","email":"s@x.test","phone":"+14175550001"},{"name":"Krystal","email":"k@x.test","phone":"+14175550002"},{"name":"Zach","email":"z@x.test","phone":"+14175550003"}]}'::jsonb, 't') on conflict (key) do nothing`);
+await pg.exec(strip(readFileSync(ROOT + '/oig_check.sql', 'utf8')));
 const SQL = strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
 ok(true, 'packet SQL runs twice');
@@ -41,6 +42,9 @@ const S = (a, i) => H('staff', a, { staff: 'samantha@mo-care.com', ...i });
 const outbox = async () => (await pg.query(`select * from cds_outbox order by created_at, id`)).rows;
 const tokenOf = link => new URL(link).searchParams.get('c');
 
+const run = (await pg.query(`insert into cds_oig_runs (status, file_month, row_count, finished_at) values ('done','2026-10',2,now()) returning id`)).rows[0].id;
+await pg.query(`insert into cds_oig_leie (run_id, last_name, first_name, dob, state, last_keys, first_key) values ($1,'COLE','BRENDA','1980-01-01','MO','{cole}','brenda'), ($1,'SMITH','JOHN',null,'MO','{smith}','john')`, [run]);
+await pg.query(`update cds_match_settings set value = jsonb_set(value, '{live}', 'true') where key='oig_check'`);
 // ---------- the public link ----------
 await refuses(() => H('public', 'applyStart', { first_name: 'Jordan', last_name: 'Ellis', phone: '417-555-0142', email: 'j@x.test' }), /who you will care for/, 'consumer name required');
 await refuses(() => H('public', 'applyStart', { consumer_name: 'Ruth Ellis', first_name: 'Jordan', last_name: 'Ellis', phone: '555-0142', email: 'j@x.test' }), /10-digit/, 'phone checked');
@@ -96,11 +100,15 @@ const pk = (await pg.query(`select * from cds_packets where pool_id=$1`, [pool.i
 ok(!!pk.step1_signed_at && pk.reminders.length === 2 && pk.reminders.every(r => r.kind === 'orientation'), 'Step 1 done: orientation reminders set (2)');
 const scr2 = (await pg.query(`select * from cds_screening where pool_id=$1`, [pool.id])).rows[0];
 ok(!!scr2.authorization_signed_at && !!scr2.reg_needed_at, 'background signature = screening authorization; FCSR registration flagged as needed');
+const oigRow = (await pg.query(`select * from cds_screening_checks where pool_id=$1 and check_key='oig'`, [pool.id])).rows;
+ok(oigRow.length === 1 && oigRow[0].result === 'clear' && oigRow[0].recorded_by === 'oig-automatic', 'OIG ran itself at Step 1: clear, recorded');
+ok((await pg.query(`select count(*)::int n from cds_oig_results where person_ref=$1`, ['pool:' + pool.id])).rows[0].n === 1, 'OIG result saved for the audit trail');
 const t1 = (await pg.query(`select * from cds_tasks where pool_id=$1`, [pool.id])).rows;
 ok(t1.length === 1 && /Run EDL and FCSR for Jordan Ellis/.test(t1[0].title) && t1[0].due_at, 'office to-do: run EDL and FCSR, due next business day 4pm');
 const ob1 = (await outbox()).filter(o => o.pool_id === pool.id);
 const office = ob1.filter(o => o.audience === 'office');
 ok(office.filter(o => o.channel === 'email').length === 3, 'office alert emailed to Samantha, Krystal, Zach');
+ok(office.every(o => /OIG: clear, checked automatically/.test(o.body)), 'office alert says OIG is already clear');
 ok(office.every(o => o.status === 'practice') && office.every(o => !o.body.includes('912')), 'office alerts practice only, never an SSN');
 const after = ob1.filter(o => o.template === 'packet_att_after_step1');
 ok(after.length === 2 && after.every(o => /orientation/.test(o.body) && /handbook/.test(o.body)), 'attendant gets orientation + handbook by text and email');
@@ -121,7 +129,7 @@ await refuses(() => S('packetMark', { pool_id: pool.id, what: 'i9_done' }), /not
 // ---------- checks clear (office records them the existing way) ----------
 const now = (await pg.query(`select (now() at time zone 'America/Chicago')::date as d`)).rows[0].d;
 await pg.query(`update cds_screening set reg_verified_at=now(), reg_verified_by='t', screen_requested_at=now(), screen_result_at=now(), screen_result='no_findings' where pool_id=$1`, [pool.id]);
-for (const k of ['edl', 'edr', 'oig', 'mo_medicaid'])
+for (const k of ['edl', 'edr', 'mo_medicaid'])
   await pg.query(`insert into cds_screening_checks (pool_id, check_key, result, checked_on, recorded_by) values ($1,$2,'clear',$3,'t')`, [pool.id, k, now]);
 const age = (await pg.query(`select * from cds_screening_checks where pool_id=$1 and check_key='age18'`, [pool.id])).rows;
 ok(age.length === 1 && age[0].recorded_by === 'packet', 'age 18 recorded by itself from the date of birth');

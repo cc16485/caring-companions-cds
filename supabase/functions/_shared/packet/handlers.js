@@ -17,6 +17,7 @@ import { FORMS, STEP1, STEP2, CONTRACT_PARTS, formText, COMPANY, HANDBOOK_URL, O
 import * as P from './rules.js';
 import { PACKET_TEMPLATES, fill } from './messages.js';
 import { CONSENT_WORDING } from '../match/messages.js';
+import { createOig } from '../office/oig.js';
 
 const addDays = (iso, d) => new Date(new Date(iso).getTime() + d * 86400000).toISOString();
 const digits10 = v => String(v ?? '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
@@ -271,8 +272,26 @@ export function createPacket(h) {
     }
     await h.task('packet_checks', ('Run EDL and FCSR for ' + name + ' (Step 1 signed' + (x.p.consumer_name ? ', for ' + x.p.consumer_name : '') + ').').slice(0, 300),
       { pool_id: poolId }, 'packet_checks:' + poolId, (await one('select cds_next_business_4pm(now()) as d')).d);
+    // OIG runs itself (cds-oig, 2026-10-21): name + birth date against this month's list.
+    // A clear result is recorded as the OIG check only when the OIG switch is on; a possible
+    // match is never decided by software (the OIG module makes the office to-do).
+    let oigLine = 'OIG: check it with EDL (the automatic OIG list is not loaded yet).';
+    try {
+      const scr = await one('select legal_first, legal_middle, legal_last, dob from cds_screening where pool_id=$1', [poolId]);
+      const oig = createOig({ db: deps.db });
+      const r = await oig.check({ source: 'check', people: [{ ref: 'pool:' + poolId, first: (scr && scr.legal_first) || x.c.pool.first_name,
+        middle: (scr && scr.legal_middle) || '', last: (scr && scr.legal_last) || x.c.pool.last_name, dob: scr && scr.dob ? String(scr.dob).slice(0, 10) : '', state: a.state || 'MO' }] });
+      const me = r.ok && r.people && r.people[0];
+      if (me && me.ok && me.result === 'clear') {
+        if (r.live) {
+          await q(`insert into cds_screening_checks (pool_id, check_key, result, checked_on, note, recorded_by)
+                   values ($1,'oig','clear',(now() at time zone 'America/Chicago')::date,$2,'oig-automatic')`, [poolId, 'Not on the OIG list (' + r.file_month + '), checked automatically']);
+          oigLine = 'OIG: clear, checked automatically.';
+        } else oigLine = 'OIG: clear on the automatic check (practice, not recorded yet). Check it with EDL.';
+      } else if (me && me.ok) oigLine = 'OIG: POSSIBLE MATCH on the OIG list. Look at it before anything else.';
+    } catch (e) { /* the list isn't loaded or the check failed: the office runs OIG by hand */ }
     const v = { name, for: x.p.consumer_name ? ' for ' + x.p.consumer_name : '',
-      oig: 'OIG: run automatically when the OIG check is switched on; until then, check it with EDL.',
+      oig: oigLine,
       fcsr: { yes: 'already registered (no fee)', no: 'NOT registered yet: they get the registration steps', notsure: 'not sure' }[a.fcsr] || 'not answered',
       list: x.p.list_choice === 'join' ? 'yes, wants to be listed' : 'no, works for their consumer only' };
     const cfg = await setting('packet_alerts', { recipients: [] });

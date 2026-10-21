@@ -26,9 +26,9 @@ export const PACKET_TEMPLATES = {
     email_subject: 'Your checks are clear: next steps',
     email: 'Hi {first},\n\nGood news: your background checks are clear. Open your private link to finish onboarding:\n\n{link}\n\nYou will sign your attendant papers, set up payroll in Empeon, and book a 5-minute video call to show us your ID.\n\nYour Attendant Handbook is always here: ' + HANDBOOK_URL + '\n\n' + SIGN_OFF },
   office_step1: { audience: 'office',
-    sms: '{name} signed CDS Step 1{for}. {oig} Run EDL and FCSR: https://hub.caringcds.com/#attendants',
+    sms: '{name} signed CDS Step 1{for}. {oig} Run EDL and FCSR: https://hub.caringcds.com/#activeattendants',
     email_subject: 'Step 1 signed: run EDL and FCSR for {name}',
-    email: '{name} signed the CDS attendant application{for}.\n\n{oig}\nRun EDL and FCSR: open their profile in the CDS hub (Attendants), where every field the forms need has a Copy button.\nhttps://hub.caringcds.com/#attendants\n\nFCSR registration: {fcsr}\nCaregiver list: {list}\n\n' + SIGN_OFF },
+    email: '{name} signed the CDS attendant application{for}.\n\n{oig}\nRun EDL and FCSR: open their profile in the CDS hub (Attendants, then Active Attendants), where every field the forms need has a Copy button.\nhttps://hub.caringcds.com/#activeattendants\n\nFCSR registration: {fcsr}\nCaregiver list: {list}\n\n' + SIGN_OFF },
 };
 
 export function fill(t, vars) {
