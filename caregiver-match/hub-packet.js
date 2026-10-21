@@ -45,11 +45,13 @@ const CSS = `
 `;
 
 // Roster attendants: next due dates from what was typed on the Roster.
-function rosterDue(a) {
+// autoOig: the date the automatic OIG check (cds-oig) last found them clear, when the OIG switch is on.
+function rosterDue(a, autoOig) {
   const t = ymd(new Date()), soon = ymd(new Date(Date.now() + 7 * 864e5));
-  const rows = [['OIG', a.leieDate, 1], ['EDL', a.edlDate, 3], ['FCSR', a.fcsrDate, 12]].map(([k, d, m]) => {
+  const oig = autoOig && (!a.leieDate || autoOig > a.leieDate) ? autoOig : a.leieDate;
+  const rows = [['OIG', oig, 1, oig && oig === autoOig], ['EDL', a.edlDate, 3], ['FCSR', a.fcsrDate, 12]].map(([k, d, m, auto]) => {
     const due = d ? addM(d, m) : null;
-    return { k, done: d, due, tone: !d ? 'r' : due < t ? 'r' : due <= soon ? 'y' : 'g' };
+    return { k, done: d, auto: !!auto, due, tone: !d ? 'r' : due < t ? 'r' : due <= soon ? 'y' : 'g' };
   });
   const worst = rows.find(r => r.tone === 'r') || rows.find(r => r.tone === 'y');
   return { rows, label: worst ? (worst.done ? worst.k + (worst.tone === 'r' ? ' overdue' : ' due soon') : worst.k + ' date missing') : 'Active', tone: worst ? worst.tone : 'g' };
@@ -58,6 +60,8 @@ function rosterDue(a) {
 export function mountHubPacket(el, opts) {
   const { api } = opts;
   const roster = () => (opts.roster ? opts.roster() : []).filter(a => a.status !== 'inactive');
+  const autoOig = id => { const p = opts.oigPeople && (opts.oigPeople() || {})['attendant:' + id];
+    return p && (p.result === 'clear' || p.review === 'not_them') ? String(p.checked_at || '').slice(0, 10) || null : null; };
   let tab = 'active', list = [], open = null, err = '';
   if (!document.getElementById('hp_css')) { const s = document.createElement('style'); s.id = 'hp_css'; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add('hp');
@@ -72,7 +76,7 @@ export function mountHubPacket(el, opts) {
   function rows() {
     const pk = list.map(a => ({ kind: 'packet', id: a.pool_id, name: a.name, label: a.label, tone: a.tone, active: a.active,
       meta: [a.consumer, a.next].filter(Boolean).join(' · ') }));
-    const ro = roster().map(a => { const d = rosterDue(a); return { kind: 'roster', id: a.id, name: a.name, label: d.label, tone: d.tone, active: true,
+    const ro = roster().map(a => { const d = rosterDue(a, autoOig(a.id)); return { kind: 'roster', id: a.id, name: a.name, label: d.label, tone: d.tone, active: true,
       meta: [a.consumer, 'From the Roster'].filter(Boolean).join(' · ') }; });
     return { active: [...pk.filter(r => r.active), ...ro].sort((x, y) => x.name.localeCompare(y.name)), applying: pk.filter(r => !r.active) };
   }
@@ -133,14 +137,14 @@ export function mountHubPacket(el, opts) {
   function openRosterCard(id) {
     const a = roster().find(x => x.id === id); if (!a) { draw(); return; }
     open = { kind: 'roster', id };
-    const d = rosterDue(a);
+    const d = rosterDue(a, autoOig(a.id));
     el.innerHTML = `<button class="pill-btn" data-act="back">← All attendants</button>
       <div class="card"><h2>${esc(a.name)}</h2><span class="pill ${d.tone}">${esc(d.label)}</span>
       <dl><dt>Phone</dt><dd>${esc(a.phone)}</dd><dt>Email</dt><dd>${esc(a.email)}</dd><dt>Works for</dt><dd>${esc(a.consumer)}</dd><dt>Hired</dt><dd>${esc(fmtD(a.hiredate))}</dd>
       <dt>FCSR number</dt><dd>${esc(a.fcsrNum)}</dd><dt>Empeon</dt><dd>${esc(a.empeon)}</dd><dt>Contract</dt><dd>${esc(a.contract)}</dd><dt>EVV</dt><dd>${esc(a.evv)}</dd></dl>
       <h3>Rechecks</h3>
       <table><thead><tr><th>Check</th><th>Last done</th><th>Next due</th></tr></thead><tbody>
-      ${d.rows.map(r => `<tr><td><b>${r.k}</b></td><td>${esc(fmtD(r.done)) || 'Not on the Roster'}</td><td>${r.due ? `<span class="pill ${r.tone}">${esc(fmtD(r.due))}</span>` : ''}</td></tr>`).join('')}
+      ${d.rows.map(r => `<tr><td><b>${r.k}</b></td><td>${esc(fmtD(r.done)) || 'Not on the Roster'}${r.auto ? ' <span class="small">(checked automatically)</span>' : ''}</td><td>${r.due ? `<span class="pill ${r.tone}">${esc(fmtD(r.due))}</span>` : ''}</td></tr>`).join('')}
       </tbody></table>
       <p class="small">OIG every month, EDL every 3 months, FCSR every year (the hub's onboarding checklist).</p>
       <div class="btns"><button class="btn" data-act="roster">Update on the Roster</button></div></div>`;
