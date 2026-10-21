@@ -21,7 +21,8 @@ const countyOf = c => { c = String(c || '').trim(); return !c ? '' : /county/i.t
 const first = s => String(s || '').trim().split(/\s+/)[0] || '';
 
 // deps: { db: { query(text, params) -> { rows } }, now?: () => ms,
-//         ghl?: { contactUrl({contactId, phone, email}) -> url|null, texts({contactId, phone, email}) -> {ok, messages:[{body, at}]} } }
+//         ghl?: { contactUrl({contactId, phone, email}) -> url|null, texts({contactId, phone, email}) -> {ok, messages:[{body, at}]} },
+//         bridge?: { ring({email, name}, lead) -> {ok, message} } }   (call-bridge.js, "Ring my phone, then connect")
 //         contactId is the lead's linked GoHighLevel contact (site_leads.ghl_contact_id) when there is one.
 export function createLeadLink(deps) {
   const now = () => (deps.now ? deps.now() : Date.now());
@@ -61,7 +62,7 @@ export function createLeadLink(deps) {
       last: last ? { by: last.by_name, outcome: OUTCOMES[last.outcome] || last.outcome, talked: last.outcome === 'connected',
                      at: (now() - Date.parse(last.at) > 20 * 3600e3) ? whenShort(Date.parse(last.at), now()) : time12(Date.parse(last.at)) } : null,
       calls: calls.map(c => ({ by: c.by_name, outcome: OUTCOMES[c.outcome] || c.outcome, note: c.note || '', at: whenShort(Date.parse(c.at), now()) })),
-      their_texts: theirTexts, contact_url: contactUrl,
+      their_texts: theirTexts, contact_url: contactUrl, can_ring: !!deps.bridge,
       intake: { referral: HUB + '#lead=' + lead.id + '&intake=referral', pccp: HUB + '#lead=' + lead.id + '&intake=pccp' },
       leads_url: HUB + '#pipeline',
     };
@@ -81,11 +82,20 @@ export function createLeadLink(deps) {
     return { ok: true, first_call: before.n === 0, message: 'Logged. The reminder is stopped.' };
   }
 
+  // "Ring my phone, then connect" (2026-10-20): the person is the one the link was made for.
+  // Ringing does not log a call; they still pick what happened.
+  async function ring(k) {
+    const { l, lead } = await linkOf(k);
+    if (!deps.bridge) throw new LinkError('Ringing your phone is not set up yet. Call from the CDS line, (417) 218-2888.');
+    return deps.bridge.ring({ email: l.person_email, name: l.person_name }, lead);
+  }
+
   async function handle(body) {
     const action = String(body?.action || 'view');
     if (action === 'view') return view(body.k);
     if (action === 'called') return called(body.k, body);
+    if (action === 'ring') return ring(body.k);
     throw new LinkError('Unknown request');
   }
-  return { view, called, handle };
+  return { view, called, ring, handle };
 }

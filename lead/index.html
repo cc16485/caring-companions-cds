@@ -88,14 +88,21 @@ function render(msg, good) {
     D.calls.map(c => '<li>' + esc(c.by) + ', ' + esc(c.outcome) + ', ' + esc(c.at) + (c.note ? ': ' + esc(c.note) : '') + '</li>').join('') + '</ul>';
   h += '</div>';
 
-  // Call. The button that rings your phone first comes once the GoHighLevel
-  // workflow is copied into the CDS sub-account; until then, GoHighLevel itself.
+  // Call. "Ring my phone, then connect" (2026-10-20): GoHighLevel rings your phone, you
+  // press a key, and it connects you to the lead from the CDS line. GoHighLevel itself
+  // stays as the fallback.
   h += '<div class="card"><h2>Call</h2>' +
-    (D.contact_url
-      ? '<a class="btn teal" href="' + esc(D.contact_url) + '">Call ' + esc(D.first) + ' in GoHighLevel</a>' +
-        '<div class="note">Call from there so it goes out on the CDS line, (417) 218-2888.</div>'
-      : '<div class="note">' + esc(D.first) + ' is not in GoHighLevel yet. Call from the CDS line, (417) 218-2888, using the number in Leads.</div>' +
-        '<a class="btn quiet" href="' + LEADS + '">Open Leads in the CDS hub</a>') +
+    (D.can_ring && D.contact_url
+      ? '<button class="teal" id="bRing">Ring my phone, then connect to ' + esc(D.first) + '</button>' +
+        '<div class="note">Your phone rings first. Answer, press any key, and you are connected to ' + esc(D.first) +
+        '. It goes out on the CDS line, (417) 218-2888.</div>' +
+        '<div class="err" id="ringMsg"></div>' +
+        '<a class="btn quiet" href="' + esc(D.contact_url) + '">Or call ' + esc(D.first) + ' in GoHighLevel</a>'
+      : D.contact_url
+        ? '<a class="btn teal" href="' + esc(D.contact_url) + '">Call ' + esc(D.first) + ' in GoHighLevel</a>' +
+          '<div class="note">Call from there so it goes out on the CDS line, (417) 218-2888.</div>'
+        : '<div class="note">' + esc(D.first) + ' is not in GoHighLevel yet. Call from the CDS line, (417) 218-2888, using the number in Leads.</div>' +
+          '<a class="btn quiet" href="' + LEADS + '">Open Leads in the CDS hub</a>') +
     '</div>';
 
   h += '<div class="card"><h2>What happened?</h2><div class="reasons">' +
@@ -113,6 +120,20 @@ function render(msg, good) {
 
   app.innerHTML = h;
   document.getElementById('bCalled').onclick = logCall;
+  const br = document.getElementById('bRing');
+  if (br) br.onclick = ring;
+}
+
+async function ring() {
+  const b = document.getElementById('bRing'), el = document.getElementById('ringMsg');
+  if (!b || b.disabled) return;
+  b.disabled = true; el.className = 'note'; el.textContent = 'Asking GoHighLevel to ring your phone…';
+  try {
+    const j = await call('ring');
+    el.className = j.ok ? 'done' : 'err';
+    el.textContent = j.message || (j.ok ? 'Ringing your phone now.' : 'Nothing was rung. Call from the CDS line, (417) 218-2888.');
+  } catch (e) { el.className = 'err'; el.textContent = e.message; }
+  setTimeout(() => { b.disabled = false; }, 30000);
 }
 
 async function logCall() {

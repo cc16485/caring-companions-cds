@@ -4,8 +4,13 @@
 // Reads the lead; the only write is a logged call. Never contacts the lead.
 // GoHighLevel (CDS sub-account only, read only here): finds the lead's contact for an
 // "Open in GoHighLevel" link and their latest texts to us, when the key may read them.
+// 2026-10-20 action 'ring' ("Ring my phone, then connect", _shared/office/call-bridge.js):
+// the only GoHighLevel change it makes is the contact's "Assigned to" and the tag
+// hub-call-bridge, on the person's own tap. Action 'setup' is the installer's check only
+// (header x-setup-key = secret CDS_SETUP_KEY): names and yes/no, never ids or numbers.
 import postgres from 'npm:postgres@3.4.4';
 import { createLeadLink, LinkError } from '../_shared/office/lead-link.js';
+import { createCallBridge } from '../_shared/office/call-bridge.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const GHL = 'https://services.leadconnectorhq.com';
@@ -20,6 +25,25 @@ async function ghlGet(path: string) {
   const r = await fetch(GHL + path, { headers: { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-07-28', Accept: 'application/json' } });
   return { status: r.status, body: await r.json().catch(() => null) };
 }
+// The call bridge's GoHighLevel calls: CDS sub-account only, or nothing at all.
+async function ghlSend(method: string, path: string, body?: unknown) {
+  if (!env('CDS_GHL_TOKEN') || env('CDS_GHL_LOCATION_ID') !== CDS_LOCATION) return { status: 0, body: null };
+  const r = await fetch(GHL + path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    headers: { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-07-28', Accept: 'application/json',
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) } });
+  return { status: r.status, body: await r.json().catch(() => null) };
+}
+const bridge = createCallBridge({
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
+  locationId: CDS_LOCATION,
+  ghl: {
+    get: (path: string) => ghlSend('GET', path),
+    put: (path: string, body: unknown) => ghlSend('PUT', path, body),
+    post: (path: string, body: unknown) => ghlSend('POST', path, body),
+    del: (path: string, body: unknown) => ghlSend('DELETE', path, body),
+  },
+});
+
 // Search only, exactly one match by phone (last 10 digits) or email; never creates a contact.
 // deno-lint-ignore no-explicit-any
 async function findContact(who: { phone?: string; email?: string }): Promise<any> {
@@ -35,6 +59,7 @@ async function findContact(who: { phone?: string; email?: string }): Promise<any
 }
 
 const link = createLeadLink({
+  bridge,
   db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
   ghl: {
     async contactUrl(who: { contactId?: string | null; phone?: string; email?: string }) {
@@ -69,7 +94,15 @@ Deno.serve(async (req) => {
   const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...h, 'Content-Type': 'application/json' } });
   if (req.method === 'OPTIONS') return new Response('ok', { headers: h });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
-  try { return json(await link.handle(await req.json().catch(() => ({})))); }
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body?.action === 'setup') {
+      const key = env('CDS_SETUP_KEY');
+      if (!key || key.length < 32 || req.headers.get('x-setup-key') !== key) return json({ error: 'not allowed' }, 401);
+      return json(await bridge.setup());
+    }
+    return json(await link.handle(body));
+  }
   catch (e) {
     if (e instanceof LinkError) return json({ error: e.message }, e.status);
     console.error(e);
