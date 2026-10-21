@@ -7,7 +7,8 @@
 //      | { kind: 'ping' }                     the installer checking the key; saves nothing
 //      | { kind: 'open', report, from, to, total, pulledLocal, rows }   her saved Custom Report's
 //        shifts still In Progress (never clocked out), 2026-10-20; read with wellsky.js parseOpenReport
-// Saves into agency_data 'wellskyCheck' (one key, merged): { live, shifts, auths, lastRun }.
+// Saves into agency_data 'wellskyCheck' (one key, merged): { live, shifts, auths, lastRun },
+// and each consumer's earliest worked shift into 'firstShifts' (only grows).
 // A report that cannot be read is NOT saved over the last good one; it is recorded as
 // a failed run, which the Dashboard and the 8am email show in red (no silent failures).
 //
@@ -56,6 +57,14 @@ export async function ingest(deps, body) {
   const counted = kind === 'shifts' ? r.consumers.reduce((n, c) => n + c.shifts.length, 0)
                                     : r.consumers.reduce((n, c) => n + c.auths.length, 0);
   await save({ [kind]: Object.assign({ at }, r), lastRun: { at, kind, ok: true, why: '' } });
+  // Each consumer's earliest worked shift, kept for good (the 40 new consumers goal, 2026-10-20).
+  if (kind === 'shifts') {
+    const prev = (await q(`select data_value from agency_data where agency_id = $1 and data_key = 'firstShifts'`, [AGENCY_ID]))[0];
+    const pulledOn = new Date(at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    const next = W.mergeFirstShifts(prev && prev.data_value, r, pulledOn);
+    await q(`insert into agency_data (agency_id, data_key, data_value) values ($1, 'firstShifts', $2::jsonb)
+             on conflict (agency_id, data_key) do update set data_value = excluded.data_value`, [AGENCY_ID, JSON.stringify(next)]);
+  }
   return { ok: true, saved: true, live, kind, consumers: r.consumers.length, [kind === 'shifts' ? 'shifts' : 'authorizations']: counted, unread: r.unread.length };
 }
 

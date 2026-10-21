@@ -188,6 +188,38 @@ await pg.exec(`update cds_match_settings set value = jsonb_set(value, '{live}', 
 await ingest({ db, now: () => t0 }, { kind: 'shifts', text: shiftsText });
 eq((await saved()).live, true, 'live follows the setting');
 
+// ---------- first shifts, for the 40 new consumers goal (2026-10-20) ----------
+const firsts = async () => (await pg.query(`select data_value v from agency_data where agency_id=$1 and data_key='firstShifts'`, [AGENCY_ID])).rows[0]?.v;
+let fs = await firsts();
+eq([fs.from, fs.people], ['2026-09-01', { 'Able, Ann': { date: '2026-10-01', attendant: 'Baker, Bea' }, 'Carr, Cal': { date: '2026-10-02', attendant: 'Dunn, Dee' } }],
+   'each consumer\'s earliest worked shift is kept');
+const nov = 'Schedules by Client\n\nDate Range: 10/01/2026 - 11/30/2026\n\n' +
+  'Able, Ann\n\nDate/Time\tActivity\tHours\n' + day('11/02/2026', 'Baker, Bea', '6:00 AM', '8:45 AM', 2.75) + 'Total Hours for Able, Ann: 2.75\n' +
+  'Ely, Eve\n\nDate/Time\tActivity\tHours\n' + day('11/02/2026', 'Gray, Gus', '9:00 AM', '1:00 PM', 4) + day('11/10/2026', 'Gray, Gus', '9:00 AM', '1:00 PM', 4) + 'Total Hours for Ely, Eve: 8\n' +
+  'Fox, Finn\n\nDate/Time\tActivity\tHours\n' + day('11/03/2026', 'Hill, Hal', '9:00 AM', '11:00 AM', 2) + 'Total Hours for Fox, Finn: 2\n' +
+  'Ivy, Iris\n\nDate/Time\tActivity\tHours\n' + day('11/12/2026', 'Hill, Hal', '9:00 AM', '11:00 AM', 2) + 'Total Hours for Ivy, Iris: 2\n';
+await ingest({ db, now: () => Date.parse('2026-11-05T12:30:00Z') }, { kind: 'shifts', text: nov });
+fs = await firsts();
+eq(fs.people['Able, Ann'].date, '2026-10-01', 'a later report that no longer reaches back keeps the earlier first shift');
+eq(fs.people['Ely, Eve'], { date: '2026-11-02', attendant: 'Gray, Gus' }, 'a new consumer\'s first worked shift is added');
+ok(!fs.people['Ivy, Iris'], 'a shift only booked ahead is not a worked shift');
+eq(fs.from, '2026-09-01', 'how far back the data goes is kept');
+await ingest({ db, now: () => Date.parse('2026-11-06T12:30:00Z') }, { kind: 'shifts', text: 'Please log in to WellSky' });
+eq((await firsts()).people['Ely, Eve'].date, '2026-11-02', 'an unreadable report leaves the first shifts alone');
+
+const hub = [{ id: '1753900000000', name: 'Ann Able' }, { id: '1753900000004', name: 'Finn Fox', status: 'inactive' }, { id: 'abc', name: 'Old Odd' },
+             { id: String(Date.parse('2026-10-25T15:00:00Z')), name: 'Eve Ely' }];
+const fsMore = { from: '2026-09-01', people: Object.assign({}, fs.people, { 'Odd, Old': { date: '2026-11-01', attendant: 'Hill, Hal' }, 'Jay, Jo': { date: '2026-10-18', attendant: 'Hill, Hal' } }) };
+let nc = W.newConsumers(fsMore, hub, {});
+eq(nc.people.map(p => [p.name, p.date, p.attendant]), [['Eve Ely', '2026-11-02', 'Gus Gray']],
+   'counts only a consumer new since Oct 19; old consumers coming back, unreadable ids and first shifts before the start never count');
+eq([nc.count, nc.target, nc.from, nc.by, nc.dataFrom], [1, 40, '2026-10-19', '2027-01-31', '2026-09-01'], 'her goal: 40 by Jan 31, 2027, counted from Oct 19');
+eq(W.newConsumers(fsMore, [], {}).people.map(p => p.name), ['Old Odd', 'Eve Ely', 'Finn Fox'], 'with no hub record to go on, everyone whose first shift is on or after the start counts, oldest first');
+nc = W.newConsumers(fsMore, hub, { leftOut: { [W.nameKey('Ely, Eve')]: { at: 'x', by: 'y' } } });
+eq([nc.count, nc.leftOut.map(p => p.name)], [0, ['Eve Ely']], 'Leave out takes a person out of the count and lists them so they can be put back');
+eq(W.nameKey('Fitzgeraldbeckle, Misty'), W.nameKey('Misty Fitzgeraldbeckle'), 'WellSky and hub names match either way round');
+eq(W.newConsumers(null, hub, null).count, 0, 'no data yet is zero, not an error');
+
 // ---------- receipts: the key never goes into the WellSky page (2026-10-20) ----------
 await pg.exec(`do $$ begin
   if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;

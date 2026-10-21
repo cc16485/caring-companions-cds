@@ -278,6 +278,48 @@
     return out;
   }
 
+  // ---------- the 40 new consumers goal (2026-10-20) ----------
+  // Her goal (2026-10-19): 40 new CDS consumers by January 2027. Her rule (2026-10-20): a
+  // consumer counts only once their attendant has worked the FIRST shift. Not paperwork,
+  // not the authorization. The schedule report only reaches back to the 1st of last month,
+  // so the server keeps each consumer's earliest shift in agency_data 'firstShifts'
+  // ({ from, people: { 'Last, First': { date, attendant } } }), which only ever grows.
+  const GOAL = { target: 40, from: '2026-10-19', by: '2027-01-31' };
+  // "Barnwell, Susan" and "Susan Barnwell" are the same person.
+  const nameKey = n => String(n || '').toLowerCase().replace(/[^a-z\s,'-]/g, '').split(/[\s,]+/).filter(Boolean).sort().join(' ');
+  const firstLast = n => { const m = /^([^,]+),\s*(.+)$/.exec(String(n || '').trim()); return m ? m[2] + ' ' + m[1] : String(n || '').trim(); };
+  // Only shifts dated before the day of the pull count as worked: the report also lists
+  // shifts booked ahead, and today's shift may not have happened yet.
+  function mergeFirstShifts(prev, shifts, pulledOn) {
+    const out = { from: (prev && prev.from) || '', people: Object.assign({}, prev && prev.people) };
+    if (!shifts || !shifts.consumers || !pulledOn) return out;
+    if (shifts.from && (!out.from || shifts.from < out.from)) out.from = shifts.from;
+    shifts.consumers.forEach(c => {
+      const worked = (c.shifts || []).filter(s => s.date < pulledOn).sort((a, b) => a.date.localeCompare(b.date));
+      if (!worked.length) return;
+      const had = out.people[c.name];
+      if (!had || worked[0].date < had.date) out.people[c.name] = { date: worked[0].date, attendant: worked[0].attendant };
+    });
+    return out;
+  }
+  // Who counts: first shift on or after the start date, and not someone the hub already
+  // had before the start date (so a consumer coming back after a break never counts).
+  // The hub's consumer id is the time the record was added; an id that is not a time is
+  // treated as an old consumer. cfg = agency_data 'cdsGoal' { leftOut: { key: { at, by } } }.
+  function newConsumers(first, consumers, cfg) {
+    const g = Object.assign({}, GOAL, cfg || {});
+    const start = Date.parse(g.from + 'T00:00:00-05:00');
+    const old = new Set((consumers || []).filter(c => !(Number(c.id) >= start)).map(c => nameKey(c.name)));
+    const left = (cfg && cfg.leftOut) || {};
+    const all = Object.keys((first && first.people) || {})
+      .map(n => ({ key: nameKey(n), name: firstLast(n), date: first.people[n].date, attendant: firstLast(first.people[n].attendant) }))
+      .filter(p => p.date >= g.from && !old.has(p.key))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+    const people = all.filter(p => !left[p.key]);
+    return { target: g.target, from: g.from, by: g.by, count: people.length, people, leftOut: all.filter(p => left[p.key]), dataFrom: (first && first.from) || '' };
+  }
+
   root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
+                      mergeFirstShifts, newConsumers, nameKey, firstLast, GOAL,
                       LONG_HOURS, LONG_FACTOR, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
