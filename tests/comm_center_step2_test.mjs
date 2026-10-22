@@ -193,6 +193,7 @@ ok(/id="fuTiles"/.test(html) && /id="fuFilters"/.test(html), 'Follow-ups has til
 ok(/function fuCheckinTile/.test(html) && /A call only counts if you record it/.test(html), 'the check-ins tile, kept apart');
 ok(/Record as the ' \+ esc\(month\) \+ ' check-in/.test(html) && /if \(_clm_commId\) log\.commId = _clm_commId/.test(html), 'the check-in tap opens the form and the saved form remembers the call');
 ok(/_clm_commId = null;/.test(html), 'opening the form any other way does not link a call');
+ok(/if \(!c\.urgency\) c\.urgency = 'today'/.test(html), 'before the server update, cards with no urgency still show (as today)');
 ok(/id="needOwnersCard"/.test(html) && /action: 'owners'/.test(html), 'Switches has who gets each follow-up');
 const added = html.slice(html.indexOf('/* Step 2 (2026-10-22)'), html.indexOf('/* Consumer profile */'));
 ok(!/—/.test(added), 'no em dashes in the new styles');

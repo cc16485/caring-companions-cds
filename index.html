@@ -5585,7 +5585,8 @@ async function renderNeedOwners(note) {
   if (!_comm || !_comm.needs) await commLoad();
   const d = _comm || {};
   const head = '<div class="card"><div class="card-title">Who gets each follow-up</div>';
-  if (d.error || !d.needs) { host.innerHTML = head + '<div class="alert alert-danger" style="font-size:13px"><div>Could not load: ' + esc(d.error || 'no answer') + '</div></div></div>'; return; }
+  if (d.error) { host.innerHTML = head + '<div class="alert alert-danger" style="font-size:13px"><div>Could not load: ' + esc(d.error) + '</div></div></div>'; return; }
+  if (!d.needs) { host.innerHTML = head + '<div style="font-size:13px;color:var(--gray-600)">Ready once the Desktop step for Follow-ups step 2 has run.</div></div>'; return; }
   const owners = d.owners || {}, choices = d.ownerChoices || [];
   const rows = d.needs.map(n => ({ key: n.key, label: n.label })).concat([{ key: 'not_sure', label: 'Not sure yet' }]);
   const sel = r => '<select id="no_' + esc(r.key) + '" aria-label="Owner for ' + esc(r.label) + '"' + (d.canSetOwners ? '' : ' disabled') + '>' +
@@ -6909,6 +6910,8 @@ async function renderFollowups(reload) {
       : stale ? '<div class="fu-banner bad"><b>' + (lastRun ? 'The hub has not read GoHighLevel since ' + esc(_commWhen(st.last_run)) + '.' : 'The hub has not read GoHighLevel yet.') + '</b> Check GoHighLevel for calls and texts until this clears.</div>' : '') +
     (!d.live ? '<div class="fu-banner practice"><b>Practice.</b> Today and the 8am email do not list these yet. Turn on "Follow-ups on Today and the 8am email" on the Switches page when they look right.</div>' : '');
   const cards = d.cards || [];
+  // Until the server has step 2 (Desktop step after the merge) cards come without how soon: today.
+  cards.forEach(c => { if (!c.urgency) c.urgency = 'today'; });
   const who = cards.filter(c => c.kind === 'who_is_this');
   sum.textContent = cards.length
     ? cards.length + (cards.length === 1 ? ' call or text needs someone.' : ' calls and texts need someone.') + (who.length ? ' ' + who.length + ' from a number we do not know.' : '')
