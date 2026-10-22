@@ -13,11 +13,58 @@
 // Owners come from setting comm_center.owners (the hub picks the owner, never the AI); until she
 // sets them every card is "Nobody yet". Calls never count as monthly check-ins.
 // No em dashes in anything a person reads (her rule).
+//
+// Step 2 (2026-10-22, her approved mockup LBNkuRZyb7pJebrykd4Mxm): every card gets a need, an owner
+// for that need (comm_center.owners, set on the Switches page), and "Care or safety today" when a
+// text says so. No AI: who is calling and simple words only. A need, owner or urgency a person sets
+// is never changed by the hub. "Later this week" moves a card to a day. The check-in tap lists
+// real calls of 3 minutes or more with a consumer or their family; only the hub's check-in form,
+// saved by a person, counts as a check-in. Nothing here texts or calls anyone.
 
 export const ten = v => { const d = String(v ?? '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
 const normName = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
 const TRIVIAL = /^(ok|okay|k|kk|thanks|thank you|thank u|thx|ty|sounds good|great|perfect|got it|will do|you too|yw|welcome|bye)[.! ]*$/i;
 export const TEXT_QUIET_MIN = 10;
+
+// ---------- step 2: needs, owners, care or safety ----------
+export const NEEDS = [
+  { key: 'enrollment', label: 'Enrollment' }, { key: 'evv', label: 'Clock-in & EVV' }, { key: 'pay', label: 'Pay' },
+  { key: 'attendant_change', label: 'Attendant change' }, { key: 'hours', label: 'Hours & care plan' },
+  { key: 'concern', label: 'Concern or complaint' }, { key: 'other', label: 'Other' }, { key: 'not_sure', label: 'Not sure yet' }];
+export const NEED_LABEL = Object.fromEntries(NEEDS.map(n => [n.key, n.label]));
+// Her approved owners (2026-10-22): Zach for everything but Pay and Concern or complaint.
+export const DEFAULT_NEED_OWNERS = { enrollment: 'zach@mo-care.com', evv: 'zach@mo-care.com', pay: 'samantha@mo-care.com',
+  attendant_change: 'zach@mo-care.com', hours: 'zach@mo-care.com', concern: 'samantha@mo-care.com', other: 'zach@mo-care.com', not_sure: 'zach@mo-care.com' };
+// Words in a text (the approved list), checked in this order.
+const NEED_WORDS = [
+  ['concern', /complain|\bupset\b/i],
+  ['attendant_change', /new attendant|\bquit\b|\bquitting\b|did ?n[o']?t (come|show)|didn'?t (come|show)|no[- ]show/i],
+  ['evv', /\bclock(ed|ing)?\b|\bapp\b|\bevv\b|\bshift\b/i],
+  ['pay', /\bcheck\b|\bpaid\b|\bpay(check|day|roll)?\b|\bw-?2\b/i],
+  ['hours', /\bhours\b|care plan/i]];
+// Care or safety words (her approved list), and the words shown back on the card.
+const URGENT_WORDS = /did ?n[o']?t come|didn'?t come|no[- ]show|nobody is here|no one is here|nobody'?s here|\bfell\b|hospital|\b911\b|\bhurt(ing|s)?\b|no food/i;
+const textsOf = events => (events || []).filter(e => e.kind === 'text').map(e => String(e.text || ''));
+export function guessNeed(personKind, events) {
+  if (personKind === 'lead' || personKind === 'applicant') return 'enrollment';
+  const texts = textsOf(events).reverse();
+  for (const t of texts) for (const [key, re] of NEED_WORDS) if (re.test(t)) return key;
+  return 'not_sure';
+}
+// Why a card is care or safety today, or '' when it is not. An attendant who says they cannot clock
+// in, today: a shift may be going on (CDS shifts are not scheduled ahead, so the hub cannot know).
+export function urgentWhy(personKind, events, nowMs) {
+  for (const t of textsOf(events)) { const m = t.match(URGENT_WORDS); if (m) return 'The text says "' + m[0] + '".'; }
+  if (personKind === 'attendant' && (events || []).some(e => e.kind === 'text' && /\bclock|\bapp\b|\bevv\b/i.test(e.text || '') && nowMs - Date.parse(e.at) < 12 * 3600000))
+    return 'An attendant says they cannot clock in. A shift may be going on now.';
+  return '';
+}
+const firstNameOf = e => { const n = String(e || '').split('@')[0].replace(/[^a-z]/gi, ''); return n ? n[0].toUpperCase() + n.slice(1).toLowerCase() : ''; };
+// Missouri's date (America/Chicago), YYYY-MM-DD.
+export const chicagoDay = ms => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+const byPerson = v => !!v && v !== 'hub';
+// A date column comes back as a Date or a string, depending on the driver.
+const dayOf = v => !v ? null : v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
 
 // Words for the kinds of people (cards and profiles).
 export const KIND_LABEL = { lead: 'Lead', consumer: 'Consumer', family: 'Family', attendant: 'Attendant', pool: 'Attendant',
@@ -266,8 +313,11 @@ export function createComms(deps) {
         if (id && d.close) { await closeTask(id, d.close.reason, d.close.by || 'GoHighLevel', d.close.at); closed++; }
       } else {
         if (JSON.stringify(open.events) !== JSON.stringify(d.open.events) || open.person_ref !== ref) {
-          await q(`update cds_tasks set events=$2::jsonb, updated_at=$3, title=$4, person_ref=$5, kind=$6 where id=$1`,
-            [open.id, JSON.stringify(d.open.events), d.open.last, title, ref, who.state === 'known' ? 'followup' : 'who_is_this']);
+          // A new call or text brings a card moved to a later day back to today.
+          const wants = ev => (ev || []).filter(e => e.kind !== 'tried').length;
+          const fresh = wants(d.open.events) > wants(open.events);
+          await q(`update cds_tasks set events=$2::jsonb, updated_at=$3, title=$4, person_ref=$5, kind=$6, later_until=case when $7 then null else later_until end where id=$1`,
+            [open.id, JSON.stringify(d.open.events), d.open.last, title, ref, who.state === 'known' ? 'followup' : 'who_is_this', fresh]);
           updated++;
         }
         if (d.close) { await closeTask(open.id, d.close.reason, d.close.by || 'GoHighLevel', d.close.at); closed++; }
@@ -295,7 +345,36 @@ export function createComms(deps) {
         if (t) { await closeTask(t.id, later.channel === 'sms' ? 'texted' : later.direction === 'outbound' ? 'called' : 'talked', later.staff_name || 'GoHighLevel', later.at); closed++; }
       }
     }
-    return { opened, updated, closed };
+    const sorted = await sortAll(s);
+    return { opened, updated, closed, sorted };
+  }
+
+  // Step 2: need, owner and care or safety for every open card. A person's choice always wins.
+  async function personKindOf(t) {
+    if (!t.phone10) return null;
+    const who = resolve(await bookFor(t.phone10));
+    return who.person ? who.person.kind : null;
+  }
+  function sortOne(t, kind, owners) {
+    const need = byPerson(t.need_by) && t.need ? t.need : guessNeed(kind, t.events);
+    const why = byPerson(t.urgent_by) ? (t.urgent ? t.urgent_why || '' : '') : urgentWhy(kind, t.events, nowMs());
+    const urgent = byPerson(t.urgent_by) ? !!t.urgent : !!why;
+    const owner = byPerson(t.owner_by) ? (t.owner || null) : (owners[need] || owners.not_sure || null);
+    return { need, need_by: byPerson(t.need_by) ? t.need_by : 'hub', urgent, urgent_why: urgent ? why : null,
+             urgent_by: byPerson(t.urgent_by) ? t.urgent_by : 'hub', owner, owner_by: byPerson(t.owner_by) ? t.owner_by : 'hub' };
+  }
+  async function sortAll(s) {
+    const owners = (s && s.owners) || {};
+    let n = 0;
+    for (const t of await q(`select * from cds_tasks where area='followup' and done_at is null`)) {
+      const v = sortOne(t, await personKindOf(t), owners);
+      if (v.need === t.need && v.need_by === t.need_by && v.urgent === !!t.urgent && (v.urgent_why || null) === (t.urgent_why || null)
+          && v.urgent_by === t.urgent_by && (v.owner || null) === (t.owner || null) && v.owner_by === t.owner_by) continue;
+      await q(`update cds_tasks set need=$2, need_by=$3, urgent=$4, urgent_why=$5, urgent_by=$6, owner=$7, owner_by=$8 where id=$1`,
+        [t.id, v.need, v.need_by, v.urgent, v.urgent_why, v.urgent_by, v.owner, v.owner_by]);
+      n++;
+    }
+    return n;
   }
 
   async function closeTask(id, reason, by, at) {
@@ -327,7 +406,12 @@ export function createComms(deps) {
       candidates: who.state === 'several' ? who.candidates.map(c => ({ ref: c.ref, name: c.name, role: KIND_LABEL[c.kind] || c.kind, detail: c.detail })) : [],
       owner: t.owner || null, need: t.need || null, events: t.events || [], since: t.due_at, updated: t.updated_at,
       contactId: null,
+      ...step2(t),
     };
+  }
+  function step2(t) {
+    return { needLabel: NEED_LABEL[t.need] || NEED_LABEL.not_sure, needByHub: !byPerson(t.need_by),
+      urgent: !!t.urgent, urgentWhy: t.urgent ? (t.urgent_why || '') : '', later: dayOf(t.later_until) };
   }
   async function queue() {
     const s = await settings() || {};
@@ -338,7 +422,7 @@ export function createComms(deps) {
         const e = (t.events || [])[0] || {};
         out.push({ id: t.id, kind: t.kind, phone10: null, ref: null, name: 'Hidden number', role: '', detail: '', candidates: [],
           owner: t.owner || null, need: t.need || null, events: t.events || [], since: t.due_at, updated: t.updated_at,
-          contactId: e.contactId || null, conversationId: e.conversationId || null });
+          contactId: e.contactId || null, conversationId: e.conversationId || null, ...step2(t) });
         continue;
       }
       const v = cardView(t, await bookFor(t.phone10));
@@ -349,7 +433,14 @@ export function createComms(deps) {
     const today = iso(nowMs()).slice(0, 10);
     const closedToday = await q(`select id, title, done_by, done_at, closed_reason from cds_tasks where area='followup' and done_at >= $1 order by done_at desc`, [today + 'T05:00:00Z']);
     const match = await one(`select count(*)::int n from cds_tasks where area='match' and done_at is null`);
-    return { live: !!s.live, state: s.state || {}, cardsFrom: s.cards_from || null, cards: out, closedToday, caregiverListTodos: match ? match.n : 0 };
+    return { live: !!s.live, state: s.state || {}, cardsFrom: s.cards_from || null, cards: out, closedToday, caregiverListTodos: match ? match.n : 0,
+             today: chicagoDay(nowMs()), needs: NEEDS, people: peopleOf(s) };
+  }
+  // Who a card can belong to: setting comm_center.people ({ email, name }), else the owners' emails.
+  function peopleOf(s) {
+    const set = Array.isArray(s.people) && s.people.length ? s.people
+      : [...new Set(Object.values(s.owners || {}).filter(Boolean))].map(e => ({ email: e, name: firstNameOf(e) }));
+    return set.map(p => ({ email: String(p.email || '').toLowerCase(), name: p.name || firstNameOf(p.email) })).filter(p => p.email);
   }
   // Calls and texts for a person: every number whose phone book row points at one of these refs.
   // phones: numbers on the record itself, so history shows even before the phone book is rebuilt.
@@ -408,6 +499,7 @@ export function createComms(deps) {
        family ? 'Family of ' + p.name : p.detail, by]);
     await q(`update cds_tasks set kind='followup', title=$2, person_ref=$3 where area='followup' and phone10=$1 and done_at is null`, [phone10, family ? 'Family of ' + p.name : p.name, finalRef]);
     await audit(by, 'comm_pick', phone10, { ref: finalRef });
+    await sortAll(await settings());   // the need and owner follow who it is, right away
     return { ok: true };
   }
   async function done(email, { id }) {
@@ -418,6 +510,75 @@ export function createComms(deps) {
     await audit(email, 'comm_done', String(id), {});
     return { ok: true };
   }
+  // ---------- step 2: what a person can change on a card ----------
+  async function openCard(id) {
+    const t = await one(`select * from cds_tasks where id=$1 and area='followup' and done_at is null`, [String(id || '')]);
+    if (!t) throw new CommsError('That follow-up is already closed.');
+    return t;
+  }
+  async function setNeed(email, { id, need }) {
+    email = String(email || '').toLowerCase();
+    if (!NEED_LABEL[need]) throw new CommsError('Pick a need from the list.');
+    const t = await openCard(id);
+    const s = await settings() || {};
+    // The owner follows the need unless a person picked the owner.
+    const owner = byPerson(t.owner_by) ? t.owner : ((s.owners || {})[need] || (s.owners || {}).not_sure || null);
+    await q(`update cds_tasks set need=$2, need_by=$3, owner=$4 where id=$1`, [t.id, need, email, owner]);
+    await audit(email, 'comm_need', String(t.id), { from: t.need, to: need });
+    return { ok: true };
+  }
+  async function setOwner(email, { id, owner }) {
+    email = String(email || '').toLowerCase();
+    const t = await openCard(id);
+    owner = String(owner || '').toLowerCase();
+    if (owner && !peopleOf(await settings() || {}).some(p => p.email === owner)) throw new CommsError('Pick an owner from the list.');
+    await q(`update cds_tasks set owner=$2, owner_by=$3 where id=$1`, [t.id, owner || null, email]);
+    await audit(email, 'comm_owner', String(t.id), { from: t.owner, to: owner || null });
+    return { ok: true };
+  }
+  async function setUrgent(email, { id, on }) {
+    email = String(email || '').toLowerCase();
+    if (typeof on !== 'boolean') throw new CommsError('Say yes or no.');
+    const t = await openCard(id);
+    await q(`update cds_tasks set urgent=$2, urgent_why=$3, urgent_by=$4 where id=$1`,
+      [t.id, on, on ? 'Marked care or safety by ' + firstNameOf(email) + '.' : null, email]);
+    await audit(email, 'comm_urgent', String(t.id), { to: on });
+    return { ok: true };
+  }
+  // A day after today, up to two weeks out; null brings it back to today.
+  async function setLater(email, { id, date }) {
+    email = String(email || '').toLowerCase();
+    const t = await openCard(id);
+    if (date != null) {
+      const today = chicagoDay(nowMs()), max = chicagoDay(nowMs() + 14 * 86400000);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || date <= today || date > max) throw new CommsError('Pick a day in the next two weeks.');
+    }
+    await q(`update cds_tasks set later_until=$2 where id=$1`, [t.id, date || null]);
+    await audit(email, 'comm_later', String(t.id), { to: date || null });
+    return { ok: true };
+  }
+  // The check-in tap: answered calls this month (Missouri time) of 3 minutes or more with a consumer
+  // or their family, newest per consumer. The hub leaves out anyone already checked in. Read only.
+  async function checkins() {
+    const month = chicagoDay(nowMs()).slice(0, 7);
+    const consumers = new Map((await agency('consumers')).filter(c => c && c.id).map(c => [String(c.id), c]));
+    const calls = await q(`select id, at, phone10, seconds, staff_name, direction from cds_comms where channel='call' and answered and seconds >= 180
+      and phone10 is not null and at >= $1 order by at desc`, [month + '-01T00:00:00Z']);
+    const out = new Map();
+    for (const c of calls) {
+      if (chicagoDay(Date.parse(c.at)).slice(0, 7) !== month) continue;
+      const who = resolve(await bookFor(c.phone10));
+      const p = who.person;
+      if (!p) continue;
+      const m = String(p.ref).match(/^(family:)?consumer:(.+)$/);
+      if (!m || !consumers.has(m[2]) || out.has(m[2])) continue;
+      const family = !!m[1];
+      out.set(m[2], { consumerId: m[2], name: consumers.get(m[2]).name, who: family ? (p.detail || 'Family') : 'Consumer', whoName: family ? p.name : '',
+        family, at: c.at, day: chicagoDay(Date.parse(c.at)), minutes: Math.round(c.seconds / 60), staff: c.staff_name || '', direction: c.direction });
+    }
+    return { month, calls: [...out.values()] };
+  }
+
   async function audit(actor, action, target, detail) {
     await q(`insert into cds_audit (actor, action, target, detail) values ($1, $2, $3, $4::jsonb)`, [actor, action, target, JSON.stringify(detail || {})]);
   }
@@ -431,9 +592,14 @@ export function createComms(deps) {
     if (a === 'people') return people();
     if (a === 'pick') return pick(email, body);
     if (a === 'done') return done(email, body);
+    if (a === 'set_need') return setNeed(email, body);
+    if (a === 'set_owner') return setOwner(email, body);
+    if (a === 'urgent') return setUrgent(email, body);
+    if (a === 'later') return setLater(email, body);
+    if (a === 'checkins') return checkins();
     throw new CommsError('Unknown request');
   }
-  return { run, rebuildBook, pull, cards, queue, history, reached, people, pick, done, handle, settings };
+  return { run, rebuildBook, pull, cards, sortAll, queue, history, reached, people, pick, done, setNeed, setOwner, setUrgent, setLater, checkins, handle, settings };
 }
 
 export class CommsError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }

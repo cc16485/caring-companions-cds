@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=8"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=9"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=4"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -538,6 +538,42 @@ input, select, textarea { border-radius:10px; }
 .fu-who .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .fu-who button { min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; font:inherit; font-size:14px; font-weight:700; color:#0D365F; cursor:pointer; }
 .fu-who button.go { background:var(--cute-teal); border-color:var(--cute-teal); color:#fff; }
+.fu-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap:12px; margin-bottom:16px; }
+.fu-tile { background:#fff; border-radius:20px; box-shadow:var(--cute-shadow); padding:16px 18px; display:flex; flex-direction:column; gap:4px; border:2px solid transparent; text-align:left; font:inherit; }
+.fu-tile b { font-size:30px; font-weight:800; line-height:1.1; }
+.fu-tile span { font-weight:700; color:#0D365F; }
+.fu-tile small { font-size:12.5px; }
+.fu-tile.urgent { border-color:#F1C2BD; } .fu-tile.urgent b { color:#9B2C1A; }
+.fu-tile.today b { color:#7A4E0B; } .fu-tile.later b { color:#0D365F; }
+button.fu-tile.check { background:var(--cute-teal-pale); box-shadow:none; color:#14606F; cursor:pointer; }
+button.fu-tile.check span { color:#14606F; }
+.fu-filters { display:flex; flex-direction:column; gap:10px; margin-bottom:8px; }
+.fu-filters .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.fu-filters .lbl { font-size:13.5px; color:#55677a; font-weight:700; min-width:56px; }
+.fu-pill { min-height:40px; padding:0 16px; border-radius:999px; font:inherit; font-size:14px; font-weight:700; cursor:pointer; border:1.5px solid #e4e1d8; background:#fff; color:#3d4b5a; }
+.fu-pill.on { border-color:#0D365F; background:#0D365F; color:#fff; }
+.fu-sec { margin:22px 0 12px; font-family:'Fraunces', Georgia, serif; font-size:24px; font-weight:600; }
+.fu-sec.urgent { color:#9B2C1A; } .fu-sec.today { color:#7A4E0B; } .fu-sec.later { color:#0D365F; }
+.ld-card.fu-urgent { border:2px solid #F1C2BD; }
+.fu-why { margin:0; font-size:13.5px; line-height:1.45; color:#9B2C1A; font-weight:700; }
+.fu-sel { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+.fu-sel label { display:flex; flex-direction:column; gap:3px; font-size:12.5px; font-weight:700; color:#55677a; }
+.fu-sel select { min-height:40px; border-radius:10px; border:1.5px solid #e4e1d8; background:#fff; padding:0 10px; font:inherit; font-size:14px; font-weight:700; color:#0D365F; }
+.fu-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:auto; }
+.fu-acts a, .fu-acts button { min-height:44px; border-radius:999px; font:inherit; font-size:14px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; padding:0 14px; }
+.fu-acts .go { flex:1 1 150px; background:var(--cute-teal); color:#fff; border:0; font-weight:800; }
+.fu-acts .urg { flex:1 1 150px; background:#fff; border:1.5px solid #9B2C1A; color:#9B2C1A; font-weight:800; }
+.fu-acts .urg.on { border-color:#e4e1d8; color:#3d4b5a; }
+.fu-acts .plain { flex:1 1 100px; background:#fff; border:1.5px solid #e4e1d8; color:#16283a; }
+.fu-days { display:flex; flex-wrap:wrap; gap:6px; align-items:center; background:#f6f5f0; border-radius:14px; padding:10px 12px; font-size:13.5px; font-weight:700; color:#0D365F; }
+.fu-days button { min-height:40px; padding:0 12px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; font:inherit; font-size:13.5px; font-weight:700; color:#0D365F; cursor:pointer; }
+.fu-checkins { background:#fff; border-radius:20px; box-shadow:var(--cute-shadow); padding:18px 20px; margin-bottom:16px; display:flex; flex-direction:column; gap:12px; }
+.fu-checkins[hidden] { display:none; }
+.fu-checkins h2 { margin:0; font-family:'Fraunces', Georgia, serif; font-size:22px; font-weight:600; color:#0D365F; }
+.fu-ci { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; justify-content:space-between; border-top:1px solid #f0ece2; padding-top:12px; }
+.fu-ci div { display:flex; flex-direction:column; gap:3px; font-size:14.5px; }
+.fu-ci b { font-family:'Fraunces', Georgia, serif; font-size:19px; font-weight:600; color:#0D365F; }
+.fu-ci button { min-height:44px; padding:0 18px; border-radius:999px; border:0; background:var(--cute-teal); color:#fff; font:inherit; font-size:14.5px; font-weight:800; cursor:pointer; }
 .fu-closed { background:#fff; border-radius:18px; padding:14px 20px; margin-top:16px; box-shadow:var(--cute-shadow); }
 .fu-closed summary { cursor:pointer; font-weight:700; color:#14606F; }
 .fu-closed div div { font-size:14px; padding:6px 0; border-bottom:1px solid #f0ece2; }
@@ -869,7 +905,10 @@ input, select, textarea { border-radius:10px; }
     <span class="fu-checked" id="fuChecked"></span>
   </div>
   <div id="fuBanner"></div>
-  <div class="ld-grid" id="fuCards"></div>
+  <div class="fu-tiles" id="fuTiles"></div>
+  <div class="fu-checkins" id="fuCheckins" hidden></div>
+  <div class="fu-filters" id="fuFilters"></div>
+  <div id="fuCards"></div>
   <details class="fu-closed" id="fuClosedBox" hidden><summary id="fuClosedSum"></summary><div id="fuClosed"></div></details>
 </div>
 
@@ -2827,6 +2866,7 @@ input, select, textarea { border-radius:10px; }
     </div>
     <div class="clm-body">
       <div>
+        <div id="clm_from" style="display:none;background:#FDF1DC;color:#7A4E0B;border-radius:8px;padding:10px 12px;font-size:13px;font-weight:600;margin-bottom:14px"></div>
         <div id="clm_existing_note" style="display:none;background:var(--gray-100);border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px">
           A call is already logged for this month. Saving replaces it.
         </div>
@@ -5139,6 +5179,7 @@ function openContactLog(cid, key) {
   // Check if existing log
   const existing = c.contacts && c.contacts[key] && typeof c.contacts[key] === 'object' ? c.contacts[key] : null;
   document.getElementById('clm_existing_note').style.display = existing ? 'block' : 'none';
+  document.getElementById('clm_from').style.display = 'none';
   document.getElementById('clm_dhss_alert').style.display = 'none';
 
   // Pre-fill or reset
@@ -5230,6 +5271,7 @@ function saveContactLog() {
 
   closeModal('contactLogModal');
   renderConsumers();
+  if (document.getElementById('page-followups')?.classList.contains('active')) renderFollowups(false);
   if (document.getElementById('page-profile').classList.contains('active')) renderProfile();
   updateDashboard();
 
@@ -5537,7 +5579,36 @@ async function renderSwitches(reload) {
   }).join('');
   host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
     '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
-    rows + '</div>';
+    rows + '</div>' + needOwnersHtml(d);
+}
+// Who owns each need (Communication Center step 2, 2026-10-22). A new follow-up card goes to this
+// person. Same rule as the switches: everyone sees it, only Samantha changes it, every change recorded.
+function needOwnersHtml(d) {
+  const no = d.needOwners;
+  if (!no) return '';
+  const nameOf = e => { const p = no.people.find(x => x.email === e); return p ? p.name : (e || 'Nobody yet'); };
+  const rows = no.needs.map(n => {
+    const right = d.canChange
+      ? '<select id="swNeed_' + esc(n.key) + '" aria-label="Owner for ' + esc(n.label) + '" onchange="swNeedOwner(\'' + esc(n.key) + '\',this.value)" style="min-height:36px;border-radius:8px;border:1.5px solid var(--gray-200);padding:0 8px;font:inherit;font-size:13px">' +
+          '<option value=""' + (!n.owner ? ' selected' : '') + '>Nobody yet</option>' +
+          no.people.map(p => '<option value="' + esc(p.email) + '"' + (n.owner === p.email ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>'
+      : '<b style="font-size:13px">' + esc(nameOf(n.owner)) + '</b>';
+    return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--gray-200)">' +
+      '<span style="font-weight:700;font-size:13.5px">' + esc(n.label) + '</span>' + right + '</div>';
+  }).join('');
+  return '<div class="card" style="margin-top:14px"><div class="card-title"><span class="icon">📞</span> Who owns each need</div>' +
+    '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">A new follow-up card goes to this person. Moving one card never changes this list. Everyone still sees every card.</div>' +
+    rows + (_swNote && _swNote.key === 'need_owner' ? '<div style="font-size:12.5px;margin-top:6px;font-weight:600;color:' + (_swNote.bad ? 'var(--danger)' : 'var(--success)') + '">' + esc(_swNote.text) + '</div>' : '') + '</div>';
+}
+async function swNeedOwner(need, owner) {
+  try {
+    const r = await _swCall({ action: 'set_need_owner', need, owner });
+    _swNote = { key: 'need_owner', text: r.message, bad: false };
+    await renderSwitches(true);
+  } catch (e) {
+    _swNote = { key: 'need_owner', text: 'Could not change it: ' + e.message.replace(/\.$/, '') + '. Nothing changed.', bad: true };
+    renderSwitches(true);
+  }
 }
 function swAsk(key) { _swAsk = key; _swNote = null; renderSwitches(false); }
 async function swSet(key, on) {
@@ -6806,7 +6877,8 @@ function commMergeReached() {
 }
 // For Today: only once the Switches page has "Follow-ups on Today" on.
 function commForToday() {
-  return _comm && _comm.live && Array.isArray(_comm.cards) ? _comm.cards.map(c => ({ name: c.name, since: c.since })) : undefined;
+  return _comm && _comm.live && Array.isArray(_comm.cards)
+    ? _comm.cards.map(c => ({ name: c.name, since: c.since, urgent: !!c.urgent, owner: commOwnerName(c.owner), later: c.later || null })) : undefined;
 }
 
 function _commWhen(iso) {
@@ -6841,32 +6913,82 @@ async function renderFollowups(reload) {
     (!d.live ? '<div class="fu-banner practice"><b>Practice.</b> Today and the 8am email do not list these yet. Turn on "Follow-ups on Today and the 8am email" on the Switches page when they look right.</div>' : '');
   const cards = d.cards || [];
   const who = cards.filter(c => c.kind === 'who_is_this');
+  if (who.length && !_commPeople) { try { _commPeople = (await _commCall({ action: 'people' })).people || []; } catch (e) { _commPeople = []; } }
+  if (!_fuMe) { try { const { data } = await _db.auth.getSession(); _fuMe = String(data && data.session && data.session.user && data.session.user.email || '').toLowerCase(); } catch (e) {} }
+  // Step 2 (her approved mockup LBNkuRZyb7pJebrykd4Mxm): care or safety first, then today, then later this week.
+  const todayIso = d.today || new Date().toISOString().slice(0, 10);
+  // Until the Desktop step updates the server, cards show as before: all as today, no need or owner controls.
+  const step2 = Array.isArray(d.needs) && d.needs.length > 0;
+  const secOf = c => c.urgent ? 'urgent' : (c.later && c.later > todayIso ? 'later' : 'today');
+  const myName = commOwnerName(_fuMe);
+  const ownerOk = c => _fuOwner === 'all' || (_fuOwner === 'nobody' ? !c.owner : _fuOwner === 'mine' ? !!c.owner && commOwnerName(c.owner) === myName : c.owner === _fuOwner);
+  const shown = cards.filter(c => ownerOk(c) && (_fuNeed === 'all' || (c.need || 'not_sure') === _fuNeed));
+  const count = k => cards.filter(c => secOf(c) === k).length;
   sum.textContent = cards.length
     ? cards.length + (cards.length === 1 ? ' call or text needs someone.' : ' calls and texts need someone.') + (who.length ? ' ' + who.length + ' from a number we do not know.' : '')
     : 'Nothing waiting. Every call and text has been answered.';
-  if (who.length && !_commPeople) { try { _commPeople = (await _commCall({ action: 'people' })).people || []; } catch (e) { _commPeople = []; } }
+  // Monthly check-ins: kept apart from follow-ups (her rule). Same count as the consumer roster.
+  const active = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const doneN = active.filter(c => ongoingRequirements(c).monthly.doneThisMonth).length;
+  const monthWord = new Date().toLocaleDateString('en-US', { month: 'long' });
+  document.getElementById('fuTiles').innerHTML =
+    '<div class="fu-tile urgent"><b>' + count('urgent') + '</b><span>Care or safety today</span></div>' +
+    '<div class="fu-tile today"><b>' + count('today') + '</b><span>Call or text back today</span></div>' +
+    '<div class="fu-tile later"><b>' + count('later') + '</b><span>Later this week</span></div>' +
+    (!step2 ? '<div class="fu-tile later"><b>' + doneN + ' of ' + active.length + '</b><span>' + esc(monthWord) + ' check-ins done</span><small>Kept apart. Only recorded check-ins count.</small></div>' : '') +
+    (!step2 ? '' : '<button type="button" class="fu-tile check" aria-expanded="' + (_fuCheckOpen ? 'true' : 'false') + '" onclick="fuCheckinsToggle()"><b>' + doneN + ' of ' + active.length + '</b><span>' + esc(monthWord) + ' check-ins done</span>' +
+      '<small>Kept apart. ' + (_fuCheckOpen ? 'Tap to hide the calls that could count.' : 'Tap to see calls that could count.') + '</small></button>');
+  const pill = (on, label, js) => '<button type="button" class="fu-pill' + (on ? ' on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '" onclick="' + js + '">' + esc(label) + '</button>';
+  const owners = [['all', 'Everyone'], ['mine', 'Mine']].concat((d.people || []).map(p => [p.email, p.name])).concat([['nobody', 'Nobody yet']]);
+  document.getElementById('fuFilters').innerHTML = cards.length && step2 ? (
+    '<div class="row"><span class="lbl">Owner</span>' + owners.map(([k, l]) => pill(_fuOwner === k, l + ' (' + cards.filter(c => (k === 'all' || (k === 'nobody' ? !c.owner : k === 'mine' ? !!c.owner && commOwnerName(c.owner) === myName : c.owner === k))).length + ')', "fuFilter('owner','" + esc(k) + "')")).join('') + '</div>' +
+    '<div class="row"><span class="lbl">Need</span>' + [['all', 'All']].concat((d.needs || []).map(n => [n.key, n.label])).map(([k, l]) => pill(_fuNeed === k, l, "fuFilter('need','" + esc(k) + "')")).join('') + '</div>') : '';
   const today = new Date().toDateString();
-  host.innerHTML = cards.length ? cards.map(c => {
+  const card = c => {
     const old = c.since && new Date(c.since).toDateString() !== today;
-    const due = old ? 'Since ' + _commWhen(c.since) : 'Waiting since ' + _commWhen(c.since);
+    const sec = secOf(c);
+    const due = sec === 'later' ? 'Back ' + _fuDay(c.later) : old ? 'Since ' + _commWhen(c.since) : 'Waiting since ' + _commWhen(c.since);
     const phone = c.phone10 ? '(' + c.phone10.slice(0, 3) + ') ' + c.phone10.slice(3, 6) + '-' + c.phone10.slice(6) : '';
     const hidden = c.kind === 'hidden_number';
     const link = c.contactId ? CDS_GHL_APP + '/contacts/detail/' + encodeURIComponent(c.contactId)
       : c.conversationId ? CDS_GHL_APP + '/conversations/conversations/' + encodeURIComponent(c.conversationId) : CDS_GHL_APP + '/conversations/conversations';
     const events = (c.events || []).slice(-6).map(e => '<li><span>' + esc(_commWhen(e.at)) + '</span>' + esc(e.text) + '</li>').join('');
     const role = hidden ? 'Number not shown' : c.kind === 'who_is_this' ? phone : [c.role, c.detail].filter(Boolean).join(': ');
-    return '<article class="ld-card">' +
+    const id = esc(c.id);
+    const needOpts = (d.needs || []).map(n => '<option value="' + esc(n.key) + '"' + ((c.need || 'not_sure') === n.key ? ' selected' : '') + '>' + esc(n.label) + '</option>').join('');
+    const ownOpts = '<option value=""' + (!c.owner ? ' selected' : '') + '>Nobody yet</option>' + (d.people || []).map(p => '<option value="' + esc(p.email) + '"' + (c.owner === p.email ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('')
+      + (c.owner && !(d.people || []).some(p => p.email === c.owner) ? '<option value="' + esc(c.owner) + '" selected>' + esc(commOwnerName(c.owner)) + '</option>' : '');
+    const days = _fuLaterOpen === c.id ? '<div class="fu-days" role="group" aria-label="Move to a later day"><span>Move to:</span>' +
+        _fuNextDays(todayIso).map(x => '<button type="button" onclick="fuLater(\'' + id + '\',\'' + x + '\')">' + esc(_fuDay(x)) + '</button>').join('') +
+        (c.later ? '<button type="button" onclick="fuLater(\'' + id + '\',null)">Back to today</button>' : '') +
+        '<button type="button" onclick="fuLaterPick(\'\')">Cancel</button></div>' : '';
+    return '<article class="ld-card' + (c.urgent ? ' fu-urgent' : '') + '">' +
       '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') + '</div>' +
       (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
       '<ul class="fu-events">' + events + '</ul>' +
+      (c.urgent && c.urgentWhy ? '<p class="fu-why">' + esc(c.urgentWhy) + '</p>' : '') +
       (c.kind === 'who_is_this' ? commWhoHtml(c) : '') +
-      '<div class="ld-next"><span class="ld-due ' + (old ? 't-late' : 't-today') + '">' + esc(due) + '</span>' +
-        '<span class="ld-nexttext">Owner: <strong>' + esc(c.owner || 'Nobody yet') + '</strong>. ' +
-          (hidden ? 'There is no number to call back. Look at it in GoHighLevel, then press Done.' : 'Closes itself when someone calls or texts them back.') + '</span></div>' +
-      '<div class="ld-btns"><a class="ld-log" style="flex:1.4;display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;text-decoration:none;font-weight:700" href="' + esc(link) + '" target="_blank" rel="noopener">' + (hidden ? 'Open in GoHighLevel' : 'Call or text back') + '</a>' +
-        '<button type="button" class="ld-open" onclick="commDone(\'' + esc(c.id) + '\')">Done</button></div>' +
+      (!step2 ? '' : '<div class="fu-sel">' +
+        '<label for="fuNeed_' + id + '">Need' + (c.needByHub ? ' (the hub picked it, change it any time)' : '') + '<select id="fuNeed_' + id + '" onchange="fuSet(\'' + id + '\',\'set_need\',{need:this.value})">' + needOpts + '</select></label>' +
+        '<label for="fuOwner_' + id + '">Owner<select id="fuOwner_' + id + '" onchange="fuSet(\'' + id + '\',\'set_owner\',{owner:this.value})">' + ownOpts + '</select></label></div>') +
+      '<div class="ld-next"><span class="ld-due ' + (sec === 'later' ? '' : old || c.urgent ? 't-late' : 't-today') + '">' + esc(due) + '</span>' +
+        '<span class="ld-nexttext">' + (hidden ? 'There is no number to call back. Look at it in GoHighLevel, then press Done.'
+          : sec === 'later' ? 'Comes back that morning, or sooner if they call or text again.' : 'Closes itself when someone calls or texts them back.') + '</span></div>' +
+      '<div class="fu-acts"><a class="go" href="' + esc(link) + '" target="_blank" rel="noopener">' + (hidden ? 'Open in GoHighLevel' : 'Call or text back') + '</a>' +
+        (!step2 ? '' : '<button type="button" class="urg' + (c.urgent ? ' on' : '') + '" aria-pressed="' + (c.urgent ? 'true' : 'false') + '" onclick="fuSet(\'' + id + '\',\'urgent\',{on:' + (!c.urgent) + '})">' + (c.urgent ? 'Not care or safety' : 'Care or safety today') + '</button>' +
+        '<button type="button" class="plain" onclick="fuLaterPick(\'' + id + '\')">' + (sec === 'later' ? 'Change the day' : 'Later this week') + '</button>') +
+        '<button type="button" class="plain" onclick="commDone(\'' + id + '\')">Done</button></div>' + days +
     '</article>';
-  }).join('') : '<div class="ld-empty">Nothing waiting. Every call and text has been answered.</div>';
+  };
+  const SECS = [['urgent', 'Care or safety today'], ['today', 'Call or text back today'], ['later', 'Later this week']];
+  host.innerHTML = !cards.length ? '<div class="ld-grid"><div class="ld-empty">Nothing waiting. Every call and text has been answered.</div></div>'
+    : SECS.map(([k, t]) => {
+        const list = shown.filter(c => secOf(c) === k);
+        if (!list.length && !count(k)) return '';
+        return '<h2 class="fu-sec ' + k + '">' + esc(t) + '</h2><div class="ld-grid">' +
+          (list.length ? list.map(card).join('') : '<div class="ld-empty">Nothing here for this filter.</div>') + '</div>';
+      }).join('');
+  if (_fuCheckOpen && step2) fuCheckinsDraw(); else document.getElementById('fuCheckins').hidden = true;
   const closed = d.closedToday || [];
   const box = document.getElementById('fuClosedBox');
   box.hidden = !closed.length;
@@ -6904,6 +7026,71 @@ async function commPick(phone10, ref, family) {
 async function commDone(id) {
   try { await _commCall({ action: 'done', id }); renderFollowups(true); }
   catch (e) { alert(e.message); }
+}
+
+// ---- Step 2: need, owner, care or safety, later, and the check-in tap ----
+let _fuOwner = 'all', _fuNeed = 'all', _fuLaterOpen = '', _fuMe = '', _fuCheckOpen = false, _fuCheck = null;
+function commOwnerName(email) {
+  if (!email) return '';
+  const p = ((_comm && _comm.people) || []).find(x => x.email === String(email).toLowerCase());
+  if (p) return p.name;
+  const n = String(email).split('@')[0].replace(/[^a-z]/gi, '');
+  return n ? n[0].toUpperCase() + n.slice(1).toLowerCase() : '';
+}
+function _fuDay(iso) { return iso ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''; }
+// The next five weekdays after today.
+function _fuNextDays(todayIso) {
+  const out = [], d = new Date(todayIso + 'T12:00:00');
+  while (out.length < 5) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) out.push(d.toISOString().slice(0, 10)); }
+  return out;
+}
+function fuFilter(kind, v) { if (kind === 'owner') _fuOwner = v; else _fuNeed = v; renderFollowups(false); }
+function fuLaterPick(id) { _fuLaterOpen = id; renderFollowups(false); }
+async function fuSet(id, action, extra) {
+  try { await _commCall(Object.assign({ action, id }, extra)); _fuLaterOpen = ''; renderFollowups(true); }
+  catch (e) { alert('Could not save that: ' + e.message.replace(/\.$/, '') + '. Nothing changed.'); renderFollowups(false); }
+}
+function fuLater(id, date) { return fuSet(id, 'later', { date }); }
+async function fuCheckinsToggle() {
+  _fuCheckOpen = !_fuCheckOpen;
+  if (_fuCheckOpen) _fuCheck = null;
+  renderFollowups(false);
+}
+async function fuCheckinsDraw() {
+  const box = document.getElementById('fuCheckins');
+  if (!box) return;
+  box.hidden = false;
+  if (!_fuCheck) {
+    box.innerHTML = '<h2>Calls that could count</h2><div class="field-note">Loading…</div>';
+    try { _fuCheck = await _commCall({ action: 'checkins' }); }
+    catch (e) { box.innerHTML = '<h2>Calls that could count</h2><div class="field-note">Could not load: ' + esc(e.message) + '</div>'; _fuCheck = null; return; }
+  }
+  const byId = new Map(getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged').map(c => [String(c.id), c]));
+  const calls = (_fuCheck.calls || []).filter(x => byId.has(String(x.consumerId)) && !ongoingRequirements(byId.get(String(x.consumerId))).monthly.doneThisMonth);
+  const monthWord = new Date().toLocaleDateString('en-US', { month: 'long' });
+  const noCall = [...byId.values()].filter(c => !ongoingRequirements(c).monthly.doneThisMonth && !calls.some(x => String(x.consumerId) === String(c.id))).length;
+  box.innerHTML = '<h2>Calls that could count</h2>' +
+    '<div class="field-note">Real calls this month, 3 minutes or more, with a consumer or their family, for consumers with no ' + esc(monthWord) + ' check-in yet. A call only counts when you open the check-in form and press Save.</div>' +
+    (calls.length ? calls.map(x => {
+      const them = x.family ? (x.whoName || 'their family') : x.name;
+      const line = x.direction === 'inbound' ? them + ' called. ' + (x.staff || 'We') + ' answered. ' + x.minutes + ' minutes, ' + _fuDay(x.day) + '.'
+        : (x.staff || 'We') + ' called ' + them + '. Talked ' + x.minutes + ' minutes, ' + _fuDay(x.day) + '.';
+      return '<div class="fu-ci"><div><b>' + esc(x.name) + '</b><span>' + esc((x.family ? x.who + '. ' : '') + line) + '</span></div>' +
+        '<button type="button" onclick="fuCheckin(\'' + esc(x.consumerId) + '\',\'' + esc(x.day) + '\',' + (x.family ? 'true' : 'false') + ',\'' + esc(String(line).replace(/'/g, '’')) + '\')">Record as ' + esc(monthWord) + ' check-in</button></div>';
+    }).join('') : '<div class="field-note">No calls like that yet this month.</div>') +
+    (noCall ? '<div class="field-note">' + noCall + (noCall === 1 ? ' consumer has' : ' consumers have') + ' no call yet this month. They stay on the consumer roster\'s check-in list, as now.</div>' : '');
+}
+// Opens the check-in form the office already uses, filled in from the call. Only Save counts.
+function fuCheckin(cid, day, family, line) {
+  const c = getData('consumers').find(x => String(x.id) === String(cid));
+  if (!c) return;
+  openContactLog(c.id, ongoingRequirements(c).monthly.thisMonth);
+  document.getElementById('clm_date').value = day;
+  document.getElementById('clm_method').value = 'phone';
+  document.getElementById('clm_person').value = family ? 'family' : 'consumer';
+  const from = document.getElementById('clm_from');
+  from.textContent = 'Filled in from the call: ' + line + ' The Missouri questions are still yours to answer.';
+  from.style.display = 'block';
 }
 
 // "Calls and texts" on a profile. Fills every .cds-comm-history inside root.
