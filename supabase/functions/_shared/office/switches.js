@@ -45,6 +45,9 @@ export const SWITCHES = [
   { key: 'messages_live', field: null, label: 'Caregiver Match messages', warn: 'This one reaches caregivers and families.',
     does: () => 'Lets Caregiver Match text and email caregivers and families. While off, messages wait in Messages (the office\'s test phones still get them).',
     on: 'From now on, texts and emails written in Caregiver Match go to real caregivers and families.', off: 'Caregiver Match messages will wait in Messages instead of being sent.' },
+  { key: 'comm_center', field: 'live', label: 'Follow-ups on Today and the 8am email',
+    does: () => 'Missed calls and texts nobody answered, read from GoHighLevel every 5 minutes, show on Today and in the 8am email. The Follow-ups page shows them either way. Nothing is ever sent to anyone.',
+    on: 'Today and the 8am email will list calls and texts to follow up.', off: 'Today and the 8am email will leave them out. The Follow-ups page still shows them.' },
 ];
 function hour(h) { h = +h; return (h % 12 || 12) + (h < 12 ? 'am' : 'pm'); }
 

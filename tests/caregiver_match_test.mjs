@@ -24,6 +24,8 @@ await pg.exec(strip(readFileSync(ROOT + '/cds_public_insert_lock.sql', 'utf8')))
 const phase1 = strip(readFileSync(ROOT + '/caregiver_match_phase1.sql', 'utf8'));
 await pg.exec(phase1);
 await pg.exec(phase1);
+// Communication Center (2026-10-22) adds cds_tasks.area; Caregiver Match reads only area 'match'.
+await pg.exec(strip(readFileSync(ROOT + '/comm_center.sql', 'utf8')));
 ok(true, 'Phase 1 SQL runs twice');
 // The attendant application tables (Caregiver Match lists leave out applicants with a consumer unless they chose to be listed).
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);

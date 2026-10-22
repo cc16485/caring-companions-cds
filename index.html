@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=7"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=8"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=4"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -524,6 +524,29 @@ input, select, textarea { border-radius:10px; }
 .ld-choice b { font-size:16.5px; color:#0D365F; }
 .ld-choice span { font-size:14px; color:#55677a; }
 .lp-msgs { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+/* Follow-ups and calls and texts (Communication Center, 2026-10-22) */
+.fu-checked { font-size:13.5px; color:#55677a; }
+.fu-banner { border-radius:16px; padding:12px 16px; margin-bottom:16px; font-size:14.5px; line-height:1.5; }
+.fu-banner.practice { background:var(--cute-teal-pale); color:#14606F; }
+.fu-banner.bad { background:#FBE7E3; color:#9B2C1A; }
+.fu-events { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:6px; }
+.fu-events li { font-size:14.5px; line-height:1.45; }
+.fu-events li span { color:#55677a; font-size:13px; margin-right:6px; }
+.fu-who { display:flex; flex-direction:column; gap:8px; background:#f6f5f0; border-radius:14px; padding:12px 14px; }
+.fu-who b { color:#0D365F; font-size:14.5px; }
+.fu-who input[type=text] { min-height:42px; padding:0 12px; border:1.5px solid #e4e1d8; border-radius:10px; font:inherit; font-size:14.5px; }
+.fu-who .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.fu-who button { min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; font:inherit; font-size:14px; font-weight:700; color:#0D365F; cursor:pointer; }
+.fu-who button.go { background:var(--cute-teal); border-color:var(--cute-teal); color:#fff; }
+.fu-closed { background:#fff; border-radius:18px; padding:14px 20px; margin-top:16px; box-shadow:var(--cute-shadow); }
+.fu-closed summary { cursor:pointer; font-weight:700; color:#14606F; }
+.fu-closed div div { font-size:14px; padding:6px 0; border-bottom:1px solid #f0ece2; }
+.ch-list { display:flex; flex-direction:column; }
+.ch-row { display:flex; gap:10px; padding:9px 0; border-bottom:1px solid #f0ece2; font-size:14px; line-height:1.45; }
+.ch-row:last-child { border-bottom:0; }
+.ch-dot { flex:none; width:30px; height:30px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:var(--cute-teal-pale); }
+.ch-dot.missed { background:#FBE7E3; }
+.ch-row small { display:block; color:#55677a; font-size:12.5px; }
 @media (max-width: 600px) {
   .ld-steps { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
   .ld-step { padding:10px 8px; align-items:center; text-align:center; gap:4px; border-radius:16px; }
@@ -829,6 +852,23 @@ input, select, textarea { border-radius:10px; }
     </div>
   </div>
   </details>
+</div>
+
+<!-- ==================== FOLLOW-UPS (Communication Center, 2026-10-22) ====================
+     Her approved design (artifact 6DTNtZDFccu8i3ZbJZhmee), step 1: missed calls and texts nobody
+     answered, read from GoHighLevel every 5 minutes by the cds-comms server function. Cards close
+     themselves when someone calls or texts back. Nothing here sends anything. -->
+<div id="page-followups" class="page">
+  <div class="ld-head">
+    <div>
+      <h1 class="cute-title ld-title">Follow-ups</h1>
+      <p class="ld-sum" id="fuSummary">Loading…</p>
+    </div>
+    <span class="fu-checked" id="fuChecked"></span>
+  </div>
+  <div id="fuBanner"></div>
+  <div class="ld-grid" id="fuCards"></div>
+  <details class="fu-closed" id="fuClosedBox" hidden><summary id="fuClosedSum"></summary><div id="fuClosed"></div></details>
 </div>
 
 <!-- ==================== CONSUMERS ==================== -->
@@ -4625,7 +4665,7 @@ const PAGE_TO_SECTION = (() => {
   SECTIONS.forEach(sec => sec.tabs.forEach(t => { m[t.page] = sec.id; }));
   // Pages with no tab of their own, and section ids used bare.
   Object.assign(m, {
-    dashboard: 'today', today: 'today',
+    dashboard: 'today', today: 'today', followups: 'today',
     pipeline: 'leads', statesubmissions: 'leads', leadprofile: 'leads', leads: 'leads',
     profile: 'consumers',
     attendants: 'attendants', roster: 'attendants', backuppool: 'attendants', caregiverpool: 'attendants',
@@ -4758,6 +4798,7 @@ function showPage(id) {
   if (id === 'caregivermatch') renderCaregiverMatch();
   if (id === 'activeattendants') { renderActiveAttendants(); renderAttendantCheck(); }
   if (id === 'profile') renderProfile();
+  if (id === 'followups') renderFollowups(true);
 }
 
 // Caregiver Match: the private caregiver directory office screens. Everything
@@ -4812,7 +4853,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=2');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=3');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       oigPeople: () => { const d = oig && oig.data(); return d && d.live ? d.people : {}; },
@@ -5991,7 +6032,7 @@ let _leadCalls = [];
 async function loadLeadCalls() {
   if (!_db) return;
   const { data, error } = await _db.from('cds_lead_calls').select('*').order('at', { ascending: false }).limit(500);
-  if (!error && data) _leadCalls = data;
+  if (!error && data) { _leadCalls = data; if (typeof commMergeReached === 'function') commMergeReached(); }
 }
 // One import at a time: sign-in, the Leads page and a link from the lead page can all
 // ask at once, and two at once would each add the same new lead.
@@ -6162,7 +6203,7 @@ function renderLeadProfile(){
     '</div></div>';
   // ---- calls logged from the lead link page (the new-lead text) ----
   const OUT = { connected: 'We talked', voicemail: 'Voicemail', no_answer: 'No answer', wrong_number: 'Wrong number' };
-  const logged = p.siteLeadId ? _leadCalls.filter(c => c.site_lead_id === p.siteLeadId) : [];
+  const logged = p.siteLeadId ? _leadCalls.filter(c => c.site_lead_id === p.siteLeadId && !c.fromComms) : [];
   if (logged.length) html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
     '<b style="color:var(--primary)">Calls logged from the text link</b>' +
     logged.map(c => '<div style="font-size:13px;padding:4px 0">' + esc(c.by_name) + ', ' + esc(OUT[c.outcome] || c.outcome) + ', ' +
@@ -6302,7 +6343,9 @@ function renderLeadProfile(){
       : '<div class="field-note">No notes yet.</div>') +
     '</div>';
 
+  html += '<div class="cds-comm-history" data-refs="lead:' + esc(p.id) + '" data-phones="' + esc(p.phone || '') + '"></div>';
   host.innerHTML = html;
+  if (window.cdsCommHistory) window.cdsCommHistory(host);
 }
 
 /* The details a care plan change request asks for, in one block to copy. */
@@ -6692,6 +6735,176 @@ function renderPipeline() {
       '<div class="ld-btns"><button type="button" class="ld-open" onclick="openLeadProfile(\'' + id + '\')">Open</button>' + main + '</div>' +
     '</article>';
   }).join('');
+}
+
+// ============================================================================
+// COMMUNICATION CENTER, step 1 (2026-10-22, her approved design, artifact 6DTNtZDFccu8i3ZbJZhmee)
+//
+// The cds-comms server function reads every call and text on both CDS lines from GoHighLevel
+// every 5 minutes. This page only shows what it found and records two things a person decides:
+// "Who is this?" and Done. Call and text buttons open the contact in GoHighLevel (calls go from
+// the office line, her rule). Nothing here sends anything. Calls never count as monthly check-ins.
+// ============================================================================
+const CDS_GHL_APP = 'https://app.hirecara.com/v2/location/4EFPkajwe0hHrqxvYkZ9';
+let _comm = null, _commReached = [], _commPeople = null, _commTimer = null;
+
+async function _commCall(body) {
+  const { data } = await _db.auth.getSession();
+  const jwt = data && data.session ? data.session.access_token : '';
+  let r;
+  try {
+    r = await fetch(SUPABASE_URL + '/functions/v1/cds-comms', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt }, body: JSON.stringify(body) });
+  } catch (e) { throw new Error('The follow-ups could not be reached. Check the connection and try again.'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'The follow-ups could not be reached.');
+  return j;
+}
+
+// Called at sign-in and every 5 minutes after.
+async function commLoad() {
+  if (!_db) return;
+  try { _comm = await _commCall({ action: 'queue' }); } catch (e) { _comm = { error: e.message }; }
+  try { _commReached = (await _commCall({ action: 'reached' })).phones || []; } catch (e) { /* the Leads page still works */ }
+  commMergeReached();
+  if (!_commTimer) _commTimer = setInterval(() => commLoad().then(() => {
+    if (document.getElementById('page-followups')?.classList.contains('active')) renderFollowups(false);
+    try { renderDailyRoutine(); } catch (e) {}
+  }), 5 * 60000);
+}
+// A website lead the office has texted, or talked to on the phone, counts as called on Leads.
+function commMergeReached() {
+  const set = new Set(_commReached);
+  const extra = getData('pipeline').filter(p => p.siteLeadId && set.has(String(p.phone || '').replace(/\D/g, '').slice(-10)))
+    .map(p => ({ site_lead_id: p.siteLeadId, outcome: 'connected', at: '', fromComms: true }));
+  _leadCalls = _leadCalls.filter(c => !c.fromComms).concat(extra);
+}
+// For Today: only once the Switches page has "Follow-ups on Today" on.
+function commForToday() {
+  return _comm && _comm.live && Array.isArray(_comm.cards) ? _comm.cards.map(c => ({ name: c.name, since: c.since })) : undefined;
+}
+
+function _commWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), now = new Date();
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  if (d.toDateString() === now.toDateString()) return time;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'Yesterday ' + time;
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + time;
+}
+
+async function renderFollowups(reload) {
+  const host = document.getElementById('fuCards');
+  if (!host || !_db) return;
+  if (reload || !_comm) { host.innerHTML = '<div class="ld-empty">Loading…</div>'; await commLoad(); }
+  const d = _comm || {};
+  const sum = document.getElementById('fuSummary'), banner = document.getElementById('fuBanner'), chk = document.getElementById('fuChecked');
+  if (d.error) {
+    sum.textContent = 'Calls and texts that still need someone.';
+    banner.innerHTML = '<div class="fu-banner bad"><b>The follow-ups could not load.</b> ' + esc(d.error) + '</div>';
+    host.innerHTML = ''; return;
+  }
+  const st = d.state || {};
+  const lastRun = st.last_run ? new Date(st.last_run) : null;
+  chk.textContent = lastRun ? 'Checked GoHighLevel ' + _commWhen(st.last_run) : 'Not checked GoHighLevel yet';
+  // Nothing fails silently: a stopped reader is said out loud.
+  const stale = !lastRun || (Date.now() - lastRun.getTime() > 20 * 60000);
+  banner.innerHTML =
+    (st.last_error ? '<div class="fu-banner bad"><b>Reading GoHighLevel failed ' + esc(_commWhen(st.last_error_at)) + '.</b> ' + esc(st.last_error) + ' Calls and texts since then may be missing here, so check GoHighLevel too.</div>'
+      : stale ? '<div class="fu-banner bad"><b>' + (lastRun ? 'The hub has not read GoHighLevel since ' + esc(_commWhen(st.last_run)) + '.' : 'The hub has not read GoHighLevel yet.') + '</b> Check GoHighLevel for calls and texts until this clears.</div>' : '') +
+    (!d.live ? '<div class="fu-banner practice"><b>Practice.</b> Today and the 8am email do not list these yet. Turn on "Follow-ups on Today and the 8am email" on the Switches page when they look right.</div>' : '');
+  const cards = d.cards || [];
+  const who = cards.filter(c => c.kind === 'who_is_this');
+  sum.textContent = cards.length
+    ? cards.length + (cards.length === 1 ? ' call or text needs someone.' : ' calls and texts need someone.') + (who.length ? ' ' + who.length + ' from a number we do not know.' : '')
+    : 'Nothing waiting. Every call and text has been answered.';
+  if (who.length && !_commPeople) { try { _commPeople = (await _commCall({ action: 'people' })).people || []; } catch (e) { _commPeople = []; } }
+  const today = new Date().toDateString();
+  host.innerHTML = cards.length ? cards.map(c => {
+    const old = c.since && new Date(c.since).toDateString() !== today;
+    const due = old ? 'Since ' + _commWhen(c.since) : 'Waiting since ' + _commWhen(c.since);
+    const phone = c.phone10 ? '(' + c.phone10.slice(0, 3) + ') ' + c.phone10.slice(3, 6) + '-' + c.phone10.slice(6) : '';
+    const link = c.contactId ? CDS_GHL_APP + '/contacts/detail/' + encodeURIComponent(c.contactId) : CDS_GHL_APP + '/conversations/conversations';
+    const events = (c.events || []).slice(-6).map(e => '<li><span>' + esc(_commWhen(e.at)) + '</span>' + esc(e.text) + '</li>').join('');
+    const role = c.kind === 'who_is_this' ? phone : [c.role, c.detail].filter(Boolean).join(': ');
+    return '<article class="ld-card">' +
+      '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') + '</div>' +
+      (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
+      '<ul class="fu-events">' + events + '</ul>' +
+      (c.kind === 'who_is_this' ? commWhoHtml(c) : '') +
+      '<div class="ld-next"><span class="ld-due ' + (old ? 't-late' : 't-today') + '">' + esc(due) + '</span>' +
+        '<span class="ld-nexttext">Owner: <strong>' + esc(c.owner || 'Nobody yet') + '</strong>. Closes itself when someone calls or texts them back.</span></div>' +
+      '<div class="ld-btns"><a class="ld-log" style="flex:1.4;display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;text-decoration:none;font-weight:700" href="' + esc(link) + '" target="_blank" rel="noopener">Call or text back</a>' +
+        '<button type="button" class="ld-open" onclick="commDone(\'' + esc(c.id) + '\')">Done</button></div>' +
+    '</article>';
+  }).join('') : '<div class="ld-empty">Nothing waiting. Every call and text has been answered.</div>';
+  const closed = d.closedToday || [];
+  const box = document.getElementById('fuClosedBox');
+  box.hidden = !closed.length;
+  const WHY = { texted: 'texted them back', called: 'called them back', talked: 'talked to them', marked_done: 'marked it done', not_cds: 'marked it not for CDS' };
+  document.getElementById('fuClosedSum').textContent = closed.length + ' closed today';
+  document.getElementById('fuClosed').innerHTML = closed.map(t => '<div>' + esc(t.title) + ': ' + esc(t.done_by || 'Someone') + ' ' + esc(WHY[t.closed_reason] || 'closed it') + ', ' + esc(_commWhen(t.done_at)) + '</div>').join('');
+}
+
+function commWhoHtml(c) {
+  const id = esc(c.id);
+  const several = (c.candidates || []).length
+    ? '<b>This number is on more than one person. Which one is it?</b><div class="row">' + c.candidates.map(p =>
+        '<button type="button" onclick="commPick(\'' + esc(c.phone10) + '\',\'' + esc(p.ref) + '\',false)">' + esc(p.name) + ' (' + esc(p.role) + ')</button>').join('') + '</div>'
+    : '<b>Pick once and the hub remembers this number.</b>';
+  const opts = (_commPeople || []).map(p => '<option value="' + esc(p.name + ' (' + p.role + ')') + '"></option>').join('');
+  return '<div class="fu-who">' + several +
+    '<label class="ld-sr" for="fuWho_' + id + '">Who is this?</label>' +
+    '<input type="text" id="fuWho_' + id + '" list="fuPeople_' + id + '" placeholder="Start typing a name">' +
+    '<datalist id="fuPeople_' + id + '">' + opts + '</datalist>' +
+    '<label class="row" style="font-size:14px"><input type="checkbox" id="fuFam_' + id + '"> It is their family, not them</label>' +
+    '<div class="row"><button type="button" class="go" onclick="commPickTyped(\'' + id + '\',\'' + esc(c.phone10) + '\')">Save</button>' +
+    '<button type="button" onclick="commPick(\'' + esc(c.phone10) + '\',\'ignore\',false)">Not for CDS</button></div>' +
+    '<div class="field-note" id="fuErr_' + id + '"></div></div>';
+}
+function commPickTyped(id, phone10) {
+  const v = (document.getElementById('fuWho_' + id) || {}).value || '';
+  const p = (_commPeople || []).find(x => (x.name + ' (' + x.role + ')') === v);
+  if (!p) { document.getElementById('fuErr_' + id).textContent = 'Pick a name from the list.'; return; }
+  commPick(phone10, p.ref, !!(document.getElementById('fuFam_' + id) || {}).checked);
+}
+async function commPick(phone10, ref, family) {
+  try { await _commCall({ action: 'pick', phone10, ref, family }); _commPeople = null; renderFollowups(true); }
+  catch (e) { alert(e.message); }
+}
+async function commDone(id) {
+  try { await _commCall({ action: 'done', id }); renderFollowups(true); }
+  catch (e) { alert(e.message); }
+}
+
+// "Calls and texts" on a profile. Fills every .cds-comm-history inside root.
+window.cdsCommHistory = function (root) {
+  if (!root || !_db) return;
+  root.querySelectorAll('.cds-comm-history').forEach(el => commHistoryFill(el,
+    (el.dataset.refs || '').split(',').filter(Boolean), (el.dataset.phones || '').split(',').filter(Boolean)));
+};
+async function commHistoryFill(el, refs, phones) {
+  el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b><div class="field-note">Loading…</div></div>';
+  let h;
+  try { h = await _commCall({ action: 'history', refs, phones }); }
+  catch (e) { el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b><div class="field-note">Could not load: ' + esc(e.message) + '</div></div>'; return; }
+  const ico = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#14606F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+  const phoneIco = ico + '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>';
+  const textIco = ico + '<path d="M4 5h16v11H8l-4 4z"/></svg>';
+  const rows = (h.items || []).map(i => {
+    const who = (i.who || 'them') + (i.family ? ' (family)' : '');
+    const we = i.staff_name || 'We';
+    const mins = i.seconds >= 60 ? Math.round(i.seconds / 60) + ' min' : i.seconds + ' sec';
+    let t, missed = false;
+    if (i.channel === 'sms') t = i.direction === 'inbound' ? 'Text from ' + who + ': "' + (i.body || '') + '"' : we + ' texted ' + who + ': "' + (i.body || '') + '"';
+    else if (i.direction === 'inbound') { if (i.answered) t = who + ' called. ' + we + ' answered. ' + mins + '.'; else { missed = true; t = 'Missed call from ' + who + '.' + (i.voicemail ? ' Voicemail.' : ''); } }
+    else t = i.answered ? we + ' called ' + who + '. Talked ' + mins + '.' : we + ' called ' + who + '. ' + (i.voicemail ? 'Went to their voicemail.' : 'No answer.');
+    return '<div class="ch-row"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small></div></div>';
+  }).join('');
+  el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b>' +
+    '<div class="field-note" style="margin:2px 0 8px">From GoHighLevel, both CDS lines. A call never counts as a monthly check-in unless you record it.</div>' +
+    (rows ? '<div class="ch-list">' + rows + '</div>' : '<div class="field-note">No calls or texts yet.</div>') + '</div>';
 }
 
 function convertToConsumer(id) {
@@ -8050,10 +8263,11 @@ function renderProfile() {
       prepCard + lateCard +
       '<div class="cp-pair">' + callBox + visitBox + '</div>' +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
+      '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(c.phone || '') + '"></div>' +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
         '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
         '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a></div>' +
-    '</div>';
+    '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
 }
 
 let _profTab = 'overview';
@@ -11421,7 +11635,7 @@ function renderDailyRoutine() {
     consumers: getData('consumers'), pipeline: getData('pipeline'),
     authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages'), calls: _leadCalls,
     wellskyItems: CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date()),
-    firstShiftOf
+    firstShiftOf, followups: commForToday()
   });
 
   // A new-lead alert that did not reach the office is shown in red until
@@ -12830,6 +13044,7 @@ function initApp() {
   // Pull new website leads in at sign-in, not only when someone opens Leads,
   // so the Dashboard and the lead alerts agree on who is still waiting.
   importWebsiteLeads().then(() => { renderPipeline(); updateDashboard(); }).catch(() => {});
+  commLoad().then(() => { renderPipeline(); updateDashboard(); }).catch(() => {});
 
   // Checkbox change → mark done class
   document.querySelectorAll('.checklist input[type="checkbox"]').forEach(cb => {

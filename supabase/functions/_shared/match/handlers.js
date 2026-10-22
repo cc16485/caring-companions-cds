@@ -793,7 +793,7 @@ export function createMatch(deps) {
       }
       const waitingCg = await one(`select count(*)::int n from cds_introductions where status in ('sent','asked')`);
       const meetings = await one(`select count(*)::int n from cds_introductions where status='scheduled'`);
-      const tasks = await one('select count(*)::int n from cds_tasks where done_at is null');
+      const tasks = await one(`select count(*)::int n from cds_tasks where done_at is null and coalesce(area, 'match') = 'match'`);
       const outboxHeld = await one(`select count(*)::int n from cds_outbox where status in ('held','failed')`);
       const review = await one(`select count(*)::int n from cds_prospects where stage in ('new_request','medicaid_needed','cds_review_pending','potential_review')`);
       const toInvite = await one(`select count(*)::int n from cds_prospects where access_status='approved' and stage='access_approved'`);
@@ -1360,11 +1360,11 @@ export function createMatch(deps) {
       who(s);
       return { tasks: await q(`select t.*, p.first_name as caregiver, f.first_name as family from cds_tasks t
         left join attendant_pool p on p.id=t.pool_id left join cds_prospects f on f.id=t.prospect_id
-        where t.done_at is null order by coalesce(t.due_at, t.created_at)`) };
+        where t.done_at is null and coalesce(t.area, 'match') = 'match' order by coalesce(t.due_at, t.created_at)`) };
     },
     async completeTask({ staff: s, id }) {
       who(s);
-      await q('update cds_tasks set done_at=now(), done_by=$2 where id=$1', [id, s]);
+      await q(`update cds_tasks set done_at=now(), done_by=$2 where id=$1 and coalesce(area, 'match') = 'match'`, [id, s]);
       await audit('staff:' + s, 'task_done', 'task:' + id);
       return { ok: true };
     },
