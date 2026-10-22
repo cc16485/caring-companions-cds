@@ -6831,17 +6831,20 @@ async function renderFollowups(reload) {
     const old = c.since && new Date(c.since).toDateString() !== today;
     const due = old ? 'Since ' + _commWhen(c.since) : 'Waiting since ' + _commWhen(c.since);
     const phone = c.phone10 ? '(' + c.phone10.slice(0, 3) + ') ' + c.phone10.slice(3, 6) + '-' + c.phone10.slice(6) : '';
-    const link = c.contactId ? CDS_GHL_APP + '/contacts/detail/' + encodeURIComponent(c.contactId) : CDS_GHL_APP + '/conversations/conversations';
+    const hidden = c.kind === 'hidden_number';
+    const link = c.contactId ? CDS_GHL_APP + '/contacts/detail/' + encodeURIComponent(c.contactId)
+      : c.conversationId ? CDS_GHL_APP + '/conversations/conversations/' + encodeURIComponent(c.conversationId) : CDS_GHL_APP + '/conversations/conversations';
     const events = (c.events || []).slice(-6).map(e => '<li><span>' + esc(_commWhen(e.at)) + '</span>' + esc(e.text) + '</li>').join('');
-    const role = c.kind === 'who_is_this' ? phone : [c.role, c.detail].filter(Boolean).join(': ');
+    const role = hidden ? 'Number not shown' : c.kind === 'who_is_this' ? phone : [c.role, c.detail].filter(Boolean).join(': ');
     return '<article class="ld-card">' +
       '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') + '</div>' +
       (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
       '<ul class="fu-events">' + events + '</ul>' +
       (c.kind === 'who_is_this' ? commWhoHtml(c) : '') +
       '<div class="ld-next"><span class="ld-due ' + (old ? 't-late' : 't-today') + '">' + esc(due) + '</span>' +
-        '<span class="ld-nexttext">Owner: <strong>' + esc(c.owner || 'Nobody yet') + '</strong>. Closes itself when someone calls or texts them back.</span></div>' +
-      '<div class="ld-btns"><a class="ld-log" style="flex:1.4;display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;text-decoration:none;font-weight:700" href="' + esc(link) + '" target="_blank" rel="noopener">Call or text back</a>' +
+        '<span class="ld-nexttext">Owner: <strong>' + esc(c.owner || 'Nobody yet') + '</strong>. ' +
+          (hidden ? 'There is no number to call back. Look at it in GoHighLevel, then press Done.' : 'Closes itself when someone calls or texts them back.') + '</span></div>' +
+      '<div class="ld-btns"><a class="ld-log" style="flex:1.4;display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;text-decoration:none;font-weight:700" href="' + esc(link) + '" target="_blank" rel="noopener">' + (hidden ? 'Open in GoHighLevel' : 'Call or text back') + '</a>' +
         '<button type="button" class="ld-open" onclick="commDone(\'' + esc(c.id) + '\')">Done</button></div>' +
     '</article>';
   }).join('') : '<div class="ld-empty">Nothing waiting. Every call and text has been answered.</div>';

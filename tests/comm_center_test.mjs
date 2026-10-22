@@ -120,7 +120,7 @@ const comms = C.createComms({
     async users() { return [{ id: 'u-k', name: 'Krystal Smith' }, { id: 'u-s', firstName: 'Samantha', lastName: 'Troutman' }]; },
     async conversations(since) { if (ghlDown) throw new Error('GoHighLevel 503'); return [...convs.values()].map(c => c.conv).filter(c => c.lastMessageDate >= since).sort((a, b) => b.lastMessageDate - a.lastMessageDate); },
     async messages(id, since) { return convs.get(id).messages.filter(m => Date.parse(m.dateAdded) >= since).filter(m => Date.parse(m.dateAdded) <= NOW); },
-    async contact(id) { contactLookups++; return CONTACTS[id] || {}; },
+    async contact(id) { contactLookups++; if (CONTACTS[id] && CONTACTS[id].throw) throw new Error('GoHighLevel 403 on /contacts/' + id + ': no'); return CONTACTS[id] || {}; },
   },
 });
 const CONTACTS = {}; let contactLookups = 0;
@@ -278,8 +278,10 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   contactLookups = 0;
   const rr = await tick(171);
   const saved = (await pg.query(`select id, phone10 from cds_comms where id in ('np1','np2','np3') order by id`)).rows;
-  ok(saved.length === 2 && saved.every(x => x.phone10 === '4175550131'), 'no phone on the conversation: the contact\'s number is used');
+  ok(saved.length === 3 && saved[0].phone10 === '4175550131' && saved[1].phone10 === '4175550131', 'no phone on the conversation: the contact\'s number is used');
+  ok(saved[2].phone10 === null, 'a call with no number anywhere is still saved, not dropped');
   ok(rr.fromContact === 2 && rr.skipped === 1, 'counted: 2 from the contact, 1 still without a number (' + rr.fromContact + '/' + rr.skipped + ')');
+  ok(rr.noNumber.contact_no_phone === 1 && rr.noNumber.kinds['call inbound'] === 1, 'and why: the contact has no phone; it was an incoming call');
   ok(contactLookups === 2, 'each contact is looked up once per run (' + contactLookups + ')');
   ok((await open()).some(t => t.phone10 === '4175550131' && t.events.some(e => e.id === 'np1')), 'and it makes a follow-up on the right person');
 }
@@ -291,6 +293,42 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   ok(!(await pg.query(`select 1 from cds_comms where id='late1'`)).rows.length, 'a normal run only looks back 15 minutes');
   rr = await comms.run({ rescan: true });
   ok((await pg.query(`select 1 from cds_comms where id='late1'`)).rows.length === 1 && rr.saved === 1, 'a rescan reads the whole window again and saves only what is new');
+}
+
+// hidden numbers: a card for each missed call or real text, never dropped; the reason is counted
+{
+  convs.set('cv-anon', { conv: { id: 'cv-anon', lastMessageDate: Date.parse(at(180)) }, messages: [
+    { id: 'an1', messageType: 'TYPE_CALL', direction: 'inbound', dateAdded: at(180), meta: { call: { duration: 20, status: 'voicemail' } } },
+    { id: 'an2', messageType: 'TYPE_SMS', direction: 'inbound', dateAdded: at(181), body: 'thanks' }] });
+  convs.set('cv-403', { conv: { id: 'cv-403', contactId: 'ct-403', lastMessageDate: Date.parse(at(182)) }, messages: [
+    { id: 'an3', messageType: 'TYPE_SMS', direction: 'inbound', dateAdded: at(182), contactId: 'ct-403', body: 'Who do I call about my check?' }] });
+  CONTACTS['ct-403'] = { throw: true };
+  let rr = await tick(183);
+  ok(rr.noNumber.no_contact === 2 && rr.noNumber.contact_no_phone === 1 && rr.noNumber.lookup_failed['403'] === 1,
+     'reasons counted: no contact, contact has no phone, lookup refused (403) ' + JSON.stringify(rr.noNumber));
+  const st = (await pg.query(`select value->'state'->'last_no_number' n from cds_match_settings where key='comm_center'`)).rows[0].n;
+  ok(st && st.no_contact === 2, 'the reasons are saved for the page and the next report');
+  ok(!(await open()).some(t => t.kind === 'hidden_number' && t.events[0].id === 'an3'), 'a text with no number also waits 10 quiet minutes');
+  await tick(195);
+  const hid = (await open()).filter(t => t.kind === 'hidden_number');
+  eq(hid.map(t => t.events[0].id).sort(), ['an1', 'an3', 'np3'], 'hidden-number cards: the voicemail, the real text and the earlier call; "thanks" makes none');
+  ok(hid.find(t => t.events[0].id === 'an1').events[0].text === 'Missed call from a hidden number. Voicemail, 20 seconds.', 'hidden voicemail wording');
+  ok(/^Text with no number: "Who do I call/.test(hid.find(t => t.events[0].id === 'an3').events[0].text), 'hidden text wording');
+  await tick(196);
+  ok((await open()).filter(t => t.kind === 'hidden_number').length === 3, 'running again makes no duplicates');
+  const qv = await comms.queue();
+  const card = qv.cards.find(c => c.kind === 'hidden_number' && c.events[0].id === 'np3');
+  ok(card && card.name === 'Hidden number' && card.contactId === 'ct-empty' && card.phone10 === null, 'the queue shows it with a link to the GoHighLevel contact');
+  ok(qv.cards.find(c => c.events[0].id === 'an1').conversationId === 'cv-anon', 'or to the conversation when there is no contact');
+  // an answered call in the same conversation closes it; Done closes the others
+  convs.get('cv-anon').messages.push({ id: 'an4', messageType: 'TYPE_CALL', direction: 'inbound', dateAdded: at(197), meta: { call: { duration: 90, status: 'completed' } } });
+  convs.get('cv-anon').conv.lastMessageDate = Date.parse(at(197));
+  await tick(198);
+  ok(!(await open()).some(t => t.kind === 'hidden_number' && t.events[0].id === 'an1'), 'a later answered call in the same conversation closes it');
+  await comms.done('krystal@mo-care.com', { id: hid.find(t => t.events[0].id === 'an3').id });
+  ok(!(await open()).some(t => t.kind === 'hidden_number' && t.events[0].id === 'an3'), 'Done closes a hidden-number card');
+  await tick(200);
+  ok(!(await open()).some(t => t.events[0] && t.events[0].id === 'an3'), 'and it does not come back');
 }
 
 // ---------- Today and the switch ----------
