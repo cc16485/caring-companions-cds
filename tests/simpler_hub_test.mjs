@@ -115,9 +115,14 @@ const at = d => new Date(d + 'T12:00:00');
   SECTIONS.forEach(s => s.tabs.forEach(t => ok(pages.has(t.page) || guideSubs.includes(t.page), 'tab ' + t.label + ' has a page')));
   ok(SECTIONS.length === 7 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,money,help,switches', 'the seven sections, in order');
   const tabCount = SECTIONS.reduce((t, s) => t + s.tabs.length, 0);
-  ok(tabCount <= 13, 'fewer tabs than before (' + tabCount + ', was 22)');
+  ok(tabCount <= 14, 'fewer tabs than before (' + tabCount + ', was 22)');
   const today = SECTIONS.find(x => x.id === 'today');
-  ok(today.tabs.map(t => t.page).join() === 'dashboard,followups', 'Today has Today and Follow-ups tabs (her call 10-22)');
+  ok(today.tabs.map(t => t.page).join() === 'dashboard,followups,numbers', 'Today has Today, Follow-ups and Dashboard tabs (her calls 10-22)');
+  ok(resolve('numbers').page === 'numbers' && resolve('numbers').section === 'today', '#numbers opens the Dashboard tab inside Today');
+  ok(resolve('dashboard').page === 'dashboard', '#dashboard (the GoHighLevel link) still opens Today');
+  { const d = html.indexOf('id="page-dashboard"'), n = html.indexOf('id="page-numbers"');
+    ok(n > d && !/More numbers and reference/.test(html), 'the old Dashboard numbers are their own page, not folded under Today');
+    ok(['statConsumers', 'statLeads', 'dashMargin', 'upcomingDeadlines'].every(id => html.indexOf('id="' + id + '"') > n), 'the numbers updateDashboard fills are on the Dashboard tab'); }
   ok(!/—/.test(html.slice(a, b)), 'no em dashes in the new menu');
   // The WellSky attendant check card now lives on Active Attendants.
   const aa = html.indexOf('id="page-activeattendants"');
