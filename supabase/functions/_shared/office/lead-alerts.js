@@ -288,7 +288,7 @@ export function createLeadAlerts(deps) {
     const comm = await setting('comm_center', null);
     let followups;
     if (comm && comm.live === true) {
-      followups = (await q(`select title as name, due_at as since from cds_tasks where area='followup' and done_at is null order by due_at`)).map(f => ({ name: f.name, since: f.since }));
+      followups = (await q(`select title as name, due_at as since, urgency from cds_tasks where area='followup' and done_at is null order by due_at`)).map(f => ({ name: f.name, since: f.since, urgency: f.urgency || 'today' }));
     }
     // Central noon today, read in the server's own (UTC) clock, so "today" is Missouri's today.
     const noon = new Date(Date.UTC(c.y, c.m - 1, c.d, 12));

@@ -13,11 +13,40 @@
 // Owners come from setting comm_center.owners (the hub picks the owner, never the AI); until she
 // sets them every card is "Nobody yet". Calls never count as monthly check-ins.
 // No em dashes in anything a person reads (her rule).
+//
+// Step 2 (2026-10-22, same approved design): every follow-up has a need, an owner and how soon.
+//   - need: one of NEEDS, or none ("Not sure yet"). Leads and attendant applicants start as
+//     Enrollment; everyone else starts as Not sure yet. Staff change it with one tap.
+//   - owner: the person set for that need on the Switches page (comm_center.owners), else the
+//     "Not sure yet" owner, else Nobody yet. Changing the need moves the card to that need's owner,
+//     unless someone picked the owner by hand (owner_by). Saving owners on Switches moves every open
+//     card nobody picked by hand. Only the switch owners can change who owns each need.
+//   - urgency: urgent ("Care or safety today"), today, week. Every card starts as today; staff move
+//     it with one tap (the AI suggests it in step 3, never sets it).
+//   - "Make a follow-up" from a call or text on a profile, for something promised on a call.
 
 export const ten = v => { const d = String(v ?? '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
 const normName = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
 const TRIVIAL = /^(ok|okay|k|kk|thanks|thank you|thank u|thx|ty|sounds good|great|perfect|got it|will do|you too|yw|welcome|bye)[.! ]*$/i;
 export const TEXT_QUIET_MIN = 10;
+
+// What the call is about (her design). No need = "Not sure yet".
+export const NEEDS = [
+  { key: 'enrollment', label: 'Enrollment' },
+  { key: 'evv', label: 'Clock-in & EVV' },
+  { key: 'pay', label: 'Pay' },
+  { key: 'attendant_change', label: 'Attendant change' },
+  { key: 'hours', label: 'Hours & care plan' },
+  { key: 'concern', label: 'Concern or complaint' },
+  { key: 'other', label: 'Other' },
+];
+export const NOT_SURE = 'Not sure yet';
+export const needLabel = k => (NEEDS.find(n => n.key === k) || {}).label || NOT_SURE;
+export const URGENCY = { urgent: 'Care or safety today', today: 'Call or text back today', week: 'This week' };
+// A new card's need, from who it is. Only leads and applicants are clear without listening.
+export const defaultNeed = kind => (kind === 'lead' || kind === 'applicant') ? 'enrollment' : null;
+// The owner for a need: that need's owner, else the "Not sure yet" owner, else nobody.
+export const ownerFor = (owners, need) => (owners && ((need && owners[need]) || owners.not_sure)) || null;
 
 // Words for the kinds of people (cards and profiles).
 export const KIND_LABEL = { lead: 'Lead', consumer: 'Consumer', family: 'Family', attendant: 'Attendant', pool: 'Attendant',
@@ -256,11 +285,12 @@ export function createComms(deps) {
       const person = who.person;
       const title = person ? person.name : 'Unknown number';
       const ref = person ? person.ref : null;
-      const owner = owners.not_sure || null;
+      const need = who.state === 'known' ? defaultNeed(person.kind) : null;
+      const owner = ownerFor(owners, need);
       if (!open) {
-        const id = (await one(`insert into cds_tasks (kind, title, area, phone10, person_ref, owner, events, due_at, dedupe_key, updated_at)
-          values ($1, $2, 'followup', $3, $4, $5, $6::jsonb, $7, $8, $9) on conflict (dedupe_key) do nothing returning id`,
-          [who.state === 'known' ? 'followup' : 'who_is_this', title, phone10, ref, owner, JSON.stringify(d.open.events), d.open.events[0].at,
+        const id = (await one(`insert into cds_tasks (kind, title, area, phone10, person_ref, owner, need, urgency, events, due_at, dedupe_key, updated_at)
+          values ($1, $2, 'followup', $3, $4, $5, $6, 'today', $7::jsonb, $8, $9, $10) on conflict (dedupe_key) do nothing returning id`,
+          [who.state === 'known' ? 'followup' : 'who_is_this', title, phone10, ref, owner, need, JSON.stringify(d.open.events), d.open.events[0].at,
            'fu:' + phone10 + ':' + d.open.events[0].id, d.open.last]))?.id;
         if (id) opened++;
         if (id && d.close) { await closeTask(id, d.close.reason, d.close.by || 'GoHighLevel', d.close.at); closed++; }
@@ -284,9 +314,9 @@ export function createComms(deps) {
         ? (c.voicemail ? 'Missed call from a hidden number. Voicemail' + (c.seconds ? ', ' + c.seconds + ' seconds.' : '.') : 'Missed call from a hidden number. No voicemail.')
         : 'Text with no number: "' + String(c.body || '').trim().slice(0, 240) + '"';
       const ev = [{ id: c.id, at: c.at, kind: c.channel === 'call' ? (c.voicemail ? 'voicemail' : 'missed') : 'text', text, contactId: c.ghl_contact_id || null, conversationId: c.conversation_id || null }];
-      const id = (await one(`insert into cds_tasks (kind, title, area, phone10, owner, events, due_at, dedupe_key, updated_at)
-        values ('hidden_number', 'Hidden number', 'followup', null, $1, $2::jsonb, $3, $4, $3) on conflict (dedupe_key) do nothing returning id`,
-        [owners.not_sure || null, JSON.stringify(ev), c.at, 'fu:hidden:' + c.id]))?.id;
+      const id = (await one(`insert into cds_tasks (kind, title, area, phone10, owner, urgency, events, due_at, dedupe_key, updated_at)
+        values ('hidden_number', 'Hidden number', 'followup', null, $1, 'today', $2::jsonb, $3, $4, $3) on conflict (dedupe_key) do nothing returning id`,
+        [ownerFor(owners, null), JSON.stringify(ev), c.at, 'fu:hidden:' + c.id]))?.id;
       if (id) opened++;
       const later = c.conversation_id ? await one(`select at, staff_name, channel, direction from cds_comms where conversation_id=$1 and at > $2
         and ((direction='outbound' and channel='sms') or (channel='call' and answered)) order by at limit 1`, [c.conversation_id, c.at]) : null;
@@ -325,11 +355,12 @@ export function createComms(deps) {
       id: t.id, kind: t.kind, phone10: t.phone10, ref: t.person_ref,
       name: p ? p.name : 'Unknown number', role: p ? (KIND_LABEL[p.kind] || p.kind) : '', detail: p ? p.detail : '',
       candidates: who.state === 'several' ? who.candidates.map(c => ({ ref: c.ref, name: c.name, role: KIND_LABEL[c.kind] || c.kind, detail: c.detail })) : [],
-      owner: t.owner || null, need: t.need || null, events: t.events || [], since: t.due_at, updated: t.updated_at,
+      owner: t.owner || null, ownerBy: t.owner_by || null, need: t.need || null, needLabel: needLabel(t.need),
+      urgency: URGENCY[t.urgency] ? t.urgency : 'today', events: t.events || [], since: t.due_at, updated: t.updated_at,
       contactId: null,
     };
   }
-  async function queue() {
+  async function queue(email) {
     const s = await settings() || {};
     const open = await q(`select * from cds_tasks where area='followup' and done_at is null order by due_at`);
     const out = [];
@@ -337,7 +368,8 @@ export function createComms(deps) {
       if (t.kind === 'hidden_number') {
         const e = (t.events || [])[0] || {};
         out.push({ id: t.id, kind: t.kind, phone10: null, ref: null, name: 'Hidden number', role: '', detail: '', candidates: [],
-          owner: t.owner || null, need: t.need || null, events: t.events || [], since: t.due_at, updated: t.updated_at,
+          owner: t.owner || null, ownerBy: t.owner_by || null, need: t.need || null, needLabel: needLabel(t.need),
+          urgency: URGENCY[t.urgency] ? t.urgency : 'today', events: t.events || [], since: t.due_at, updated: t.updated_at,
           contactId: e.contactId || null, conversationId: e.conversationId || null });
         continue;
       }
@@ -349,7 +381,26 @@ export function createComms(deps) {
     const today = iso(nowMs()).slice(0, 10);
     const closedToday = await q(`select id, title, done_by, done_at, closed_reason from cds_tasks where area='followup' and done_at >= $1 order by done_at desc`, [today + 'T05:00:00Z']);
     const match = await one(`select count(*)::int n from cds_tasks where area='match' and done_at is null`);
-    return { live: !!s.live, state: s.state || {}, cardsFrom: s.cards_from || null, cards: out, closedToday, caregiverListTodos: match ? match.n : 0 };
+    return { live: !!s.live, state: s.state || {}, cardsFrom: s.cards_from || null, cards: out, closedToday, caregiverListTodos: match ? match.n : 0,
+      needs: NEEDS, urgency: URGENCY, owners: s.owners || {}, ownerChoices: await ownerChoices(), canSetOwners: await canSetOwners(email) };
+  }
+  // Who can own a need: the office people on the alert lists (by first name, as the cards show it).
+  async function ownerChoices() {
+    const names = [];
+    for (const key of ['lead_alerts', 'packet_alerts']) {
+      const r = await one(`select value from cds_match_settings where key=$1`, [key]);
+      for (const x of (r && r.value && r.value.recipients) || []) {
+        const n = String(x && x.name || '').trim().split(/\s+/)[0];
+        if (n && !names.includes(n)) names.push(n);
+      }
+    }
+    return names;
+  }
+  // Same people who can change switches (setting switch_owners), so owners stay hers until March.
+  async function canSetOwners(email) {
+    const r = await one(`select value from cds_match_settings where key='switch_owners'`);
+    const list = r && Array.isArray(r.value) ? r.value.map(e => String(e).trim().toLowerCase()) : [];
+    return !!email && list.includes(String(email).toLowerCase());
   }
   // Calls and texts for a person: every number whose phone book row points at one of these refs.
   // phones: numbers on the record itself, so history shows even before the phone book is rebuilt.
@@ -407,6 +458,13 @@ export function createComms(deps) {
       [phone10, finalRef, family ? 'family' : String(ref).split(':')[0] === 'pool' ? 'attendant' : String(ref).split(':')[0], family ? 'Family' : p.name,
        family ? 'Family of ' + p.name : p.detail, by]);
     await q(`update cds_tasks set kind='followup', title=$2, person_ref=$3 where area='followup' and phone10=$1 and done_at is null`, [phone10, family ? 'Family of ' + p.name : p.name, finalRef]);
+    // Now we know who it is, a card with no need yet gets that person's need and its owner.
+    const need = family ? null : defaultNeed(p.role === 'Lead' ? 'lead' : p.role === 'Applicant' ? 'applicant' : '');
+    if (need) {
+      const s = await settings() || {};
+      await q(`update cds_tasks set need=$2, owner=case when owner_by is null then $3 else owner end
+               where area='followup' and phone10=$1 and done_at is null and need is null`, [phone10, need, ownerFor(s.owners, need)]);
+    }
     await audit(by, 'comm_pick', phone10, { ref: finalRef });
     return { ok: true };
   }
@@ -418,22 +476,108 @@ export function createComms(deps) {
     await audit(email, 'comm_done', String(id), {});
     return { ok: true };
   }
+  // One tap on a card: its need, owner or how soon. Owner '' = Nobody yet, need '' = Not sure yet.
+  async function change(email, { id, need, owner, urgency }) {
+    email = String(email || '').toLowerCase();
+    const t = await one(`select * from cds_tasks where id=$1 and area='followup' and done_at is null`, [String(id || '')]);
+    if (!t) throw new CommsError('That follow-up is already closed.');
+    const s = await settings() || {};
+    const patch = {};
+    if (need !== undefined) {
+      if (need !== '' && need !== null && !NEEDS.some(n => n.key === need)) throw new CommsError('That is not one of the needs.');
+      patch.need = need || null;
+      // the need's owner, unless someone picked the owner by hand
+      if (owner === undefined && !t.owner_by) patch.owner = ownerFor(s.owners, patch.need);
+    }
+    if (owner !== undefined) {
+      if (owner !== '' && owner !== null && !(await ownerChoices()).includes(owner)) throw new CommsError('Pick an owner from the list.');
+      patch.owner = owner || null;
+      patch.owner_by = email;
+    }
+    if (urgency !== undefined) {
+      if (!URGENCY[urgency]) throw new CommsError('Pick how soon.');
+      patch.urgency = urgency;
+    }
+    const keys = Object.keys(patch);
+    if (!keys.length) throw new CommsError('Nothing to change.');
+    await q(`update cds_tasks set ` + keys.map((k, i) => k + '=$' + (i + 2)).join(', ') + ` where id=$1`, [t.id, ...keys.map(k => patch[k])]);
+    await audit(email, 'comm_change', t.id, { from: { need: t.need, owner: t.owner, urgency: t.urgency }, to: patch });
+    return { ok: true };
+  }
+  // Switches page: who owns each need. Moves every open card nobody picked an owner for by hand.
+  async function setOwners(email, { owners }) {
+    email = String(email || '').toLowerCase();
+    if (!(await canSetOwners(email))) throw new CommsError('Only Samantha can change who owns each need.', 403);
+    const choices = await ownerChoices();
+    const clean = {};
+    for (const k of [...NEEDS.map(n => n.key), 'not_sure']) {
+      const v = owners && owners[k];
+      if (v === undefined || v === null || v === '') continue;
+      if (!choices.includes(v)) throw new CommsError('Pick an owner from the list.');
+      clean[k] = v;
+    }
+    const s = await settings();
+    if (!s) throw new CommsError('The Communication Center is not set up yet.');
+    await q(`update cds_match_settings set value = value || jsonb_build_object('owners', $1::jsonb), updated_at=now(), updated_by=$2 where key='comm_center'`,
+      [JSON.stringify(clean), email]);
+    const open = await q(`select id, need, owner from cds_tasks where area='followup' and done_at is null and owner_by is null`);
+    let moved = 0;
+    for (const t of open) {
+      const to = ownerFor(clean, t.need);
+      if ((t.owner || null) !== to) { await q(`update cds_tasks set owner=$2 where id=$1`, [t.id, to]); moved++; }
+    }
+    await audit(email, 'comm_owners', 'comm_center', { from: s.owners || {}, to: clean, moved });
+    return { ok: true, moved };
+  }
+  // "Make a follow-up" from a call or text on a profile (something promised on the call).
+  // If the number already has an open card, the note joins it.
+  async function make(email, { commId, need, urgency, note }) {
+    email = String(email || '').toLowerCase();
+    const c = await one(`select id, phone10, at from cds_comms where id=$1`, [String(commId || '')]);
+    if (!c || !c.phone10) throw new CommsError('That call or text has no number to follow up on.');
+    if (need && !NEEDS.some(n => n.key === need)) throw new CommsError('That is not one of the needs.');
+    // Joining an open card never moves it down, only to what someone picked here.
+    const picked = URGENCY[urgency] ? urgency : null;
+    urgency = picked || 'week';
+    const text = String(note || '').trim().slice(0, 300) || 'Follow-up from the call or text on ' + new Date(c.at).toISOString().slice(0, 10) + '.';
+    const ev = { id: 'note:' + c.id + ':' + nowMs(), at: iso(nowMs()), kind: 'note', text: 'Note: ' + text };
+    const s = await settings() || {};
+    const open = await one(`select * from cds_tasks where area='followup' and phone10=$1 and done_at is null order by created_at desc limit 1`, [c.phone10]);
+    if (open) {
+      await q(`update cds_tasks set events = events || $2::jsonb, updated_at=$3 where id=$1`, [open.id, JSON.stringify([ev]), ev.at]);
+      if (need || picked) await change(email, Object.assign({ id: open.id }, need ? { need } : {}, picked ? { urgency: picked } : {}));
+      await audit(email, 'comm_make', open.id, { joined: true, commId: c.id });
+      return { ok: true, id: open.id, joined: true };
+    }
+    const who = resolve(await bookFor(c.phone10));
+    const p = who.state === 'known' ? who.person : null;
+    const n = need || (p ? defaultNeed(p.kind) : null);
+    const id = (await one(`insert into cds_tasks (kind, title, area, phone10, person_ref, owner, need, urgency, events, due_at, dedupe_key, updated_at)
+      values ($1, $2, 'followup', $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $9) returning id`,
+      [p ? 'followup' : 'who_is_this', p ? p.name : 'Unknown number', c.phone10, p ? p.ref : null, ownerFor(s.owners, n), n, urgency,
+       JSON.stringify([ev]), ev.at, 'fu:make:' + ev.id]))?.id;
+    await audit(email, 'comm_make', id, { commId: c.id });
+    return { ok: true, id };
+  }
   async function audit(actor, action, target, detail) {
     await q(`insert into cds_audit (actor, action, target, detail) values ($1, $2, $3, $4::jsonb)`, [actor, action, target, JSON.stringify(detail || {})]);
   }
 
   async function handle(email, body) {
     const a = String(body && body.action || 'queue');
-    if (a === 'queue') return queue();
+    if (a === 'queue') return queue(email);
     if (a === 'history') return history(body.refs, body.phones);
     if (a === 'reached') { const r = await reached(body.since); return { phones: r.map(x => x.phone10), last: Object.fromEntries(r.map(x => [x.phone10, x.last])),
       talk: Object.fromEntries(r.filter(x => x.last_talk).map(x => [x.phone10, x.last_talk])) }; }
     if (a === 'people') return people();
     if (a === 'pick') return pick(email, body);
     if (a === 'done') return done(email, body);
+    if (a === 'change') return change(email, body);
+    if (a === 'owners') return setOwners(email, body);
+    if (a === 'make') return make(email, body);
     throw new CommsError('Unknown request');
   }
-  return { run, rebuildBook, pull, cards, queue, history, reached, people, pick, done, handle, settings };
+  return { run, rebuildBook, pull, cards, queue, history, reached, people, pick, done, change, setOwners, make, handle, settings };
 }
 
 export class CommsError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }

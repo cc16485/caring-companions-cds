@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=8"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=9"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=4"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -547,6 +547,37 @@ input, select, textarea { border-radius:10px; }
 .ch-dot { flex:none; width:30px; height:30px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; background:var(--cute-teal-pale); }
 .ch-dot.missed { background:#FBE7E3; }
 .ch-row small { display:block; color:#55677a; font-size:12.5px; }
+/* Step 2 (2026-10-22): how soon, owners, needs, and the check-in tap */
+.fu-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap:12px; margin-bottom:16px; }
+.fu-tile { background:#fff; border-radius:20px; box-shadow:var(--cute-shadow); padding:14px 18px; display:flex; flex-direction:column; gap:2px; border:0; font:inherit; text-align:left; color:#0D365F; }
+.fu-tile b { font-size:28px; font-weight:800; line-height:1.1; }
+.fu-tile span { font-weight:700; font-size:14.5px; }
+.fu-tile small { font-size:12.5px; color:#14606F; }
+.fu-tile.urgent b { color:#9B2C1A; } .fu-tile.today b { color:#7A4E0B; }
+.fu-tile.checkins { background:var(--cute-teal-pale); color:#14606F; cursor:pointer; }
+.fu-filters { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+.fu-filters .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.fu-filters .lbl { font-size:13.5px; color:#55677a; font-weight:700; min-width:56px; }
+.fu-pill { min-height:40px; padding:0 15px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; color:#3d4b5a; font:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+.fu-pill.on { background:#0D365F; border-color:#0D365F; color:#fff; }
+.fu-sec { margin:18px 0 10px; font-family:'Fraunces', Georgia, serif; font-size:23px; font-weight:600; color:#0D365F; }
+.fu-sec.urgent { color:#9B2C1A; } .fu-sec.today { color:#7A4E0B; }
+.ld-card.urgent { border:2px solid #F1C2BD; }
+.fu-need { padding:3px 11px; border-radius:999px; background:var(--cute-teal-pale); color:#14606F; font-size:12.5px; font-weight:700; }
+.fu-more { width:44px; flex:none !important; border:1.5px solid #e4e1d8; background:#fff; color:var(--cute-ink); }
+.fu-edit { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; background:#f6f5f0; border-radius:14px; padding:12px 14px; }
+.fu-edit label { display:flex; flex-direction:column; gap:4px; font-size:13px; font-weight:700; color:#55677a; }
+.fu-edit select, .fu-edit input { min-height:42px; padding:0 10px; border:1.5px solid #e4e1d8; border-radius:10px; font:inherit; font-size:14.5px; background:#fff; color:var(--cute-ink); }
+.fu-edit .wide { grid-column:1/-1; }
+.fu-edit .row { grid-column:1/-1; display:flex; gap:8px; flex-wrap:wrap; }
+.fu-edit .row button { min-height:40px; padding:0 16px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; font:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+.fu-edit .row button.go { background:var(--cute-teal); border-color:var(--cute-teal); color:#fff; }
+.ch-acts { display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:6px; align-items:center; }
+.ch-acts button { min-height:36px; padding:0 13px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; color:#0D365F; font:inherit; font-size:13.5px; font-weight:700; cursor:pointer; }
+.ch-acts button.ci { border-color:var(--cute-teal); color:#14606F; }
+.ch-done { padding:3px 10px; border-radius:999px; background:var(--cute-teal-pale); color:#14606F; font-size:12.5px; font-weight:700; }
+.fu-owners { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.2fr); gap:8px 16px; align-items:center; max-width:560px; }
+.fu-owners select { min-height:40px; padding:0 10px; border:1.5px solid #e4e1d8; border-radius:10px; font:inherit; font-size:14px; background:#fff; }
 @media (max-width: 600px) {
   .ld-steps { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
   .ld-step { padding:10px 8px; align-items:center; text-align:center; gap:4px; border-radius:16px; }
@@ -869,7 +900,9 @@ input, select, textarea { border-radius:10px; }
     <span class="fu-checked" id="fuChecked"></span>
   </div>
   <div id="fuBanner"></div>
-  <div class="ld-grid" id="fuCards"></div>
+  <div class="fu-tiles" id="fuTiles"></div>
+  <div class="fu-filters" id="fuFilters"></div>
+  <div id="fuCards"></div>
   <details class="fu-closed" id="fuClosedBox" hidden><summary id="fuClosedSum"></summary><div id="fuClosed"></div></details>
 </div>
 
@@ -2460,6 +2493,8 @@ input, select, textarea { border-radius:10px; }
 
   <!-- Switches (2026-10-20): drawn by renderSwitches() from the cds-switches server function -->
   <div id="switchesCard"></div>
+  <!-- Who owns each need (Communication Center step 2, 2026-10-22): drawn by renderNeedOwners() -->
+  <div id="needOwnersCard" style="margin-top:20px"></div>
 
   <!-- GHL CONTACT SYNC -->
   <div class="card" style="margin-bottom:20px">
@@ -5115,6 +5150,7 @@ function renderConsumers() {
 // Monthly contact log - open form
 let _clm_cid = null;
 let _clm_key = null;
+let _clm_commId = null;   // the GoHighLevel call this check-in was recorded from, if any
 
 function toggleContact(cid) {
   const now = new Date();
@@ -5132,6 +5168,7 @@ function openContactLog(cid, key) {
   if (!c) return;
   _clm_cid = cid;
   _clm_key = key;
+  _clm_commId = null;
 
   // Set consumer name
   document.getElementById('clm_name').textContent = c.name + ', ' + (key.split('-')[0] === String(new Date().getFullYear()) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(key.split('-')[1])-1] + ' ' + key.split('-')[0] : key);
@@ -5220,6 +5257,7 @@ function saveContactLog() {
     loggedAt: new Date().toISOString(),
     dhssFlag: healthVal === 'yes' || circVal === 'yes'
   };
+  if (_clm_commId) log.commId = _clm_commId;
 
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === _clm_cid);
@@ -5538,6 +5576,37 @@ async function renderSwitches(reload) {
   host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
     '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
     rows + '</div>';
+}
+// Who owns each need. Read from and saved through cds-comms; only the switch owners can save.
+// Saving moves every open follow-up nobody picked an owner for by hand.
+async function renderNeedOwners(note) {
+  const host = document.getElementById('needOwnersCard');
+  if (!host || !_db) return;
+  if (!_comm || !_comm.needs) await commLoad();
+  const d = _comm || {};
+  const head = '<div class="card"><div class="card-title">Who gets each follow-up</div>';
+  if (d.error || !d.needs) { host.innerHTML = head + '<div class="alert alert-danger" style="font-size:13px"><div>Could not load: ' + esc(d.error || 'no answer') + '</div></div></div>'; return; }
+  const owners = d.owners || {}, choices = d.ownerChoices || [];
+  const rows = d.needs.map(n => ({ key: n.key, label: n.label })).concat([{ key: 'not_sure', label: 'Not sure yet' }]);
+  const sel = r => '<select id="no_' + esc(r.key) + '" aria-label="Owner for ' + esc(r.label) + '"' + (d.canSetOwners ? '' : ' disabled') + '>' +
+    '<option value="">Nobody yet</option>' + choices.map(o => '<option value="' + esc(o) + '"' + (owners[r.key] === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select>';
+  host.innerHTML = head +
+    '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:12px">The hub gives each follow-up to the person set for its need. "Not sure yet" covers cards with no need. ' +
+      'Anyone can still change one card by hand on the Follow-ups tab.' + (d.canSetOwners ? '' : ' Only Samantha can change these.') + '</div>' +
+    '<div class="fu-owners">' + rows.map(r => '<label for="no_' + esc(r.key) + '" style="font-size:13.5px;font-weight:700">' + esc(r.label) + '</label>' + sel(r)).join('') + '</div>' +
+    (d.canSetOwners ? '<div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="saveNeedOwners()">Save</button></div>' : '') +
+    (note ? '<div style="font-size:12.5px;margin-top:8px;font-weight:600;color:' + (note.bad ? 'var(--danger)' : 'var(--success)') + '">' + esc(note.text) + '</div>' : '') +
+  '</div>';
+}
+async function saveNeedOwners() {
+  const keys = ((_comm && _comm.needs) || []).map(n => n.key).concat(['not_sure']);
+  const owners = {};
+  keys.forEach(k => { const v = (document.getElementById('no_' + k) || {}).value; if (v) owners[k] = v; });
+  try {
+    const r = await _commCall({ action: 'owners', owners });
+    await commLoad();
+    renderNeedOwners({ text: 'Saved. ' + (r.moved ? r.moved + ' open follow-up' + (r.moved === 1 ? '' : 's') + ' moved to the new owner.' : 'No open follow-ups needed to move.') });
+  } catch (e) { renderNeedOwners({ bad: true, text: 'Not saved: ' + e.message }); }
 }
 function swAsk(key) { _swAsk = key; _swNote = null; renderSwitches(false); }
 async function swSet(key, on) {
@@ -6806,7 +6875,7 @@ function commMergeReached() {
 }
 // For Today: only once the Switches page has "Follow-ups on Today" on.
 function commForToday() {
-  return _comm && _comm.live && Array.isArray(_comm.cards) ? _comm.cards.map(c => ({ name: c.name, since: c.since })) : undefined;
+  return _comm && _comm.live && Array.isArray(_comm.cards) ? _comm.cards.map(c => ({ name: c.name, since: c.since, urgency: c.urgency })) : undefined;
 }
 
 function _commWhen(iso) {
@@ -6845,28 +6914,33 @@ async function renderFollowups(reload) {
     ? cards.length + (cards.length === 1 ? ' call or text needs someone.' : ' calls and texts need someone.') + (who.length ? ' ' + who.length + ' from a number we do not know.' : '')
     : 'Nothing waiting. Every call and text has been answered.';
   if (who.length && !_commPeople) { try { _commPeople = (await _commCall({ action: 'people' })).people || []; } catch (e) { _commPeople = []; } }
-  const today = new Date().toDateString();
-  host.innerHTML = cards.length ? cards.map(c => {
-    const old = c.since && new Date(c.since).toDateString() !== today;
-    const due = old ? 'Since ' + _commWhen(c.since) : 'Waiting since ' + _commWhen(c.since);
-    const phone = c.phone10 ? '(' + c.phone10.slice(0, 3) + ') ' + c.phone10.slice(3, 6) + '-' + c.phone10.slice(6) : '';
-    const hidden = c.kind === 'hidden_number';
-    const link = c.contactId ? CDS_GHL_APP + '/contacts/detail/' + encodeURIComponent(c.contactId)
-      : c.conversationId ? CDS_GHL_APP + '/conversations/conversations/' + encodeURIComponent(c.conversationId) : CDS_GHL_APP + '/conversations/conversations';
-    const events = (c.events || []).slice(-6).map(e => '<li><span>' + esc(_commWhen(e.at)) + '</span>' + esc(e.text) + '</li>').join('');
-    const role = hidden ? 'Number not shown' : c.kind === 'who_is_this' ? phone : [c.role, c.detail].filter(Boolean).join(': ');
-    return '<article class="ld-card">' +
-      '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') + '</div>' +
-      (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
-      '<ul class="fu-events">' + events + '</ul>' +
-      (c.kind === 'who_is_this' ? commWhoHtml(c) : '') +
-      '<div class="ld-next"><span class="ld-due ' + (old ? 't-late' : 't-today') + '">' + esc(due) + '</span>' +
-        '<span class="ld-nexttext">Owner: <strong>' + esc(c.owner || 'Nobody yet') + '</strong>. ' +
-          (hidden ? 'There is no number to call back. Look at it in GoHighLevel, then press Done.' : 'Closes itself when someone calls or texts them back.') + '</span></div>' +
-      '<div class="ld-btns"><a class="ld-log" style="flex:1.4;display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;text-decoration:none;font-weight:700" href="' + esc(link) + '" target="_blank" rel="noopener">' + (hidden ? 'Open in GoHighLevel' : 'Call or text back') + '</a>' +
-        '<button type="button" class="ld-open" onclick="commDone(\'' + esc(c.id) + '\')">Done</button></div>' +
-    '</article>';
-  }).join('') : '<div class="ld-empty">Nothing waiting. Every call and text has been answered.</div>';
+  // Step 2: tiles, then the Owner and Need filters, then the cards by how soon.
+  _fuData = d;
+  const URG = d.urgency || { urgent: 'Care or safety today', today: 'Call or text back today', week: 'This week' };
+  const count = u => cards.filter(c => c.urgency === u).length;
+  document.getElementById('fuTiles').innerHTML =
+    ['urgent', 'today', 'week'].map(u => '<div class="fu-tile ' + u + '"><b>' + count(u) + '</b><span>' + esc(URG[u]) + '</span></div>').join('') +
+    fuCheckinTile();
+  const owners = ['all'].concat(d.ownerChoices || [], ['none']);
+  const ownerOf = c => c.owner || 'none';
+  if (!owners.includes(_fuOwner)) _fuOwner = 'all';
+  const needs = ['all'].concat((d.needs || []).map(n => n.key), ['none']);
+  if (!needs.includes(_fuNeed)) _fuNeed = 'all';
+  const needName = k => k === 'all' ? 'All' : k === 'none' ? 'Not sure yet' : ((d.needs || []).find(n => n.key === k) || {}).label || k;
+  document.getElementById('fuFilters').innerHTML = cards.length ? (
+    '<div class="row"><span class="lbl">Owner</span>' + owners.map(o =>
+      '<button type="button" class="fu-pill' + (o === _fuOwner ? ' on' : '') + '" aria-pressed="' + (o === _fuOwner) + '" onclick="_fuOwner=\'' + esc(o) + '\';renderFollowups(false)">' +
+      esc(o === 'all' ? 'Everyone' : o === 'none' ? 'Nobody yet' : o) + ' (' + cards.filter(c => o === 'all' || ownerOf(c) === o).length + ')</button>').join('') + '</div>' +
+    '<div class="row"><span class="lbl">Need</span>' + needs.map(n =>
+      '<button type="button" class="fu-pill' + (n === _fuNeed ? ' on' : '') + '" aria-pressed="' + (n === _fuNeed) + '" onclick="_fuNeed=\'' + esc(n) + '\';renderFollowups(false)">' + esc(needName(n)) + '</button>').join('') + '</div>') : '';
+  const shown = cards.filter(c => (_fuOwner === 'all' || ownerOf(c) === _fuOwner) && (_fuNeed === 'all' || (c.need || 'none') === _fuNeed));
+  host.innerHTML = !cards.length ? '<div class="ld-empty">Nothing waiting. Every call and text has been answered.</div>'
+    : ['urgent', 'today', 'week'].map(u => {
+        const list = shown.filter(c => c.urgency === u);
+        if (!list.length && u !== 'urgent') return '';
+        return '<h2 class="fu-sec ' + u + '">' + esc(URG[u]) + '</h2>' +
+          (list.length ? '<div class="ld-grid">' + list.map(fuCardHtml).join('') + '</div>' : '<div class="ld-empty" style="padding:16px">Nothing here' + (_fuOwner !== 'all' || _fuNeed !== 'all' ? ' for this filter.' : '.') + '</div>');
+      }).join('');
   const closed = d.closedToday || [];
   const box = document.getElementById('fuClosedBox');
   box.hidden = !closed.length;
@@ -6875,6 +6949,62 @@ async function renderFollowups(reload) {
   document.getElementById('fuClosed').innerHTML = closed.map(t => '<div>' + esc(t.title) + ': ' + esc(t.done_by || 'Someone') + ' ' + esc(WHY[t.closed_reason] || 'closed it') + ', ' + esc(_commWhen(t.done_at)) + '</div>').join('');
 }
 
+let _fuData = null, _fuOwner = 'all', _fuNeed = 'all';
+// One follow-up card (step 1 card, plus need, owner and how soon).
+function fuCardHtml(c) {
+  const d = _fuData || {};
+  const today = new Date().toDateString();
+  const old = c.since && new Date(c.since).toDateString() !== today;
+  const due = old ? 'Since ' + _commWhen(c.since) : 'Waiting since ' + _commWhen(c.since);
+  const phone = c.phone10 ? '(' + c.phone10.slice(0, 3) + ') ' + c.phone10.slice(3, 6) + '-' + c.phone10.slice(6) : '';
+  const hidden = c.kind === 'hidden_number';
+  const link = c.contactId ? CDS_GHL_APP + '/contacts/detail/' + encodeURIComponent(c.contactId)
+    : c.conversationId ? CDS_GHL_APP + '/conversations/conversations/' + encodeURIComponent(c.conversationId) : CDS_GHL_APP + '/conversations/conversations';
+  const events = (c.events || []).slice(-6).map(e => '<li><span>' + esc(_commWhen(e.at)) + '</span>' + esc(e.text) + '</li>').join('');
+  const role = hidden ? 'Number not shown' : c.kind === 'who_is_this' ? phone : [c.role, c.detail].filter(Boolean).join(': ');
+  const id = esc(c.id);
+  const opt = (v, label, on) => '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(label) + '</option>';
+  const URG = d.urgency || {};
+  const edit = '<div class="fu-edit" id="fuEdit_' + id + '" hidden>' +
+    '<label>How soon<select onchange="commChange(\'' + id + '\',{urgency:this.value})">' + Object.keys(URG).map(u => opt(u, URG[u], c.urgency === u)).join('') + '</select></label>' +
+    '<label>Need<select onchange="commChange(\'' + id + '\',{need:this.value})">' + opt('', 'Not sure yet', !c.need) + (d.needs || []).map(n => opt(n.key, n.label, c.need === n.key)).join('') + '</select></label>' +
+    '<label>Owner<select onchange="commChange(\'' + id + '\',{owner:this.value})">' + opt('', 'Nobody yet', !c.owner) + (d.ownerChoices || []).map(o => opt(o, o, c.owner === o)).join('') + '</select></label>' +
+    '<div class="field-note wide" id="fuEditErr_' + id + '">' + (c.ownerBy ? 'Owner picked by hand, so changing the need keeps it.' : 'The owner follows the need, as set on the Switches page.') + '</div></div>';
+  return '<article class="ld-card' + (c.urgency === 'urgent' ? ' urgent' : '') + '">' +
+    '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') +
+      (c.need ? '<span class="fu-need">' + esc(c.needLabel || c.need) + '</span>' : '') + '</div>' +
+    (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
+    '<ul class="fu-events">' + events + '</ul>' +
+    (c.kind === 'who_is_this' ? commWhoHtml(c) : '') +
+    '<div class="ld-next"><span class="ld-due ' + (c.urgency === 'urgent' || old ? 't-late' : c.urgency === 'week' ? '' : 't-today') + '">' + esc(due) + '</span>' +
+      '<span class="ld-nexttext">Owner: <strong>' + esc(c.owner || 'Nobody yet') + '</strong>. ' +
+        (hidden ? 'There is no number to call back. Look at it in GoHighLevel, then press Done.' : 'Closes itself when someone calls or texts them back.') + '</span></div>' +
+    edit +
+    '<div class="ld-btns"><a class="ld-log" style="flex:1.4;display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;text-decoration:none;font-weight:700" href="' + esc(link) + '" target="_blank" rel="noopener">' + (hidden ? 'Open in GoHighLevel' : 'Call or text back') + '</a>' +
+      '<button type="button" class="ld-open" onclick="commDone(\'' + id + '\')">Done</button>' +
+      '<button type="button" class="fu-more" aria-label="Change how soon, need or owner" aria-expanded="false" onclick="fuToggleEdit(this,\'' + id + '\')">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button></div>' +
+  '</article>';
+}
+function fuToggleEdit(btn, id) {
+  const el = document.getElementById('fuEdit_' + id);
+  if (!el) return;
+  el.hidden = !el.hidden;
+  btn.setAttribute('aria-expanded', String(!el.hidden));
+}
+async function commChange(id, patch) {
+  try { await _commCall(Object.assign({ action: 'change', id }, patch)); renderFollowups(true); }
+  catch (e) { const el = document.getElementById('fuEditErr_' + id); if (el) el.textContent = 'Not saved: ' + e.message; else alert(e.message); }
+}
+// Monthly check-ins, kept apart: only what someone recorded with the check-in form counts.
+function fuCheckinTile() {
+  const now = new Date();
+  const key = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const active = getData('consumers').filter(c => c.status !== 'inactive');
+  const done = active.filter(c => c.contacts && c.contacts[key]).length;
+  return '<button type="button" class="fu-tile checkins" onclick="showPage(\'consumers\')"><b>' + done + ' of ' + active.length + '</b>' +
+    '<span>' + now.toLocaleDateString('en-US', { month: 'long' }) + ' check-ins done</span><small>Kept apart. A call only counts if you record it.</small></button>';
+}
 function commWhoHtml(c) {
   const id = esc(c.id);
   const several = (c.candidates || []).length
@@ -6920,6 +7050,8 @@ async function commHistoryFill(el, refs, phones) {
   const ico = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#14606F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
   const phoneIco = ico + '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>';
   const textIco = ico + '<path d="M4 5h16v11H8l-4 4z"/></svg>';
+  // Step 2: on a consumer's profile a call we talked on can be recorded as that month's check-in.
+  const cid = (refs.find(r => /^consumer:/.test(r)) || '').slice('consumer:'.length);
   const rows = (h.items || []).map(i => {
     const who = (i.who || 'them') + (i.family ? ' (family)' : '');
     const we = i.staff_name || 'We';
@@ -6928,11 +7060,57 @@ async function commHistoryFill(el, refs, phones) {
     if (i.channel === 'sms') t = i.direction === 'inbound' ? 'Text from ' + who + ': "' + (i.body || '') + '"' : we + ' texted ' + who + ': "' + (i.body || '') + '"';
     else if (i.direction === 'inbound') { if (i.answered) t = who + ' called. ' + we + ' answered. ' + mins + '.'; else { missed = true; t = 'Missed call from ' + who + '.' + (i.voicemail ? ' Voicemail.' : ''); } }
     else t = i.answered ? we + ' called ' + who + '. Talked ' + mins + '.' : we + ' called ' + who + '. ' + (i.voicemail ? 'Went to their voicemail.' : 'No answer.');
-    return '<div class="ch-row"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small></div></div>';
+    return '<div class="ch-row"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div style="flex:1;min-width:0">' + esc(t) +
+      '<small>' + esc(_commWhen(i.at)) + '</small>' + chActs(i, cid) + '</div></div>';
   }).join('');
   el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b>' +
     '<div class="field-note" style="margin:2px 0 8px">From GoHighLevel, both CDS lines. A call never counts as a monthly check-in unless you record it.</div>' +
     (rows ? '<div class="ch-list">' + rows + '</div>' : '<div class="field-note">No calls or texts yet.</div>') + '</div>';
+}
+
+// Under one call or text on a profile: the check-in tap and "Make a follow-up".
+function chActs(i, cid) {
+  const talked = i.channel === 'call' && i.answered;
+  const acts = [];
+  if (cid && talked) {
+    const d = new Date(i.at), key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const month = d.toLocaleDateString('en-US', { month: 'long' });
+    const c = getData('consumers').find(x => x.id === cid);
+    const log = c && c.contacts && c.contacts[key];
+    if (log && typeof log === 'object' && log.commId === i.id) acts.push('<span class="ch-done">Recorded as the ' + esc(month) + ' check-in</span>');
+    else if (c && !log) acts.push('<button type="button" class="ci" onclick="commRecordCheckin(\'' + esc(cid) + '\',\'' + esc(i.id) + '\',\'' + esc(i.at) + '\',' + (i.family ? 'true' : 'false') + ')">Record as the ' + esc(month) + ' check-in</button>');
+  }
+  if (i.phone10 && (talked || i.channel === 'sms')) {
+    const id = esc(i.id), needs = (_comm && _comm.needs) || [], URG = (_comm && _comm.urgency) || {};
+    acts.push('<button type="button" aria-expanded="false" onclick="const f=document.getElementById(\'chMake_' + id + '\');f.hidden=!f.hidden;this.setAttribute(\'aria-expanded\',String(!f.hidden))">Make a follow-up</button>');
+    return '<div class="ch-acts">' + acts.join('') + '</div>' +
+      '<div class="fu-edit" id="chMake_' + id + '" hidden style="margin-top:8px">' +
+        '<label>Need<select id="chNeed_' + id + '"><option value="">Not sure yet</option>' + needs.map(n => '<option value="' + esc(n.key) + '">' + esc(n.label) + '</option>').join('') + '</select></label>' +
+        '<label>How soon<select id="chUrg_' + id + '">' + Object.keys(URG).map(u => '<option value="' + esc(u) + '"' + (u === 'week' ? ' selected' : '') + '>' + esc(URG[u]) + '</option>').join('') + '</select></label>' +
+        '<label class="wide">What needs doing<input type="text" id="chNote_' + id + '" maxlength="300" placeholder="For example: call back Friday about more hours"></label>' +
+        '<div class="row"><button type="button" class="go" onclick="commMake(\'' + id + '\')">Save</button></div>' +
+        '<div class="field-note wide" id="chErr_' + id + '"></div></div>';
+  }
+  return acts.length ? '<div class="ch-acts">' + acts.join('') + '</div>' : '';
+}
+async function commMake(commId) {
+  const v = k => (document.getElementById(k + commId) || {}).value || '';
+  const err = document.getElementById('chErr_' + commId);
+  try {
+    const r = await _commCall({ action: 'make', commId, need: v('chNeed_'), urgency: v('chUrg_'), note: v('chNote_') });
+    err.textContent = r.joined ? 'Added to the open follow-up for this number. It is on the Follow-ups tab.' : 'Follow-up made. It is on the Follow-ups tab.';
+    commLoad();
+  } catch (e) { err.textContent = 'Not saved: ' + e.message; }
+}
+// Opens the usual monthly check-in form for the month of the call, filled in from it. The call
+// counts only once the form is saved (her rule: calls never count by themselves).
+function commRecordCheckin(cid, commId, atIso, family) {
+  const d = new Date(atIso), key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  openContactLog(cid, key);
+  _clm_commId = commId;
+  document.getElementById('clm_date').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  document.getElementById('clm_method').value = 'phone';
+  document.getElementById('clm_person').value = family ? 'family' : 'consumer';
 }
 
 function convertToConsumer(id) {
@@ -7321,6 +7499,7 @@ function clearOutreachLog() {
 // ============================================================
 function renderAutomations() {
   renderSwitches();
+  renderNeedOwners();
   renderPendingOutreaches();
   renderQuickSendGrid();
   renderOutreachLog();

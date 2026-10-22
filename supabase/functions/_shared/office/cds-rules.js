@@ -218,8 +218,11 @@
                             people: follow.map(p => ({ name: p.name, county: p.county || '', at: '' })) },
         // Communication Center (2026-10-22): missed calls and unanswered texts. Only handed in once
         // setting comm_center.live is true, by the hub and the 8am email alike.
+        // Step 2: cards marked "Care or safety today" are said first.
         Array.isArray(data.followups) && data.followups.length &&
-          { t: plural(data.followups.length, 'call or text', 'calls and texts') + ' to follow up', go: 'followups', bad: true,
+          { t: plural(data.followups.length, 'call or text', 'calls and texts') + ' to follow up' +
+               (data.followups.some(f => f.urgency === 'urgent') ? ', ' + data.followups.filter(f => f.urgency === 'urgent').length + ' care or safety today' : ''),
+            go: 'followups', bad: true,
             people: data.followups.map(f => ({ name: f.name || 'Unknown number', county: '', at: f.since || '' })) }
       ].filter(Boolean),
       clear: 'Nobody is waiting on a call.'

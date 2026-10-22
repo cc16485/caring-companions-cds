@@ -76,6 +76,8 @@ await pg.exec(`create table agency_data (id uuid primary key default gen_random_
 const SQL = strip(readFileSync(ROOT + '/comm_center.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
 ok(true, 'comm_center.sql runs twice');
+// step 2 (urgency, owner_by): the job code needs it from step 2 on
+await pg.exec(strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8')));
 const s0 = (await pg.query(`select value from cds_match_settings where key='comm_center'`)).rows[0].value;
 ok(s0.live === false && s0.history_days === 30, 'starts in practice, 30 days of history');
 for (const role of ['anon', 'authenticated']) {
