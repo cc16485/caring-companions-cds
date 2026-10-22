@@ -418,7 +418,67 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  // ---------- Dashboard numbers (her "keep it and fix", 2026-10-22) ----------
+  // Every number on the Dashboard tab reads live data:
+  //  consumers  = WellSky: everyone with a worked shift in the last 31 days (wsPeople from
+  //               CDSWellSky.consumersNow), matched to hub records by nameKey. Hub records
+  //               not seen in WellSky are listed, not counted. No WellSky report yet: the hub list.
+  //  check-ins  = the same live consumers, a check-in logged this month (the Communication
+  //               Center saves them there too).
+  //  screenings = OIG/LEIE counts as current from a monthly check: the hub date OR the
+  //               automatic OIG check's clear (oigPeople, only when that switch is on).
+  //               FCSR yearly. EDL is not counted (no date kept for it).
+  //  checklist  = done out of the real number of items on the checklist.
+  //  money      = this month's WellSky authorized hours (personal care), or the hub's
+  //               weekly hours x 4.33 when there is no authorization report yet.
+  function dashboardNumbers(o) {
+    const now = o.now || new Date();
+    const key = o.nameKey || (n => String(n || '').toLowerCase().replace(/[^a-z]/g, ''));
+    const days = d => (now - new Date(d)) / DAY;
+    const hub = (o.consumers || []);
+    let consumers, notInWellSky = [], wellSkyOnly = [], live = false;
+    if (o.wsPeople) {
+      live = true;
+      const byKey = new Map(hub.map(c => [key(c.name), c]));
+      const seen = new Set();
+      consumers = [];
+      o.wsPeople.forEach(p => {
+        const c = byKey.get(p.key);
+        seen.add(p.key);
+        if (c) consumers.push(c); else wellSkyOnly.push(p.name);
+      });
+      notInWellSky = hub.filter(isActive).filter(c => !seen.has(key(c.name))).map(c => c.name);
+    } else consumers = hub.filter(isActive);
+    const count = live ? o.wsPeople.length : consumers.length;
+    const ym = isoLocal(now).slice(0, 7);
+    const checkedIn = consumers.filter(c => c.contacts && c.contacts[ym]).length;
+    const atts = (o.attendants || []).filter(a => a.status !== 'inactive');
+    const oig = o.oigPeople || {};
+    const autoClear = a => { const p = oig['attendant:' + a.id];
+      return p && (p.result === 'clear' || p.review === 'not_them') ? String(p.checked_at || '').slice(0, 10) : ''; };
+    const within = (a, n) => [a.leieDate, autoClear(a)].some(d => d && days(d) <= n);
+    const leieOk = atts.filter(a => within(a, 31)).length;
+    const fcsrOk = atts.filter(a => a.fcsrDate && days(a.fcsrDate) <= 365).length;
+    // Due soon or late: OIG/LEIE older than 25 days, FCSR older than 335 days, or never done.
+    const soon = atts.filter(a => !within(a, 25) || !(a.fcsrDate && days(a.fcsrDate) <= 335)).length;
+    const total = o.checklistTotal || 0;
+    const done = Object.entries(o.checks || {}).filter(([k, v]) => v && (!o.checklistIds || o.checklistIds.includes(k))).length;
+    const authRows = (o.hours || []);
+    const fromWellSky = authRows.length > 0;
+    const hoursMonth = fromWellSky ? authRows.reduce((s, r) => s + (Number(r.authorized) || 0), 0)
+                                   : consumers.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0) * 4.33;
+    const rates = o.rates || { billing: 0, pay: 0 };
+    const revenue = hoursMonth * rates.billing, labor = hoursMonth * rates.pay;
+    return { live, consumers: count, notInWellSky, wellSkyOnly,
+             checkIns: { done: checkedIn, of: count, left: Math.max(0, count - checkedIn) },
+             attendants: atts.length, screeningsSoon: soon,
+             leie: { ok: leieOk, of: atts.length, auto: atts.filter(a => autoClear(a)).length }, fcsr: { ok: fcsrOk, of: atts.length },
+             checklist: { done, of: total },
+             money: { hoursMonth, fromWellSky, revenue, labor, margin: revenue - labor,
+                      pct: revenue > 0 ? Math.round((revenue - labor) / revenue * 100) : 0, rates } };
+  }
+
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, firstShiftPrep, PREP_STEPS, LATE_REASONS,
-                    leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue };
+                    leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=10"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=11"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -700,7 +700,7 @@ button.fu-tile.check span { color:#14606F; }
     <div class="stat-card blue">
       <div class="stat-label">Active Consumers</div>
       <div class="stat-value" id="statConsumers">0</div>
-      <div class="stat-sub">not marked inactive</div>
+      <div class="stat-sub" id="statConsumersSub">worked a shift in WellSky in the last 31 days</div>
     </div>
     <div class="stat-card green">
       <div class="stat-label">Active Attendants</div>
@@ -710,14 +710,15 @@ button.fu-tile.check span { color:#14606F; }
     <div class="stat-card warn">
       <div class="stat-label">Check-ins left this month</div>
       <div class="stat-value" id="statContactsDue">0</div>
-      <div class="stat-sub">monthly check-in calls</div>
+      <div class="stat-sub">of the active consumers above</div>
     </div>
     <div class="stat-card red">
-      <div class="stat-label">Screenings Expiring Soon</div>
+      <div class="stat-label">Attendants due a screening</div>
       <div class="stat-value" id="statScreenings">0</div>
-      <div class="stat-sub">LEIE / FCSR / EDL</div>
+      <div class="stat-sub" id="statScreeningsSub">OIG/LEIE monthly, FCSR yearly</div>
     </div>
   </div>
+  <div id="dashNotInWellSky" style="display:none;margin:-4px 0 16px;padding:10px 14px;border-radius:8px;background:#fff8e6;border:1px solid #ffe3a3;font-size:13px"></div>
 
   <div class="grid-3" style="margin-bottom:16px">
     <div class="stat-card blue" style="cursor:pointer" onclick="showPage('pipeline')">
@@ -792,14 +793,14 @@ button.fu-tile.check span { color:#14606F; }
         </div>
         <div>
           <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px">
-            <span>Attendant LEIE Screenings Current</span>
+            <span>Attendant OIG/LEIE checks current (31 days)</span>
             <span id="leiePct" style="font-weight:700">—</span>
           </div>
           <div class="progress-bar"><div class="progress-fill blue" id="leieBar" style="width:0%"></div></div>
         </div>
         <div>
           <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px">
-            <span>Attendant FCSR Screenings Current</span>
+            <span>Attendant FCSR checks current (1 year)</span>
             <span id="fcsrPct" style="font-weight:700">—</span>
           </div>
           <div class="progress-bar"><div class="progress-fill green" id="fcsrBar" style="width:0%"></div></div>
@@ -11922,54 +11923,63 @@ function _niceDay(iso) {
     ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// The automatic OIG check's latest results for the Dashboard (only once its switch is on;
+// practice results are not counted). Loaded once per page load, then the numbers redraw.
+let _dashOig = null, _dashOigAsked = false, _dashLast = null;
+async function _loadDashOig() {
+  if (_dashOigAsked || typeof _db === 'undefined' || !_db) return;
+  _dashOigAsked = true;
+  try {
+    const { data } = await _db.auth.getSession();
+    const jwt = data && data.session ? data.session.access_token : '';
+    if (!jwt) { _dashOigAsked = false; return; }
+    const r = await fetch(SUPABASE_URL + '/functions/v1/cds-oig', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt },
+      body: JSON.stringify({ action: 'list' }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.live && j.people) { _dashOig = j.people; updateDashboard(); }
+  } catch (e) { console.error('dashboard OIG:', e); }
+}
 function updateDashboard() {
   // keep the morning list in step with everything else the dashboard shows
   try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   try { renderCdsGoal(); } catch (e) { console.error('cds goal:', e); }
   try { renderTodayTop(); } catch (e) { console.error('today top:', e); }
-  const consumers = getData('consumers').filter(CDSRules.isActive);
-  const attendants = getData('attendants').filter(a => a.status !== 'inactive');
-  const now = new Date();
+  // 2026-10-22 (her "keep it and fix"): every number reads live data. The rule is
+  // CDSRules.dashboardNumbers in cds-rules.js; this only gathers the inputs and fills the page.
+  const check = getObj('wellskyCheck');
+  const cg = _cgResult();
+  const authOn = check.auths && check.auths.at ? CDSWellSky.isoLocal(new Date(check.auths.at)) : '';
+  const checklistIds = [...document.querySelectorAll('#page-guides input[type=checkbox][onchange^="saveCheck"]')].map(i => i.id);
+  const D = _dashLast = CDSRules.dashboardNumbers({
+    consumers: getData('consumers'), attendants: getData('attendants'), now: new Date(),
+    wsPeople: cg.hasData ? cg.r.people.concat(cg.r.leftOut) : null, nameKey: CDSWellSky.nameKey,
+    oigPeople: _dashOig, checks: getObj('complianceChecks'), checklistIds, checklistTotal: checklistIds.length,
+    hours: authOn ? CDSWellSky.hoursThisMonth(check.auths, check.shifts, authOn) : [], rates: getRates() });
+  _loadDashOig();
+  const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  const bar = (id, n, of) => { const el = document.getElementById(id); if (el) el.style.width = (of ? Math.min(100, Math.round(n / of * 100)) : 0) + '%'; };
+  const frac = (n, of) => of ? n + '/' + of + ' (' + Math.round(n / of * 100) + '%)' : '—';
 
-  document.getElementById('statConsumers').textContent = consumers.length;
-  document.getElementById('statAttendants').textContent = attendants.length;
-
-  // Same rule as Today's step 3 and the Follow-ups check-in tile.
-  const contactsDue = consumers.filter(c => !ongoingRequirements(c).monthly.doneThisMonth).length;
-  document.getElementById('statContactsDue').textContent = contactsDue;
-
-  // Screenings expiring (LEIE > 25 days old)
-  const screeningsExp = attendants.filter(a => {
-    if (!a.leieDate) return true;
-    const d = new Date(a.leieDate);
-    return (now - d) / (1000*60*60*24) > 25;
-  }).length;
-  document.getElementById('statScreenings').textContent = screeningsExp;
-
-  // Progress bars
-  if (consumers.length > 0) {
-    const contacted = consumers.length - contactsDue;
-    const pct = Math.round((contacted / consumers.length) * 100);
-    document.getElementById('contactPct').textContent = `${contacted}/${consumers.length} (${pct}%)`;
-    document.getElementById('contactBar').style.width = pct + '%';
-  } else {
-    document.getElementById('contactPct').textContent = 'No consumers';
+  setText('statConsumers', D.consumers);
+  setText('statConsumersSub', D.live ? 'worked a shift in WellSky in the last 31 days' : 'not marked inactive (no WellSky report yet)');
+  const odd = document.getElementById('dashNotInWellSky');
+  if (odd) {
+    odd.style.display = D.notInWellSky.length ? '' : 'none';
+    odd.innerHTML = D.notInWellSky.length ? '<b>' + D.notInWellSky.length + ' active in the hub but no WellSky shift in 31 days:</b> ' +
+      D.notInWellSky.map(esc).join(', ') + '. Not counted above. Mark them inactive on Consumers if they have left.' : '';
   }
+  setText('statAttendants', D.attendants);
+  setText('statContactsDue', D.checkIns.left);
+  setText('statScreenings', D.screeningsSoon);
+  setText('statScreeningsSub', 'OIG/LEIE monthly, FCSR yearly' + (D.leie.auto ? ' (' + D.leie.auto + ' cleared by the automatic OIG check)' : ''));
 
-  if (attendants.length > 0) {
-    const leieOk = attendants.filter(a => a.leieDate && (now - new Date(a.leieDate)) / (1000*60*60*24) <= 31).length;
-    const leiePct = Math.round((leieOk / attendants.length) * 100);
-    document.getElementById('leiePct').textContent = `${leieOk}/${attendants.length} (${leiePct}%)`;
-    document.getElementById('leieBar').style.width = leiePct + '%';
-
-    const fcsrOk = attendants.filter(a => a.fcsrDate && (now - new Date(a.fcsrDate)) / (1000*60*60*24) <= 365).length;
-    const fcsrPct = Math.round((fcsrOk / attendants.length) * 100);
-    document.getElementById('fcsrPct').textContent = `${fcsrOk}/${attendants.length} (${fcsrPct}%)`;
-    document.getElementById('fcsrBar').style.width = fcsrPct + '%';
-  } else {
-    document.getElementById('leiePct').textContent = 'No attendants';
-    document.getElementById('fcsrPct').textContent = 'No attendants';
-  }
+  setText('contactPct', D.checkIns.of ? frac(D.checkIns.done, D.checkIns.of) : 'No consumers');
+  bar('contactBar', D.checkIns.done, D.checkIns.of);
+  setText('leiePct', D.leie.of ? frac(D.leie.ok, D.leie.of) : 'No attendants');
+  bar('leieBar', D.leie.ok, D.leie.of);
+  setText('fcsrPct', D.fcsr.of ? frac(D.fcsr.ok, D.fcsr.of) : 'No attendants');
+  bar('fcsrBar', D.fcsr.ok, D.fcsr.of);
 
   // Pipeline stats
   const pipeline = getData('pipeline');
@@ -12006,31 +12016,22 @@ function updateDashboard() {
     corrSub.style.color = 'var(--success)';
   }
 
-  // Compliance checklist %
-  const checks = getObj('complianceChecks');
-  const totalChecks = 45; // approximate total
-  const doneChecks = Object.values(checks).filter(v => v).length;
-  const compPct = Math.round((doneChecks / totalChecks) * 100);
-  document.getElementById('compPct').textContent = `${doneChecks}/${totalChecks} (${compPct}%)`;
-  document.getElementById('compBar').style.width = Math.min(compPct, 100) + '%';
+  // Compliance checklist: done out of the real number of items on Help > Checklist
+  setText('compPct', frac(D.checklist.done, D.checklist.of));
+  bar('compBar', D.checklist.done, D.checklist.of);
 
-  // Margin snapshot
-  const rates = getRates();
-  const WEEKS_PER_MONTH = 4.33;
-  const totalAuthHrsWeek = consumers.reduce((sum, c) => sum + (parseFloat(c.hours) || 0), 0);
-  const totalAuthHrsMonth = totalAuthHrsWeek * WEEKS_PER_MONTH;
-  const estRevenue = totalAuthHrsMonth * rates.billing;
-  const estLabor   = totalAuthHrsMonth * rates.pay;
-  const estMargin  = estRevenue - estLabor;
-  const marginPct  = estRevenue > 0 ? Math.round((estMargin / estRevenue) * 100) : 0;
+  // Money: this month's WellSky authorized hours at the rates on the Money page
+  const M = D.money;
   const fmtD = v => v > 0 ? '$' + v.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0}) : '—';
-  document.getElementById('dashAuthHrs').textContent = totalAuthHrsMonth > 0 ? Math.round(totalAuthHrsMonth).toLocaleString() : '—';
-  document.getElementById('dashRevenue').textContent = fmtD(estRevenue);
-  document.getElementById('dashLabor').textContent   = fmtD(estLabor);
-  document.getElementById('dashMargin').textContent  = fmtD(estMargin);
-  document.getElementById('dashBillingRate').textContent = `@ $${rates.billing.toFixed(2)}/hr`;
-  document.getElementById('dashPayRate').textContent     = `@ $${rates.pay.toFixed(2)}/hr`;
-  document.getElementById('dashMarginPct').textContent   = totalAuthHrsMonth > 0 ? `${marginPct}% gross margin` : 'add consumers to calculate';
+  setText('dashAuthHrs', M.hoursMonth > 0 ? Math.round(M.hoursMonth).toLocaleString() : '—');
+  setText('dashRevenue', fmtD(M.revenue));
+  setText('dashLabor', fmtD(M.labor));
+  setText('dashMargin', fmtD(M.margin));
+  setText('dashBillingRate', `@ $${M.rates.billing.toFixed(2)}/hr`);
+  setText('dashPayRate', `@ $${M.rates.pay.toFixed(2)}/hr`);
+  setText('dashMarginPct', M.hoursMonth > 0
+    ? `${M.pct}% margin on ${Math.round(M.hoursMonth).toLocaleString()} hrs ${M.fromWellSky ? 'authorized this month in WellSky' : 'a month from hub hours (no WellSky authorization report yet)'}, pay $${M.rates.pay.toFixed(2)}/hr`
+    : 'no hours to calculate yet');
 }
 
 // ============================================================
@@ -12320,7 +12321,7 @@ function getRates() {
   const r = getObj('rateSettings');
   return {
     billing: parseFloat(r.billing) || 20.21,  // MMAC reimburses per hour
-    pay:     parseFloat(r.pay)     || 15.00   // attendant hourly pay
+    pay:     parseFloat(r.pay)     || 16.00   // attendant hourly pay ($16 from 2026-10-16)
   };
 }
 
