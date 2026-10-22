@@ -187,10 +187,18 @@ export function createComms(deps) {
     let saved = 0, seen = 0, skipped = 0, partial = false, fromContact = 0;
     // Some GoHighLevel conversations carry no phone number (seen live 2026-10-22: 8 of 55).
     // Then the number is read from the contact itself, once per contact per run. Read only.
+    // Why a number is missing is counted, never swallowed (1042 could not tell; her rule).
+    const noNumber = { no_contact: 0, contact_no_phone: 0, lookup_failed: {}, kinds: {} };
     const contactPhone = new Map();
     const phoneOf = async id => {
-      if (!id || !deps.ghl.contact) return '';
-      if (!contactPhone.has(id)) contactPhone.set(id, ten(await deps.ghl.contact(id).then(c => c && c.phone).catch(() => '')));
+      if (!id) return { phone: '', why: 'no_contact' };
+      if (!deps.ghl.contact) return { phone: '', why: 'contact_no_phone' };
+      if (!contactPhone.has(id)) {
+        let got;
+        try { const c = await deps.ghl.contact(id); const ph = ten(c && c.phone); got = { phone: ph, why: ph ? '' : 'contact_no_phone' }; }
+        catch (e) { const m = String(e && e.message || e).match(/GoHighLevel (\d{3})/); got = { phone: '', why: 'lookup_failed', status: m ? m[1] : 'error' }; }
+        contactPhone.set(id, got);
+      }
       return contactPhone.get(id);
     };
     const started = nowMs();
@@ -205,18 +213,28 @@ export function createComms(deps) {
         if (!c) continue;
         seen++;
         if (Date.parse(c.at) < since) continue;
-        if (!c.phone10) { c.phone10 = await phoneOf(c.ghl_contact_id); if (c.phone10) fromContact++; }
-        if (!c.phone10) { skipped++; continue; }
+        if (!c.phone10) {
+          const got = await phoneOf(c.ghl_contact_id);
+          if (got.phone) { c.phone10 = got.phone; fromContact++; }
+          else {
+            // Still saved (phone10 empty) so a missed call from a hidden number is never dropped.
+            skipped++;
+            if (got.why === 'lookup_failed') noNumber.lookup_failed[got.status] = (noNumber.lookup_failed[got.status] || 0) + 1;
+            else noNumber[got.why]++;
+            const k = c.channel + ' ' + c.direction;
+            noNumber.kinds[k] = (noNumber.kinds[k] || 0) + 1;
+          }
+        }
         const r = await one(`insert into cds_comms (id, channel, direction, at, phone10, ghl_contact_id, conversation_id, contact_name, status, seconds, answered, voicemail, staff_name, body)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) on conflict (id) do nothing returning id`,
-          [c.id, c.channel, c.direction, c.at, c.phone10, c.ghl_contact_id, c.conversation_id, c.contact_name, c.status, c.seconds, c.answered, c.voicemail,
+          [c.id, c.channel, c.direction, c.at, c.phone10 || null, c.ghl_contact_id, c.conversation_id, c.contact_name, c.status, c.seconds, c.answered, c.voicemail,
            c.user_id ? (users.get(c.user_id) || null) : null, c.body]);
         if (r) saved++;
       }
     }
-    await saveState(Object.assign({ read_until: iso(started), last_run: iso(nowMs()), last_saved: saved, last_skipped_no_number: skipped, last_error: null },
+    await saveState(Object.assign({ read_until: iso(started), last_run: iso(nowMs()), last_saved: saved, last_skipped_no_number: skipped, last_no_number: noNumber, last_error: null },
       partial ? { history_partial: true } : {}));
-    return { seen, saved, skipped, partial, fromContact };
+    return { seen, saved, skipped, partial, fromContact, noNumber };
   }
 
   // Keep follow-ups right for every number with calls or texts since cards_from.
@@ -253,6 +271,28 @@ export function createComms(deps) {
           updated++;
         }
         if (d.close) { await closeTask(open.id, d.close.reason, d.close.by || 'GoHighLevel', d.close.at); closed++; }
+      }
+    }
+    // Hidden numbers: a missed call or a text with no number anywhere still gets a card, one per
+    // call or text, so nobody is dropped. It cannot be called back; Done closes it, and an answered
+    // call or a reply in the same GoHighLevel conversation closes it too.
+    const hidden = await q(`select * from cds_comms where phone10 is null and at >= $1 and direction='inbound' and at <= $2
+      and ((channel='call' and not answered) or channel='sms') order by at`, [from, iso(nowMs() - TEXT_QUIET_MIN * 60000)]);
+    for (const c of hidden) {
+      if (c.channel === 'sms' && TRIVIAL.test(String(c.body || '').trim())) continue;
+      const text = c.channel === 'call'
+        ? (c.voicemail ? 'Missed call from a hidden number. Voicemail' + (c.seconds ? ', ' + c.seconds + ' seconds.' : '.') : 'Missed call from a hidden number. No voicemail.')
+        : 'Text with no number: "' + String(c.body || '').trim().slice(0, 240) + '"';
+      const ev = [{ id: c.id, at: c.at, kind: c.channel === 'call' ? (c.voicemail ? 'voicemail' : 'missed') : 'text', text, contactId: c.ghl_contact_id || null, conversationId: c.conversation_id || null }];
+      const id = (await one(`insert into cds_tasks (kind, title, area, phone10, owner, events, due_at, dedupe_key, updated_at)
+        values ('hidden_number', 'Hidden number', 'followup', null, $1, $2::jsonb, $3, $4, $3) on conflict (dedupe_key) do nothing returning id`,
+        [owners.not_sure || null, JSON.stringify(ev), c.at, 'fu:hidden:' + c.id]))?.id;
+      if (id) opened++;
+      const later = c.conversation_id ? await one(`select at, staff_name, channel, direction from cds_comms where conversation_id=$1 and at > $2
+        and ((direction='outbound' and channel='sms') or (channel='call' and answered)) order by at limit 1`, [c.conversation_id, c.at]) : null;
+      if (later) {
+        const t = await one(`select id from cds_tasks where dedupe_key=$1 and done_at is null`, ['fu:hidden:' + c.id]);
+        if (t) { await closeTask(t.id, later.channel === 'sms' ? 'texted' : later.direction === 'outbound' ? 'called' : 'talked', later.staff_name || 'GoHighLevel', later.at); closed++; }
       }
     }
     return { opened, updated, closed };
@@ -294,6 +334,13 @@ export function createComms(deps) {
     const open = await q(`select * from cds_tasks where area='followup' and done_at is null order by due_at`);
     const out = [];
     for (const t of open) {
+      if (t.kind === 'hidden_number') {
+        const e = (t.events || [])[0] || {};
+        out.push({ id: t.id, kind: t.kind, phone10: null, ref: null, name: 'Hidden number', role: '', detail: '', candidates: [],
+          owner: t.owner || null, need: t.need || null, events: t.events || [], since: t.due_at, updated: t.updated_at,
+          contactId: e.contactId || null, conversationId: e.conversationId || null });
+        continue;
+      }
       const v = cardView(t, await bookFor(t.phone10));
       const c = await one(`select ghl_contact_id from cds_comms where phone10=$1 and ghl_contact_id is not null order by at desc limit 1`, [t.phone10]);
       v.contactId = c ? c.ghl_contact_id : null;
