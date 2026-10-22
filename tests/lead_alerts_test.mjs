@@ -38,6 +38,8 @@ await pg.exec(SQL); await pg.exec(SQL);
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
 await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
+// Communication Center (2026-10-22): calls and texts read from GoHighLevel.
+await pg.exec(strip(readFileSync(ROOT + '/comm_center.sql', 'utf8')));
 ok(true, 'SQL runs twice');
 const old = (await pg.query(`select * from site_leads where first_name='Old'`)).rows[0];
 ok(old.alert_at && old.alert_texted_at && old.reminder_at, 'a lead already on file is marked handled, so turning alerts on never sends about it');
@@ -148,7 +150,26 @@ await pipeline([
   { id: 'web-' + d.id, siteLeadId: d.id, name: 'Bo Park', fromWebsite: true, status: 'new',
     notes: [{ date: '2026-10-26', text: 'They said: hi', fromForm: true }, { date: '2026-10-26', text: 'Left a voicemail' }] }]);
 await pg.query(`insert into cds_lead_calls (site_lead_id, by_name, by_email, outcome, at) values ($1,'Krystal','krystal@mo-care.com','voicemail',$2)`, [f.id, new Date(NOW).toISOString()]);
+// Her point 10-22: a call made from GoHighLevel (read by the Communication Center) counts, answered or not.
+const ghA = await lead({ first: 'Gil', last: 'Ames', phone: '(417) 555-0145' });   // we called, no answer
+const ghB = await lead({ first: 'Hal', last: 'Bent', phone: '417.555.0146' });     // we texted
+const ghC = await lead({ first: 'Jo', last: 'Cobb', phone: '4175550147' });        // they called, we answered
+const ghD = await lead({ first: 'Kim', last: 'Dale', phone: '4175550148' });       // only a call from BEFORE the lead came in
+const ghE = await lead({ first: 'Lu', last: 'Esk', phone: '4175550149' });        // they called, nobody answered
+await jobs.run();
+const comm = (id, phone, ch, dir, mins, answered) => pg.query(`insert into cds_comms (id, channel, direction, at, phone10, answered) values ($1,$2,$3,$4,$5,$6)`,
+  [id, ch, dir, new Date(Date.parse('2026-10-26T15:00:00Z') + mins * 60000).toISOString(), phone, answered]);
+await comm('g1', '4175550145', 'call', 'outbound', 10, false);
+await comm('h1', '4175550146', 'sms', 'outbound', 12, false);
+await comm('j1', '4175550147', 'call', 'inbound', 14, true);
+await comm('k1', '4175550148', 'call', 'outbound', -300, true);
+await comm('l1', '4175550149', 'call', 'inbound', 15, false);
 at('2026-10-26T15:40:00Z'); await jobs.run();
+eq((await outbox(ghA.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'called from GoHighLevel, no answer: no reminder');
+eq((await outbox(ghB.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'texted from GoHighLevel: no reminder');
+eq((await outbox(ghC.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'they called and we answered: no reminder');
+eq((await outbox(ghD.id)).filter(m => m.template === 'lead_reminder_text').length, 2, 'a call from before the lead came in does not count: reminder');
+eq((await outbox(ghE.id)).filter(m => m.template === 'lead_reminder_text').length, 2, 'they called and nobody answered: still a reminder');
 eq((await outbox(c.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'called (status moved): no reminder');
 eq((await outbox(d.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'note added: no reminder');
 eq((await outbox(f.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'call logged from the link page: no reminder');
@@ -197,13 +218,16 @@ for (const want of [
   '3. Keep the case files clean',
   '   1 monthly check-in call not yet logged this month',
   '4. Call the people waiting',
-  '   5 new enquiries from the website, never contacted',
+  '   7 new enquiries from the website, never contacted',
+  '      Kim Dale, came in 10:00am Mon',
+  '      Lu Esk, came in 10:00am Mon',
   '      Eve Fox, came in 11:00am Mon',
   '      Mary Smith, Greene County, came in Oct 19',
   'Also waiting',
   '   2 new lead alerts did not send',
   '   2 EVV correction forms to review',
   'Sent to Samantha and Krystal every weekday at 8am. Nothing here goes to families.']) ok(body.includes(want), 'morning email has: ' + want);
+for (const name of ['Gil Ames', 'Hal Bent', 'Jo Cobb']) ok(!body.includes(name), 'morning email leaves out ' + name + ' (reached from GoHighLevel)');
 ok(!body.includes('Ann Lee') && !body.includes('Bo Park') && !body.includes('Cy Ray'), 'people already called are not listed (status, note or a logged call)');
 ok(/      Old Lead, came in [A-Z][a-z]{2} \d{1,2}\n/.test(body), 'a lead older than 6 days shows its date, not a weekday');
 eq((await jobs.morning()).skipped, 'already sent today', 'only one a day');

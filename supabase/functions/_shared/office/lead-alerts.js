@@ -204,6 +204,23 @@ export function createLeadAlerts(deps) {
     return LINK + t;
   }
   const callsFor = async ids => ids.length ? q('select site_lead_id, outcome, at from cds_lead_calls where site_lead_id = any($1)', [ids]) : [];
+  // Calls and texts read from GoHighLevel by the Communication Center (cds_comms, 2026-10-22). Her
+  // point: a lead somebody already called, or texted, or who called in and was answered, is not
+  // waiting, even if nobody tapped anything. Any call we made counts, answered or not; it has to
+  // come after the lead came in. Read only; if that table is not there yet, nothing changes.
+  async function commsCallsFor(leads) {
+    const byPhone = new Map();
+    for (const l of leads) { const p = String(l.phone || '').replace(/\D/g, '').slice(-10); if (p.length === 10) byPhone.set(l.id, p); }
+    if (!byPhone.size) return [];
+    let rows;
+    try {
+      rows = await q(`select phone10, max(at) as last from cds_comms where phone10 = any($1)
+                      and (direction='outbound' or (channel='call' and answered)) group by phone10`, [[...new Set(byPhone.values())]]);
+    } catch (e) { return []; }
+    const last = new Map(rows.map(r => [r.phone10, Date.parse(r.last)]));
+    return leads.filter(l => byPhone.has(l.id) && last.get(byPhone.get(l.id)) >= Date.parse(l.submitted_at || 0))
+      .map(l => ({ site_lead_id: l.id, outcome: 'gohighlevel', at: new Date(last.get(byPhone.get(l.id))).toISOString() }));
+  }
   const claim = (col, id) => one(`update site_leads set ${col} = $2 where id=$1 and ${col} is null returning id`, [id, new Date(now()).toISOString()]);
 
   async function texts(cfg, lead, template, words) {
@@ -221,7 +238,7 @@ export function createLeadAlerts(deps) {
     const leads = await q(`select * from site_leads where agency_id=$1 and not coalesce(archived,false) and submitted_at >= $2 order by submitted_at`, [AGENCY_ID, since]);
     if (!leads.length) return { ok: true, live, leads: 0, emailed: 0, texted: 0, reminded: 0 };
     const pipeline = ((await store(['pipeline'])).pipeline) || [];
-    const calls = await callsFor(leads.map(l => l.id));
+    const calls = (await callsFor(leads.map(l => l.id))).concat(await commsCallsFor(leads));
     const sum = { ok: true, live, leads: leads.length, emailed: 0, texted: 0, reminded: 0 };
     for (const lead of leads) {
       const waiting = R.siteLeadWaiting(lead, pipeline, calls);
@@ -256,15 +273,13 @@ export function createLeadAlerts(deps) {
     if (!mine && !force) return { ok: true, skipped: 'already sent today' };
     const s = await store(['consumers', 'pipeline', 'authorizations', 'attendantWages']);
     const siteLeads = await q('select * from site_leads where agency_id=$1 and not coalesce(archived,false)', [AGENCY_ID]);
-    const calls = await callsFor(siteLeads.map(r => r.id));
-    // Communication Center (2026-10-22): once live, its follow-ups join step 4, and a website lead the
-    // office has texted or talked to on the phone counts as called.
+    const calls = (await callsFor(siteLeads.map(r => r.id))).concat(await commsCallsFor(siteLeads));
+    // Communication Center (2026-10-22): once live, its follow-ups join step 4. (Website leads the office
+    // already called or texted count as called above, live or not: commsCallsFor.)
     const comm = await setting('comm_center', null);
     let followups;
     if (comm && comm.live === true) {
       followups = (await q(`select title as name, due_at as since from cds_tasks where area='followup' and done_at is null order by due_at`)).map(f => ({ name: f.name, since: f.since }));
-      const reached = new Set((await q(`select distinct phone10 from cds_comms where (direction='outbound' and channel='sms') or (channel='call' and answered)`)).map(r => r.phone10));
-      for (const r of siteLeads) { const p = String(r.phone || '').replace(/\D/g, '').slice(-10); if (p.length === 10 && reached.has(p)) calls.push({ site_lead_id: r.id }); }
     }
     // Central noon today, read in the server's own (UTC) clock, so "today" is Missouri's today.
     const noon = new Date(Date.UTC(c.y, c.m - 1, c.d, 12));

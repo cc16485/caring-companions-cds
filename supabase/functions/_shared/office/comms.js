@@ -367,10 +367,12 @@ export function createComms(deps) {
     return { items: items.map(i => ({ ...i, who: (whoByPhone.get(i.phone10) || {}).name || '', family: ((whoByPhone.get(i.phone10) || {}).kind === 'family') })),
              phones: phones.map(p => ({ phone10: p.phone10, name: p.name, kind: p.kind })) };
   }
-  // Phones the office has reached by call or text (the Leads page counts them as called).
+  // Phones the office has called (answered or not), texted, or talked to when they called in, with
+  // the last time. The Leads page counts a lead as called when that came after the lead did. Same rule
+  // as the lead reminder text and the 8am email (lead-alerts.js commsCallsFor).
   async function reached(sinceIso) {
-    return (await q(`select distinct phone10 from cds_comms where at >= $1 and ((direction='outbound' and channel='sms') or (channel='call' and answered))`,
-      [sinceIso || iso(nowMs() - 120 * 86400000)])).map(r => r.phone10);
+    return q(`select phone10, max(at) as last from cds_comms where at >= $1 and phone10 is not null
+              and (direction='outbound' or (channel='call' and answered)) group by phone10`, [sinceIso || iso(nowMs() - 120 * 86400000)]);
   }
   // Everyone who can be picked for "Who is this?".
   async function people() {
@@ -422,7 +424,7 @@ export function createComms(deps) {
     const a = String(body && body.action || 'queue');
     if (a === 'queue') return queue();
     if (a === 'history') return history(body.refs, body.phones);
-    if (a === 'reached') return { phones: await reached(body.since) };
+    if (a === 'reached') { const r = await reached(body.since); return { phones: r.map(x => x.phone10), last: Object.fromEntries(r.map(x => [x.phone10, x.last])) }; }
     if (a === 'people') return people();
     if (a === 'pick') return pick(email, body);
     if (a === 'done') return done(email, body);
