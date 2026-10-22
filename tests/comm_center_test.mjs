@@ -242,6 +242,7 @@ ok(reached.includes('4175550188') && !reached.includes('4175550190'), 'reached: 
 ok(reached.includes('4175550131'), 'a call back with no answer counts as called (her point 10-22)');
 const rh = await comms.handle('x@y', { action: 'reached' });
 ok(Array.isArray(rh.phones) && rh.last['4175550188'], 'the page gets the phones and when');
+ok(rh.talk['4175550188'] && !rh.talk['4175550190'], 'and the last answered call, for a talk just before a lead came in');
 
 // the Caregiver Match to-do list leaves follow-ups out
 const handlers = readFileSync(ROOT + '/supabase/functions/_shared/match/handlers.js', 'utf8');

@@ -371,8 +371,10 @@ export function createComms(deps) {
   // the last time. The Leads page counts a lead as called when that came after the lead did. Same rule
   // as the lead reminder text and the 8am email (lead-alerts.js commsCallsFor).
   async function reached(sinceIso) {
-    return q(`select phone10, max(at) as last from cds_comms where at >= $1 and phone10 is not null
-              and (direction='outbound' or (channel='call' and answered)) group by phone10`, [sinceIso || iso(nowMs() - 120 * 86400000)]);
+    // last_talk: the last answered call, for a family who talked to us just before they became a lead (24 hours).
+    return q(`select phone10, max(at) as last, max(at) filter (where channel='call' and answered) as last_talk from cds_comms
+              where at >= $1 and phone10 is not null and (direction='outbound' or (channel='call' and answered)) group by phone10`,
+      [sinceIso || iso(nowMs() - 120 * 86400000)]);
   }
   // Everyone who can be picked for "Who is this?".
   async function people() {
@@ -424,7 +426,8 @@ export function createComms(deps) {
     const a = String(body && body.action || 'queue');
     if (a === 'queue') return queue();
     if (a === 'history') return history(body.refs, body.phones);
-    if (a === 'reached') { const r = await reached(body.since); return { phones: r.map(x => x.phone10), last: Object.fromEntries(r.map(x => [x.phone10, x.last])) }; }
+    if (a === 'reached') { const r = await reached(body.since); return { phones: r.map(x => x.phone10), last: Object.fromEntries(r.map(x => [x.phone10, x.last])),
+      talk: Object.fromEntries(r.filter(x => x.last_talk).map(x => [x.phone10, x.last_talk])) }; }
     if (a === 'people') return people();
     if (a === 'pick') return pick(email, body);
     if (a === 'done') return done(email, body);
