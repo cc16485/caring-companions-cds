@@ -108,6 +108,11 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(!/Packet Sent|Send Welcome/.test(r), 'Welcome and Packet are off the cards');
   ok(/Text the welcome/.test(html) && /Tell them the packet is on its way/.test(html), 'and on the profile');
+  // Her wording 10-21: the lead profile asks for Referral or PCCP answers, with a button for each.
+  const card = html.slice(html.indexOf('No Referral or PCCP answers yet'), html.indexOf('No Referral or PCCP answers yet') + 900);
+  ok(card.includes("openAddPipeline(\\'referral\\'") && card.includes("openAddPipeline(\\'pccp\\'"), 'Referral and PCCP buttons on the lead profile');
+  ok(!html.includes('No HCBS-1 answers yet'), 'the old HCBS-1 wording is gone');
+  ok(/'leavingAgency','whySwitching','readiness','medicaidStatus'/.test(html), 'a lead turned PCCP keeps its transfer answers');
 }
 
 console.log(pass + ' passed, ' + fail + ' failed');

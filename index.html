@@ -5870,8 +5870,10 @@ function addPipelineContact() {
     const existing = pipeline.find(x => x.id === _plEditId);
     if (existing) {
       existing.type = type;
-      existing.referral = newContact.referral;
-      ['firstName','lastName','dob','dcn','phone','email'].forEach(k => {
+      if (newContact.referral) existing.referral = newContact.referral;
+      // The PCCP questions too, so a lead turned transfer keeps its answers.
+      ['firstName','lastName','dob','dcn','phone','email','county','hours',
+       'leavingAgency','whySwitching','readiness','medicaidStatus','currentAgency'].forEach(k => {
         if (newContact[k]) existing[k] = newContact[k];
       });
       if (newContact.attendant && !existing.attendant) existing.attendant = newContact.attendant;
@@ -6233,16 +6235,17 @@ function renderLeadProfile(){
 
   // ---- the HCBS-1 answers, if this was a referral call ----
   /* Say why the form is not offered, rather than just not offering it. Somebody
-     who added this person with "+ Add Lead" has no way to know the HCBS-1 answers
-     live behind a different button. */
+     who added this person as Still deciding has no way to know the referral and
+     PCCP questions live behind a different button. (Her wording 2026-10-21.) */
   if(!R && p.type !== 'pccp'){
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;background:#fffaf0;border-left:4px solid var(--accent)">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
-        '<b style="color:var(--primary)">No HCBS-1 answers yet</b>' +
-        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'referral\', \'' + esc(p.id) + '\')">Collect them now</button>' +
+      '<b style="color:var(--primary)">No Referral or PCCP answers yet</b>' +
+      '<div class="field-note" style="margin-top:6px">This person was added as Still deciding, so those questions were never asked. ' +
+        'Pick the one that fits. It updates this record rather than making a second one.</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">' +
+        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'referral\', \'' + esc(p.id) + '\')">Referral: new to CDS</button>' +
+        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'pccp\', \'' + esc(p.id) + '\')">PCCP: moving from another agency</button>' +
       '</div>' +
-      '<div class="field-note" style="margin-top:6px">This person was added as a lead, so the referral questions were never asked. ' +
-        'Collect them and the filled HCBS-1 becomes available here. It updates this record rather than making a second one.</div>' +
     '</div>';
   }
 
