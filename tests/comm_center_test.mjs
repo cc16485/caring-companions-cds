@@ -120,8 +120,10 @@ const comms = C.createComms({
     async users() { return [{ id: 'u-k', name: 'Krystal Smith' }, { id: 'u-s', firstName: 'Samantha', lastName: 'Troutman' }]; },
     async conversations(since) { if (ghlDown) throw new Error('GoHighLevel 503'); return [...convs.values()].map(c => c.conv).filter(c => c.lastMessageDate >= since).sort((a, b) => b.lastMessageDate - a.lastMessageDate); },
     async messages(id, since) { return convs.get(id).messages.filter(m => Date.parse(m.dateAdded) >= since).filter(m => Date.parse(m.dateAdded) <= NOW); },
+    async contact(id) { contactLookups++; return CONTACTS[id] || {}; },
   },
 });
+const CONTACTS = {}; let contactLookups = 0;
 const open = async () => (await pg.query(`select * from cds_tasks where area='followup' and done_at is null order by created_at`)).rows;
 const tick = async mins => { NOW = T0 + mins * 60000; return comms.run(); };
 
@@ -262,6 +264,33 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   const rr = await slow.pull(await slow.settings());
   const st2 = (await pg.query(`select value->'state' s from cds_match_settings where key='comm_center'`)).rows[0].s;
   ok(rr.partial && st2.history_partial === true && st2.read_until > before, 'out of time: says history is partial and moves on');
+}
+
+// a conversation with no phone: the number comes from the GoHighLevel contact (seen live 10-22: 8 of 55)
+{
+  CONTACTS['ct-nophone'] = { id: 'ct-nophone', phone: '+1 417-555-0131' };
+  CONTACTS['ct-empty'] = { id: 'ct-empty' };
+  convs.set('cv-np', { conv: { id: 'cv-np', contactId: 'ct-nophone', fullName: 'Ruth', lastMessageDate: Date.parse(at(170)) }, messages: [
+    { id: 'np1', messageType: 'TYPE_CALL', direction: 'inbound', dateAdded: at(170), contactId: 'ct-nophone', meta: { call: { duration: 0, status: 'no-answer' } } },
+    { id: 'np2', messageType: 'TYPE_SMS', direction: 'inbound', dateAdded: at(170), contactId: 'ct-nophone', body: 'Please call me' }] });
+  convs.set('cv-np2', { conv: { id: 'cv-np2', contactId: 'ct-empty', lastMessageDate: Date.parse(at(170)) }, messages: [
+    { id: 'np3', messageType: 'TYPE_CALL', direction: 'inbound', dateAdded: at(170), contactId: 'ct-empty', meta: { call: { duration: 0, status: 'no-answer' } } }] });
+  contactLookups = 0;
+  const rr = await tick(171);
+  const saved = (await pg.query(`select id, phone10 from cds_comms where id in ('np1','np2','np3') order by id`)).rows;
+  ok(saved.length === 2 && saved.every(x => x.phone10 === '4175550131'), 'no phone on the conversation: the contact\'s number is used');
+  ok(rr.fromContact === 2 && rr.skipped === 1, 'counted: 2 from the contact, 1 still without a number (' + rr.fromContact + '/' + rr.skipped + ')');
+  ok(contactLookups === 2, 'each contact is looked up once per run (' + contactLookups + ')');
+  ok((await open()).some(t => t.phone10 === '4175550131' && t.events.some(e => e.id === 'np1')), 'and it makes a follow-up on the right person');
+}
+// rescan: something the reader missed earlier is picked up by a one-time re-read
+{
+  say('4175550144', 'Marcus Webb', { id: 'late1', messageType: 'TYPE_SMS', direction: 'inbound', dateAdded: at(100), body: 'missed by the first read' });
+  NOW = T0 + 175 * 60000;
+  let rr = await comms.run();
+  ok(!(await pg.query(`select 1 from cds_comms where id='late1'`)).rows.length, 'a normal run only looks back 15 minutes');
+  rr = await comms.run({ rescan: true });
+  ok((await pg.query(`select 1 from cds_comms where id='late1'`)).rows.length === 1 && rr.saved === 1, 'a rescan reads the whole window again and saves only what is new');
 }
 
 // ---------- Today and the switch ----------

@@ -62,6 +62,11 @@ const comms = createComms({
       }
       return out;
     },
+    // The contact's own phone, for conversations that carry none (read only).
+    async contact(id: string) {
+      const j = await get('/contacts/' + encodeURIComponent(id), '2021-07-28');
+      return (j.contact ?? {}) as Record<string, unknown>;
+    },
     // A conversation's messages newer than sinceMs.
     async messages(conversationId: string, sinceMs: number) {
       const out: Record<string, unknown>[] = [];
@@ -99,7 +104,9 @@ Deno.serve(async (req) => {
   if (req.headers.has('x-cron-secret')) {
     const secret = env('CDS_JOB_SECRET');
     if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'not allowed' }, 401);
-    try { return json(await comms.run()); }
+    // body { rescan: true } (Desktop steps only) reads the whole history window again; ids keep it safe.
+    const body = await req.json().catch(() => ({}));
+    try { return json(await comms.run({ rescan: body?.rescan === true })); }
     catch (e) { console.error(e); return json({ ok: false, error: String((e as Error)?.message || e) }, 500); }
   }
 
