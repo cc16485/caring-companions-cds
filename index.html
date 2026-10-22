@@ -645,10 +645,13 @@ input, select, textarea { border-radius:10px; }
   <div id="dailyRoutine" style="margin-bottom:18px"></div>
   <div id="todayComing" style="margin-bottom:18px"></div>
 
-  <!-- Everything below was the old Dashboard. Kept (updateDashboard fills these
-       ids), folded away so Today is one list. 2026-10-21. -->
-  <details class="cute-more">
-  <summary>More numbers and reference</summary>
+</div>
+
+<!-- ==================== DASHBOARD (numbers) ====================
+     Her ask 2026-10-22: the old Dashboard numbers get their own tab inside Today
+     (Today | Follow-ups | Dashboard) instead of folded under Today. Same ids, so
+     updateDashboard fills them wherever they are. Hash #numbers. -->
+<div id="page-numbers" class="page">
 
   <div class="alert alert-warn">
     ⚠️ <strong>EVV Hard Launch Phase I — April 1, 2026:</strong> Claims validation is now active via Sandata EVV Aggregator. All visits must be documented via <strong>WellSky Personal Care</strong> (our EVV vendor). Claims without matching EVV data may be denied. EVV corrections must be submitted by <strong>Saturday 11:59 PM</strong> each week.
@@ -851,7 +854,6 @@ input, select, textarea { border-radius:10px; }
       <span class="tag">Senate Bill 710 (Tax Penalties)</span>
     </div>
   </div>
-  </details>
 </div>
 
 <!-- ==================== FOLLOW-UPS (Communication Center, 2026-10-22) ====================
@@ -4559,7 +4561,7 @@ function _enableRealtime() {
         const active = document.querySelector('.page.active');
         if (active) {
           const id = active.id.replace('page-','');
-          if (id === 'dashboard')    updateDashboard();
+          if (id === 'dashboard' || id === 'numbers') updateDashboard();
           if (id === 'consumers')    { renderConsumers(); renderPipeline(); }
           if (id === 'attendants')   renderAttendants();
           if (id === 'activeattendants') renderAttendantCheck();
@@ -4638,7 +4640,9 @@ const SECTIONS = [
   // Follow-ups (Communication Center, 2026-10-22) is a tab inside Today, her call. The count is the open cards.
   { id: 'today',      label: 'Today',       tabs: [
       { page: 'dashboard', label: 'Today' },
-      { page: 'followups', label: 'Follow-ups', count: () => (typeof _comm !== 'undefined' && _comm && Array.isArray(_comm.cards) ? _comm.cards.length : 0) } ] },
+      { page: 'followups', label: 'Follow-ups', count: () => (typeof _comm !== 'undefined' && _comm && Array.isArray(_comm.cards) ? _comm.cards.length : 0) },
+      // The old Dashboard numbers, their own tab (her ask 2026-10-22).
+      { page: 'numbers',   label: 'Dashboard' } ] },
   { id: 'leads',      label: 'Leads',       tabs: [] },
   { id: 'consumers',  label: 'Consumers',   chips: true, tabs: [
       { page: 'consumers',      label: 'Everyone' },
@@ -4664,7 +4668,7 @@ const PAGE_TO_SECTION = (() => {
   SECTIONS.forEach(sec => sec.tabs.forEach(t => { m[t.page] = sec.id; }));
   // Pages with no tab of their own, and section ids used bare.
   Object.assign(m, {
-    dashboard: 'today', today: 'today', followups: 'today',
+    dashboard: 'today', today: 'today', followups: 'today', numbers: 'today',
     pipeline: 'leads', statesubmissions: 'leads', leadprofile: 'leads', leads: 'leads',
     profile: 'consumers',
     attendants: 'attendants', roster: 'attendants', backuppool: 'attendants', caregiverpool: 'attendants',
@@ -4768,7 +4772,7 @@ function showPage(id) {
   renderMainTabs(section);
   renderSectionNav(section, roster ? 'activeattendants' : id);
 
-  if (id === 'dashboard') updateDashboard();
+  if (id === 'dashboard' || id === 'numbers') updateDashboard();
   if (id === 'automations') {
     renderAutomations();
     const u = document.getElementById('sw_user');
@@ -6768,7 +6772,7 @@ async function commLoad() {
   commMergeReached();
   // keep the "Follow-ups (n)" tab count current while Today is open
   const onPage = (document.querySelector('.page.active') || {}).id || '';
-  if (onPage === 'page-dashboard' || onPage === 'page-followups') renderSectionNav('today', onPage.replace('page-', ''));
+  if (onPage === 'page-dashboard' || onPage === 'page-followups' || onPage === 'page-numbers') renderSectionNav('today', onPage.replace('page-', ''));
   if (!_commTimer) _commTimer = setInterval(() => commLoad().then(() => {
     if (document.getElementById('page-followups')?.classList.contains('active')) renderFollowups(false);
     try { renderDailyRoutine(); } catch (e) {}
