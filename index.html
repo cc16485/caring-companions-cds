@@ -932,20 +932,18 @@ input, select, textarea { border-radius:10px; }
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">📞</span> Monthly Contact Tracker — <span id="currentMonthLabel"></span></div>
+      <div class="card-title" id="rosterSummary" style="font-size:13px;font-weight:400;color:var(--gray-600)"></div><span id="currentMonthLabel" hidden></span>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>Consumer Name</th><th>DCN</th><th>County</th><th>Attendant(s)</th>
-              <th>Care Plan Hours/Wk</th><th>Monthly Contact</th><th>Annual Home Visit</th>
-              <th>Backup Plan</th><th>Consumer Training</th><th>Tax Setup</th>
-              <th>Status</th><th>Care Plan</th><th>Actions</th>
+              <th>Consumer</th><th>Hrs/wk</th><th id="rosterCallHead">This month's call</th>
+              <th>Face-to-face visit</th><th>Still to finish</th>
             </tr>
           </thead>
           <tbody id="consumerTableBody">
             <tr id="emptyConsumerRow">
-              <td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td>
+              <td colspan="5"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td>
             </tr>
           </tbody>
         </table>
@@ -5068,60 +5066,48 @@ function renderConsumers() {
   document.getElementById('currentMonthLabel').textContent = MONTHS[now.getMonth()] + ' ' + now.getFullYear();
 
   if (consumers.length === 0) {
-    tbody.innerHTML = '<tr id="emptyConsumerRow"><td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td></tr>';
+    tbody.innerHTML = '<tr id="emptyConsumerRow"><td colspan="5"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td></tr>';
     document.getElementById('monthlyContactHistory').innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>';
     return;
   }
 
-  tbody.innerHTML = consumers.filter(c => c.status !== 'inactive').map(c => {
+  // 2026-10-22 her ask: a clear roster. One row = who they are, this month's
+  // call (the one thing the office does for everyone), the visit, and how much
+  // is left. Everything else lives on the profile; the name opens it.
+  const active = consumers.filter(c => c.status !== 'inactive').sort((a, b) => a.name.localeCompare(b.name));
+  const callsLeft = active.filter(c => !(c.contacts && c.contacts[currentMonth])).length;
+  document.getElementById('rosterCallHead').textContent = MONTHS[now.getMonth()] + ' call';
+  document.getElementById('rosterSummary').textContent = active.length + ' active · ' +
+    (callsLeft ? callsLeft + ' call' + (callsLeft === 1 ? '' : 's') + ' left this month' : 'every call done this month');
+  const allAttendants = getData('attendants');
+  const link = (c, html) => '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="color:inherit;text-decoration:none">' + html + '</a>';
+
+  tbody.innerHTML = active.map(c => {
     const contacted = c.contacts && c.contacts[currentMonth];
-    const statusBadge = c.status === 'active' ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-warn">Pending</span>';
-    const trainedBadge = c.trained === 'yes' ? '<span class="badge badge-green">✓ Done</span>' : c.trained === 'partial' ? '<span class="badge badge-warn">Partial</span>' : '<span class="badge badge-red">Needed</span>';
-    const backupBadge = c.backupPlan ? '<span class="badge badge-green">✓ Yes</span>' : '<span class="badge badge-red">Missing</span>';
-    const contactDetail = contacted && typeof contacted === 'object' ? contacted : null;
-    const dhssFlag = contactDetail && contactDetail.dhssFlag;
-    const contactBtn = contacted ?
-      `<button class="btn btn-sm" style="background:var(--success-pale);color:var(--success);border:1px solid #a6dbd8;cursor:pointer;position:relative" onclick="toggleContact('${c.id}')" title="${contactDetail ? 'Logged ' + contactDetail.date + ' via ' + contactDetail.method + (contactDetail.notes ? ' — ' + contactDetail.notes.substring(0,60) : '') : ''}">✓ Contacted${dhssFlag ? ' <span style=\'color:var(--danger)\'>⚠</span>' : ''}</button>` :
-      `<button class="btn btn-sm btn-danger" onclick="toggleContact('${c.id}')">📋 Log Contact</button>`;
+    const detail = contacted && typeof contacted === 'object' ? contacted : null;
+    const callCell = contacted
+      ? '<button class="btn btn-sm" style="background:var(--success-pale);color:var(--success);border:1px solid #a6dbd8" onclick="toggleContact(\'' + c.id + '\')">✓ Called' + (detail && detail.date ? ' ' + esc(_niceDay(detail.date)) : '') + (detail && detail.dhssFlag ? ' <span style="color:var(--danger)">⚠</span>' : '') + '</button>'
+      : '<button class="btn btn-sm btn-outline" onclick="toggleContact(\'' + c.id + '\')">Log call</button>';
 
-    // Tax setup badge
-    const taxItems = [c.ein, c.irs8821, c.irs2678, c.mo2643a, c.mo2827, c.desRegistered];
-    const taxDone = taxItems.filter(Boolean).length;
-    const taxTotal = 6;
-    let taxBadge;
-    if (taxDone === taxTotal) {
-      taxBadge = `<span class="badge badge-green">✓ Complete</span>`;
-    } else if (taxDone === 0 && !c.packetSigned) {
-      taxBadge = `<span class="badge badge-red">⚠ Not Started</span>`;
-    } else {
-      taxBadge = `<span class="badge badge-warn">${taxDone}/${taxTotal} Done</span>`;
-    }
+    const A = ongoingRequirements(c).annual;
+    const visitCell = !A.known ? '<span style="color:var(--warn)">No visit logged yet</span>'
+      : A.overdue ? '<span style="color:var(--danger);font-weight:600">Overdue since ' + esc(_niceDay(A.due)) + '</span>'
+      : A.soon ? '<span style="color:var(--warn)">Due ' + esc(_niceDay(A.due)) + '</span>'
+      : '<span style="color:var(--gray-600)">Next due ' + esc(new Date(A.due + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })) + '</span>';
 
+    const todo = consumerToFinish(c);
+    const todoCell = todo.length
+      ? link(c, '<span title="' + esc(todo.join(', ')) + '" style="color:var(--gray-600)">' + todo.length + ' item' + (todo.length === 1 ? '' : 's') + ' ›</span>')
+      : '<span style="color:var(--success)">All done</span>';
+
+    const names = allAttendants.filter(a => (a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name))).map(a => a.name);
     return `<tr>
-      <td><a href="javascript:void(0)" onclick="openProfile('${c.id}')" style="font-weight:700;color:var(--primary-light);text-decoration:none;cursor:pointer">${c.name}</a>${c.notes ? '<div style="font-size:11px;color:var(--gray-600)">' + c.notes + '</div>' : ''}</td>
-      <td>${c.dcn || '—'}</td>
-      <td>${c.county || '—'}</td>
-      <td style="font-size:12px">${c.consumer || '—'}</td>
-      <td>${c.hours || '—'} hrs</td>
-      <td>${contactBtn}</td>
-      <td>${(function(){
-        const r = ongoingRequirements(c).annual;
-        const label = r.overdue ? '⚠ ' + Math.abs(r.days) + 'd over'
-                    : (r.lastVisit ? '✓ ' + r.lastVisit.date : 'Log Visit');
-        const style = r.overdue ? 'font-size:11px;border-color:var(--danger);color:var(--danger)' : 'font-size:11px';
-        return '<button class="btn btn-sm btn-outline" onclick="logAnnualVisit(\'' + c.id + '\')" style="' + style + '">' + label + '</button>';
-      })()}</td>
-      <td><button class="btn btn-sm btn-outline" onclick="toggleBackup('${c.id}')" style="font-size:11px">${backupBadge}</button></td>
-      <td>${trainedBadge}</td>
-      <td><button class="btn btn-sm btn-outline" onclick="openTaxSetup('${c.id}')" style="font-size:11px">${taxBadge}</button></td>
-      <td>${statusBadge}</td>
-      <td><button class="btn btn-sm btn-outline" onclick="openCarePlan('${c.id}')" style="font-size:11px;color:var(--primary)">${c.carePlan && c.carePlan.tasks && c.carePlan.tasks.length ? '📋 View Plan' : '📋 Add Plan'}</button></td>
-      <td style="min-width:110px">
-        <button class="btn btn-sm btn-outline" onclick="openConsumerOutreach('${c.id}','service_start')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--accent)">🚀 Service Start</button>
-        <button class="btn btn-sm btn-outline" onclick="openConsumerOutreach('${c.id}','consumer_orientation')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--primary)">📺 Training Reminder</button>
-        <button class="btn btn-sm btn-outline" onclick="openConsumerOutreach('${c.id}','care_renewal')" style="width:100%;font-size:10px;color:var(--warn)">🔄 Care Renewal</button>
-      </td>
-      <td><button class="btn btn-sm btn-danger" onclick="removeConsumer('${c.id}')">Remove</button></td>
+      <td>${link(c, '<span style="font-weight:700;color:var(--primary-light)">' + esc(c.name) + '</span>')}
+        <div style="font-size:12px;color:var(--gray-600)">Attendant: ${names.length ? names.map(esc).join(', ') : 'none on file'}${c.status === 'pending' ? ' · <span class="badge badge-warn">Pending</span>' : ''}</div></td>
+      <td>${c.hours ? esc(c.hours) : '—'}</td>
+      <td>${callCell}</td>
+      <td style="font-size:13px">${visitCell}</td>
+      <td style="font-size:13px">${todoCell}</td>
     </tr>`;
   }).join('');
 
@@ -5269,10 +5255,46 @@ function logHomeVisit(cid) {
   if (c) { c.homeVisitDate = date; setData('consumers', consumers); renderConsumers(); }
 }
 
+// What is still open for one consumer, in short words. The roster shows the
+// count; the profile shows the list.
+function consumerToFinish(c) {
+  const t = taxStatus(c);
+  const auth = Object.values(getAuths().records).find(a => prNorm(a.consumer || '') === prNorm(c.name));
+  const authOk = auth && auth.planEnd && new Date(auth.planEnd + 'T12:00:00') >= new Date();
+  const plan = getObj('carePlans')[c.id] || (c.carePlan && c.carePlan.tasks && c.carePlan.tasks.length);
+  return [
+    !(t.inFusion && (t.uploaded || t.exempt)) && 'Tax and EIN',
+    !authOk && (auth ? 'Renewed authorization' : 'Authorization'),
+    !plan && 'Care plan',
+    !c.backupPlan && 'Backup plan',
+    c.trained !== 'yes' && 'Consumer training'
+  ].filter(Boolean);
+}
+
+// Replaces the roster's one-click Remove: the record and its history stay.
+function markConsumerInactive(cid) {
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c || !confirm('Mark ' + c.name + ' inactive? They come off the roster. Their history is kept.')) return;
+  c.status = 'inactive';
+  c.inactiveAt = new Date().toISOString().slice(0, 10);
+  setData('consumers', consumers);
+  _profileId = null;
+  showPage('consumers');
+  renderConsumers();
+  updateDashboard();
+}
+
+function setConsumerTrained(cid, v) {
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (c) { c.trained = v; setData('consumers', consumers); renderProfile(); renderConsumers(); }
+}
+
 function toggleBackup(cid) {
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === cid);
-  if (c) { c.backupPlan = !c.backupPlan; setData('consumers', consumers); renderConsumers(); }
+  if (c) { c.backupPlan = !c.backupPlan; setData('consumers', consumers); renderConsumers(); if (document.getElementById('page-profile')?.classList.contains('active')) renderProfile(); }
 }
 
 function removeConsumer(cid) {
@@ -8245,7 +8267,13 @@ function renderProfile() {
     (fs ? line('First shift (WellSky)', esc(_niceDay(fs))) : '') +
     (prep.shiftStyle ? line('Shifts', prep.shiftStyle === 'set' ? 'Set shifts' : 'Shifts as needed') : '') +
     line('Authorization', !auth ? '<span style="color:var(--danger)">nothing on file</span>' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'ends ' + esc(_niceDay(auth.planEnd)) + ' (' + daysLeft + ' days)')) +
-    line('Tax and EIN', outstanding.length ? '<span style="color:#9C6410">' + outstanding.length + ' thing' + (outstanding.length === 1 ? '' : 's') + ' still needed</span>' : 'all set');
+    line('Tax and EIN', outstanding.length ? '<span style="color:#9C6410">' + outstanding.length + ' thing' + (outstanding.length === 1 ? '' : 's') + ' still needed</span>' : 'all set') +
+    line('Backup plan', (c.backupPlan ? 'yes' : '<span style="color:var(--danger)">missing</span>') +
+      ' <a href="#" onclick="toggleBackup(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">' + (c.backupPlan ? 'undo' : 'mark done') + '</a>') +
+    line('Consumer training', '<select onchange="setConsumerTrained(\'' + c.id + '\',this.value)" style="font-size:13px">' +
+      [['no', 'Needed'], ['partial', 'Partly done'], ['yes', 'Done']].map(([v, l]) => '<option value="' + v + '"' + ((c.trained || 'no') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>') +
+    (function () { const t = consumerToFinish(c);
+      return t.length ? line('Still to finish', '<span style="color:#9C6410">' + t.map(esc).join(', ') + '</span>') : line('Still to finish', 'nothing'); })();
   else if (tab === 'hours') body =
     (auth
       ? line('Prior authorization', esc(auth.priorAuth || 'none')) + line('Code', esc(auth.procedureCode || 'none')) +
@@ -8281,7 +8309,8 @@ function renderProfile() {
       '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(c.phone || '') + '"></div>' +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
         '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
-        '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a></div>' +
+        '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a>' +
+        '<a href="#" onclick="markConsumerInactive(\'' + c.id + '\');return false" style="color:var(--danger)">Mark inactive</a></div>' +
     '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
 }
 
