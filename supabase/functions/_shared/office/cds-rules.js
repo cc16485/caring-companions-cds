@@ -271,7 +271,7 @@
   // ── The Leads page card (2026-10-21) ──
   // One card per person: which of the three steps they are in, who they are in a
   // sentence, how urgent they are, and what to do next. The page only draws it.
-  const LEAD_KINDS = { lead: 'Still deciding', referral: 'New to CDS', pccp: 'Moving from another agency' };
+  const LEAD_KINDS = { lead: 'Still deciding', referral: 'New to CDS - Referral', pccp: 'Moving from Another Agency - PCCP' };
   const DONE = ['authorized', 'transfer_complete'];
   const shortDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const daysBetween = (fromIso, toIso) => Math.round((Date.parse(toIso + 'T12:00:00') - Date.parse(fromIso + 'T12:00:00')) / DAY);
