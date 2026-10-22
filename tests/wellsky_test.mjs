@@ -220,6 +220,19 @@ eq([nc.count, nc.leftOut.map(p => p.name)], [0, ['Eve Ely']], 'Leave out takes a
 eq(W.nameKey('Fitzgeraldbeckle, Misty'), W.nameKey('Misty Fitzgeraldbeckle'), 'WellSky and hub names match either way round');
 eq(W.newConsumers(null, hub, null).count, 0, 'no data yet is zero, not an error');
 
+/* 2026-10-22 (her): 40 consumers in all, counting the ones we have now */
+const novShifts = W.parseShiftReport(nov);
+let cn = W.consumersNow(novShifts, '2026-11-13', fsMore, hub, {});
+eq(cn.people.map(p => [p.name, p.isNew]), [['Ann Able', false], ['Finn Fox', false], ['Eve Ely', true], ['Iris Ivy', true]],
+   'everyone with a worked shift in the last 31 days counts; Eve and Iris are new since Oct 19 (Iris from today\'s report), Ann and Finn were already consumers');
+eq([cn.count, cn.newCount, cn.target], [4, 2, 40], '4 of 40 consumers, 2 of them new');
+ok(!W.consumersNow(novShifts, '2026-11-12', fsMore, hub, {}).people.some(p => p.name === 'Iris Ivy'), 'a shift booked for today, not worked yet, does not count yet');
+cn = W.consumersNow(novShifts, '2026-12-11', fsMore, hub, {});
+eq(cn.people.map(p => p.name), ['Eve Ely', 'Iris Ivy'], 'someone with no worked shift in the last 31 days drops off (Ann last worked Nov 2; Eve Nov 10 and Iris Nov 12 stay)');
+cn = W.consumersNow(novShifts, '2026-11-13', fsMore, hub, { leftOut: { [W.nameKey('Able, Ann')]: { at: 'x', by: 'y' } } });
+eq([cn.count, cn.leftOut.map(p => p.name)], [3, ['Ann Able']], 'Leave out still works, and lists them to put back');
+eq(W.consumersNow(null, '', null, hub, null).count, 0, 'no WellSky report yet is zero, not an error');
+
 // ---------- receipts: the key never goes into the WellSky page (2026-10-20) ----------
 await pg.exec(`do $$ begin
   if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;

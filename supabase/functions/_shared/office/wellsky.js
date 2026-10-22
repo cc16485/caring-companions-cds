@@ -329,7 +329,35 @@
     return { target: g.target, from: g.from, by: g.by, count: people.length, people, leftOut: all.filter(p => left[p.key]), dataFrom: (first && first.from) || '' };
   }
 
+  // ---------- 40 consumers in all (her change 2026-10-22) ----------
+  // "mark the clients we have now, not 40 new, 40 including the ones we have now". A consumer
+  // we have now = someone whose attendant worked a shift in the last 31 days (WellSky, the
+  // same report the morning check pulls). Each one is marked new when their first worked shift
+  // is on or after the goal's start date and the hub did not already have them (newConsumers'
+  // rule), so the card can still show how many are new. cfg.leftOut works the same way.
+  const ACTIVE_DAYS = 31;
+  function consumersNow(shifts, pulledOn, first, consumers, cfg) {
+    const g = Object.assign({}, GOAL, cfg || {});
+    const left = (cfg && cfg.leftOut) || {};
+    first = mergeFirstShifts(first, shifts, pulledOn);   /* today's report too, so a first shift this week already counts as new */
+    const fresh = new Set(newConsumers(first, consumers, Object.assign({}, cfg, { leftOut: {} })).people.map(p => p.key));
+    const since = pulledOn ? isoLocal(new Date(Date.parse(pulledOn + 'T12:00:00') - ACTIVE_DAYS * 864e5)) : '';
+    const all = [];
+    ((shifts && shifts.consumers) || []).forEach(c => {
+      const worked = (c.shifts || []).filter(s => s.date < pulledOn).map(s => s.date).sort();
+      if (!worked.length || worked[worked.length - 1] < since) return;
+      const key = nameKey(c.name);
+      if (all.some(p => p.key === key)) return;
+      all.push({ key, name: firstLast(c.name), last: worked[worked.length - 1], isNew: fresh.has(key),
+                 first: (first && first.people && first.people[c.name] && first.people[c.name].date) || worked[0] });
+    });
+    all.sort((a, b) => (a.isNew - b.isNew) || a.first.localeCompare(b.first) || a.name.localeCompare(b.name));
+    const people = all.filter(p => !left[p.key]);
+    return { target: g.target, from: g.from, by: g.by, count: people.length, newCount: people.filter(p => p.isNew).length,
+             people, leftOut: all.filter(p => left[p.key]), activeDays: ACTIVE_DAYS };
+  }
+
   root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
-                      mergeFirstShifts, newConsumers, nameKey, firstLast, GOAL,
+                      mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL,
                       LONG_HOURS, LONG_FACTOR, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

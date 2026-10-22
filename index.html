@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=9"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=4"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -11757,13 +11757,13 @@ function loadQuarterStatus() {
 // Samantha: "I want the goals to look just like the cds consumer cute houses look in the
 // other caring companions client goals page." The same street of houses as the CC Hub's
 // Client Goals tab, but counted for her: a house lights up when a new consumer's attendant
-// works the FIRST shift in WellSky (her rule). The rules are in wellsky.js (newConsumers);
+// works the FIRST shift in WellSky (her rule). 2026-10-22 (her): 40 in all, counting the ones we have now (consumersNow in wellsky.js; newConsumers still marks who is new);
 // the server keeps each first shift in 'firstShifts'. This card only reads, except
 // "Leave out", which saves to 'cdsGoal'.
-function _cgHouse(lit) {
+function _cgHouse(lit, isNew) {
   const dash = lit ? '' : ' stroke-dasharray="3 3"';
   return '<svg class="cg-house' + (lit ? ' lit' : '') + '" viewBox="0 0 40 40" aria-hidden="true">' +
-    '<path d="M5 19 L20 6 L35 19" fill="' + (lit ? '#2a7d78' : 'none') + '" stroke="#0e3860" stroke-width="2" stroke-linejoin="round"' + dash + '/>' +
+    '<path d="M5 19 L20 6 L35 19" fill="' + (lit ? (isNew ? '#F0A63A' : '#2a7d78') : 'none') + '" stroke="#0e3860" stroke-width="2" stroke-linejoin="round"' + dash + '/>' +
     '<rect x="9" y="18" width="22" height="17" rx="1.5" fill="' + (lit ? '#fff' : 'none') + '" stroke="#0e3860" stroke-width="2"' + dash + '/>' +
     (lit ? '<rect x="12.5" y="21.5" width="6" height="6" rx="1" fill="#F0A63A"/><rect x="22" y="25" width="5.5" height="10" rx="1" fill="#0e3860"/>' : '') +
     '</svg>';
@@ -11813,7 +11813,8 @@ function _cgResult() {
   const check = getObj('wellskyCheck'), sh = check.shifts;
   const pulledOn = sh && sh.at ? CDSWellSky.isoLocal(new Date(sh.at)) : '';
   const first = CDSWellSky.mergeFirstShifts(getObj('firstShifts'), sh, pulledOn);
-  return { r: CDSWellSky.newConsumers(first, getData('consumers'), getObj('cdsGoal')), hasData: !!(sh || first.from) };
+  /* 2026-10-22 (her): 40 consumers in all, counting the ones we have now (consumersNow) */
+  return { r: CDSWellSky.consumersNow(sh, pulledOn, first, getData('consumers'), getObj('cdsGoal')), hasData: !!sh };
 }
 function renderCdsGoal() {
   const host = document.getElementById('cdsGoal');
@@ -11824,7 +11825,7 @@ function renderCdsGoal() {
   let streets = '';
   for (let i = 0; i < Math.max(r.target, r.count); i++) {
     const p = r.people[i];
-    streets += p ? '<span title="' + esc(p.name + ', first shift ' + _cgDay(p.date)) + '">' + _cgHouse(true) + '</span>' : _cgHouse(false);
+    streets += p ? '<span title="' + esc(p.name + (p.isNew ? ', new, first shift ' + _cgDay(p.first) : ', last shift ' + _cgDay(p.last))) + '">' + _cgHouse(true, p.isNew) + '</span>' : _cgHouse(false);
   }
   const daysLeft = (Date.parse(r.by + 'T12:00:00') - Date.now()) / 864e5;
   let togo;
@@ -11832,20 +11833,20 @@ function renderCdsGoal() {
   else if (daysLeft > 0) togo = '<div class="cg-togo"><b>' + left + ' more to go.</b> By ' + _cgDay(r.by) + ', that is about <b>' +
     Math.max(1, Math.round(left / Math.max(daysLeft / 30.4, 1))) + ' a month</b> (about ' + Math.max(1, Math.round(left / Math.max(daysLeft / 7, 1))) + ' a week).</div>';
   else togo = '<div class="cg-togo"><b>' + left + ' more to go.</b> The goal date (' + _cgDay(r.by) + ') has passed.</div>';
-  const who = r.people.map(p => '<div><b>' + esc(p.name) + '</b> first shift ' + esc(_cgDay(p.date)) + (p.attendant ? ', attendant ' + esc(p.attendant) : '') +
-    ' <button class="cg-link" data-k="' + esc(p.key) + '" onclick="cdsGoalLeaveOut(this.dataset.k, true)">Not a new consumer? Leave out</button></div>').join('');
+  const who = r.people.map(p => '<div><b>' + esc(p.name) + '</b>' + (p.isNew ? ' <span style="background:#FDF1DC;color:#7A4E0B;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:800;">New</span> first shift ' + esc(_cgDay(p.first)) : ' last shift ' + esc(_cgDay(p.last))) +
+    ' <button class="cg-link" data-k="' + esc(p.key) + '" onclick="cdsGoalLeaveOut(this.dataset.k, true)">Not with us now? Leave out</button></div>').join('');
   const out = r.leftOut.map(p => '<div style="color:var(--gray-600)">Left out: ' + esc(p.name) +
     ' <button class="cg-link" data-k="' + esc(p.key) + '" onclick="cdsGoalLeaveOut(this.dataset.k, false)">Put back</button></div>').join('');
   host.innerHTML = '<div class="cg-card"><div class="cg-head">' +
     '<svg width="34" height="34" viewBox="0 0 40 40" aria-hidden="true"><path d="M5 19 L20 6 L35 19" fill="#54bdb8" stroke="#0e3860" stroke-width="2" stroke-linejoin="round"/><rect x="9" y="18" width="22" height="17" rx="1.5" fill="#fff" stroke="#0e3860" stroke-width="2"/><rect x="22" y="25" width="5.5" height="10" rx="1" fill="#0e3860"/></svg>' +
-    '<div><div class="cg-title">New CDS consumers</div><div class="cg-note">Counted from WellSky when an attendant works the first shift. Goal: ' + r.target + ' by ' +
+    '<div><div class="cg-title">CDS consumers</div><div class="cg-note">Everyone with a worked shift in WellSky in the last ' + r.activeDays + ' days, the ones you have now and the new ones. Goal: ' + r.target + ' by ' +
     esc(new Date(r.by + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })) + '.</div></div></div>' +
-    '<div class="cg-big"><span class="cg-num">' + r.count + '</span><span class="cg-of"> of ' + r.target + ' new consumers</span><span class="cg-pct' + (pc >= 100 ? ' won' : '') + '">' + pc + '%</span></div>' +
+    '<div class="cg-big"><span class="cg-num">' + r.count + '</span><span class="cg-of"> of ' + r.target + ' consumers' + (r.newCount ? ' · ' + r.newCount + ' new since ' + esc(_cgDay(r.from)) : '') + '</span><span class="cg-pct' + (pc >= 100 ? ' won' : '') + '">' + pc + '%</span></div>' +
     '<div class="cg-cheer">' + esc(_cgCheer(pc)) + '</div>' +
     '<div class="cg-street" id="cgStreet">' + streets + '</div>' + togo +
     (who || out ? '<div class="cg-who">' + who + out + '</div>' : '') +
     '<div class="cg-foot">' + (hasData ? '' : '<b style="color:var(--danger)">Waiting for the first WellSky check, so nothing can be counted yet.</b> ') +
-    'Counts consumers new since ' + esc(_cgDay(r.from)) + ', 2026. Anyone who was already your consumer before then never counts, even after a break. Updated every morning by the WellSky check.</div></div>';
+    'Teal roofs are consumers you had before ' + esc(_cgDay(r.from)) + '; honey roofs are new since then (their first shift). Someone with no shift in ' + r.activeDays + ' days drops off until they work again. Updated every morning by the WellSky check.</div></div>';
   // A house lit since this computer last looked pops in.
   try {
     const seen = Number(localStorage.getItem('cdsGoalSeen') || 'NaN');
@@ -11860,7 +11861,7 @@ function cdsGoalLeaveOut(key, leave) {
   const p = _cgResult().r;
   const person = p.people.concat(p.leftOut).find(x => x.key === key);
   if (!person) return;
-  if (leave && !confirm('Leave ' + person.name + ' out of the 40? Do this only if they are not a new consumer.')) return;
+  if (leave && !confirm('Leave ' + person.name + ' out of the 40? Do this only if they are not your consumer now.')) return;
   const g = Object.assign({}, getObj('cdsGoal'));
   g.leftOut = Object.assign({}, g.leftOut);
   if (leave) g.leftOut[key] = { at: new Date().toISOString(), by: _acWho() };
