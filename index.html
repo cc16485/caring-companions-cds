@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=4"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=6"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=4"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -459,6 +459,80 @@ input, select, textarea { border-radius:10px; }
 .cute-more > summary { cursor:pointer; color:var(--cute-teal); font-size:14px; font-weight:500; padding:10px 4px; list-style:none; }
 .cute-more > summary::-webkit-details-marker { display:none; }
 
+/* Leads (2026-10-21): three steps, one card per person. */
+.ld-head { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; justify-content:space-between; margin-bottom:20px; }
+.ld-title { margin:0; font-size:36px; line-height:1.1; }
+.ld-sum { margin:6px 0 0; font-size:15px; color:#55677a; }
+.ld-sum strong { color:#9B2C1A; }
+.ld-add { display:inline-flex; align-items:center; gap:8px; min-height:48px; padding:0 24px; border:0; border-radius:999px; background:var(--cute-teal);
+          color:#fff; font:inherit; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 6px 16px rgba(31,122,140,.25); }
+.ld-add:hover { background:#155A68; }
+.ld-steps { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap:14px; margin-bottom:16px; }
+.ld-step { display:flex; flex-direction:column; gap:8px; padding:16px 20px; border-radius:20px; border:2px solid #e4e1d8; background:transparent;
+           text-align:left; font:inherit; cursor:pointer; }
+.ld-step:hover { background:#fff; }
+.ld-step.on { background:#fff; border-color:var(--cute-teal); box-shadow:0 6px 18px rgba(31,122,140,.14); }
+.ld-step .ld-num { display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:36px; padding:0 8px; border-radius:999px;
+                   background:#f2f0e9; color:#0D365F; font-weight:700; font-size:16px; }
+.ld-step.on .ld-num { background:var(--cute-teal); color:#fff; }
+.ld-step .ld-name { font-family:'Fraunces', Georgia, serif; font-size:20px; font-weight:600; color:#0D365F; }
+.ld-step .ld-desc { font-size:13.5px; color:#55677a; line-height:1.45; }
+.ld-step .ld-late { font-size:12.5px; font-weight:700; color:#9B2C1A; }
+.ld-tools { display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; margin-bottom:16px; }
+.ld-search { display:flex; align-items:center; gap:8px; flex:1 1 260px; max-width:380px; min-height:44px; padding:0 16px; background:#fff;
+             border:1.5px solid #e4e1d8; border-radius:999px; }
+.ld-search input { border:0 !important; outline:0; background:transparent; font:inherit; font-size:14.5px; flex:1; min-width:0; padding:0; }
+.ld-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+.ld-closed { display:flex; align-items:center; gap:8px; min-height:44px; font-size:14.5px; color:#55677a; cursor:pointer; }
+.ld-closed input { width:18px; height:18px; accent-color:var(--cute-teal); }
+.ld-helpbtn { margin-left:auto; min-height:44px; padding:0 8px; border:0; background:transparent; color:#14606F; font:inherit; font-size:14.5px;
+              font-weight:600; text-decoration:underline; cursor:pointer; }
+.ld-help { background:#fff; border-radius:20px; box-shadow:var(--cute-shadow); padding:18px 22px; margin-bottom:16px;
+           display:grid; grid-template-columns:repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap:16px; }
+.ld-help[hidden] { display:none; }
+.ld-help p { margin:6px 0 0; font-size:14px; line-height:1.5; color:var(--cute-ink); }
+.ld-kind { display:inline-block; padding:4px 12px; border-radius:999px; font-size:12.5px; font-weight:700; white-space:nowrap; }
+.k-lead { background:var(--cute-teal-pale); color:#14606F; }
+.k-referral { background:var(--cute-honey-pale); color:#7A4E0B; }
+.k-pccp { background:#E6ECF3; color:#0D365F; }
+.ld-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap:16px; }
+.ld-card { background:#fff; border-radius:20px; box-shadow:var(--cute-shadow); padding:18px 20px; display:flex; flex-direction:column; gap:10px; }
+.ld-card.closed { opacity:.7; }
+.ld-card .ld-top { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; justify-content:space-between; }
+.ld-card h3 { margin:0; font-family:'Fraunces', Georgia, serif; font-size:21px; font-weight:600; color:#0D365F; }
+.ld-card .ld-who { margin:0; font-size:14.5px; line-height:1.5; color:var(--cute-ink); }
+.ld-card .ld-meta { display:flex; flex-wrap:wrap; gap:4px 16px; align-items:center; font-size:13.5px; color:#55677a; }
+.ld-card .ld-meta a { font-weight:700; color:#14606F; text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
+.ld-web { padding:2px 10px; border-radius:999px; border:1.5px solid #8FD1C7; color:#14606F; font-size:11.5px; font-weight:700; }
+.ld-next { background:#f6f5f0; border-radius:14px; padding:11px 14px; display:flex; flex-direction:column; gap:7px; }
+.ld-next span.ld-due { align-self:flex-start; padding:3px 10px; border-radius:999px; font-size:12.5px; font-weight:700; background:#fff; color:#55677a; }
+.ld-due.t-late { background:#FBE7E3 !important; color:#9B2C1A !important; }
+.ld-due.t-today { background:var(--cute-honey-pale) !important; color:#7A4E0B !important; }
+.ld-due.t-ready { background:var(--cute-teal-pale) !important; color:#14606F !important; }
+.ld-next .ld-nexttext { font-size:14.5px; line-height:1.45; color:var(--cute-ink); overflow-wrap:anywhere; }
+.ld-btns { display:flex; gap:10px; margin-top:auto; }
+.ld-btns button { flex:1; min-height:44px; border-radius:999px; font:inherit; font-size:14.5px; font-weight:700; cursor:pointer; }
+.ld-open { border:1.5px solid var(--cute-teal); background:#fff; color:#14606F; }
+.ld-open:hover { background:var(--cute-teal-pale); }
+.ld-log { flex:1.4 !important; border:0; background:var(--cute-teal); color:#fff; }
+.ld-log:hover { background:#155A68; }
+.ld-move { flex:1.4 !important; border:0; background:var(--cute-honey); color:var(--cute-ink); }
+.ld-empty { grid-column:1/-1; background:#fff; border-radius:20px; padding:28px; text-align:center; color:#55677a; font-size:15px; box-shadow:var(--cute-shadow); }
+.ld-choice { display:flex; flex-direction:column; gap:4px; width:100%; text-align:left; padding:14px 18px; margin-bottom:10px; border-radius:18px;
+             border:2px solid #e4e1d8; background:#fff; font:inherit; cursor:pointer; }
+.ld-choice:hover, .ld-choice:focus-visible { border-color:var(--cute-teal); box-shadow:0 6px 18px rgba(31,122,140,.14); }
+.ld-choice b { font-size:16.5px; color:#0D365F; }
+.ld-choice span { font-size:14px; color:#55677a; }
+.lp-msgs { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+@media (max-width: 600px) {
+  .ld-steps { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
+  .ld-step { padding:10px 8px; align-items:center; text-align:center; gap:4px; border-radius:16px; }
+  .ld-step > span:first-child { flex-direction:column; gap:4px !important; }
+  .ld-step .ld-name { font-size:15px; }
+  .ld-step .ld-desc { display:none; }
+  .ld-helpbtn { margin-left:0; }
+}
+
 /* Consumer profile */
 .cp-next { background:var(--cute-teal-pale); border-radius:16px; padding:16px 18px; display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; margin-top:16px; }
 .cp-next.warn { background:var(--cute-honey-pale); }
@@ -767,75 +841,42 @@ input, select, textarea { border-radius:10px; }
 
   <!-- ── PIPELINE SUB-SECTION ── -->
   <div id="csub-pipeline" style="display:none">
-    <div class="section-header">
-      <div class="section-title">Consumer Pipeline</div>
-      <!-- Three buttons rather than one, because the form is three different
-           calls now and you always know which one you are on before you open
-           it. Choosing the type after opening was a step that only ever got
-           chosen wrong. -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="openAddPipeline('lead')">+ Add Lead</button>
-        <button class="btn btn-outline" onclick="openAddPipeline('referral')">+ New to CDS</button>
-        <button class="btn btn-outline" onclick="openAddPipeline('pccp')">+ Transferring to Us</button>
+    <!-- 2026-10-21 Leads, her mockup (artifact NZLSkacmWxi64cKtKDFWjS): one card per
+         person in three steps, To call / Sent to state / Ready to start. The
+         words for each step and the Next line come from CDSRules.leadCard. -->
+    <div class="ld-head">
+      <div>
+        <h1 class="cute-title ld-title">Leads</h1>
+        <p class="ld-sum" id="ldSummary"></p>
       </div>
+      <button type="button" class="ld-add" onclick="openModal('addSomeoneModal')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Add someone
+      </button>
     </div>
 
-    <div class="grid-3" style="margin-bottom:16px">
-      <div class="card" style="border-top:4px solid var(--primary-light);padding:14px 18px">
-        <div style="font-weight:700;color:var(--primary-light);font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:7px"><svg class="type-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21v-7"/><path d="M12 14c0-3.6-2.6-6.2-6.4-6.6C5.2 11 7.6 13.7 12 14Z"/><path d="M12 14c0-4.4 2.9-7.4 7-7.8.4 4.2-2.3 7.4-7 7.8Z"/></svg>Lead</div>
-        <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Called in but <strong>not ready yet</strong> — maybe still deciding, waiting on a family member, or wants to learn more. No state submission yet. Needs periodic follow-up to stay warm.</div>
-        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Nurturing → Ready to Submit → Closed</div>
-      </div>
-      <div class="card" style="border-top:4px solid var(--success-light);padding:14px 18px">
-        <div style="font-weight:700;color:var(--success);font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:7px"><svg class="type-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M15 5h3v15H6V5h3"/><path d="M9 12h6M9 16h4"/></svg>Referral (New to CDS)</div>
-        <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>new to the Missouri CDS program</strong> and we have submitted (or are submitting) a request to DHSS/DSDS to start services. State authorization typically takes 2–6+ weeks.</div>
-        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: New → Submitted to State → State Processing → Authorized → Active</div>
-      </div>
-      <div class="card" style="border-top:4px solid var(--warn-light);padding:14px 18px">
-        <div style="font-weight:700;color:var(--warn);font-size:14px;margin-bottom:6px;display:flex;align-items:center;gap:7px"><svg class="type-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5"/></svg>PCCP Transfer</div>
-        <div style="font-size:12px;color:var(--gray-600);line-height:1.6">Consumer is <strong>currently with another CDS agency</strong> and wants to transfer to Caring Companions. Request submitted to DSDS. Current agency must be notified. Transfer can take 2–4+ weeks.</div>
-        <div style="margin-top:8px;font-size:11px;font-weight:700;color:var(--gray-600)">STAGES: Request Received → Submitted to DSDS → Processing → Transfer Complete → Active</div>
-      </div>
+    <div class="ld-steps" id="ldSteps" role="tablist" aria-label="Lead steps"></div>
+
+    <div class="ld-tools">
+      <label class="ld-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="ld-sr">Find someone</span>
+        <input type="search" id="ldSearch" placeholder="Find someone by name or phone" oninput="renderPipeline()">
+      </label>
+      <label class="ld-closed">
+        <input type="checkbox" id="pipeShowClosed" onchange="renderPipeline()">
+        <span id="ldClosedLabel">Show closed</span>
+      </label>
+      <button type="button" class="ld-helpbtn" onclick="const h=document.getElementById('ldHelp');h.hidden=!h.hidden">What do these mean?</button>
     </div>
 
-    <div id="pipelineFollowUpBanner"></div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">📊</span> All Pipeline Contacts</div>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-        <select id="pipeFilterType" onchange="renderPipeline()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
-          <option value="">All Types</option>
-          <option value="lead">Leads Only</option>
-          <option value="referral">📋 Referrals Only</option>
-          <option value="pccp">🔄 PCCP Transfers Only</option>
-        </select>
-        <select id="pipeFilterStatus" onchange="renderPipeline()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
-          <option value="">All Statuses</option>
-          <option value="active">Active / Open</option>
-          <option value="closed">Closed / Not Interested</option>
-          <option value="authorized">Authorized / Complete</option>
-        </select>
-        <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer">
-          <input type="checkbox" id="pipeShowClosed" onchange="renderPipeline()" style="accent-color:var(--accent)">
-          Show closed / not interested
-        </label>
-        <span style="font-size:12px;color:var(--gray-600);margin-left:auto" id="pipeCount"></span>
-      </div>
-      <div class="table-wrap">
-        <table id="pipelineTable">
-          <thead>
-            <tr>
-              <th>Name</th><th>Type</th><th>County</th><th>Phone</th><th>First Contact</th>
-              <th>Status</th><th>Submitted to State</th><th>Next Follow-Up</th><th>Notes</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="pipelineTableBody">
-            <tr><td colspan="8"><div class="empty"><div class="empty-icon">🔮</div><p>Nobody in the pipeline yet.<br>Use the buttons above: <b>Add Lead</b> for somebody still deciding, <b>New to CDS</b> for a referral, <b>Transferring to Us</b> for somebody already in the programme.</p></div></td></tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="ld-help" id="ldHelp" hidden>
+      <div><span class="ld-kind k-lead">Still deciding</span><p>Called to learn more. Not ready yet. We call back when they ask us to.</p></div>
+      <div><span class="ld-kind k-referral">New to CDS</span><p>Never had CDS. We send the referral to the state. Usually 2 to 6 weeks.</p></div>
+      <div><span class="ld-kind k-pccp">Moving from another agency</span><p>Has CDS now with someone else. We send the transfer to DSDS. Usually 2 to 4 weeks.</p></div>
     </div>
 
+    <div class="ld-grid" id="ldCards"></div>
   </div>
 
   <!-- ── ACTIVE CONSUMERS SUB-SECTION ── -->
@@ -882,20 +923,6 @@ input, select, textarea { border-radius:10px; }
   </div><!-- end csub-active -->
 </div>
 
-<!-- ==================== STATE SUBMISSION TRACKER ==================== -->
-<div id="page-statesubmissions" class="page">
-  <div class="section-header">
-    <div class="section-title">🏛️ State Submission Tracker</div>
-  </div>
-  <div class="card">
-    <div class="card-title"><span class="icon">🏛️</span> Referrals &amp; PCCP Transfers Pending Authorization</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">These contacts have been submitted to DSDS/DHSS and are awaiting state authorization. Track submission dates and follow up every 1–2 weeks.</div>
-    <div id="stateSubmissionList">
-      <p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>
-    </div>
-  </div>
-</div>
-
 <!-- ==================== CONSUMER PROFILE ==================== -->
 <div id="page-profile" class="page">
   <div class="section-header">
@@ -919,7 +946,7 @@ input, select, textarea { border-radius:10px; }
 <div id="page-leadprofile" class="page">
   <div class="section-header">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <button class="btn btn-outline" onclick="showPage('consumers');showConsumerTab('pipeline')" style="font-size:12px">← Back to pipeline</button>
+      <button class="btn btn-outline" onclick="showPage('pipeline')" style="font-size:12px">← Back to Leads</button>
     </div>
     <button class="btn btn-outline" onclick="renderLeadProfile()" style="font-size:12px">↻ Refresh</button>
   </div>
@@ -3605,10 +3632,24 @@ input, select, textarea { border-radius:10px; }
 </div>
 
 <!-- Pipeline Modal -->
+<!-- Leads "Add someone": pick which of the three it is, then the form for that one. -->
+<div class="modal-overlay" id="addSomeoneModal">
+  <div class="modal" style="width:520px;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:24px">Add someone</div>
+      <button class="modal-close" onclick="closeModal('addSomeoneModal')" aria-label="Close">×</button>
+    </div>
+    <p style="margin:0 0 14px;font-size:14.5px;color:#55677a">Which one fits the person who called?</p>
+    <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('lead')"><b>Still deciding</b><span>Wants to learn more. Not ready to start yet.</span></button>
+    <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('referral')"><b>New to CDS</b><span>Never had CDS. We send the referral to the state.</span></button>
+    <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('pccp')"><b>Moving from another agency</b><span>Has CDS now with someone else and wants to switch to us.</span></button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addPipelineModal">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Add to pipeline &mdash; <span id="addPipelineTitle" style="font-weight:600;color:var(--gray-600)"></span></div>
+      <div class="modal-title">Add someone: <span id="addPipelineTitle" style="font-weight:600;color:var(--gray-600)"></span></div>
       <button class="modal-close" onclick="closeModal('addPipelineModal')">×</button>
     </div>
     <div class="apl-body">
@@ -3616,9 +3657,9 @@ input, select, textarea { border-radius:10px; }
       <div class="form-group"><label>Full Name *</label><input type="text" id="pl_name" placeholder="Potential consumer's name"></div>
       <div class="form-group"><label>Type *</label>
         <select id="pl_type" onchange="updatePipelineModalFields()">
-          <option value="lead">Lead — Not Ready Yet</option>
-          <option value="referral">📋 Referral — New to CDS Program</option>
-          <option value="pccp">🔄 PCCP — Transferring from Another Agency</option>
+          <option value="lead">Still deciding</option>
+          <option value="referral">New to CDS</option>
+          <option value="pccp">Moving from another agency</option>
         </select>
       </div>
     </div>
@@ -4012,36 +4053,36 @@ input, select, textarea { border-radius:10px; }
 <div class="modal-overlay" id="editPipelineModal">
   <div class="modal" style="width:540px">
     <div class="modal-header">
-      <div class="modal-title" id="editPipelineTitle">Update Pipeline Contact</div>
+      <div class="modal-title" id="editPipelineTitle">Log a call</div>
       <button class="modal-close" onclick="closeModal('editPipelineModal')">×</button>
     </div>
     <input type="hidden" id="ep_id">
+    <div class="form-group" style="margin-bottom:12px"><label>What happened on the call?</label>
+      <textarea id="ep_notes" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:10px;font-family:inherit;font-size:13px" placeholder="For example: talked to her daughter, call back after payday"></textarea>
+    </div>
     <div class="form-row">
-      <div class="form-group"><label>Status</label>
+      <div class="form-group"><label>Where they are now</label>
         <select id="ep_status">
-          <option value="new">New</option>
-          <option value="nurturing">Nurturing — Following Up</option>
-          <option value="submitted">Submitted to State</option>
-          <option value="processing">State Processing</option>
-          <option value="authorized">Authorized / Approved</option>
-          <option value="transfer_complete">Transfer Complete</option>
-          <option value="closed_ni">Closed — Not Interested</option>
-          <option value="closed_other">Closed — Other Agency</option>
+          <option value="new">New, not called yet</option>
+          <option value="nurturing">Following up</option>
+          <option value="submitted">Sent to the state</option>
+          <option value="processing">The state is working on it</option>
+          <option value="authorized">Approved by the state</option>
+          <option value="transfer_complete">Transfer done</option>
+          <option value="closed_ni">Closed, not interested</option>
+          <option value="closed_other">Closed, went with another agency</option>
         </select>
       </div>
-      <div class="form-group"><label>Next Follow-Up Date</label><input type="date" id="ep_followup"></div>
+      <div class="form-group"><label>Call back on</label><input type="date" id="ep_followup"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Date Submitted to State</label><input type="date" id="ep_statesubmit"></div>
+      <div class="form-group"><label>Date sent to the state</label><input type="date" id="ep_statesubmit"></div>
       <div class="form-group"><label>DCN (if assigned)</label><input type="text" id="ep_dcn" placeholder="Dept. Client Number"></div>
-    </div>
-    <div class="form-group" style="margin-bottom:12px"><label>Add Follow-Up Note</label>
-      <textarea id="ep_notes" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:6px;font-family:inherit;font-size:13px" placeholder="What happened on this follow-up call?"></textarea>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('editPipelineModal')">Cancel</button>
-      <button class="btn btn-danger" onclick="closePipelineContact(document.getElementById('ep_id').value)">Close / Remove</button>
-      <button class="btn btn-primary" onclick="savePipelineUpdate()">Save Update</button>
+      <button class="btn btn-danger" onclick="closePipelineContact(document.getElementById('ep_id').value)">Close this lead</button>
+      <button class="btn btn-primary" onclick="savePipelineUpdate()">Save</button>
     </div>
   </div>
 </div>
@@ -4614,7 +4655,6 @@ const PAGE_ALIASES = {
 
 // Pages shown together, one above the other, so a section is one screen.
 const STACKED = {
-  pipeline: ['statesubmissions'],
   caregivermatch: ['backuppool'],
   payroll: ['financials']
 };
@@ -4645,6 +4685,8 @@ function showPage(id) {
   const roster = id === 'roster';
   // A bare section name (#leads, #money) opens that section's first page.
   if (!roster && SECTION_DEFAULT[id] && !document.getElementById('page-' + id)) id = SECTION_DEFAULT[id];
+  // The old State Submissions page is now the Leads "Sent to state" step.
+  if (id === 'statesubmissions') { _ldStep = 'state'; id = 'pipeline'; }
   // A stacked page opens its whole screen, scrolled to that part.
   const scrollTo = STACK_HOME[id] ? id : null;
   if (STACK_HOME[id]) id = STACK_HOME[id];
@@ -5570,11 +5612,11 @@ function removeAttendant(aid) {
 // ============================================================
 // CONSUMER PIPELINE
 // ============================================================
-const PIPELINE_TYPE_LABELS = { lead: 'Lead', referral: 'Referral', pccp: 'PCCP' };
+const PIPELINE_TYPE_LABELS = { lead: 'Still deciding', referral: 'New to CDS', pccp: 'Moving from another agency' };
 const PIPELINE_STATUS_LABELS = {
-  new: 'New', nurturing: 'Nurturing', submitted: 'Submitted to State',
-  processing: 'State Processing', authorized: 'Authorized', transfer_complete: 'Transfer Complete',
-  closed_ni: 'Closed — Not Interested', closed_other: 'Closed — Other Agency'
+  new: 'New, not called yet', nurturing: 'Following up', submitted: 'Sent to the state',
+  processing: 'The state is working on it', authorized: 'Approved by the state', transfer_complete: 'Transfer done',
+  closed_ni: 'Closed, not interested', closed_other: 'Closed, went with another agency'
 };
 const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other'];
 const PIPELINE_DONE_STATUSES = ['authorized','transfer_complete'];
@@ -5653,10 +5695,10 @@ function openAddPipeline(type, existingId){
   updatePipelineModalFields();
   const title = document.getElementById('addPipelineTitle');
   if (title) title.textContent = _plEditId
-    ? (type === 'pccp' ? 'Transferring to us from another agency' : 'Answers for the HCBS-1')
-    : (type === 'pccp' ? 'Transferring to us from another agency' :
-       type === 'referral' ? 'New to the CDS programme' :
-       'A lead, still deciding');
+    ? (type === 'pccp' ? 'Moving from another agency' : 'Answers for the HCBS-1')
+    : (type === 'pccp' ? 'Moving from another agency' :
+       type === 'referral' ? 'New to CDS' :
+       'Still deciding');
 
   /* Clear who-they-are first, every time. Without this, opening the modal for one
      person and then opening it again for somebody else inherits the first
@@ -5876,7 +5918,7 @@ function openPipelineEdit(id) {
   const p = pipeline.find(x => x.id === id);
   if (!p) return;
   document.getElementById('ep_id').value = id;
-  document.getElementById('editPipelineTitle').textContent = 'Update: ' + p.name;
+  document.getElementById('editPipelineTitle').textContent = 'Log a call: ' + p.name;
   document.getElementById('ep_status').value = p.status || 'new';
   document.getElementById('ep_followup').value = p.followup || '';
   document.getElementById('ep_statesubmit').value = p.stateSubmit || '';
@@ -5902,17 +5944,19 @@ function savePipelineUpdate() {
   setData('pipeline', pipeline);
   closeModal('editPipelineModal');
   renderPipeline();
+  if (document.getElementById('page-leadprofile')?.classList.contains('active')) renderLeadProfile();
   updateDashboard();
 }
 
 function closePipelineContact(id) {
-  if (!confirm('Close / remove this contact from the active pipeline?')) return;
+  if (!confirm('Close this lead? You can still find them with Show closed.')) return;
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === id);
   if (p) { p.status = 'closed_ni'; }
   setData('pipeline', pipeline);
   closeModal('editPipelineModal');
   renderPipeline();
+  if (document.getElementById('page-leadprofile')?.classList.contains('active')) renderLeadProfile();
   updateDashboard();
 }
 
@@ -6063,7 +6107,7 @@ function renderLeadProfile(){
   if(!p){ host.innerHTML = '<div class="field-note">That record is gone.</div>'; return; }
 
   const t = p.transfer || {}, a = p.attendant || null, R = p.referral || null;
-  const TYPE = { lead:'Lead, still deciding', referral:'New to CDS', pccp:'Transferring to us' };
+  const TYPE = PIPELINE_TYPE_LABELS;
 
   const row = (label, val) => val
     ? '<div style="display:flex;gap:10px;padding:4px 0;font-size:13px"><span style="color:var(--gray-600);min-width:150px">' +
@@ -6074,7 +6118,7 @@ function renderLeadProfile(){
     '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">' +
       '<h2 style="font-size:20px;color:var(--primary);margin:0">' + esc(p.name || 'Unnamed') + '</h2>' +
       '<span class="badge" style="background:var(--gray-100)">' + esc(TYPE[p.type] || p.type) + '</span>' +
-      (p.status ? '<span class="badge" style="background:var(--gray-100)">' + esc(p.status) + '</span>' : '') +
+      (p.status ? '<span class="badge" style="background:var(--gray-100)">' + esc(PIPELINE_STATUS_LABELS[p.status] || p.status) + '</span>' : '') +
     '</div>' +
     row('Phone', p.phone) + row('Email', p.email) + row('County', p.county) +
     row('Date of birth', lpDate(p.dob || (R && R.dob))) + row('DCN', p.dcn || (R && R.dcn)) +
@@ -6083,6 +6127,23 @@ function renderLeadProfile(){
     row('Where they are', ({ready:'Wants to switch now', shopping:'Calling around', unsure:'Unsure'})[p.readiness]) +
     '</div>';
 
+  // ---- what to do next, and the messages that used to crowd the Leads table ----
+  const card = window.CDSRules && window.CDSRules.leadCard ? window.CDSRules.leadCard(p, _leadCalls, new Date().toISOString().split('T')[0], !!p.movedToConsumers) : null;
+  const pid = esc(p.id);
+  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
+    (card ? '<div class="ld-next" style="margin-bottom:12px"><span class="ld-due t-' + card.tone + '">' + esc(card.due) + '</span>' +
+      '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(card.next) + '</span></div>' : '') +
+    '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
+      '<button class="btn btn-primary" onclick="openPipelineEdit(\'' + pid + '\')">Log a call</button>' +
+      (card && card.step === 'ready' ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
+    '</div>' +
+    '<div style="margin-top:14px;font-weight:700;color:var(--primary);font-size:14px">Messages</div>' +
+    '<div class="field-note" style="margin-top:2px">Each one opens the text and email first. Nothing sends until you press Send.</div>' +
+    '<div class="lp-msgs">' +
+      (p.type === 'lead' ? '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'lead_welcome\')">' + (p.welcomeSent ? 'Welcome sent. Open it again' : 'Text the welcome') + '</button>' : '') +
+      (p.type !== 'lead' ? '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'consumer_onboarding\')">' + (p.onboardingSent ? 'Enrollment link sent. Open it again' : 'Text the enrollment link') + '</button>' : '') +
+      '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'app_sent\')">Tell them the packet is on its way</button>' +
+    '</div></div>';
   // ---- calls logged from the lead link page (the new-lead text) ----
   const OUT = { connected: 'We talked', voicemail: 'Voicemail', no_answer: 'No answer', wrong_number: 'Wrong number' };
   const logged = p.siteLeadId ? _leadCalls.filter(c => c.site_lead_id === p.siteLeadId) : [];
@@ -6518,125 +6579,102 @@ function lpSetBackground(value){
   renderLeadProfile();
 }
 
+// Leads (2026-10-21, her mockup): three steps and one card per person. Which
+// step, the who-they-are line and the Next line all come from CDSRules.leadCard.
+let _ldStep = 'call';
+const LD_STEPS = [
+  { id: 'call',  label: 'To call',        desc: 'New people and call backs that are due.' },
+  { id: 'state', label: 'Sent to state',  desc: 'Paperwork is in. Waiting on the state.' },
+  { id: 'ready', label: 'Ready to start', desc: 'The state said yes. Move them to Consumers.' }
+];
+const LD_KIND_CLASS = { lead: 'k-lead', referral: 'k-referral', pccp: 'k-pccp' };
+
+function ldPickStep(id) { _ldStep = id; renderPipeline(); }
+
 function renderPipeline() {
   const pipeline = getData('pipeline');
   const now = new Date();
   const today = now.toISOString().split('T')[0];
-  const showClosed = document.getElementById('pipeShowClosed')?.checked;
-  const filterType = document.getElementById('pipeFilterType')?.value || '';
-  const filterStatus = document.getElementById('pipeFilterStatus')?.value || '';
+  const R = window.CDSRules;
 
-  let filtered = pipeline;
-  if (!showClosed) filtered = filtered.filter(p => !PIPELINE_CLOSED_STATUSES.includes(p.status));
-  if (filterType) filtered = filtered.filter(p => p.type === filterType);
-  if (filterStatus === 'active') filtered = filtered.filter(p => !PIPELINE_CLOSED_STATUSES.includes(p.status) && !PIPELINE_DONE_STATUSES.includes(p.status));
-  if (filterStatus === 'closed') filtered = filtered.filter(p => PIPELINE_CLOSED_STATUSES.includes(p.status));
-  if (filterStatus === 'authorized') filtered = filtered.filter(p => PIPELINE_DONE_STATUSES.includes(p.status));
-
-  const countEl = document.getElementById('pipeCount');
-  if (countEl) countEl.textContent = `${filtered.length} contact${filtered.length!==1?'s':''}`;
-
-  // Follow-up banner
+  // Dashboard banner (unchanged).
   const followUpDue = pipeline.filter(p => !PIPELINE_CLOSED_STATUSES.includes(p.status) && p.followup && p.followup <= today);
-  const banner = document.getElementById('pipelineFollowUpBanner');
-  if (banner) {
-    if (followUpDue.length > 0) {
-      banner.innerHTML = `<div class="alert alert-danger" style="margin-bottom:16px">
-        🔔 <strong>${followUpDue.length} follow-up${followUpDue.length!==1?'s':''} due today or overdue:</strong>
-        ${followUpDue.map(p => `<strong>${p.name}</strong> (${PIPELINE_TYPE_LABELS[p.type]||p.type})`).join(' · ')}
-      </div>`;
-    } else {
-      banner.innerHTML = '';
-    }
-  }
-
-  // Also update dashboard banner
   const dashBanner = document.getElementById('pipelineFollowUpAlert');
   if (dashBanner) {
     if (followUpDue.length > 0) {
       dashBanner.style.display = 'block';
-      dashBanner.innerHTML = `<div class="alert alert-danger">🔔 <strong>${followUpDue.length} pipeline follow-up${followUpDue.length!==1?'s':''} overdue!</strong> ${followUpDue.map(p=>'<strong>'+p.name+'</strong>').join(', ')} — <a href="#" onclick="showPage('pipeline');return false" style="color:inherit;text-decoration:underline">Go to Pipeline →</a></div>`;
+      dashBanner.innerHTML = `<div class="alert alert-danger"><strong>${followUpDue.length} lead follow-up${followUpDue.length!==1?'s':''} due:</strong> ${followUpDue.map(p=>'<strong>'+esc(p.name)+'</strong>').join(', ')}. <a href="#" onclick="showPage('pipeline');return false" style="color:inherit;text-decoration:underline">Go to Leads</a></div>`;
     } else {
       dashBanner.style.display = 'none';
     }
   }
 
-  // Main table
-  const tbody = document.getElementById('pipelineTableBody');
-  if (!tbody) return;
-  if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🔮</div><p>No pipeline contacts match this filter.</p></div></td></tr>';
-  } else {
-    tbody.innerHTML = filtered.map(p => {
-      const typeColor = p.type==='lead' ? 'badge-blue' : p.type==='referral' ? 'badge-green' : 'badge-warn';
-      const isClosed = PIPELINE_CLOSED_STATUSES.includes(p.status);
-      const isDone = PIPELINE_DONE_STATUSES.includes(p.status);
-      let statusColor = 'badge-blue';
-      if (isClosed) statusColor = 'badge-gray';
-      else if (isDone) statusColor = 'badge-green';
-      else if (p.status === 'submitted' || p.status === 'processing') statusColor = 'badge-warn';
-      const followupPast = p.followup && p.followup <= today && !isClosed && !isDone;
-      const followupSoon = p.followup && p.followup > today && p.followup <= new Date(now.getTime()+3*86400000).toISOString().split('T')[0];
-      const followupCell = p.followup
-        ? `<span style="font-weight:700;color:${followupPast?'var(--danger)':followupSoon?'var(--warn)':'var(--gray-800)'}">${followupPast?'⚠ OVERDUE: ':''}${p.followup}</span>`
-        : '—';
-      const latestNote = p.notes && p.notes.length > 0 ? p.notes[p.notes.length-1] : null;
-      const noteCell = latestNote ? `<span style="font-size:11px"><strong>${latestNote.date}:</strong> ${latestNote.text.substring(0,80)}${latestNote.text.length>80?'…':''}</span>${p.notes.length>1?'<div style="font-size:10px;color:var(--gray-600);margin-top:2px">+'+( p.notes.length-1)+' more notes</div>':''}` : '—';
-      return `<tr style="${isClosed?'opacity:0.55':''}">
-        <td><strong>${p.name}</strong>${p.dcn?'<div style="font-size:10px;color:var(--gray-600)">DCN: '+p.dcn+'</div>':''}</td>
-        <td><span class="badge ${typeColor}">${PIPELINE_TYPE_LABELS[p.type]||p.type}</span></td>
-        <td style="font-size:12px">${p.county||'—'}</td>
-        <td style="font-size:12px">${p.phone||'—'}</td>
-        <td style="font-size:12px">${p.firstContact||'—'}</td>
-        <td><span class="badge ${statusColor}">${PIPELINE_STATUS_LABELS[p.status]||p.status}</span></td>
-        <td style="font-size:12px">${p.stateSubmit?'<span style="color:var(--success);font-weight:600">✓ '+p.stateSubmit+'</span>':'<span style="color:var(--gray-600)">—</span>'}</td>
-        <td style="font-size:12px">${followupCell}</td>
-        <td style="font-size:11px;max-width:180px">${noteCell}</td>
-        <td style="min-width:110px">
-          <button class="btn btn-sm btn-primary" onclick="openPipelineEdit('${p.id}')" style="width:100%;font-size:11px;margin-bottom:3px">Update</button>
-          ${isDone?'<button class="btn btn-sm btn-success" onclick="convertToConsumer(\''+p.id+'\')" style="width:100%;font-size:11px;margin-bottom:3px">→ Move to Consumers</button>':''}
-          ${p.type==='lead'?`<button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','lead_welcome')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--primary)">${p.welcomeSent?'✓ Welcome Sent':'📤 Send Welcome'}</button>`:''}
-          ${(p.type==='referral'||p.type==='pccp')?`<button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','consumer_onboarding')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--accent)">${p.onboardingSent?'✓ Onboarding Sent':'📤 Send Onboarding'}</button>`:''}
-          <button class="btn btn-sm btn-outline" onclick="openLeadProfile('${p.id}')" style="width:100%;font-size:10px;margin-bottom:2px;color:var(--primary-light);font-weight:700">👤 Open profile</button>
-          <button class="btn btn-sm btn-outline" onclick="openPipelineOutreach('${p.id}','app_sent')" style="width:100%;font-size:10px;color:var(--gray-600)">📦 Packet Sent</button>
-        </td>
-      </tr>`;
-    }).join('');
-  }
+  const stepsEl = document.getElementById('ldSteps');
+  const cardsEl = document.getElementById('ldCards');
+  if (!stepsEl || !cardsEl || !R || !R.leadCard) return;
 
-  // State submission tracker
-  const pendingState = pipeline.filter(p =>
-    (p.type === 'referral' || p.type === 'pccp') &&
-    !PIPELINE_CLOSED_STATUSES.includes(p.status) &&
-    !['authorized','transfer_complete'].includes(p.status)
-  ).sort((a,b) => (a.stateSubmit||'').localeCompare(b.stateSubmit||''));
+  // Already on the Consumers list: an approved lead stops showing as Ready.
+  const onRoster = new Set(getData('consumers').map(c => String(c.name || '').trim().toLowerCase()).filter(Boolean));
+  const people = pipeline.map(p => ({ p, c: R.leadCard(p, _leadCalls, today, !!p.movedToConsumers || onRoster.has(String(p.name || '').trim().toLowerCase())) }));
+  const open = people.filter(x => x.c.step !== 'closed');
+  const closed = people.filter(x => x.c.step === 'closed');
 
-  const stateList = document.getElementById('stateSubmissionList');
-  if (stateList) {
-    if (pendingState.length === 0) {
-      stateList.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">No pending state submissions.</p>';
-    } else {
-      stateList.innerHTML = pendingState.map(p => {
-        const submitted = p.stateSubmit || null;
-        const daysSince = submitted ? Math.floor((now - new Date(submitted)) / 86400000) : null;
-        const urgency = daysSince === null ? 'badge-red' : daysSince > 21 ? 'badge-red' : daysSince > 10 ? 'badge-warn' : 'badge-blue';
-        const urgencyNote = daysSince === null ? '⚠ Not yet submitted' : daysSince > 21 ? `⚠ ${daysSince} days — follow up urgently!` : daysSince > 10 ? `${daysSince} days — follow up soon` : `${daysSince} days in`;
-        return `<div class="deadline-item">
-          <div class="deadline-date" style="min-width:60px">
-            <div class="month" style="font-size:9px">${p.type.toUpperCase()}</div>
-            <div class="day" style="font-size:16px">${daysSince!==null?daysSince+'d':'NEW'}</div>
-          </div>
-          <div class="deadline-info">
-            <div class="title">${p.name} ${p.county?'— '+p.county:''}${p.fromWebsite?' <span style="font-size:10.5px;font-weight:700;background:var(--teal-pale,#eaf6f6);color:var(--primary);border:1px solid var(--teal,#54bdb8);border-radius:11px;padding:2px 8px;vertical-align:middle">FROM WEBSITE</span>':''}</div>
-            <div class="desc">${p.phone||''} ${p.stateSubmit?'· Submitted: '+p.stateSubmit:''} ${p.dcn?'· DCN: '+p.dcn:''} ${p.hours?'· '+p.hours+' hrs/wk':''} ${p.currentAgency?'· From: '+p.currentAgency:''}</div>
-            <div class="desc" style="margin-top:2px">Follow-up: ${p.followup||'Not set'}</div>
-          </div>
-          <span class="badge ${urgency}">${urgencyNote}</span>
-          <button class="btn btn-sm btn-outline" onclick="openPipelineEdit('${p.id}')" style="margin-left:8px;font-size:11px">Update</button>
-        </div>`;
-      }).join('');
-    }
+  // Summary line: who needs a call today.
+  const urgent = open.filter(x => x.c.needsToday);
+  const firstNames = urgent.map(x => esc(String(x.p.name || '').split(' ')[0]));
+  const sum = document.getElementById('ldSummary');
+  if (sum) sum.innerHTML = open.length + (open.length === 1 ? ' person' : ' people') + ' right now. ' +
+    (!urgent.length ? 'Nobody needs a call today.'
+      : urgent.length <= 3 ? '<strong>' + (firstNames.length > 1 ? firstNames.slice(0, -1).join(', ') + ' and ' + firstNames.slice(-1) : firstNames[0]) + '</strong> ' + (urgent.length === 1 ? 'needs' : 'need') + ' you today.'
+      : '<strong>' + urgent.length + ' people</strong> need you today.');
+
+  stepsEl.innerHTML = LD_STEPS.map(s => {
+    const inStep = open.filter(x => x.c.step === s.id);
+    const late = inStep.filter(x => x.c.tone === 'late').length;
+    const on = s.id === _ldStep;
+    return '<button type="button" role="tab" aria-selected="' + on + '" class="ld-step' + (on ? ' on' : '') + '" onclick="ldPickStep(\'' + s.id + '\')">' +
+      '<span style="display:flex;align-items:center;gap:12px"><span class="ld-num">' + inStep.length + '</span><span class="ld-name">' + s.label + '</span></span>' +
+      '<span class="ld-desc">' + s.desc + '</span>' +
+      (late ? '<span class="ld-late">' + late + ' late</span>' : '') + '</button>';
+  }).join('');
+
+  const showClosed = document.getElementById('pipeShowClosed')?.checked;
+  const cl = document.getElementById('ldClosedLabel');
+  if (cl) cl.textContent = 'Show closed (' + closed.length + ')';
+
+  // Searching looks across every step, so nobody hides behind the wrong tab.
+  const q = (document.getElementById('ldSearch')?.value || '').trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, '');
+  const match = x => !q || String(x.p.name || '').toLowerCase().includes(q) || (qDigits.length >= 3 && String(x.p.phone || '').replace(/\D/g, '').includes(qDigits));
+  let shown = q ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
+  shown.sort((a, b) => a.c.sort - b.c.sort || String(a.c.followup).localeCompare(String(b.c.followup)));
+  if (showClosed) shown = shown.concat(closed.filter(match));
+
+  if (!shown.length) {
+    cardsEl.innerHTML = '<div class="ld-empty">' + (q ? 'Nobody matches that search.'
+      : _ldStep === 'call' ? 'Nobody to call right now.'
+      : _ldStep === 'state' ? 'Nobody is waiting on the state.'
+      : 'Nobody is ready to start yet.') + '</div>';
+    return;
   }
+  cardsEl.innerHTML = shown.map(({ p, c }) => {
+    const id = esc(p.id);
+    const tel = String(p.phone || '').replace(/\D/g, '');
+    const phone = p.phone ? '<a href="tel:' + tel + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>' + esc(p.phone) + '</a>' : '<span>No phone yet</span>';
+    const main = c.step === 'ready'
+      ? '<button type="button" class="ld-move" onclick="convertToConsumer(\'' + id + '\')">Move to Consumers</button>'
+      : c.step === 'closed' ? ''
+      : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
+    return '<article class="ld-card' + (c.step === 'closed' ? ' closed' : '') + '">' +
+      '<div class="ld-top"><h3>' + esc(p.name || 'No name') + '</h3><span class="ld-kind ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '">' + esc(c.kind) + '</span></div>' +
+      '<p class="ld-who">' + esc(c.who) + '</p>' +
+      '<div class="ld-meta">' + (p.county ? '<span>' + esc(p.county) + ' County</span>' : '') + phone +
+        (p.fromWebsite ? '<span class="ld-web">From website</span>' : '') + '</div>' +
+      '<div class="ld-next"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span>' +
+        '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span></div>' +
+      '<div class="ld-btns"><button type="button" class="ld-open" onclick="openLeadProfile(\'' + id + '\')">Open</button>' + main + '</div>' +
+    '</article>';
+  }).join('');
 }
 
 function convertToConsumer(id) {
@@ -6644,6 +6682,7 @@ function convertToConsumer(id) {
   const p = pipeline.find(x => x.id === id);
   if (!p || !confirm(`Move ${p.name} to the active Consumer roster?`)) return;
   p.status = p.type === 'pccp' ? 'transfer_complete' : 'authorized';
+  p.movedToConsumers = new Date().toISOString().split('T')[0];
   setData('pipeline', pipeline);
   // Pre-fill add consumer modal
   document.getElementById('c_name').value = p.name;

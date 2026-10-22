@@ -268,6 +268,96 @@
              needsReason: applies && late && !(c.lateStart && c.lateStart.reason) };
   }
 
+  // ── The Leads page card (2026-10-21) ──
+  // One card per person: which of the three steps they are in, who they are in a
+  // sentence, how urgent they are, and what to do next. The page only draws it.
+  const LEAD_KINDS = { lead: 'Still deciding', referral: 'New to CDS', pccp: 'Moving from another agency' };
+  const DONE = ['authorized', 'transfer_complete'];
+  const shortDay = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const daysBetween = (fromIso, toIso) => Math.round((Date.parse(toIso + 'T12:00:00') - Date.parse(fromIso + 'T12:00:00')) / DAY);
+
+  // The website form's answers, as a sentence. The form note reads
+  // "Who needs care: ...\nMedicaid: ...\nThey said: ...".
+  function formWho(text) {
+    const get = k => { const m = String(text || '').match(new RegExp('^' + k + ': *(.+)$', 'mi')); return m ? m[1].trim() : ''; };
+    const who = get('Who needs care'), med = get('Medicaid'), said = get('They said');
+    const parts = [];
+    if (/paid caregiver/i.test(who)) parts.push('Wants to be the paid caregiver for someone.');
+    else if (/^yes/i.test(who)) parts.push('Needs the care themself.');
+    else if (who) parts.push('Who needs care: ' + who + '.');
+    if (/^yes/i.test(med)) parts.push('Has Medicaid.');
+    else if (/not sure/i.test(med)) parts.push('Medicaid not sure.');
+    else if (/^no/i.test(med)) parts.push('No Medicaid yet.');
+    else if (med) parts.push('Medicaid: ' + med + '.');
+    if (said) parts.push('They said: "' + (said.length > 90 ? said.slice(0, 90) + '...' : said) + '"');
+    return parts.join(' ');
+  }
+
+  // p = a pipeline record, calls = cds_lead_calls rows, todayIso = yyyy-mm-dd,
+  // moved = true when this person is already on the Consumers list.
+  // tone: late (red), today (honey), later, none, ready.
+  function leadCard(p, calls, todayIso, moved) {
+    const notes = (Array.isArray(p.notes) ? p.notes : []).filter(Boolean);
+    const form = notes.find(n => isFormNote(n));
+    const real = notes.filter(n => !isFormNote(n));
+    const last = real.length ? real[real.length - 1] : null;
+    const kind = LEAD_KINDS[p.type] || 'Still deciding';
+    const closed = CLOSED.includes(p.status);
+    const done = DONE.includes(p.status);
+    const sent = !done && (p.type === 'referral' || p.type === 'pccp') && (p.status === 'submitted' || p.status === 'processing');
+    const step = closed || (done && moved) ? 'closed' : done ? 'ready' : sent ? 'state' : 'call';
+
+    let who = form ? formWho(form.text) : '';
+    if (!who && p.type === 'pccp') who = 'Has CDS now' + (p.leavingAgency || p.currentAgency ? ' with ' + (p.leavingAgency || p.currentAgency) : ' with another agency') + '.';
+    if (!who && p.hours) who = p.hours + ' hours a week.';
+    // Nothing else known: the last call note says who they are best.
+    const clip = t => t.length > 120 ? t.slice(0, 120) + '...' : t;
+    const noteIsWho = !who && !!last;
+    if (noteIsWho) who = 'Last note: "' + clip(last.text) + '"';
+    if (!who) who = 'No details yet. Open the profile to add them.';
+    if (step === 'state') who = (p.stateSubmit ? 'Sent to the state ' + shortDay(p.stateSubmit) + '. ' : '') + who;
+
+    let due = '', tone = 'none', next = '', sort = 3;
+    if (step === 'call') {
+      if (leadWaiting(p, calls)) {
+        const added = String(p.addedAt || p.firstContact || '').slice(0, 10);
+        const old = added && added < todayIso;
+        due = 'Not called yet'; tone = old ? 'late' : 'today'; sort = old ? 0 : 1;
+        next = 'First call. Find out who needs care and if they have Medicaid.';
+      } else {
+        if (p.followup && p.followup < todayIso) {
+          const n = daysBetween(p.followup, todayIso);
+          due = plural(n, 'day', 'days') + ' late'; tone = 'late'; sort = 0;
+        } else if (p.followup === todayIso) { due = 'Due today'; tone = 'today'; sort = 1; }
+        else if (p.followup) { due = 'Due ' + shortDay(p.followup); tone = 'later'; sort = 4; }
+        else { due = 'No call back date'; tone = 'none'; sort = 2; }
+        next = p.type === 'referral' ? 'Ask the referral questions, then send it to the state.'
+          : p.type === 'pccp' ? 'Get their DCN and enter the transfer in the state portal.'
+          : 'Call back and see if they are ready to start.';
+        if (!p.followup) next = 'Set a call back date so they are not forgotten. ' + next;
+      }
+      if (last && !noteIsWho && !leadWaiting(p, calls)) next += ' Last note: "' + clip(last.text) + '"';
+    } else if (step === 'state') {
+      if (!p.stateSubmit) { due = 'Sent date missing'; tone = 'today'; sort = 1; next = 'Add the date it went to the state.'; }
+      else {
+        const n = daysBetween(p.stateSubmit, todayIso);
+        due = 'Day ' + n + ' of waiting';
+        if (n > 21) { tone = 'late'; sort = 0; next = 'This is taking long. Call DSDS today.'; }
+        else if (n > 10) { tone = 'today'; sort = 1; next = 'Check in with the state this week.'; }
+        else { tone = 'later'; sort = 4; next = 'Waiting on the state. Nothing to do yet.'; }
+      }
+    } else if (step === 'ready') {
+      due = 'Approved'; tone = 'ready'; sort = 1;
+      next = 'Move them to Consumers to start the first shift checklist.';
+    } else {
+      due = done ? 'On the Consumers list' : 'Closed'; tone = 'none'; sort = 5;
+      next = done ? 'Nothing to do here.' : 'Closed. Open the profile to see why.';
+    }
+    // needsToday: a call that should happen today (the Leads summary line).
+    const needsToday = (step === 'call' && (tone === 'late' || tone === 'today')) || (step === 'state' && tone === 'late');
+    return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '' };
+  }
+
   // The name the hub gives a website lead when it imports it.
   const siteLeadName = r => [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || String(r.full_name || '').trim() || 'Website enquiry';
 
@@ -277,5 +367,6 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isFormNote, siteLeadName, CLOSED, firstShiftPrep, PREP_STEPS, LATE_REASONS };
+                    dailyRoutine, isFormNote, siteLeadName, CLOSED, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    leadCard, formWho, LEAD_KINDS };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
