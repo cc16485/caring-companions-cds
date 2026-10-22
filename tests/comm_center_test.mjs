@@ -237,8 +237,11 @@ const hb = await comms.history([], ['4175550144']);
 ok(hb.items.length === 3, 'history by phone alone');
 ok((await comms.history(['staff:x'])).items.length === 0, 'cannot ask for our team\'s calls');
 // reached: Tom talked to Samantha, so the Leads page counts him as called
-const reached = await comms.reached();
-ok(reached.includes('4175550188') && !reached.includes('4175550190'), 'reached: talked or texted only');
+const reached = (await comms.reached()).map(r => r.phone10);
+ok(reached.includes('4175550188') && !reached.includes('4175550190'), 'reached: talked, texted, or we called; a missed call to us is not');
+ok(reached.includes('4175550131'), 'a call back with no answer counts as called (her point 10-22)');
+const rh = await comms.handle('x@y', { action: 'reached' });
+ok(Array.isArray(rh.phones) && rh.last['4175550188'], 'the page gets the phones and when');
 
 // the Caregiver Match to-do list leaves follow-ups out
 const handlers = readFileSync(ROOT + '/supabase/functions/_shared/match/handlers.js', 'utf8');

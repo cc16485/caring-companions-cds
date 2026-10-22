@@ -6749,7 +6749,7 @@ function renderPipeline() {
 // the office line, her rule). Nothing here sends anything. Calls never count as monthly check-ins.
 // ============================================================================
 const CDS_GHL_APP = 'https://app.hirecara.com/v2/location/4EFPkajwe0hHrqxvYkZ9';
-let _comm = null, _commReached = [], _commPeople = null, _commTimer = null;
+let _comm = null, _commReached = [], _commReachedAt = {}, _commPeople = null, _commTimer = null;
 
 async function _commCall(body) {
   const { data } = await _db.auth.getSession();
@@ -6768,7 +6768,7 @@ async function _commCall(body) {
 async function commLoad() {
   if (!_db) return;
   try { _comm = await _commCall({ action: 'queue' }); } catch (e) { _comm = { error: e.message }; }
-  try { _commReached = (await _commCall({ action: 'reached' })).phones || []; } catch (e) { /* the Leads page still works */ }
+  try { const r = await _commCall({ action: 'reached' }); _commReached = r.phones || []; _commReachedAt = r.last || {}; } catch (e) { /* the Leads page still works */ }
   commMergeReached();
   // keep the "Follow-ups (n)" tab count current while Today is open
   const onPage = (document.querySelector('.page.active') || {}).id || '';
@@ -6778,10 +6778,13 @@ async function commLoad() {
     try { renderDailyRoutine(); } catch (e) {}
   }), 5 * 60000);
 }
-// A website lead the office has texted, or talked to on the phone, counts as called on Leads.
+// A website lead the office called (answered or not), texted, or talked to when they called in counts
+// as called on Leads, when that came after the lead did. Same rule as the reminder text and 8am email.
 function commMergeReached() {
   const set = new Set(_commReached);
-  const extra = getData('pipeline').filter(p => p.siteLeadId && set.has(String(p.phone || '').replace(/\D/g, '').slice(-10)))
+  const after = p => { const last = _commReachedAt[String(p.phone || '').replace(/\D/g, '').slice(-10)];
+    const came = Date.parse(p.addedAt || p.firstContact || 0) || 0; return !last || Date.parse(last) >= came; };
+  const extra = getData('pipeline').filter(p => p.siteLeadId && set.has(String(p.phone || '').replace(/\D/g, '').slice(-10)) && after(p))
     .map(p => ({ site_lead_id: p.siteLeadId, outcome: 'connected', at: '', fromComms: true }));
   _leadCalls = _leadCalls.filter(c => !c.fromComms).concat(extra);
 }
