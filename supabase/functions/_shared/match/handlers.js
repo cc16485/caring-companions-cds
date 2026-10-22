@@ -15,6 +15,7 @@
 import * as R from './rules.js';
 import { TEMPLATES, fill, CONSENT_WORDING, FCSR_EXPLAINER, PROVIDER_CHOICE, FCSR_EMPLOYER } from './messages.js';
 import { createPacket } from '../packet/handlers.js';
+import { createEnroll } from '../enroll/handlers.js';
 
 export class MatchError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -1381,9 +1382,17 @@ export function createMatch(deps) {
   // The attendant packet (2026-10-21): same link, pool row and screening records.
   const packet = createPacket({ q, one, nowIso, audit, setting, task, crypto, links, ensureProfile, caregiverLink, loadCaregiver, R, fail, deps });
   Object.assign(pub, packet.pub); Object.assign(caregiver, packet.att); Object.assign(staff, packet.office);
+  // The consumer enrollment packet (2026-10-22): consumers on their own private link.
+  const enroll = createEnroll({ q, one, nowIso, audit, setting, task, crypto, links, R, fail, deps, isTestRecipient });
+  Object.assign(staff, enroll.office);
   // 'job' is only reachable with the schedule's secret (checked in the edge function).
-  const job = { packetJob: () => packet.packetJob() };
-  const ROLES = { public: pub, family, caregiver, staff, job };
+  // One 15-minute job runs both packets' reminders; one failing never stops the other.
+  const job = { packetJob: async () => {
+    const r = await packet.packetJob();
+    let e; try { e = await enroll.enrollJob(); } catch (err) { e = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
+    return { ...r, enroll: e };
+  } };
+  const ROLES = { public: pub, family, caregiver, staff, job, consumer: enroll.consumer };
   return {
     async handle(role, action, input = {}) {
       const r = ROLES[role];
