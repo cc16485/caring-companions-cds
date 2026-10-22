@@ -98,9 +98,9 @@ const at = d => new Date(d + 'T12:00:00');
                'leads', 'money'];
   const NEW = ['today', 'help', 'switches', 'roster', 'leadprofile'];
   const want = { dashboard: 'today', pipeline: 'leads', statesubmissions: 'leads', leads: 'leads', attendants: 'attendants',
-                 evvcorrections: 'attendants', automations: 'switches', guides: 'help', quarterly: 'money', financials: 'money',
+                 evvcorrections: 'attendants', automations: 'help', guides: 'help', quarterly: 'money', financials: 'money',
                  payroll: 'money', money: 'money', consumers: 'consumers', taxcompliance: 'consumers', profile: 'consumers',
-                 caregiverpool: 'attendants', backuppool: 'attendants', today: 'today', help: 'help', switches: 'switches', roster: 'attendants' };
+                 caregiverpool: 'attendants', backuppool: 'attendants', today: 'today', help: 'help', switches: 'help', roster: 'attendants' };
   OLD.concat(NEW).forEach(h => {
     const r = resolve(h);
     ok(pages.has(r.page), '#' + h + ' opens a real page (' + r.page + ')');
@@ -113,9 +113,11 @@ const at = d => new Date(d + 'T12:00:00');
   ok(resolve('backuppool').page === 'caregivermatch', 'the old pool opens the Caregiver List');
   Object.entries(STACKED).forEach(([k, v]) => v.forEach(x => ok(pages.has(x) && pages.has(k === 'pipeline' ? 'consumers' : k), 'stacked ' + k + ' + ' + x)));
   SECTIONS.forEach(s => s.tabs.forEach(t => ok(pages.has(t.page) || guideSubs.includes(t.page), 'tab ' + t.label + ' has a page')));
-  ok(SECTIONS.length === 7 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,money,help,switches', 'the seven sections, in order');
+  // 2026-10-22 (her ask): Switches became the Settings tab at the right of Help, so six sections.
+  ok(SECTIONS.length === 6 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,money,help', 'the six sections, in order');
+  ok(SECTIONS.find(s => s.id === 'help').tabs.map(t => t.label).join() === 'Deadlines,Compliance,Onboarding,Reference,Settings', 'Help ends with a Settings tab, the old Switches page');
   const tabCount = SECTIONS.reduce((t, s) => t + s.tabs.length, 0);
-  ok(tabCount <= 14, 'fewer tabs than before (' + tabCount + ', was 22)');
+  ok(tabCount <= 15, 'fewer tabs than before (' + tabCount + ', was 22; Settings is now a tab, not a section)');
   const today = SECTIONS.find(x => x.id === 'today');
   ok(today.tabs.map(t => t.page).join() === 'dashboard,followups,numbers', 'Today has Today, Follow-ups and Dashboard tabs (her calls 10-22)');
   ok(resolve('numbers').page === 'numbers' && resolve('numbers').section === 'today', '#numbers opens the Dashboard tab inside Today');

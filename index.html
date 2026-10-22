@@ -2320,7 +2320,6 @@ button.fu-tile.check span { color:#14606F; }
   <div class="section-header">
     <div class="section-title">EVV Manual Corrections</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-outline" onclick="openModal('evvSettingsModal')" style="font-size:12px">⚙️ Settings</button>
       <button class="btn btn-outline" onclick="openOutreachModal('evv_bulk_reminder',{})" style="font-size:12px;color:var(--warn)">📱 Friday EVV Reminder</button>
     </div>
   </div>
@@ -2478,12 +2477,12 @@ button.fu-tile.check span { color:#14606F; }
 <!-- ==================== AUTOMATIONS ==================== -->
 <div id="page-automations" class="page">
   <div class="section-header">
-    <div class="section-title">Switches</div>
+    <div class="section-title">Settings</div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-outline" onclick="renderAutomations()" style="font-size:12px">↻ Refresh</button>
     </div>
   </div>
-  <p style="font-size:14px;color:#55677a;margin:-4px 0 16px">Your on/off switches. Called Switches so it is never mixed up with GoHighLevel's own Settings.</p>
+  <p style="font-size:14px;color:#55677a;margin:-4px 0 16px">Everything you set up in one place: this hub, the on/off switches, who owns each need, rates and the EVV form. These are the CDS hub's settings, not GoHighLevel's.</p>
 
   <!-- Backup, Restore and Sign Out live here too: inside GoHighLevel the
        header they used to sit in is hidden (2026-10-21). -->
@@ -2499,6 +2498,19 @@ button.fu-tile.check span { color:#14606F; }
 
   <!-- Switches (2026-10-20): drawn by renderSwitches() from the cds-switches server function -->
   <div id="switchesCard"></div>
+
+  <!-- Rates and the EVV form (moved here 2026-10-22, her ask: all settings in one tab). Same forms as before. -->
+  <div class="card" style="margin:20px 0">
+    <div class="card-title"><span class="icon">⚙️</span> Rates and forms</div>
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--gray-200)">
+      <div><div style="font-weight:700;font-size:13.5px">CDS rates</div><div style="font-size:12.5px;color:var(--gray-800)">What MMAC pays per hour and what attendants are paid. Money and the quarterly report use these.</div></div>
+      <button class="btn btn-sm btn-outline" onclick="openRateSettings()">Edit rates</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--gray-200)">
+      <div><div style="font-weight:700;font-size:13.5px">EVV form</div><div style="font-size:12.5px;color:var(--gray-800)">Who is emailed when an attendant sends an EVV form, and the form link.</div></div>
+      <button class="btn btn-sm btn-outline" onclick="openModal('evvSettingsModal')">EVV form settings</button>
+    </div>
+  </div>
 
   <!-- GHL CONTACT SYNC -->
   <div class="card" style="margin-bottom:20px">
@@ -2580,7 +2592,7 @@ button.fu-tile.check span { color:#14606F; }
   <div class="section-header">
     <div class="section-title">📈 Financial Dashboard</div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn btn-sm btn-outline" onclick="openRateSettings()" style="font-size:12px">⚙️ Edit Rates</button>
+      <button class="btn btn-sm btn-outline" onclick="showPage('automations')" style="font-size:12px" title="Rates are in Help, Settings">Rates are in Settings</button>
       <button class="btn btn-sm btn-outline" onclick="renderFinancials()" style="font-size:12px">↻ Refresh</button>
     </div>
   </div>
@@ -4675,8 +4687,10 @@ const SECTIONS = [
       { page: 'calendar',    label: 'Deadlines' },
       { page: 'compliance',  label: 'Compliance' },
       { page: 'onboarding',  label: 'Onboarding' },
-      { page: 'reference',   label: 'Reference' } ] },
-  { id: 'switches',   label: 'Switches',    quiet: true, tabs: [] }
+      { page: 'reference',   label: 'Reference' },
+      // Settings (her ask 2026-10-22): switches, owners, rates, the EVV form and this hub, all in one tab
+      // at the right. It is the old Switches page (#switches and #automations still open it).
+      { page: 'automations', label: 'Settings' } ] }
 ];
 
 // page id -> section id. Built from SECTIONS so the two can never drift.
@@ -4691,7 +4705,7 @@ const PAGE_TO_SECTION = (() => {
     attendants: 'attendants', roster: 'attendants', backuppool: 'attendants', caregiverpool: 'attendants',
     payroll: 'money', financials: 'money', quarterly: 'money', money: 'money',
     guides: 'help', help: 'help',
-    automations: 'switches', switches: 'switches'
+    automations: 'help', switches: 'help', settings: 'help'
   });
   return m;
 })();
@@ -4699,7 +4713,7 @@ const PAGE_TO_SECTION = (() => {
 // Landing page when a section is opened by name rather than a specific page.
 const SECTION_DEFAULT = { today: 'dashboard', dashboard: 'dashboard', leads: 'pipeline', consumers: 'consumers',
                           attendants: 'activeattendants', money: 'payroll', help: 'calendar', guides: 'calendar',
-                          switches: 'automations' };
+                          switches: 'automations', settings: 'automations' };
 
 // Spellings that are not themselves page ids, kept because they are live links.
 // #attendants is the GoHighLevel "Attendants" link: it now opens Active
@@ -4709,7 +4723,7 @@ const PAGE_ALIASES = {
   backuppool: 'caregivermatch',
   guides: 'calendar', help: 'calendar',
   today: 'dashboard',
-  switches: 'automations',
+  switches: 'automations', settings: 'automations',
   attendants: 'activeattendants'
 };
 
@@ -12679,7 +12693,7 @@ function renderQuarterlyReport() {
 
   const fmtMoney = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0});
   document.getElementById('qr_utilization_table').innerHTML = `
-    <div style="font-size:11px;color:var(--gray-600);margin-bottom:8px">Rates: MMAC $${rates.billing.toFixed(2)}/hr · Attendant $${rates.pay.toFixed(2)}/hr · Margin $${(rates.billing - rates.pay).toFixed(2)}/hr — <a href="#" onclick="openRateSettings();return false" style="color:var(--primary)">Edit rates</a></div>
+    <div style="font-size:11px;color:var(--gray-600);margin-bottom:8px">Rates: MMAC $${rates.billing.toFixed(2)}/hr · Attendant $${rates.pay.toFixed(2)}/hr · Margin $${(rates.billing - rates.pay).toFixed(2)}/hr — <a href="#" onclick="showPage('automations');return false" style="color:var(--primary)">Edit rates in Settings</a></div>
     <div class="table-wrap">
       <table>
         <thead>
