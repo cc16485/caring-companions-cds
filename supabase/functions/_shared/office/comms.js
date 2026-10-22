@@ -139,7 +139,7 @@ export function decide(comms, open, nowMs) {
   return { open: { events, last: new Date(lastWant).toISOString() }, close };
 }
 
-// deps: { db: { query(text, params) -> { rows } }, ghl: { users(), conversations(sinceMs), messages(conversationId, sinceMs) }, now?: () => ms }
+// deps: { db: { query(text, params) -> { rows } }, ghl: { users(), conversations(sinceMs), messages(conversationId, sinceMs), contact(id) }, now?: () => ms }
 export function createComms(deps) {
   const q = async (t, p) => (await deps.db.query(t, p)).rows;
   const one = async (t, p) => (await q(t, p))[0] || null;
@@ -179,11 +179,20 @@ export function createComms(deps) {
   async function bookFor(phone10) { return q(`select * from cds_phone_book where phone10=$1`, [phone10]); }
 
   // Read GoHighLevel and save what is new. Overlaps the last run by 15 minutes; ids make it safe.
-  async function pull(s) {
+  // rescan: read the whole history window again (ids make it safe), e.g. after a fix.
+  async function pull(s, { rescan = false } = {}) {
     const st = s.state || {};
-    const since = st.read_until ? Date.parse(st.read_until) - 15 * 60000 : nowMs() - (s.history_days || 60) * 86400000;
+    const since = st.read_until && !rescan ? Date.parse(st.read_until) - 15 * 60000 : nowMs() - (s.history_days || 60) * 86400000;
     const users = new Map((await deps.ghl.users().catch(() => [])).map(u => [String(u.id), u.name || [u.firstName, u.lastName].filter(Boolean).join(' ')]));
-    let saved = 0, seen = 0, skipped = 0, partial = false;
+    let saved = 0, seen = 0, skipped = 0, partial = false, fromContact = 0;
+    // Some GoHighLevel conversations carry no phone number (seen live 2026-10-22: 8 of 55).
+    // Then the number is read from the contact itself, once per contact per run. Read only.
+    const contactPhone = new Map();
+    const phoneOf = async id => {
+      if (!id || !deps.ghl.contact) return '';
+      if (!contactPhone.has(id)) contactPhone.set(id, ten(await deps.ghl.contact(id).then(c => c && c.phone).catch(() => '')));
+      return contactPhone.get(id);
+    };
     const started = nowMs();
     // A long first read must never get stuck: after the time budget it keeps what it has,
     // says so (history_partial), and the next run carries on from now.
@@ -196,6 +205,7 @@ export function createComms(deps) {
         if (!c) continue;
         seen++;
         if (Date.parse(c.at) < since) continue;
+        if (!c.phone10) { c.phone10 = await phoneOf(c.ghl_contact_id); if (c.phone10) fromContact++; }
         if (!c.phone10) { skipped++; continue; }
         const r = await one(`insert into cds_comms (id, channel, direction, at, phone10, ghl_contact_id, conversation_id, contact_name, status, seconds, answered, voicemail, staff_name, body)
           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) on conflict (id) do nothing returning id`,
@@ -206,7 +216,7 @@ export function createComms(deps) {
     }
     await saveState(Object.assign({ read_until: iso(started), last_run: iso(nowMs()), last_saved: saved, last_skipped_no_number: skipped, last_error: null },
       partial ? { history_partial: true } : {}));
-    return { seen, saved, skipped, partial };
+    return { seen, saved, skipped, partial, fromContact };
   }
 
   // Keep follow-ups right for every number with calls or texts since cards_from.
@@ -253,12 +263,12 @@ export function createComms(deps) {
   }
 
   // The 5-minute job. Errors are saved so the page and the 8am email can say the job stopped.
-  async function run() {
+  async function run(opts = {}) {
     const s = await settings();
     if (!s) return { ok: false, error: 'comm_center setting missing (run comm_center.sql)' };
     try {
       const book = await rebuildBook();
-      const read = await pull(s);
+      const read = await pull(s, { rescan: opts.rescan === true });
       const c = await cards(await settings());
       return { ok: true, phoneBook: book, ...read, ...c };
     } catch (e) {
