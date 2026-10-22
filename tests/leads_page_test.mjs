@@ -86,7 +86,7 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
 
 // ── kinds and copy ──
 {
-  ok(R.LEAD_KINDS.lead === 'Still deciding' && R.LEAD_KINDS.referral === 'New to CDS' && R.LEAD_KINDS.pccp === 'Moving from another agency', 'the three names');
+  ok(R.LEAD_KINDS.lead === 'Still deciding' && R.LEAD_KINDS.referral === 'New to CDS - Referral' && R.LEAD_KINDS.pccp === 'Moving from Another Agency - PCCP', 'the three names');
   const all = ['lead', 'referral', 'pccp'].flatMap(type => ['new', 'nurturing', 'submitted', 'authorized', 'closed_ni'].map(status =>
     R.leadCard({ type, status, followup: '2026-10-19', stateSubmit: '2026-10-01' }, [], T)));
   ok(all.every(c => !/—/.test(c.who + c.due + c.next + c.kind)), 'no em dashes on any card');
@@ -104,7 +104,7 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(/if \(id === 'statesubmissions'\) \{ _ldStep = 'state'; id = 'pipeline'; \}/.test(html), 'the old #statesubmissions link opens Sent to state');
   const add = html.slice(html.indexOf('id="addSomeoneModal"'), html.indexOf('id="addPipelineModal"'));
   ['lead', 'referral', 'pccp'].forEach(t => ok(add.includes("openAddPipeline('" + t + "')"), 'Add someone offers ' + t));
-  ok(/cds-rules\.js\?v=6/.test(html), 'the page loads the new rules file');
+  ok(/cds-rules\.js\?v=7/.test(html), 'the page loads the new rules file');
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(!/Packet Sent|Send Welcome/.test(r), 'Welcome and Packet are off the cards');
   ok(/Text the welcome/.test(html) && /Tell them the packet is on its way/.test(html), 'and on the profile');
@@ -112,6 +112,11 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   const card = html.slice(html.indexOf('No Referral or PCCP answers yet'), html.indexOf('No Referral or PCCP answers yet') + 900);
   ok(card.includes("openAddPipeline(\\'referral\\'") && card.includes("openAddPipeline(\\'pccp\\'"), 'Referral and PCCP buttons on the lead profile');
   ok(!html.includes('No HCBS-1 answers yet'), 'the old HCBS-1 wording is gone');
+  ok(!html.includes('Answers for the HCBS-1'), 'the form title no longer says HCBS-1');
+  ok(/pre\.textContent = _plEditId \? 'Referral or PCCP answers:' : 'Add someone:'/.test(html), 'the form title says Referral or PCCP answers');
+  ok(/set\('pl_county', p\.county\)/.test(html) && /set\('pl_status', p\.status\)/.test(html), 'the form fills in what Leads already knows');
+  ok(/'firstContact','source','status','followup','stateSubmit'/.test(html), 'and keeps those on save');
+  ok((html.match(/New to CDS - Referral/g) || []).length >= 5 && (html.match(/Moving from Another Agency - PCCP/g) || []).length >= 5, 'her two names everywhere');
   ok(/'leavingAgency','whySwitching','readiness','medicaidStatus'/.test(html), 'a lead turned PCCP keeps its transfer answers');
 }
 

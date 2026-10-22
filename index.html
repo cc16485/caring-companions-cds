@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=6"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=7"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=4"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -872,8 +872,8 @@ input, select, textarea { border-radius:10px; }
 
     <div class="ld-help" id="ldHelp" hidden>
       <div><span class="ld-kind k-lead">Still deciding</span><p>Called to learn more. Not ready yet. We call back when they ask us to.</p></div>
-      <div><span class="ld-kind k-referral">New to CDS</span><p>Never had CDS. We send the referral to the state. Usually 2 to 6 weeks.</p></div>
-      <div><span class="ld-kind k-pccp">Moving from another agency</span><p>Has CDS now with someone else. We send the transfer to DSDS. Usually 2 to 4 weeks.</p></div>
+      <div><span class="ld-kind k-referral">New to CDS - Referral</span><p>Never had CDS. We send the referral to the state. Usually 2 to 6 weeks.</p></div>
+      <div><span class="ld-kind k-pccp">Moving from Another Agency - PCCP</span><p>Has CDS now with someone else. We send the transfer to DSDS. Usually 2 to 4 weeks.</p></div>
     </div>
 
     <div class="ld-grid" id="ldCards"></div>
@@ -3641,25 +3641,25 @@ input, select, textarea { border-radius:10px; }
     </div>
     <p style="margin:0 0 14px;font-size:14.5px;color:#55677a">Which one fits the person who called?</p>
     <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('lead')"><b>Still deciding</b><span>Wants to learn more. Not ready to start yet.</span></button>
-    <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('referral')"><b>New to CDS</b><span>Never had CDS. We send the referral to the state.</span></button>
-    <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('pccp')"><b>Moving from another agency</b><span>Has CDS now with someone else and wants to switch to us.</span></button>
+    <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('referral')"><b>New to CDS - Referral</b><span>Never had CDS. We send the referral to the state.</span></button>
+    <button type="button" class="ld-choice" onclick="closeModal('addSomeoneModal');openAddPipeline('pccp')"><b>Moving from Another Agency - PCCP</b><span>Has CDS now with someone else and wants to switch to us.</span></button>
   </div>
 </div>
 
 <div class="modal-overlay" id="addPipelineModal">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Add someone: <span id="addPipelineTitle" style="font-weight:600;color:var(--gray-600)"></span></div>
+      <div class="modal-title"><span id="addPipelinePrefix">Add someone:</span> <span id="addPipelineTitle" style="font-weight:600;color:var(--gray-600)"></span></div>
       <button class="modal-close" onclick="closeModal('addPipelineModal')">×</button>
     </div>
     <div class="apl-body">
     <div class="form-row">
       <div class="form-group"><label>Full Name *</label><input type="text" id="pl_name" placeholder="Potential consumer's name"></div>
       <div class="form-group"><label>Type *</label>
-        <select id="pl_type" onchange="updatePipelineModalFields()">
+        <select id="pl_type" onchange="updatePipelineModalFields();plSetTitle()">
           <option value="lead">Still deciding</option>
-          <option value="referral">New to CDS</option>
-          <option value="pccp">Moving from another agency</option>
+          <option value="referral">New to CDS - Referral</option>
+          <option value="pccp">Moving from Another Agency - PCCP</option>
         </select>
       </div>
     </div>
@@ -3694,21 +3694,21 @@ input, select, textarea { border-radius:10px; }
     <div class="form-row">
       <div class="form-group"><label>Status</label>
         <select id="pl_status">
-          <option value="new">New</option>
-          <option value="nurturing">Nurturing — Following Up</option>
-          <option value="submitted">Submitted to State</option>
-          <option value="processing">State Processing</option>
-          <option value="authorized">Authorized / Approved</option>
-          <option value="transfer_complete">Transfer Complete</option>
-          <option value="closed_ni">Closed — Not Interested</option>
-          <option value="closed_other">Closed — Other Agency</option>
+          <option value="new">New, not called yet</option>
+          <option value="nurturing">Following up</option>
+          <option value="submitted">Sent to the state</option>
+          <option value="processing">The state is working on it</option>
+          <option value="authorized">Approved by the state</option>
+          <option value="transfer_complete">Transfer done</option>
+          <option value="closed_ni">Closed, not interested</option>
+          <option value="closed_other">Closed, went with another agency</option>
         </select>
       </div>
-      <div class="form-group"><label>Next Follow-Up Date</label><input type="date" id="pl_followup"></div>
+      <div class="form-group"><label>Call back on</label><input type="date" id="pl_followup"></div>
     </div>
     <div id="pl_stateFields" style="display:none">
       <div class="form-row">
-        <div class="form-group"><label>Date Submitted to State</label><input type="date" id="pl_statesubmit"></div>
+        <div class="form-group"><label>Date sent to the state</label><input type="date" id="pl_statesubmit"></div>
         <div class="form-group" id="pl_currentAgencyGroup"><label>Current Agency (PCCP only)</label><input type="text" id="pl_currentagency" placeholder="Agency being left"></div>
       </div>
       <div class="form-row">
@@ -4044,7 +4044,7 @@ input, select, textarea { border-radius:10px; }
 </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('addPipelineModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="addPipelineContact()">Save to Pipeline</button>
+      <button class="btn btn-primary" onclick="addPipelineContact()">Save</button>
     </div>
   </div>
 </div>
@@ -5612,7 +5612,7 @@ function removeAttendant(aid) {
 // ============================================================
 // CONSUMER PIPELINE
 // ============================================================
-const PIPELINE_TYPE_LABELS = { lead: 'Still deciding', referral: 'New to CDS', pccp: 'Moving from another agency' };
+const PIPELINE_TYPE_LABELS = { lead: 'Still deciding', referral: 'New to CDS - Referral', pccp: 'Moving from Another Agency - PCCP' };
 const PIPELINE_STATUS_LABELS = {
   new: 'New, not called yet', nurturing: 'Following up', submitted: 'Sent to the state',
   processing: 'The state is working on it', authorized: 'Approved by the state', transfer_complete: 'Transfer done',
@@ -5693,20 +5693,17 @@ function openAddPipeline(type, existingId){
   const sel = document.getElementById('pl_type');
   if (sel) sel.value = type || 'lead';
   updatePipelineModalFields();
-  const title = document.getElementById('addPipelineTitle');
-  if (title) title.textContent = _plEditId
-    ? (type === 'pccp' ? 'Moving from another agency' : 'Answers for the HCBS-1')
-    : (type === 'pccp' ? 'Moving from another agency' :
-       type === 'referral' ? 'New to CDS' :
-       'Still deciding');
+  plSetTitle();
 
   /* Clear who-they-are first, every time. Without this, opening the modal for one
      person and then opening it again for somebody else inherits the first
      person's name, which would file a referral under the wrong name. */
   ['pl_name','pl_phone','pl_email','pl_nfirst','pl_nlast','pl_nmi','pl_ndob','pl_ndcn',
-   'pl_first','pl_last','pl_dob','pl_dcn2'].forEach(id => {
+   'pl_first','pl_last','pl_dob','pl_dcn2','pl_county','pl_firstcontact','pl_source',
+   'pl_followup','pl_statesubmit','pl_dcn','pl_hours'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  const st = document.getElementById('pl_status'); if (st) st.value = 'new';
 
   // Carry across what we already know, so nobody is asked their name twice.
   if (_plEditId) {
@@ -5718,6 +5715,10 @@ function openAddPipeline(type, existingId){
       set('pl_nfirst', p.firstName || bits[0]);
       set('pl_nlast', p.lastName || (bits.length > 1 ? bits[bits.length - 1] : ''));
       set('pl_ndob', p.dob); set('pl_ndcn', p.dcn);
+      // and what the Leads page already knows, so saving does not lose it
+      set('pl_county', p.county); set('pl_firstcontact', p.firstContact); set('pl_source', p.source);
+      set('pl_status', p.status); set('pl_followup', p.followup); set('pl_statesubmit', p.stateSubmit);
+      set('pl_dcn', p.dcn); set('pl_hours', p.hours);
       // the transfer questions use their own boxes
       set('pl_first', p.firstName || bits[0]);
       set('pl_last', p.lastName || (bits.length > 1 ? bits[bits.length - 1] : ''));
@@ -5725,6 +5726,16 @@ function openAddPipeline(type, existingId){
     }
   }
   openModal('addPipelineModal');
+}
+
+// Her wording 2026-10-21: adding answers to somebody already on Leads is
+// "Referral or PCCP answers", never "HCBS-1".
+function plSetTitle() {
+  const type = (document.getElementById('pl_type') || {}).value || 'lead';
+  const pre = document.getElementById('addPipelinePrefix');
+  const title = document.getElementById('addPipelineTitle');
+  if (pre) pre.textContent = _plEditId ? 'Referral or PCCP answers:' : 'Add someone:';
+  if (title) title.textContent = PIPELINE_TYPE_LABELS[type] || 'Still deciding';
 }
 
 function updatePipelineModalFields() {
@@ -5873,6 +5884,7 @@ function addPipelineContact() {
       if (newContact.referral) existing.referral = newContact.referral;
       // The PCCP questions too, so a lead turned transfer keeps its answers.
       ['firstName','lastName','dob','dcn','phone','email','county','hours',
+       'firstContact','source','status','followup','stateSubmit',
        'leavingAgency','whySwitching','readiness','medicaidStatus','currentAgency'].forEach(k => {
         if (newContact[k]) existing[k] = newContact[k];
       });
@@ -6243,8 +6255,8 @@ function renderLeadProfile(){
       '<div class="field-note" style="margin-top:6px">This person was added as Still deciding, so those questions were never asked. ' +
         'Pick the one that fits. It updates this record rather than making a second one.</div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">' +
-        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'referral\', \'' + esc(p.id) + '\')">Referral: new to CDS</button>' +
-        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'pccp\', \'' + esc(p.id) + '\')">PCCP: moving from another agency</button>' +
+        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'referral\', \'' + esc(p.id) + '\')">New to CDS - Referral</button>' +
+        '<button class="btn btn-accent" style="font-size:12px" onclick="openAddPipeline(\'pccp\', \'' + esc(p.id) + '\')">Moving from Another Agency - PCCP</button>' +
       '</div>' +
     '</div>';
   }
