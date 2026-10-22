@@ -14,7 +14,9 @@
   'use strict';
   const DAY = 864e5;
   const CLOSED = ['closed_ni', 'closed_other'];
-  const isActive = c => c && c.status !== 'Inactive' && c.status !== 'Discharged';
+  // One rule for "active" (2026-10-22): the hub saves "inactive" lowercase and old
+  // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
+  const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
 
   // The 90-day EIN clock, measured from the CDS start date.
@@ -217,7 +219,8 @@
       items: [
         waiting.length && { t: waiting.length + ' new ' + (waiting.length !== 1 ? 'enquiries' : 'enquiry') + ' from the website, never contacted', go: 'pipeline', bad: true,
                             people: waiting },
-        follow.length  && { t: plural(follow.length, 'follow-up', 'follow-ups') + ' due today or overdue', go: 'pipeline',
+        // "Follow-ups" is the calls-and-texts tab, so a lead's call-back date says "call back" (10-22).
+        follow.length  && { t: plural(follow.length, 'lead', 'leads') + ' to call back today or overdue', go: 'pipeline',
                             people: follow.map(p => ({ name: p.name, county: p.county || '', at: '' })) },
         // Communication Center (2026-10-22): missed calls and unanswered texts. Only handed in once
         // setting comm_center.live is true, by the hub and the 8am email alike. Step 2: care or safety
@@ -370,6 +373,43 @@
     return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '' };
   }
 
+  // State reports with a due date (2026-10-22, her yes): shown on Today's Coming up from 30 days
+  // before until marked Submitted on the Deadlines page. A Submitted mark only counts for the due
+  // date it was made for (quarterStatus[key + '_for']), so last year's mark never hides this year's.
+  const REPORTS = [
+    { key: 'q1',     title: 'Q1 Financial & Service Report (Jan to Mar)', due: y => [y, 4, 30] },
+    { key: 'q2',     title: 'Q2 Financial & Service Report (Apr to Jun)', due: y => [y, 7, 31] },
+    { key: 'q3',     title: 'Q3 Financial & Service Report (Jul to Sep)', due: y => [y, 10, 31] },
+    { key: 'q4',     title: 'Q4 Financial & Service Report (Oct to Dec)', due: y => [y + 1, 1, 31] },
+    { key: 'annual', title: 'Annual Service Report',                      due: y => [y + 1, 1, 31] },
+    { key: 'des',    title: 'DES wage reports in UInteract, one per registered consumer', quarterly: true }
+  ];
+  const _iso = (y, m, d) => y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  const QUARTER_DUE = [[4, 30], [7, 31], [10, 31], [1, 31]];
+  // The due date a report is "on" right now: the earliest one no more than 55 days past (a late one
+  // stays on Today for 55 days, until the next quarter's report is close).
+  function reportDue(key, now) {
+    now = now || new Date();
+    const r = REPORTS.find(x => x.key === key);
+    if (!r) return null;
+    const today = isoLocal(now), y0 = now.getFullYear(), dates = [];
+    for (let y = y0 - 2; y <= y0 + 1; y++) {
+      if (r.quarterly) QUARTER_DUE.forEach(([m, d], i) => dates.push(_iso(i === 3 ? y + 1 : y, m, d)));
+      else { const [yy, m, d] = r.due(y); dates.push(_iso(yy, m, d)); }
+    }
+    const days = iso => Math.round((new Date(iso + 'T12:00:00') - new Date(today + 'T12:00:00')) / DAY);
+    const due = dates.sort().find(iso => days(iso) >= -55);
+    return { key, title: r.title, due, days: days(due) };
+  }
+  const reportSubmitted = (qs, key, due) => !!qs && qs[key] === 'submitted' && qs[key + '_for'] === due;
+  // Reports due within 30 days, or late, and not yet marked Submitted for that due date.
+  function reportsDue(quarterStatus, now) {
+    return REPORTS.map(r => reportDue(r.key, now))
+      .filter(x => x && x.days <= 30 && !reportSubmitted(quarterStatus, x.key, x.due))
+      .map(x => Object.assign(x, { late: x.days < 0 }))
+      .sort((a, b) => a.days - b.days);
+  }
+
   // The name the hub gives a website lead when it imports it.
   const siteLeadName = r => [r.first_name, r.last_name].filter(Boolean).join(' ').trim() || String(r.full_name || '').trim() || 'Website enquiry';
 
@@ -379,6 +419,6 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isFormNote, siteLeadName, CLOSED, firstShiftPrep, PREP_STEPS, LATE_REASONS,
-                    leadCard, formWho, LEAD_KINDS };
+                    dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
