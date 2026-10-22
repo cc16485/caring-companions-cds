@@ -5700,7 +5700,7 @@ function openAddPipeline(type, existingId){
      person's name, which would file a referral under the wrong name. */
   ['pl_name','pl_phone','pl_email','pl_nfirst','pl_nlast','pl_nmi','pl_ndob','pl_ndcn',
    'pl_first','pl_last','pl_dob','pl_dcn2','pl_county','pl_firstcontact','pl_source',
-   'pl_followup','pl_statesubmit','pl_dcn','pl_hours'].forEach(id => {
+   'pl_followup','pl_statesubmit','pl_dcn','pl_hours','pl_notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const st = document.getElementById('pl_status'); if (st) st.value = 'new';
@@ -5888,6 +5888,8 @@ function addPipelineContact() {
        'leavingAgency','whySwitching','readiness','medicaidStatus','currentAgency'].forEach(k => {
         if (newContact[k]) existing[k] = newContact[k];
       });
+      // A note typed in this form is added to their notes, never dropped.
+      if (newContact.notes.length) existing.notes = (existing.notes || []).concat(newContact.notes);
       if (newContact.attendant && !existing.attendant) existing.attendant = newContact.attendant;
       if (newContact.transfer && !existing.transfer) existing.transfer = newContact.transfer;
       setData('pipeline', pipeline);
