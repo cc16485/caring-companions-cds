@@ -430,7 +430,8 @@
   //               FCSR yearly. EDL is not counted (no date kept for it).
   //  checklist  = done out of the real number of items on the checklist.
   //  money      = this month's WellSky authorized hours (personal care), or the hub's
-  //               weekly hours x 4.33 when there is no authorization report yet.
+  //               weekly hours x 4.33 when there is no authorization report yet. With
+  //               payRange [15, 16] the margin is a range (pay differs by attendant).
   function dashboardNumbers(o) {
     const now = o.now || new Date();
     const key = o.nameKey || (n => String(n || '').toLowerCase().replace(/[^a-z]/g, ''));
@@ -469,13 +470,16 @@
                                    : consumers.reduce((s, c) => s + (parseFloat(c.hours) || 0), 0) * 4.33;
     const rates = o.rates || { billing: 0, pay: 0 };
     const revenue = hoursMonth * rates.billing, labor = hoursMonth * rates.pay;
+    // Pay differs by attendant ($15 to $16): margin low = everyone at the top rate, high = everyone at the bottom.
+    const pr = o.payRange;
+    const range = pr && revenue > 0 ? { low: revenue - hoursMonth * pr[1], high: revenue - hoursMonth * pr[0] } : null;
     return { live, consumers: count, notInWellSky, wellSkyOnly,
              checkIns: { done: checkedIn, of: count, left: Math.max(0, count - checkedIn) },
              attendants: atts.length, screeningsSoon: soon,
              leie: { ok: leieOk, of: atts.length, auto: atts.filter(a => autoClear(a)).length }, fcsr: { ok: fcsrOk, of: atts.length },
              checklist: { done, of: total },
              money: { hoursMonth, fromWellSky, revenue, labor, margin: revenue - labor,
-                      pct: revenue > 0 ? Math.round((revenue - labor) / revenue * 100) : 0, rates } };
+                      pct: revenue > 0 ? Math.round((revenue - labor) / revenue * 100) : 0, rates, range } };
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
