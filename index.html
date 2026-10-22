@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=11"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=12"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -12022,7 +12022,7 @@ function updateDashboard() {
     consumers: getData('consumers'), attendants: getData('attendants'), now: new Date(),
     wsPeople: cg.hasData ? cg.r.people.concat(cg.r.leftOut) : null, nameKey: CDSWellSky.nameKey,
     oigPeople: _dashOig, checks: getObj('complianceChecks'), checklistIds, checklistTotal: checklistIds.length,
-    hours: authOn ? CDSWellSky.hoursThisMonth(check.auths, check.shifts, authOn) : [], rates: getRates() });
+    hours: authOn ? CDSWellSky.hoursThisMonth(check.auths, check.shifts, authOn) : [], rates: getRates(), payRange: [15, 16] });
   _loadDashOig();
   const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
   const bar = (id, n, of) => { const el = document.getElementById(id); if (el) el.style.width = (of ? Math.min(100, Math.round(n / of * 100)) : 0) + '%'; };
@@ -12093,11 +12093,12 @@ function updateDashboard() {
   setText('dashAuthHrs', M.hoursMonth > 0 ? Math.round(M.hoursMonth).toLocaleString() : '—');
   setText('dashRevenue', fmtD(M.revenue));
   setText('dashLabor', fmtD(M.labor));
-  setText('dashMargin', fmtD(M.margin));
+  // Pay is $15 to $16 an hour depending on the attendant (her rule 2026-10-16), so margin is a range.
+  setText('dashMargin', M.range ? fmtD(M.range.low) + ' to ' + fmtD(M.range.high) : fmtD(M.margin));
   setText('dashBillingRate', `@ $${M.rates.billing.toFixed(2)}/hr`);
-  setText('dashPayRate', `@ $${M.rates.pay.toFixed(2)}/hr`);
+  setText('dashPayRate', M.range ? '@ $15 to $16/hr' : `@ $${M.rates.pay.toFixed(2)}/hr`);
   setText('dashMarginPct', M.hoursMonth > 0
-    ? `${M.pct}% margin on ${Math.round(M.hoursMonth).toLocaleString()} hrs ${M.fromWellSky ? 'authorized this month in WellSky' : 'a month from hub hours (no WellSky authorization report yet)'}, pay $${M.rates.pay.toFixed(2)}/hr`
+    ? `on ${Math.round(M.hoursMonth).toLocaleString()} hrs ${M.fromWellSky ? 'authorized this month in WellSky' : 'a month from hub hours (no WellSky authorization report yet)'}, pay $15 to $16/hr`
     : 'no hours to calculate yet');
 }
 
@@ -12388,7 +12389,7 @@ function getRates() {
   const r = getObj('rateSettings');
   return {
     billing: parseFloat(r.billing) || 20.21,  // MMAC reimburses per hour
-    pay:     parseFloat(r.pay)     || 16.00   // attendant hourly pay ($16 from 2026-10-16)
+    pay:     parseFloat(r.pay)     || 15.00   // attendant hourly pay (the low end; pay is $15 to $16 since 2026-10-16)
   };
 }
 

@@ -51,5 +51,10 @@ ok(!F.money.fromWellSky && Math.round(F.money.hoursMonth) === Math.round(60 * 4.
 const P = R.dashboardNumbers({ consumers, attendants, now, wsPeople: ws, nameKey: W.nameKey, rates: { billing: 20, pay: 16 } });
 ok(P.leie.ok === 1 && P.screeningsSoon === 2, 'without the automatic check, the old date counts as due');
 
+// Pay is $15 to $16 depending on the attendant: margin is a range
+const G = R.dashboardNumbers({ consumers, attendants, now, wsPeople: ws, nameKey: W.nameKey,
+  hours: [{ authorized: 100 }], rates: { billing: 20, pay: 15 }, payRange: [15, 16] });
+ok(G.money.range && G.money.range.low === 400 && G.money.range.high === 500, 'margin range at $16 (low) and $15 (high)');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
