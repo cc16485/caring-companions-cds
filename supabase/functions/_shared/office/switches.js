@@ -7,6 +7,10 @@
 // setting switch_owners can CHANGE one. Every change is written to cds_audit (who, when, from, to).
 // Only the on/off of these seven; recipients, hours and owners are not changeable here.
 // No em dashes in anything a person reads (her rule).
+//
+// 2026-10-22, Communication Center step 2: "Who owns each need" (setting comm_center.owners), on
+// the same page and under the same rule: anyone signed in sees it, only a switch owner changes it.
+import { NEEDS } from './comms.js';
 
 export const DEFAULT_OWNERS = ['samantha@mo-care.com', 'samantha@caringcds.com'];
 const firstName = e => { const n = String(e || '').split('@')[0].replace(/[^a-z]/gi, ''); return n ? n[0].toUpperCase() + n.slice(1).toLowerCase() : ''; };
@@ -69,7 +73,8 @@ export function createSwitches(deps) {
     const can = (await owners()).includes(String(email || '').toLowerCase());
     const rows = await q(`select key, value, updated_at, updated_by from cds_match_settings where key = any($1)`, [SWITCHES.map(s => s.key)]);
     const last = await q(`select distinct on (target) target, actor, at, detail from cds_audit where action='switch' order by target, at desc`);
-    return { canChange: can, switches: SWITCHES.map(sw => {
+    const cc = rows.find(x => x.key === 'comm_center');
+    return { canChange: can, needOwners: needOwnersOf(cc ? cc.value : null), switches: SWITCHES.map(sw => {
       const r = rows.find(x => x.key === sw.key);
       const l = last.find(x => x.target === sw.key);
       const value = r ? r.value : null;
@@ -95,11 +100,38 @@ export function createSwitches(deps) {
     return { ok: true, key, on, message: 'Done. Turned ' + (on ? 'on' : 'off') + ' by ' + firstName(email) + '.' };
   }
 
+  // Who owns each need. A new follow-up card goes to this person; moving one card never changes this.
+  function needOwnersOf(v) {
+    if (!v || typeof v !== 'object') return null;
+    const people = (Array.isArray(v.people) ? v.people : []).map(p => ({ email: String(p.email || '').toLowerCase(), name: p.name || firstName(p.email) })).filter(p => p.email);
+    const owners = v.owners || {};
+    return { people, needs: NEEDS.map(n => ({ key: n.key, label: n.label, owner: owners[n.key] ? String(owners[n.key]).toLowerCase() : '' })) };
+  }
+  async function setNeedOwner(email, need, owner) {
+    email = String(email || '').toLowerCase();
+    if (!(await owners()).includes(email)) throw new SwitchError('Only Samantha can change who owns each need.', 403);
+    if (!NEEDS.some(n => n.key === need)) throw new SwitchError('That is not one of the needs.');
+    const r = await one(`select value from cds_match_settings where key='comm_center'`);
+    if (!r) throw new SwitchError('Follow-ups are not set up yet, so this cannot be changed here.');
+    owner = String(owner || '').toLowerCase();
+    const no = needOwnersOf(r.value);
+    if (owner && !no.people.some(p => p.email === owner)) throw new SwitchError('Pick someone from the list.');
+    const was = (r.value.owners || {})[need] || '';
+    await q(`update cds_match_settings set value = jsonb_set(value, '{owners}', coalesce(value->'owners','{}'::jsonb) || jsonb_build_object($2::text, $3::text)),
+             updated_at=$4, updated_by=$5 where key=$1`, ['comm_center', need, owner || null, now(), email]);
+    await q(`insert into cds_audit (actor, action, target, detail) values ($1, 'need_owner', $2, $3::jsonb)`,
+      [email, need, JSON.stringify({ from: was || null, to: owner || null })]);
+    const label = NEEDS.find(n => n.key === need).label;
+    const name = owner ? (no.people.find(p => p.email === owner).name) : 'nobody';
+    return { ok: true, message: 'Done. New ' + label + ' cards go to ' + name + '.' };
+  }
+
   async function handle(email, body) {
     const action = String(body && body.action || 'list');
     if (action === 'list') return list(email);
     if (action === 'set') return set(email, String(body.key || ''), body.on);
+    if (action === 'set_need_owner') return setNeedOwner(email, String(body.need || ''), body.owner);
     throw new SwitchError('Unknown request');
   }
-  return { list, set, handle };
+  return { list, set, setNeedOwner, handle };
 }

@@ -209,6 +209,9 @@
     const waiting = pipeline.filter(p => leadWaiting(p, calls)).map(p => ({ name: p.name, county: p.county || '', at: p.addedAt || p.firstContact || '' }))
       .concat(notPulled.map(r => ({ name: siteLeadName(r), county: r.county || '', at: r.submitted_at || '' })));
     const follow = pipeline.filter(p => followDue(p, todayIso));
+    const fuNow = (Array.isArray(data.followups) ? data.followups : []).filter(f => !f.later || f.later <= todayIso);
+    const urgentFu = fuNow.filter(f => f.urgent), otherFu = fuNow.filter(f => !f.urgent);
+    const fuPerson = f => ({ name: (f.name || 'Unknown number') + (f.owner ? ' (' + f.owner + ')' : ''), county: '', at: f.since || '' });
     steps.push({
       n: 4, title: 'Call the people waiting',
       items: [
@@ -217,10 +220,14 @@
         follow.length  && { t: plural(follow.length, 'follow-up', 'follow-ups') + ' due today or overdue', go: 'pipeline',
                             people: follow.map(p => ({ name: p.name, county: p.county || '', at: '' })) },
         // Communication Center (2026-10-22): missed calls and unanswered texts. Only handed in once
-        // setting comm_center.live is true, by the hub and the 8am email alike.
-        Array.isArray(data.followups) && data.followups.length &&
-          { t: plural(data.followups.length, 'call or text', 'calls and texts') + ' to follow up', go: 'followups', bad: true,
-            people: data.followups.map(f => ({ name: f.name || 'Unknown number', county: '', at: f.since || '' })) }
+        // setting comm_center.live is true, by the hub and the 8am email alike. Step 2: care or safety
+        // cards first, with whose they are; cards moved to a later day are left out until that day.
+        urgentFu.length &&
+          { t: plural(urgentFu.length, 'care or safety call or text', 'care or safety calls and texts') + ' today', go: 'followups', bad: true,
+            people: urgentFu.map(fuPerson) },
+        otherFu.length &&
+          { t: plural(otherFu.length, 'call or text', 'calls and texts') + ' to follow up', go: 'followups', bad: true,
+            people: otherFu.map(fuPerson) }
       ].filter(Boolean),
       clear: 'Nobody is waiting on a call.'
     });

@@ -288,7 +288,11 @@ export function createLeadAlerts(deps) {
     const comm = await setting('comm_center', null);
     let followups;
     if (comm && comm.live === true) {
-      followups = (await q(`select title as name, due_at as since from cds_tasks where area='followup' and done_at is null order by due_at`)).map(f => ({ name: f.name, since: f.since }));
+      // Step 2: care or safety first, whose it is, and a card moved to a later day waits for that day.
+      const people = Array.isArray(comm.people) ? comm.people : [];
+      const nameOf = e => { const p = people.find(x => String(x.email || '').toLowerCase() === String(e || '').toLowerCase()); return p ? p.name : (e ? String(e).split('@')[0].replace(/^./, x => x.toUpperCase()) : ''); };
+      followups = (await q(`select title as name, due_at as since, urgent, owner, later_until::text as later from cds_tasks where area='followup' and done_at is null order by urgent desc, due_at`))
+        .map(f => ({ name: f.name, since: f.since, urgent: !!f.urgent, owner: nameOf(f.owner), later: f.later || null }));
     }
     // Central noon today, read in the server's own (UTC) clock, so "today" is Missouri's today.
     const noon = new Date(Date.UTC(c.y, c.m - 1, c.d, 12));

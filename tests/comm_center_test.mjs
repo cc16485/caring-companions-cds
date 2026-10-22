@@ -76,6 +76,19 @@ await pg.exec(`create table agency_data (id uuid primary key default gen_random_
 const SQL = strip(readFileSync(ROOT + '/comm_center.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
 ok(true, 'comm_center.sql runs twice');
+// step 2 (2026-10-22): run twice too; a changed owner survives a second run
+const SQL2 = strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8'));
+await pg.exec(SQL2);
+await pg.query(`update cds_match_settings set value = jsonb_set(value, '{owners,other}', '"samantha@mo-care.com"') where key='comm_center'`);
+await pg.exec(SQL2);
+{
+  const v = (await pg.query(`select value from cds_match_settings where key='comm_center'`)).rows[0].value;
+  ok(v.owners.enrollment === 'zach@mo-care.com' && v.owners.pay === 'samantha@mo-care.com' && v.owners.concern === 'samantha@mo-care.com' && v.owners.not_sure === 'zach@mo-care.com',
+     'step 2: her approved owners, Zach for all but Pay and Concern');
+  ok(v.owners.other === 'samantha@mo-care.com', 'running step 2 again never undoes an owner changed on the Switches page');
+  ok(v.live === false && v.people.length === 2, 'still practice; Samantha and Zach can own cards');
+  await pg.query(`update cds_match_settings set value = jsonb_set(value, '{owners,other}', '"zach@mo-care.com"') where key='comm_center'`);
+}
 const s0 = (await pg.query(`select value from cds_match_settings where key='comm_center'`)).rows[0].value;
 ok(s0.live === false && s0.history_days === 30, 'starts in practice, 30 days of history');
 for (const role of ['anon', 'authenticated']) {
@@ -141,7 +154,8 @@ ok(r.ok && r.saved === 5, 'saved 5 calls (the old one included)');
 let o = await open();
 eq(o.map(t => t.title + '|' + t.kind).sort(), ['Ruth Caldwell|followup', 'Unknown number|who_is_this'], 'cards: Ruth, and Who is this');
 const ruth = o.find(t => t.title === 'Ruth Caldwell');
-ok(ruth.person_ref === 'consumer:c1' && ruth.owner === null, 'Ruth is the consumer; Nobody yet owns it');
+ok(ruth.person_ref === 'consumer:c1' && ruth.owner === 'zach@mo-care.com' && ruth.need === 'not_sure' && ruth.need_by === 'hub',
+   'Ruth is the consumer; a missed call with no words is Not sure yet, so Zach owns it (step 2)');
 ok(/Voicemail, 41 seconds/.test(ruth.events[0].text) && ruth.events.length === 1, 'the old missed call is not on the card');
 ok((await pg.query(`select count(*)::int n from cds_comms where staff_name='Samantha Troutman'`)).rows[0].n === 1, 'who on our team answered');
 
@@ -335,12 +349,127 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   ok(!(await open()).some(t => t.events[0] && t.events[0].id === 'an3'), 'and it does not come back');
 }
 
+// ---------- step 2: need, owner, care or safety, later, check-in calls ----------
+{
+  // the words (her approved list)
+  const tx = t => [{ kind: 'text', text: 'Texted: "' + t + '"', at: at(0) }];
+  eq(C.guessNeed('lead', []), 'enrollment', 'a lead is Enrollment');
+  eq(C.guessNeed('applicant', tx('my check')), 'enrollment', 'an applicant is Enrollment, whatever the words');
+  eq(C.guessNeed('attendant', tx('My check was short this week')), 'pay', '"check" is Pay');
+  eq(C.guessNeed('attendant', tx('The app will not let me clock in')), 'evv', '"clock" or "app" is Clock-in & EVV');
+  eq(C.guessNeed('consumer', tx('My attendant did not come today')), 'attendant_change', '"did not come" is Attendant change');
+  eq(C.guessNeed('consumer', tx('I want to make a complaint')), 'concern', '"complaint" is Concern or complaint');
+  eq(C.guessNeed('consumer', tx('Can I get more hours?')), 'hours', '"hours" is Hours & care plan');
+  eq(C.guessNeed('consumer', [{ kind: 'missed', text: 'Missed call. No voicemail.', at: at(0) }]), 'not_sure', 'a missed call with no words is Not sure yet');
+  const nowMs = Date.parse(at(10));
+  eq(C.urgentWhy('consumer', tx('My attendant did not come today and nobody is here for lunch'), nowMs), 'The text says "did not come".', 'care or safety words, said back on the card');
+  for (const w of ['no show', 'nobody is here', 'fell', 'hospital', '911', 'hurt', 'no food'])
+    ok(C.urgentWhy('family', tx('Mom ' + w + ' today'), nowMs) !== '', 'care or safety word: ' + w);
+  ok(/cannot clock in/.test(C.urgentWhy('attendant', tx('The app will not let me clock in'), nowMs)), 'an attendant who cannot clock in today is care or safety');
+  eq(C.urgentWhy('attendant', [{ kind: 'text', text: 'Texted: "app will not clock me in"', at: at(-24 * 60) }], nowMs), '', 'but not a day later');
+  eq(C.urgentWhy('consumer', tx('What time is my shift?'), nowMs), '', 'ordinary words are not');
+  ok(C.NEEDS.length === 8 && !/—/.test(JSON.stringify(C.NEEDS)), 'eight needs, no em dashes');
+
+  // on real cards
+  text('4175550144', 'Marcus Webb', 210, 'inbound', 'The app will not let me clock in');
+  text('4175550177', 'Lena', 211, 'inbound', 'Mom fell this morning, she is ok but sore');
+  call('4175550188', 'Tom Hensley', 212, 'inbound', 'no-answer', 0);
+  await tick(225);
+  const by = async ph => (await open()).find(t => t.phone10 === ph);
+  let mc = await by('4175550144'), lc = await by('4175550177'), tc = await by('4175550188');
+  ok(mc.need === 'evv' && mc.urgent && /cannot clock in/.test(mc.urgent_why) && mc.owner === 'zach@mo-care.com', 'Marcus: Clock-in & EVV, care or safety, Zach');
+  ok(lc.urgent && lc.urgent_why === 'The text says "fell".' && lc.need === 'not_sure', 'Lena: care or safety because the text says "fell"');
+  ok(tc.need === 'enrollment' && !tc.urgent && tc.owner === 'zach@mo-care.com', 'Tom the lead: Enrollment, Zach');
+
+  // a person's choice wins, and the hub never changes it back
+  await comms.setNeed('samantha@mo-care.com', { id: tc.id, need: 'pay' });
+  tc = await by('4175550188');
+  ok(tc.need === 'pay' && tc.need_by === 'samantha@mo-care.com' && tc.owner === 'samantha@mo-care.com', 'changing the need moves the owner to that need\'s owner');
+  await comms.setOwner('samantha@mo-care.com', { id: tc.id, owner: '' });
+  await comms.setNeed('samantha@mo-care.com', { id: tc.id, need: 'evv' });
+  tc = await by('4175550188');
+  ok(tc.owner === null && tc.owner_by === 'samantha@mo-care.com' && tc.need === 'evv', 'an owner a person picked (here Nobody yet) stays when the need changes');
+  await comms.setUrgent('samantha@mo-care.com', { id: lc.id, on: false });
+  await comms.setUrgent('zach@mo-care.com', { id: tc.id, on: true });
+  await tick(230);
+  lc = await by('4175550177'); tc = await by('4175550188');
+  ok(!lc.urgent && lc.urgent_by === 'samantha@mo-care.com', '"Not care or safety" stays, even with the words still on the card');
+  ok(tc.urgent && tc.urgent_why === 'Marked care or safety by Zach.' && tc.need === 'evv' && tc.owner === null, 'a person can mark one; the next run changes none of it');
+  let threw = false; try { await comms.setOwner('x', { id: tc.id, owner: 'stranger@x.com' }); } catch (e) { threw = e instanceof C.CommsError; }
+  ok(threw, 'only Samantha or Zach can own a card');
+  threw = false; try { await comms.setNeed('x', { id: tc.id, need: 'lunch' }); } catch (e) { threw = e instanceof C.CommsError; }
+  ok(threw, 'only a need from the list');
+
+  // later this week
+  const tomorrow = C.chicagoDay(NOW + 86400000);
+  await comms.setLater('zach@mo-care.com', { id: mc.id, date: tomorrow });
+  let q2 = await comms.queue();
+  ok(q2.cards.find(c => c.id === mc.id).later === tomorrow && q2.today === C.chicagoDay(NOW), 'moved to tomorrow; the page knows Missouri\'s today');
+  for (const bad of [C.chicagoDay(NOW), C.chicagoDay(NOW + 20 * 86400000), 'soon']) {
+    threw = false; try { await comms.setLater('x', { id: mc.id, date: bad }); } catch (e) { threw = e instanceof C.CommsError; }
+    ok(threw, 'a later day must be after today and within two weeks: ' + bad);
+  }
+  text('4175550144', 'Marcus Webb', 232, 'inbound', 'Still cannot get in, please call');
+  await tick(245);
+  ok((await by('4175550144')).later_until === null, 'a new text brings a moved card back to today');
+  await comms.setLater('zach@mo-care.com', { id: mc.id, date: tomorrow });
+  await comms.setLater('zach@mo-care.com', { id: mc.id, date: null });
+  ok((await by('4175550144')).later_until === null, '"Back to today" clears it');
+
+  // what the page gets
+  q2 = await comms.queue();
+  const tv = q2.cards.find(c => c.id === tc.id), lv = q2.cards.find(c => c.id === lc.id);
+  ok(q2.needs.length === 8 && q2.people.map(p => p.name).join() === 'Samantha,Zach', 'the page gets the needs and who can own a card');
+  ok(tv.needLabel === 'Clock-in & EVV' && tv.needByHub === false && tv.urgent && tv.urgentWhy === 'Marked care or safety by Zach.', 'card: need label, who picked it, why it is care or safety');
+  ok(lv.needByHub === true && lv.urgent === false && lv.urgentWhy === '', 'card: a hub-picked need, not care or safety');
+  for (const a of ['comm_need', 'comm_owner', 'comm_urgent', 'comm_later'])
+    ok((await pg.query(`select count(*)::int n from cds_audit where action=$1`, [a])).rows[0].n >= 1, 'recorded in the audit log: ' + a);
+
+  // the check-in tap: answered calls of 3 minutes or more with a consumer or their family
+  call('4175550177', 'Lena', 250, 'outbound', 'completed', 240, 'u-k');
+  call('4175550131', 'Ruth Caldwell', 252, 'inbound', 'completed', 120, 'u-s');
+  await tick(255);
+  const ci = await comms.checkins();
+  ok(ci.month === '2026-10' && ci.calls.length === 1, 'one consumer, once, newest call (Ruth: ' + ci.calls.length + ')');
+  const rc = ci.calls[0];
+  ok(rc.consumerId === 'c1' && rc.name === 'Ruth Caldwell' && rc.family && rc.whoName === 'Lena' && rc.who === 'Daughter of Ruth Caldwell' && rc.minutes === 4 && rc.staff === 'Krystal Smith' && rc.day === '2026-10-22',
+     'Lena\'s 4 minute call counts for Ruth, marked family; the 2 minute call does not');
+  ok(!ci.calls.some(x => x.name === 'Tom Hensley'), 'a lead\'s call is never a check-in');
+  ok((await pg.query(`select data_value from agency_data where data_key='consumers'`)).rows[0].data_value[0].contacts === undefined, 'listing calls records no check-in');
+
+  // Who owns each need, on the Switches page
+  const sw = SW.createSwitches({ db, now: () => NOW });
+  const l = await sw.list('zach@mo-care.com');
+  ok(!l.canChange && l.needOwners.needs.length === 8 && l.needOwners.needs.find(n => n.key === 'pay').owner === 'samantha@mo-care.com', 'everyone sees who owns each need');
+  threw = false; try { await sw.setNeedOwner('zach@mo-care.com', 'pay', 'zach@mo-care.com'); } catch (e) { threw = e.status === 403; }
+  ok(threw, 'only Samantha changes it');
+  const m = await sw.handle('samantha@mo-care.com', { action: 'set_need_owner', need: 'pay', owner: 'zach@mo-care.com' });
+  ok(m.message === 'Done. New Pay cards go to Zach.', 'her change, said back: ' + m.message);
+  ok((await sw.list('x')).needOwners.needs.find(n => n.key === 'pay').owner === 'zach@mo-care.com', 'saved');
+  ok((await pg.query(`select count(*)::int n from cds_audit where action='need_owner'`)).rows[0].n === 1, 'and recorded');
+  threw = false; try { await sw.setNeedOwner('samantha@mo-care.com', 'pay', 'stranger@x.com'); } catch (e) { threw = true; }
+  ok(threw, 'only someone from the list');
+  await sw.setNeedOwner('samantha@mo-care.com', 'pay', 'samantha@mo-care.com');
+  const v = (await pg.query(`select value from cds_match_settings where key='comm_center'`)).rows[0].value;
+  ok(v.live === false && v.state && v.state.last_run, 'changing an owner leaves the switch and the job\'s state alone');
+
+  // nothing in step 2 sends anything
+  const src = readFileSync(ROOT + '/supabase/functions/_shared/office/comms.js', 'utf8');
+  ok(!/fetch\(|sendMessage|sms|ghl\.send/i.test(src.slice(src.indexOf('step 2: what a person can change'), src.indexOf('async function audit'))), 'the step 2 actions only write the hub\'s own cards');
+}
+
 // ---------- Today and the switch ----------
 {
   const steps = R.dailyRoutine({ consumers: [], pipeline: [], followups: [{ name: 'Ruth Caldwell', since: at(52) }] }, new Date(T0));
   const s4 = steps.find(s => s.n === 4);
   ok(s4.items.some(i => /1 call or text to follow up/.test(i.t) && i.go === 'followups'), 'Today step 4 lists follow-ups once handed in');
   ok(!R.dailyRoutine({ consumers: [], pipeline: [] }, new Date(T0)).find(s => s.n === 4).items.length, 'and says nothing when not live');
+  const s4b = R.dailyRoutine({ consumers: [], pipeline: [], followups: [
+    { name: 'Ruth Caldwell', since: at(52), urgent: true, owner: 'Zach' }, { name: 'Tom Hensley', since: at(60), owner: 'Samantha' },
+    { name: 'June Pruitt', since: at(60), later: '2099-01-01' }] }, new Date(T0)).find(s => s.n === 4);
+  const ui = s4b.items.find(i => /care or safety/.test(i.t)), oi = s4b.items.find(i => /to follow up/.test(i.t));
+  ok(ui && ui.t === '1 care or safety call or text today' && ui.people[0].name === 'Ruth Caldwell (Zach)' && s4b.items.indexOf(ui) < s4b.items.indexOf(oi), 'Today: care or safety first, with whose it is');
+  ok(oi && oi.t === '1 call or text to follow up' && !oi.people.some(p => /June/.test(p.name)), 'a card moved to a later day waits for that day');
   const sw = SW.SWITCHES.find(x => x.key === 'comm_center');
   ok(sw && sw.field === 'live' && !/—/.test(sw.does({}) + sw.on + sw.off), 'the switch is on the Switches page, no em dashes');
 }
@@ -359,6 +488,13 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   const hp = readFileSync(ROOT + '/caregiver-match/hub-packet.js', 'utf8');
   ok((hp.match(/cds-comm-history/g) || []).length === 2 && /hub-packet\.js\?v=3/.test(html), 'and on both attendant cards');
   ok(/&& !c\.fromComms\) : \[\];/.test(html), 'the lead profile\'s logged calls leave out the ones read from GoHighLevel');
+  const a2 = html.indexOf('// ---- Step 2: need, owner, care or safety'), b2 = html.indexOf('// "Calls and texts" on a profile');
+  ok(a2 > 0 && b2 > a2 && !/—/.test(html.slice(a2, b2)) && !/—/.test(html.slice(html.indexOf('function needOwnersHtml'), html.indexOf('async function swNeedOwner'))), 'step 2 page code: no em dashes');
+  ok(/id="fuTiles"/.test(html) && /id="fuCheckins"/.test(html) && /id="fuFilters"/.test(html), 'step 2: tiles, check-in panel and filters on the page');
+  ok(/onchange="fuSet\(\\'' \+ id \+ '\\',\\'set_need\\'/.test(html) && /'urgent',\{on:/.test(html.replace(/\\'/g, "'")), 'cards change need, owner and care or safety through the server');
+  ok(/id="clm_from"/.test(html) && /document\.getElementById\('clm_from'\)\.style\.display = 'none';/.test(html), 'the check-in form says when it was filled in from a call, and forgets it next time');
+  ok(/openContactLog\(c\.id, ongoingRequirements\(c\)\.monthly\.thisMonth\)/.test(html) && !/contacts\[[^\]]*\] *=/.test(html.slice(a2, b2)), 'the check-in tap opens the existing form and never saves a check-in itself');
+  ok(/action: 'set_need_owner'/.test(html), 'Who owns each need on the Switches page');
   ok(!/sendMessage|\/conversations\/messages'/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8')), 'the server function never sends');
   ok(!/method: 'POST'|method: "POST"/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8').split('Deno.serve')[0]), 'it only reads GoHighLevel (no POST to it)');
 }
