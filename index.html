@@ -677,10 +677,16 @@ button.fu-tile.check span { color:#14606F; }
     </div>
   </div>
 
-  <div id="cdsGoal" style="margin-bottom:18px"></div>
   <div id="dailyRoutine" style="margin-bottom:18px"></div>
   <div id="todayComing" style="margin-bottom:18px"></div>
 
+</div>
+
+<!-- ==================== GOALS ====================
+     Her ask 2026-10-22: the New CDS consumers card gets its own Goals tab inside Today
+     instead of sitting at the top of Today. Same id, so renderCdsGoal fills it. Hash #goals. -->
+<div id="page-goals" class="page">
+  <div id="cdsGoal" style="margin-bottom:18px"></div>
 </div>
 
 <!-- ==================== DASHBOARD (numbers) ====================
@@ -4590,7 +4596,7 @@ function _enableRealtime() {
         const active = document.querySelector('.page.active');
         if (active) {
           const id = active.id.replace('page-','');
-          if (id === 'dashboard' || id === 'numbers') updateDashboard();
+          if (id === 'dashboard' || id === 'numbers' || id === 'goals') updateDashboard();
           if (id === 'consumers')    { renderConsumers(); renderPipeline(); }
           if (id === 'attendants')   renderAttendants();
           if (id === 'activeattendants') renderAttendantCheck();
@@ -4671,7 +4677,9 @@ const SECTIONS = [
       { page: 'dashboard', label: 'Today' },
       { page: 'followups', label: 'Follow-ups', count: () => (typeof _comm !== 'undefined' && _comm && Array.isArray(_comm.cards) ? _comm.cards.length : 0) },
       // The old Dashboard numbers, their own tab (her ask 2026-10-22).
-      { page: 'numbers',   label: 'Dashboard' } ] },
+      { page: 'numbers',   label: 'Dashboard' },
+      // New CDS consumers card, its own tab (her ask 2026-10-22).
+      { page: 'goals',     label: 'Goals' } ] },
   { id: 'leads',      label: 'Leads',       tabs: [] },
   { id: 'consumers',  label: 'Consumers',   chips: true, tabs: [
       { page: 'consumers',      label: 'Everyone' },
@@ -4699,7 +4707,7 @@ const PAGE_TO_SECTION = (() => {
   SECTIONS.forEach(sec => sec.tabs.forEach(t => { m[t.page] = sec.id; }));
   // Pages with no tab of their own, and section ids used bare.
   Object.assign(m, {
-    dashboard: 'today', today: 'today', followups: 'today', numbers: 'today',
+    dashboard: 'today', today: 'today', followups: 'today', numbers: 'today', goals: 'today',
     pipeline: 'leads', statesubmissions: 'leads', leadprofile: 'leads', leads: 'leads',
     profile: 'consumers',
     attendants: 'attendants', roster: 'attendants', backuppool: 'attendants', caregiverpool: 'attendants',
@@ -4803,7 +4811,7 @@ function showPage(id) {
   renderMainTabs(section);
   renderSectionNav(section, roster ? 'activeattendants' : id);
 
-  if (id === 'dashboard' || id === 'numbers') updateDashboard();
+  if (id === 'dashboard' || id === 'numbers' || id === 'goals') updateDashboard();
   if (id === 'automations') {
     renderAutomations();
     const u = document.getElementById('sw_user');
