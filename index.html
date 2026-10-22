@@ -4639,7 +4639,10 @@ function importData(event) {
 // page div and every old hash still works. Old hashes are live GoHighLevel
 // menu links: never make her edit GoHighLevel first.
 const SECTIONS = [
-  { id: 'today',      label: 'Today',       tabs: [] },
+  // Follow-ups (Communication Center, 2026-10-22) is a tab inside Today, her call. The count is the open cards.
+  { id: 'today',      label: 'Today',       tabs: [
+      { page: 'dashboard', label: 'Today' },
+      { page: 'followups', label: 'Follow-ups', count: () => (typeof _comm !== 'undefined' && _comm && Array.isArray(_comm.cards) ? _comm.cards.length : 0) } ] },
   { id: 'leads',      label: 'Leads',       tabs: [] },
   { id: 'consumers',  label: 'Consumers',   chips: true, tabs: [
       { page: 'consumers',      label: 'Everyone' },
@@ -4716,7 +4719,7 @@ function renderSectionNav(activeSection, activePage) {
   if (!sec || !sec.tabs.length) { nav.innerHTML = ''; return; }
   nav.innerHTML = (sec.chips ? '<span class="nav-lead">Show</span>' : '') + sec.tabs.map(t =>
     '<button class="' + (t.page === activePage ? 'on' : '') +
-    '" onclick="showPage(\'' + t.page + '\')">' + esc(t.label) + '</button>').join('');
+    '" onclick="showPage(\'' + t.page + '\')">' + esc(t.label) + (t.count && t.count() ? ' (' + t.count() + ')' : '') + '</button>').join('');
 }
 
 function showPage(id) {
@@ -6767,6 +6770,9 @@ async function commLoad() {
   try { _comm = await _commCall({ action: 'queue' }); } catch (e) { _comm = { error: e.message }; }
   try { _commReached = (await _commCall({ action: 'reached' })).phones || []; } catch (e) { /* the Leads page still works */ }
   commMergeReached();
+  // keep the "Follow-ups (n)" tab count current while Today is open
+  const onPage = (document.querySelector('.page.active') || {}).id || '';
+  if (onPage === 'page-dashboard' || onPage === 'page-followups') renderSectionNav('today', onPage.replace('page-', ''));
   if (!_commTimer) _commTimer = setInterval(() => commLoad().then(() => {
     if (document.getElementById('page-followups')?.classList.contains('active')) renderFollowups(false);
     try { renderDailyRoutine(); } catch (e) {}
