@@ -922,15 +922,11 @@ input, select, textarea { border-radius:10px; }
   <!-- ── ACTIVE CONSUMERS SUB-SECTION ── -->
   <div id="csub-active">
 
-  <div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-outline btn-sm" onclick="openBulkContacts()" style="font-size:12px">&#128197; Record completed monthly contacts</button></div>
-  <div id="ongoingReqs" style="margin-bottom:18px"></div>
+    <!-- Just the roster: no alert boxes here (her ask 10-22). New consumers
+         come in through Leads, so there is no Add Consumer button. -->
     <div class="section-header">
       <div class="section-title">Consumer Roster</div>
-      <button class="btn btn-primary" onclick="openModal('addConsumerModal')">+ Add Consumer</button>
-    </div>
-
-    <div class="alert alert-info">
-      ℹ️ Agency must perform case management with each consumer <strong>at least monthly</strong>, and conduct an <strong>annual face-to-face home visit</strong>. Consumers must be trained on: timesheet prep, fraud identification, allowable tasks, attendant rights, and abuse/neglect/exploitation recognition.
+      <button class="btn btn-outline btn-sm" onclick="openBulkContacts()" style="font-size:12px">&#128197; Record completed monthly contacts</button>
     </div>
 
     <div class="card">
@@ -947,7 +943,7 @@ input, select, textarea { border-radius:10px; }
           </thead>
           <tbody id="consumerTableBody">
             <tr id="emptyConsumerRow">
-              <td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers added yet.<br>Click "Add Consumer" to get started.</p></div></td>
+              <td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td>
             </tr>
           </tbody>
         </table>
@@ -5068,7 +5064,7 @@ function renderConsumers() {
   document.getElementById('currentMonthLabel').textContent = MONTHS[now.getMonth()] + ' ' + now.getFullYear();
 
   if (consumers.length === 0) {
-    tbody.innerHTML = '<tr id="emptyConsumerRow"><td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers added yet.<br>Click "Add Consumer" to get started.</p></div></td></tr>';
+    tbody.innerHTML = '<tr id="emptyConsumerRow"><td colspan="12"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td></tr>';
     document.getElementById('monthlyContactHistory').innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>';
     return;
   }
