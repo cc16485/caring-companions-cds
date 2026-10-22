@@ -257,6 +257,15 @@ export function createLeadAlerts(deps) {
     const s = await store(['consumers', 'pipeline', 'authorizations', 'attendantWages']);
     const siteLeads = await q('select * from site_leads where agency_id=$1 and not coalesce(archived,false)', [AGENCY_ID]);
     const calls = await callsFor(siteLeads.map(r => r.id));
+    // Communication Center (2026-10-22): once live, its follow-ups join step 4, and a website lead the
+    // office has texted or talked to on the phone counts as called.
+    const comm = await setting('comm_center', null);
+    let followups;
+    if (comm && comm.live === true) {
+      followups = (await q(`select title as name, due_at as since from cds_tasks where area='followup' and done_at is null order by due_at`)).map(f => ({ name: f.name, since: f.since }));
+      const reached = new Set((await q(`select distinct phone10 from cds_comms where (direction='outbound' and channel='sms') or (channel='call' and answered)`)).map(r => r.phone10));
+      for (const r of siteLeads) { const p = String(r.phone || '').replace(/\D/g, '').slice(-10); if (p.length === 10 && reached.has(p)) calls.push({ site_lead_id: r.id }); }
+    }
     // Central noon today, read in the server's own (UTC) clock, so "today" is Missouri's today.
     const noon = new Date(Date.UTC(c.y, c.m - 1, c.d, 12));
     // The daily WellSky check joins the email only once it is live (setting wellsky_check.live).
@@ -266,7 +275,7 @@ export function createLeadAlerts(deps) {
       ? globalThis.CDSWellSky.items(Object.assign({}, ws.wellskyCheck || { lastRun: { ok: false, why: 'never ran' } }, { live: true }), ws.wellskyReviewed || {}, noon)
       : [];
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
-                                   attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems }, noon);
+                                   attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems, followups }, noon);
     const pipeline = s.pipeline || [];
     // The attendant check against WellSky joins the email only once setting attendant_check.live is true.
     const acfg = await setting('attendant_check', null);

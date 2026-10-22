@@ -137,7 +137,9 @@ export function mountHubPacket(el, opts) {
 
       <h3>Signed forms</h3>
       <dl>${Object.values(g.forms).map(f => `<dt>${esc(f.title)}</dt><dd>${esc(f.signed_name)}, ${esc(fmtD(f.signed_at))}${f.countersigned_at ? ' · countersigned by ' + esc(f.countersigned_name) : ''}</dd>`).join('') || '<dt>None yet</dt><dd></dd>'}</dl>
+      <div class="cds-comm-history" data-refs="pool:${esc(id)}" data-phones="${esc(g.pool.phone || '')}"></div>
       <div class="err" id="hp_err"></div></div>`;
+    if (window.cdsCommHistory) window.cdsCommHistory(el);
   }
   function openRosterCard(id) {
     const a = roster().find(x => x.id === id); if (!a) { draw(); return; }
@@ -152,7 +154,9 @@ export function mountHubPacket(el, opts) {
       ${d.rows.map(r => `<tr><td><b>${r.k}</b></td><td>${esc(fmtD(r.done)) || 'Not on the Roster'}${r.auto ? ' <span class="small">(checked automatically)</span>' : ''}</td><td>${r.due ? `<span class="pill ${r.tone}">${esc(fmtD(r.due))}</span>` : ''}</td></tr>`).join('')}
       </tbody></table>
       <p class="small">OIG every month, EDL every 3 months, FCSR every year (the hub's onboarding checklist).</p>
-      <div class="btns"><button class="btn" data-act="roster">Update on the Roster</button></div></div>`;
+      <div class="btns"><button class="btn" data-act="roster">Update on the Roster</button></div>
+      <div class="cds-comm-history" data-refs="attendant:${esc(a.id)}" data-phones="${esc(a.phone || '')}"></div></div>`;
+    if (window.cdsCommHistory) window.cdsCommHistory(el);
   }
 
   async function onClick(e) {

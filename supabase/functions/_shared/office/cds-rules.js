@@ -215,7 +215,12 @@
         waiting.length && { t: waiting.length + ' new ' + (waiting.length !== 1 ? 'enquiries' : 'enquiry') + ' from the website, never contacted', go: 'pipeline', bad: true,
                             people: waiting },
         follow.length  && { t: plural(follow.length, 'follow-up', 'follow-ups') + ' due today or overdue', go: 'pipeline',
-                            people: follow.map(p => ({ name: p.name, county: p.county || '', at: '' })) }
+                            people: follow.map(p => ({ name: p.name, county: p.county || '', at: '' })) },
+        // Communication Center (2026-10-22): missed calls and unanswered texts. Only handed in once
+        // setting comm_center.live is true, by the hub and the 8am email alike.
+        Array.isArray(data.followups) && data.followups.length &&
+          { t: plural(data.followups.length, 'call or text', 'calls and texts') + ' to follow up', go: 'followups', bad: true,
+            people: data.followups.map(f => ({ name: f.name || 'Unknown number', county: '', at: f.since || '' })) }
       ].filter(Boolean),
       clear: 'Nobody is waiting on a call.'
     });
