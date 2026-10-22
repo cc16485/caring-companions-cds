@@ -2794,112 +2794,91 @@ input, select, textarea { border-radius:10px; }
 
 <!-- Add Consumer Modal -->
 <!-- MONTHLY CONTACT LOG MODAL -->
+<!-- 2026-10-22 her ask: less busy, wide enough to fit without scrolling.
+     Two columns, Yes/No buttons, and a notes box only shows when an answer
+     needs explaining. Field ids and radio names are unchanged. -->
+<style>
+  #contactLogModal .modal { width: 1040px; max-width: 96vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  #contactLogModal .clm-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 26px; border-bottom: 1px solid var(--gray-200); }
+  #contactLogModal .clm-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 28px; padding: 20px 26px; overflow-y: auto; }
+  #contactLogModal .clm-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 26px; border-top: 1px solid var(--gray-200); }
+  #contactLogModal .clm-lbl { font-size: 12.5px; font-weight: 600; color: var(--gray-600); display: block; margin: 0 0 4px; }
+  #contactLogModal .clm-field { margin-bottom: 14px; }
+  #contactLogModal .clm-q { padding: 11px 0; border-bottom: 1px solid var(--gray-200); }
+  #contactLogModal .clm-q:last-child { border-bottom: 0; }
+  #contactLogModal .clm-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  #contactLogModal .clm-row > span:first-child { font-size: 14px; }
+  #contactLogModal .clm-seg { display: inline-flex; flex: none; border: 1px solid var(--gray-200); border-radius: 999px; overflow: hidden; }
+  #contactLogModal .clm-seg label { margin: 0; cursor: pointer; }
+  #contactLogModal .clm-seg input { position: absolute; opacity: 0; pointer-events: none; }
+  #contactLogModal .clm-seg span { display: block; padding: 6px 16px; font-size: 13px; color: var(--gray-600); }
+  #contactLogModal .clm-seg input:checked + span { background: var(--primary); color: white; }
+  #contactLogModal .clm-seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
+  #contactLogModal .form-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1.5px solid var(--gray-200); border-radius: 8px; font: inherit; font-size: 14px; background: white; }
+  #contactLogModal .form-input:focus { outline: none; border-color: var(--primary-light); }
+  #contactLogModal .clm-note { margin-top: 8px; font-size: 13px; }
+  @media (max-width: 760px) { #contactLogModal .clm-body { grid-template-columns: 1fr; } }
+</style>
 <div class="modal-overlay" id="contactLogModal">
-  <div class="modal" style="max-width:560px">
-    <div class="modal-header" style="background:var(--primary)">
-      <div class="modal-title" style="color:white">📞 Monthly Contact Log — <span id="clm_name"></span></div>
-      <button class="modal-close" onclick="closeModal('contactLogModal')" style="color:white">×</button>
+  <div class="modal">
+    <div class="clm-head">
+      <div class="modal-title">Monthly check-in call: <span id="clm_name"></span></div>
+      <button class="modal-close" onclick="closeModal('contactLogModal')" aria-label="Close">×</button>
     </div>
-    <div id="clm_dhss_alert" style="display:none;background:#fdedec;border-left:4px solid var(--danger);padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:12px">
-      ⚠️ <strong>DHSS Notification Required.</strong> A significant change was noted. Notify DHSS within <strong>10 days</strong> per your policy agreement.
-    </div>
-    <div id="clm_existing_note" style="display:none;background:#eaf4fb;border-left:4px solid var(--accent);padding:10px 14px;font-size:13px;margin-bottom:12px">
-      📋 A contact is already logged for this month. Saving will overwrite it.
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+    <div class="clm-body">
       <div>
-        <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Date of Contact *</label>
-        <input type="date" id="clm_date" class="form-input" style="margin-top:4px">
+        <div id="clm_existing_note" style="display:none;background:var(--gray-100);border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px">
+          A call is already logged for this month. Saving replaces it.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="clm-field"><label class="clm-lbl" for="clm_date">Date *</label><input type="date" id="clm_date" class="form-input"></div>
+          <div class="clm-field"><label class="clm-lbl" for="clm_method">How *</label>
+            <select id="clm_method" class="form-input">
+              <option value="">Choose</option>
+              <option value="phone">Phone call</option>
+              <option value="in-person">In person</option>
+              <option value="video">Video call</option>
+              <option value="text">Text message</option>
+            </select></div>
+        </div>
+        <div class="clm-field"><label class="clm-lbl" for="clm_person">Who we talked to</label>
+          <select id="clm_person" class="form-input">
+            <option value="consumer">Consumer</option>
+            <option value="family">Family member or representative</option>
+            <option value="attendant">Attendant</option>
+            <option value="other">Other</option>
+          </select></div>
+        <div class="clm-field" style="margin-bottom:0"><label class="clm-lbl" for="clm_notes">Notes from the call</label>
+          <textarea id="clm_notes" class="form-input" rows="7" placeholder="Anything worth remembering" style="resize:vertical"></textarea></div>
       </div>
+
       <div>
-        <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Contact Method *</label>
-        <select id="clm_method" class="form-input" style="margin-top:4px">
-          <option value="">— Select —</option>
-          <option value="phone">📞 Phone Call</option>
-          <option value="in-person">🏠 In-Person Visit</option>
-          <option value="video">💻 Video Call</option>
-          <option value="text">💬 Text Message</option>
-        </select>
+        <div class="clm-lbl" style="margin-bottom:2px">Missouri asks these every month</div>
+        <div class="clm-q"><div class="clm-row"><span>Is the plan of care still right?</span>
+          <span class="clm-seg"><label><input type="radio" name="clm_poc" value="yes" onchange="clmRefresh()"><span>Yes</span></label><label><input type="radio" name="clm_poc" value="no" onchange="clmRefresh()"><span>No, needs update</span></label></span></div></div>
+        <div class="clm-q"><div class="clm-row"><span>Are hours on track with what's authorized?</span>
+          <span class="clm-seg"><label><input type="radio" name="clm_util" value="yes" onchange="clmRefresh()"><span>Yes</span></label><label><input type="radio" name="clm_util" value="no" onchange="clmRefresh()"><span>No</span></label></span></div>
+          <input type="text" id="clm_util_notes" class="form-input clm-note" data-show="clm_util=no" placeholder="What's off with the hours?"></div>
+        <div class="clm-q"><div class="clm-row"><span>Happy with the care?</span>
+          <span class="clm-seg"><label><input type="radio" name="clm_sat" value="yes" onchange="clmRefresh()"><span>Yes</span></label><label><input type="radio" name="clm_sat" value="no" onchange="clmRefresh()"><span>No, concern</span></label></span></div>
+          <input type="text" id="clm_sat_notes" class="form-input clm-note" data-show="clm_sat=no" placeholder="What's the concern?"></div>
+        <div class="clm-q"><div class="clm-row"><span>Any change in health or ability to self-direct?</span>
+          <span class="clm-seg"><label><input type="radio" name="clm_health" value="no" checked onchange="clmRefresh()"><span>No</span></label><label><input type="radio" name="clm_health" value="yes" onchange="clmRefresh()"><span>Yes</span></label></span></div>
+          <input type="text" id="clm_health_notes" class="form-input clm-note" data-show="clm_health=yes" placeholder="What changed?"></div>
+        <div class="clm-q"><div class="clm-row"><span>Any change in living situation?</span>
+          <span class="clm-seg"><label><input type="radio" name="clm_circ" value="no" checked onchange="clmRefresh()"><span>No</span></label><label><input type="radio" name="clm_circ" value="yes" onchange="clmRefresh()"><span>Yes</span></label></span></div>
+          <input type="text" id="clm_circ_notes" class="form-input clm-note" data-show="clm_circ=yes" placeholder="What changed?"></div>
+        <div id="clm_dhss_alert" style="display:none;background:#fdedec;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--danger);margin:4px 0 6px">
+          <strong>Tell DHSS within 10 days.</strong> A change like this can affect the care plan.
+        </div>
+        <div class="clm-q"><div class="clm-row"><span>Any complaints?</span>
+          <span class="clm-seg"><label><input type="radio" name="clm_complaint" value="no" checked onchange="clmRefresh()"><span>No</span></label><label><input type="radio" name="clm_complaint" value="yes" onchange="clmRefresh()"><span>Yes</span></label></span></div>
+          <input type="text" id="clm_complaint_notes" class="form-input clm-note" data-show="clm_complaint=yes" placeholder="What was it, and what did we do?"></div>
       </div>
     </div>
-
-    <div style="margin-bottom:14px">
-      <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Who Was Contacted?</label>
-      <select id="clm_person" class="form-input" style="margin-top:4px">
-        <option value="consumer">Consumer directly</option>
-        <option value="family">Family member / representative</option>
-        <option value="attendant">Attendant</option>
-        <option value="other">Other</option>
-      </select>
-    </div>
-
-    <div style="background:var(--gray-100);border-radius:8px;padding:14px;margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Missouri Required Assessments</div>
-
-      <div style="margin-bottom:10px">
-        <label style="font-size:13px;font-weight:600">Is the current plan of care still appropriate?</label>
-        <div style="display:flex;gap:12px;margin-top:5px">
-          <label style="font-size:13px"><input type="radio" name="clm_poc" value="yes"> ✅ Yes</label>
-          <label style="font-size:13px"><input type="radio" name="clm_poc" value="no"> ❌ No — needs update</label>
-        </div>
-      </div>
-
-      <div style="margin-bottom:10px">
-        <label style="font-size:13px;font-weight:600">Is unit utilization on track with authorized hours?</label>
-        <div style="display:flex;gap:12px;margin-top:5px">
-          <label style="font-size:13px"><input type="radio" name="clm_util" value="yes"> ✅ Yes</label>
-          <label style="font-size:13px"><input type="radio" name="clm_util" value="no"> ❌ No</label>
-        </div>
-        <input type="text" id="clm_util_notes" class="form-input" placeholder="Notes on utilization..." style="margin-top:6px;font-size:12px">
-      </div>
-
-      <div style="margin-bottom:10px">
-        <label style="font-size:13px;font-weight:600">Is the consumer satisfied with the quality of care?</label>
-        <div style="display:flex;gap:12px;margin-top:5px">
-          <label style="font-size:13px"><input type="radio" name="clm_sat" value="yes"> ✅ Yes</label>
-          <label style="font-size:13px"><input type="radio" name="clm_sat" value="no"> ❌ No / Concern raised</label>
-        </div>
-        <input type="text" id="clm_sat_notes" class="form-input" placeholder="Notes on satisfaction..." style="margin-top:6px;font-size:12px">
-      </div>
-
-      <div style="margin-bottom:10px;padding:10px;background:white;border-radius:6px;border:1.5px solid var(--gray-200)">
-        <label style="font-size:13px;font-weight:700;color:var(--danger)">⚠️ Any significant changes in the consumer's health or ability to self-direct?</label>
-        <div style="display:flex;gap:12px;margin-top:5px">
-          <label style="font-size:13px"><input type="radio" name="clm_health" value="no" checked> ✅ No change</label>
-          <label style="font-size:13px"><input type="radio" name="clm_health" value="yes" onchange="checkDhssAlert()"> ⚠️ Yes — change noted</label>
-        </div>
-        <input type="text" id="clm_health_notes" class="form-input" placeholder="Describe change..." style="margin-top:6px;font-size:12px">
-        <div style="font-size:11px;color:var(--danger);margin-top:4px">If yes → report to DHSS. Notify within 10 days of any change affecting the care plan or residence.</div>
-      </div>
-
-      <div style="padding:10px;background:white;border-radius:6px;border:1.5px solid var(--gray-200)">
-        <label style="font-size:13px;font-weight:700;color:var(--warn)">🏠 Any changes in living situation or care plan circumstances?</label>
-        <div style="display:flex;gap:12px;margin-top:5px">
-          <label style="font-size:13px"><input type="radio" name="clm_circ" value="no" checked> ✅ No change</label>
-          <label style="font-size:13px"><input type="radio" name="clm_circ" value="yes" onchange="checkDhssAlert()"> ⚠️ Yes — change noted</label>
-        </div>
-        <input type="text" id="clm_circ_notes" class="form-input" placeholder="Describe change..." style="margin-top:6px;font-size:12px">
-      </div>
-    </div>
-
-    <div style="margin-bottom:14px">
-      <label style="font-size:13px;font-weight:600">Any consumer complaints or concerns?</label>
-      <div style="display:flex;gap:12px;margin-top:5px">
-        <label style="font-size:13px"><input type="radio" name="clm_complaint" value="no" checked> None</label>
-        <label style="font-size:13px"><input type="radio" name="clm_complaint" value="yes"> Yes</label>
-      </div>
-      <input type="text" id="clm_complaint_notes" class="form-input" placeholder="Describe complaint / action taken..." style="margin-top:6px;font-size:12px">
-    </div>
-
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;font-weight:600;color:var(--gray-600)">Contact Notes / Summary</label>
-      <textarea id="clm_notes" class="form-input" rows="3" placeholder="General notes from this contact..." style="margin-top:4px;resize:vertical"></textarea>
-    </div>
-
-    <div style="display:flex;gap:8px;justify-content:flex-end">
+    <div class="clm-foot">
       <button class="btn btn-outline" onclick="closeModal('contactLogModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveContactLog()">💾 Save Contact Log</button>
+      <button class="btn btn-primary" onclick="saveContactLog()">Save call</button>
     </div>
   </div>
 </div>
@@ -5155,7 +5134,7 @@ function openContactLog(cid, key) {
   _clm_key = key;
 
   // Set consumer name
-  document.getElementById('clm_name').textContent = c.name + ' — ' + (key.split('-')[0] === String(new Date().getFullYear()) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(key.split('-')[1])-1] + ' ' + key.split('-')[0] : key);
+  document.getElementById('clm_name').textContent = c.name + ', ' + (key.split('-')[0] === String(new Date().getFullYear()) ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(key.split('-')[1])-1] + ' ' + key.split('-')[0] : key);
 
   // Check if existing log
   const existing = c.contacts && c.contacts[key] && typeof c.contacts[key] === 'object' ? c.contacts[key] : null;
@@ -5188,7 +5167,19 @@ function openContactLog(cid, key) {
     document.getElementById('clm_dhss_alert').style.display = 'block';
   }
 
+  clmRefresh();
   openModal('contactLogModal');
+}
+
+// Show a notes box only when its answer needs explaining, or when it already
+// holds text (an older log), so nothing saved is ever hidden.
+function clmRefresh() {
+  document.querySelectorAll('#contactLogModal [data-show]').forEach(el => {
+    const [name, val] = el.dataset.show.split('=');
+    const picked = document.querySelector('input[name="' + name + '"]:checked')?.value;
+    el.style.display = (picked === val || el.value.trim()) ? '' : 'none';
+  });
+  checkDhssAlert();
 }
 
 function checkDhssAlert() {
