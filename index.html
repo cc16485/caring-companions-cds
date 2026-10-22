@@ -3359,13 +3359,18 @@ button.fu-tile.check span { color:#14606F; }
     </div>
     <div class="tax-grid">
 <section data-card="1" class="tax-card">
-<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">START &nbsp;·&nbsp; Enrollment packet (GoHighLevel)</div>
+<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">START &nbsp;·&nbsp; Enrollment packet</div>
     <div class="form-row">
       <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
       <div class="form-group"><label>Packet Signed &amp; Returned (date)</label><input type="date" id="tax_packet_signed"></div>
     </div>
 
-    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">Then split the signed packet into separate forms</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">Signed in the Hub? Get the forms</div>
+    <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
+      Sent with the Send enrollment packet button on their lead. Each signed form is filled and saved on its own, ready to fax or mail.
+    </div>
+    <button type="button" class="btn btn-sm btn-primary" onclick="importHubPacket()" style="margin-bottom:10px">Get the signed forms from the Hub packet</button>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">Signed in GoHighLevel? Split the packet into separate forms</div>
     <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
       The consumer signs once and GoHighLevel gives back one 19-page PDF. Drop that PDF here and it comes apart into
       the eleven forms inside it, each one on its own and named, ready to fax or mail. Nothing leaves this browser:
@@ -6236,6 +6241,8 @@ function renderLeadProfile(){
       (p.type !== 'lead' ? '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'consumer_onboarding\')">' + (p.onboardingSent ? 'Enrollment link sent. Open it again' : 'Text the enrollment link') + '</button>' : '') +
       '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'app_sent\')">Tell them the packet is on its way</button>' +
     '</div></div>';
+  // ---- the enrollment packet: one button, signed on their phone (2026-10-22) ----
+  html += '<div id="lpEnroll"></div>';
   // ---- calls logged from the lead link page (the new-lead text) ----
   const OUT = { connected: 'We talked', voicemail: 'Voicemail', no_answer: 'No answer', wrong_number: 'Wrong number' };
   const logged = p.siteLeadId ? _leadCalls.filter(c => c.site_lead_id === p.siteLeadId && !c.fromComms) : [];
@@ -6381,6 +6388,7 @@ function renderLeadProfile(){
   html += '<div class="cds-comm-history" data-refs="lead:' + esc(p.id) + '" data-phones="' + esc(p.phone || '') + '"></div>';
   host.innerHTML = html;
   if (window.cdsCommHistory) window.cdsCommHistory(host);
+  mountLeadEnrollCard(p);
 }
 
 /* The details a care plan change request asks for, in one block to copy. */
@@ -6399,6 +6407,65 @@ function pccpDetails(p) {
     line('Attendant', p.attendant ? p.attendant.name : null) +
     line('Requested by', 'Caring Companions CDS, 417-218-2888')
   ).trim() || 'Nothing recorded on this lead yet.';
+}
+
+/* The consumer enrollment packet (2026-10-22, her "send easily with the click of a
+   button"). The card lives in enroll/hub-enroll.js; everything goes through the
+   cds-match server as staff. The blank IRS and Missouri forms are served from /forms,
+   like the HCBS-1, and filled in this browser. */
+const ENROLL_BLANK = async name => {
+  const r = await fetch('/forms/' + name);
+  if (!r.ok) throw new Error('Could not load the blank ' + name + ' (HTTP ' + r.status + ').');
+  return r.arrayBuffer();
+};
+async function mountLeadEnrollCard(p) {
+  const el = document.getElementById('lpEnroll');
+  if (!el || !_db) return;
+  try {
+    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=1');
+    mountLeadEnroll(el, { api: cdsMatchApi, lead: p, PDFLib: window.PDFLib, blank: ENROLL_BLANK,
+      consumer: () => getData('consumers').find(c => (c.name || '').trim().toLowerCase() === (p.name || '').trim().toLowerCase()) || null });
+  } catch (e) { el.innerHTML = '<div class="field-note" style="color:var(--danger)">The enrollment packet card did not load: ' + esc(e.message) + '</div>'; }
+}
+
+// Tax Setup: the signed forms from the Hub packet, each saved on its own, named the way
+// the splitter names them, so the IRS and Missouri steps below pick them up unchanged.
+async function importHubPacket() {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const status = document.getElementById('tax_packet_status');
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const say = (m, ok) => { status.innerHTML = '<span style="color:' + (ok === false ? 'var(--danger)' : ok ? 'var(--success)' : 'var(--gray-600)') + '">' + m + '</span>'; };
+  try {
+    if (typeof PDFLib === 'undefined') throw new Error('The PDF library did not load. Reload the page.');
+    say('Looking for ' + esc(c.name) + "'s signed packet…");
+    const { packets } = await cdsMatchApi('enrollList', {});
+    const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const mine = packets.filter(k => k.consumer_id === cid || (!k.consumer_id && norm(k.name) === norm(c.name)));
+    if (!mine.length) { say('No signed Hub packet for ' + esc(c.name) + ' yet. Send it from their lead (Leads, open the lead, Send enrollment packet).', false); return; }
+    const k = mine[0];
+    if (!k.office_signed) { say('The packet is signed by the consumer but not by you as agent yet. Open their lead and press Sign as agent first.', false); return; }
+    const { buildEnrollPdfs } = await import('./enroll/enroll-pdf.js?v=1');
+    const data = await cdsMatchApi('enrollPdfData', { lead_id: k.lead_id });
+    const files = await buildEnrollPdfs(PDFLib, data, { blank: ENROLL_BLANK, consumer: c });
+    const stem = consumerStem(c.name), saved = [];
+    for (let n = 0; n < files.length; n++) {
+      const f = files[n];
+      say('Saving ' + (n + 1) + ' of ' + files.length + ' (' + esc(f.title) + ')…');
+      const name = stem + '_' + f.file + '.pdf', path = cid + '/packet/' + name;
+      const { error } = await _db.storage.from(PROOF_BUCKET).upload(path, new Blob([f.bytes], { type: 'application/pdf' }), { upsert: true });
+      if (error) throw error;
+      const lay = PACKET_LAYOUT.find(l => l.file === f.file);
+      saved.push({ path, name, file: f.file, title: f.title, dest: lay ? lay.dest : 'file', at: new Date().toISOString().slice(0, 10), from: 'hub' });
+    }
+    c.packetForms = saved;
+    if (!c.packetSigned) { c.packetSigned = String(k.signed_at).slice(0, 10); document.getElementById('tax_packet_signed').value = c.packetSigned; }
+    setData('consumers', consumers);
+    await cdsMatchApi('enrollLinkConsumer', { lead_id: k.lead_id, consumer_id: cid });
+    renderPacketForms(c);
+    say('✓ ' + saved.length + ' signed forms saved, each on its own. The ones that get sent out are in their steps below.', true);
+  } catch (e) { say('Could not get the forms: ' + esc(e.message || String(e)), false); }
 }
 
 function pccpCopy(btn) {

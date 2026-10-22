@@ -5,6 +5,7 @@
 //   public    : no sign-in (counts, request access)
 //   family    : x-cds-session header after the invite + code sign-in
 //   caregiver : input.link, the caregiver's private link token
+//   consumer  : input.link, the consumer's enrollment packet link (caringcds.com/enroll, 2026-10-22)
 //   staff     : Authorization: Bearer <CDS Hub sign-in>; the email comes from
 //               the verified sign-in, never from the request body.
 //
@@ -142,7 +143,8 @@ const match = createMatch({
       contactId: contact.contact?.id, message: body, ...(channel === 'email' ? { subject, html: body.replace(/\n/g, '<br>') } : {}) }) });
   },
   links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}`,
-           packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}` },
+           packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}`,
+           enroll: (t: string) => `https://www.caringcds.com/enroll/?c=${t}` },
 });
 
 function cors(origin: string | null) {
@@ -163,7 +165,7 @@ Deno.serve(async req => {
     if (role === 'family') i.session = req.headers.get('x-cds-session') || undefined;
     // Signatures record where they came from, from the request, never the body.
     delete i.ip; delete i.agent;
-    if (role === 'caregiver') { i.ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim(); i.agent = req.headers.get('user-agent') || ''; }
+    if (role === 'caregiver' || role === 'consumer') { i.ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim(); i.agent = req.headers.get('user-agent') || ''; }
     // The packet job (reminders, Step 2 opening) runs on the schedule's secret only.
     if (role === 'job') {
       const secret = env('CDS_JOB_SECRET');
