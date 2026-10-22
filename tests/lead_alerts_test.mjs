@@ -154,21 +154,27 @@ await pg.query(`insert into cds_lead_calls (site_lead_id, by_name, by_email, out
 const ghA = await lead({ first: 'Gil', last: 'Ames', phone: '(417) 555-0145' });   // we called, no answer
 const ghB = await lead({ first: 'Hal', last: 'Bent', phone: '417.555.0146' });     // we texted
 const ghC = await lead({ first: 'Jo', last: 'Cobb', phone: '4175550147' });        // they called, we answered
-const ghD = await lead({ first: 'Kim', last: 'Dale', phone: '4175550148' });       // only a call from BEFORE the lead came in
+const ghD = await lead({ first: 'Kim', last: 'Dale', phone: '4175550148' });       // only a call from more than a day BEFORE the lead came in
 const ghE = await lead({ first: 'Lu', last: 'Esk', phone: '4175550149' });        // they called, nobody answered
+const ghF = await lead({ first: 'Mo', last: 'Fry', phone: '4175550190' });        // they called FIRST and we talked, 20 minutes before the lead came in (her case)
+const ghG = await lead({ first: 'Ned', last: 'Gale', phone: '4175550191' });      // we only texted them, an hour before the lead came in
 await jobs.run();
 const comm = (id, phone, ch, dir, mins, answered) => pg.query(`insert into cds_comms (id, channel, direction, at, phone10, answered) values ($1,$2,$3,$4,$5,$6)`,
   [id, ch, dir, new Date(Date.parse('2026-10-26T15:00:00Z') + mins * 60000).toISOString(), phone, answered]);
 await comm('g1', '4175550145', 'call', 'outbound', 10, false);
 await comm('h1', '4175550146', 'sms', 'outbound', 12, false);
 await comm('j1', '4175550147', 'call', 'inbound', 14, true);
-await comm('k1', '4175550148', 'call', 'outbound', -300, true);
+await comm('k1', '4175550148', 'call', 'outbound', -1800, true);
+await comm('f1', '4175550190', 'call', 'inbound', -20, true);
+await comm('g2', '4175550191', 'sms', 'outbound', -60, false);
 await comm('l1', '4175550149', 'call', 'inbound', 15, false);
 at('2026-10-26T15:40:00Z'); await jobs.run();
 eq((await outbox(ghA.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'called from GoHighLevel, no answer: no reminder');
 eq((await outbox(ghB.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'texted from GoHighLevel: no reminder');
 eq((await outbox(ghC.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'they called and we answered: no reminder');
-eq((await outbox(ghD.id)).filter(m => m.template === 'lead_reminder_text').length, 2, 'a call from before the lead came in does not count: reminder');
+eq((await outbox(ghD.id)).filter(m => m.template === 'lead_reminder_text').length, 2, 'a call from more than a day before the lead does not count: reminder');
+eq((await outbox(ghF.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'they called first and we talked, then the lead came in: no reminder (her case)');
+eq((await outbox(ghG.id)).filter(m => m.template === 'lead_reminder_text').length, 2, 'a text before the lead came in is not a talk: reminder');
 eq((await outbox(ghE.id)).filter(m => m.template === 'lead_reminder_text').length, 2, 'they called and nobody answered: still a reminder');
 eq((await outbox(c.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'called (status moved): no reminder');
 eq((await outbox(d.id)).filter(m => m.template === 'lead_reminder_text').length, 0, 'note added: no reminder');
@@ -218,7 +224,7 @@ for (const want of [
   '3. Keep the case files clean',
   '   1 monthly check-in call not yet logged this month',
   '4. Call the people waiting',
-  '   7 new enquiries from the website, never contacted',
+  '   8 new enquiries from the website, never contacted',
   '      Kim Dale, came in 10:00am Mon',
   '      Lu Esk, came in 10:00am Mon',
   '      Eve Fox, came in 11:00am Mon',
@@ -227,7 +233,7 @@ for (const want of [
   '   2 new lead alerts did not send',
   '   2 EVV correction forms to review',
   'Sent to Samantha and Krystal every weekday at 8am. Nothing here goes to families.']) ok(body.includes(want), 'morning email has: ' + want);
-for (const name of ['Gil Ames', 'Hal Bent', 'Jo Cobb']) ok(!body.includes(name), 'morning email leaves out ' + name + ' (reached from GoHighLevel)');
+for (const name of ['Gil Ames', 'Hal Bent', 'Jo Cobb', 'Mo Fry']) ok(!body.includes(name), 'morning email leaves out ' + name + ' (reached from GoHighLevel)');
 ok(!body.includes('Ann Lee') && !body.includes('Bo Park') && !body.includes('Cy Ray'), 'people already called are not listed (status, note or a logged call)');
 ok(/      Old Lead, came in [A-Z][a-z]{2} \d{1,2}\n/.test(body), 'a lead older than 6 days shows its date, not a weekday');
 eq((await jobs.morning()).skipped, 'already sent today', 'only one a day');

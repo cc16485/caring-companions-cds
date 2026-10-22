@@ -206,20 +206,29 @@ export function createLeadAlerts(deps) {
   const callsFor = async ids => ids.length ? q('select site_lead_id, outcome, at from cds_lead_calls where site_lead_id = any($1)', [ids]) : [];
   // Calls and texts read from GoHighLevel by the Communication Center (cds_comms, 2026-10-22). Her
   // point: a lead somebody already called, or texted, or who called in and was answered, is not
-  // waiting, even if nobody tapped anything. Any call we made counts, answered or not; it has to
-  // come after the lead came in. Read only; if that table is not there yet, nothing changes.
+  // waiting, even if nobody tapped anything. After the lead came in, any call we made counts,
+  // answered or not, and any text we sent. And (her case, same day) a family who called first and
+  // talked to us, then became a lead, is not waiting either: an answered call in the 24 hours
+  // BEFORE the lead came in counts too. Older calls do not. Read only; if that table is not
+  // there yet, nothing changes.
   async function commsCallsFor(leads) {
     const byPhone = new Map();
     for (const l of leads) { const p = String(l.phone || '').replace(/\D/g, '').slice(-10); if (p.length === 10) byPhone.set(l.id, p); }
     if (!byPhone.size) return [];
     let rows;
     try {
-      rows = await q(`select phone10, max(at) as last from cds_comms where phone10 = any($1)
-                      and (direction='outbound' or (channel='call' and answered)) group by phone10`, [[...new Set(byPhone.values())]]);
+      rows = await q(`select phone10, at, channel, direction, answered from cds_comms where phone10 = any($1)
+                      and (direction='outbound' or (channel='call' and answered))`, [[...new Set(byPhone.values())]]);
     } catch (e) { return []; }
-    const last = new Map(rows.map(r => [r.phone10, Date.parse(r.last)]));
-    return leads.filter(l => byPhone.has(l.id) && last.get(byPhone.get(l.id)) >= Date.parse(l.submitted_at || 0))
-      .map(l => ({ site_lead_id: l.id, outcome: 'gohighlevel', at: new Date(last.get(byPhone.get(l.id))).toISOString() }));
+    const out = [];
+    for (const l of leads) {
+      const p = byPhone.get(l.id); if (!p) continue;
+      const came = Date.parse(l.submitted_at || 0);
+      const hit = rows.filter(r => r.phone10 === p).map(r => ({ t: Date.parse(r.at), talk: r.channel === 'call' && r.answered }))
+        .filter(r => r.t >= came || (r.talk && r.t >= came - 864e5)).sort((x, y) => y.t - x.t)[0];
+      if (hit) out.push({ site_lead_id: l.id, outcome: 'gohighlevel', at: new Date(hit.t).toISOString() });
+    }
+    return out;
   }
   const claim = (col, id) => one(`update site_leads set ${col} = $2 where id=$1 and ${col} is null returning id`, [id, new Date(now()).toISOString()]);
 
