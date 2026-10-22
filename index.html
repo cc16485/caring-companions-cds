@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=9"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=10"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -694,16 +694,13 @@ button.fu-tile.check span { color:#14606F; }
      (Today | Follow-ups | Dashboard) instead of folded under Today. Same ids, so
      updateDashboard fills them wherever they are. Hash #numbers. -->
 <div id="page-numbers" class="page">
-
-  <div class="alert alert-warn">
-    ⚠️ <strong>EVV Hard Launch Phase I — April 1, 2026:</strong> Claims validation is now active via Sandata EVV Aggregator. All visits must be documented via <strong>WellSky Personal Care</strong> (our EVV vendor). Claims without matching EVV data may be denied. EVV corrections must be submitted by <strong>Saturday 11:59 PM</strong> each week.
-  </div>
-
+  <!-- 2026-10-22 (her yes): numbers only. What to do lives on Today, deadlines on Today's
+       Coming up and Help > Deadlines, agency details and the rules in Help > Reference. -->
   <div class="grid-4" style="margin-bottom:16px">
     <div class="stat-card blue">
       <div class="stat-label">Active Consumers</div>
       <div class="stat-value" id="statConsumers">0</div>
-      <div class="stat-sub">enrolled & receiving services</div>
+      <div class="stat-sub">not marked inactive</div>
     </div>
     <div class="stat-card green">
       <div class="stat-label">Active Attendants</div>
@@ -711,9 +708,9 @@ button.fu-tile.check span { color:#14606F; }
       <div class="stat-sub">currently employed</div>
     </div>
     <div class="stat-card warn">
-      <div class="stat-label">Contacts Due This Month</div>
+      <div class="stat-label">Check-ins left this month</div>
       <div class="stat-value" id="statContactsDue">0</div>
-      <div class="stat-sub">monthly case management</div>
+      <div class="stat-sub">monthly check-in calls</div>
     </div>
     <div class="stat-card red">
       <div class="stat-label">Screenings Expiring Soon</div>
@@ -724,19 +721,19 @@ button.fu-tile.check span { color:#14606F; }
 
   <div class="grid-3" style="margin-bottom:16px">
     <div class="stat-card blue" style="cursor:pointer" onclick="showPage('pipeline')">
-      <div class="stat-label">Pipeline — Leads</div>
+      <div class="stat-label">Leads: Still deciding</div>
       <div class="stat-value" id="statLeads">0</div>
-      <div class="stat-sub">not yet ready to start</div>
+      <div class="stat-sub">open on the Leads page</div>
     </div>
     <div class="stat-card green" style="cursor:pointer" onclick="showPage('pipeline')">
-      <div class="stat-label">Pipeline — Referrals (New)</div>
+      <div class="stat-label">Leads: New to CDS - Referral</div>
       <div class="stat-value" id="statReferrals">0</div>
-      <div class="stat-sub">new to CDS, submitted to state</div>
+      <div class="stat-sub">open on the Leads page</div>
     </div>
     <div class="stat-card warn" style="cursor:pointer" onclick="showPage('pipeline')">
-      <div class="stat-label">Pipeline — PCCP Transfers</div>
+      <div class="stat-label">Leads: Moving from Another Agency - PCCP</div>
       <div class="stat-value" id="statPCCP">0</div>
-      <div class="stat-sub">switching from another agency</div>
+      <div class="stat-sub">open on the Leads page</div>
     </div>
   </div>
 
@@ -744,8 +741,8 @@ button.fu-tile.check span { color:#14606F; }
   <div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent);cursor:pointer" onclick="showPage('financials')">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <div>
-        <div style="font-size:13px;font-weight:700;color:var(--primary)">💰 Financial Dashboard</div>
-        <div style="font-size:12px;color:var(--gray-600);margin-top:2px">Revenue · Labor Cost · Gross Margin · Per-Consumer Profitability · Utilization History</div>
+        <div style="font-size:13px;font-weight:700;color:var(--primary)">Money</div>
+        <div style="font-size:12px;color:var(--gray-600);margin-top:2px">Revenue, pay, margin and each consumer, on the Money page</div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">
         <div style="text-align:right">
@@ -764,73 +761,31 @@ button.fu-tile.check span { color:#14606F; }
     <span id="dashPayRate" style="display:none"></span>
   </div>
 
-  <div id="pipelineFollowUpAlert" style="display:none;margin-bottom:16px"></div>
-  <div id="taxSetupAlert" style="display:none;margin-bottom:16px"></div>
-
   <div class="grid-2" style="margin-bottom:16px">
     <div class="stat-card" id="correctionStatCard" style="border-left:4px solid var(--success-light)">
-      <div class="stat-label">EVV Manual Corrections — This Month</div>
+      <div class="stat-label">EVV Forms This Month</div>
       <div style="display:flex;align-items:baseline;gap:12px">
         <div class="stat-value" id="statCorrections" style="color:var(--success)">0</div>
         <div style="font-size:13px;color:var(--gray-600)">corrections logged</div>
       </div>
-      <div class="stat-sub" id="correctionStatSub">✅ Within normal range — no red flag</div>
+      <div class="stat-sub" id="correctionStatSub">Within normal range</div>
     </div>
-    <div class="stat-card" style="border-left:4px solid var(--warn-light)">
-      <div class="stat-label">Corrections Pending Admin Action</div>
+    <div class="stat-card" style="border-left:4px solid var(--warn-light);cursor:pointer" onclick="showPage('evvcorrections')">
+      <div class="stat-label">EVV Forms Waiting on Us</div>
       <div style="display:flex;align-items:baseline;gap:12px">
         <div class="stat-value" id="statCorrectionsPending" style="color:var(--warn)">0</div>
-        <div style="font-size:13px;color:var(--gray-600)">awaiting WellSky update</div>
+        <div style="font-size:13px;color:var(--gray-600)">not yet fixed in WellSky</div>
       </div>
-      <div class="stat-sub">Click EVV Corrections tab to action</div>
+      <div class="stat-sub">Open EVV Forms</div>
     </div>
   </div>
 
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title"><span class="icon">📅</span> Upcoming Deadlines (Next 60 Days)</div>
-      <div id="upcomingDeadlines">
-        <div class="deadline-item soon">
-          <div class="deadline-date"><div class="month">JUL</div><div class="day">31</div></div>
-          <div class="deadline-info">
-            <div class="title">Q2 Financial & Service Report</div>
-            <div class="desc">Apr 1 – Jun 30 quarterly report due to MMAC — Email: MMAC.CDS@DSS.MO.GOV</div>
-          </div>
-          <span class="badge badge-warn">REPORT</span>
-        </div>
-        <div class="deadline-item">
-          <div class="deadline-date"><div class="month">Monthly</div><div class="day">→</div></div>
-          <div class="deadline-info">
-            <div class="title">LEIE/OIG Monthly Screening — All Staff & Attendants</div>
-            <div class="desc">Screen all employees and attendants against OIG exclusion list</div>
-          </div>
-          <span class="badge badge-blue">MONTHLY</span>
-        </div>
-        <div class="deadline-item">
-          <div class="deadline-date"><div class="month">Monthly</div><div class="day">→</div></div>
-          <div class="deadline-info">
-            <div class="title">Monthly Case Management Contact — All Consumers</div>
-            <div class="desc">At minimum, monthly contact to monitor ongoing service delivery</div>
-          </div>
-          <span class="badge badge-blue">MONTHLY</span>
-        </div>
-        <div class="deadline-item">
-          <div class="deadline-date"><div class="month">OCT</div><div class="day">31</div></div>
-          <div class="deadline-info">
-            <div class="title">Q3 Financial & Service Report</div>
-            <div class="desc">Jul 1 – Sep 30 quarterly report due to MMAC</div>
-          </div>
-          <span class="badge badge-warn">REPORT</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">🎯</span> Compliance Health</div>
+  <div class="card">
+    <div class="card-title">Compliance Health</div>
       <div style="display:flex;flex-direction:column;gap:14px">
         <div>
           <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px">
-            <span>Consumer Monthly Contacts</span>
+            <span>Monthly check-in calls done</span>
             <span id="contactPct" style="font-weight:700">—</span>
           </div>
           <div class="progress-bar"><div class="progress-fill green" id="contactBar" style="width:0%"></div></div>
@@ -857,44 +812,6 @@ button.fu-tile.check span { color:#14606F; }
           <div class="progress-bar"><div class="progress-fill warn" id="compBar" style="width:0%"></div></div>
         </div>
       </div>
-      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-200)">
-        <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-bottom:8px">OUR AGENCY</div>
-        <div style="font-size:12px;line-height:1.8;margin-bottom:10px">
-          🏠 <strong>Caring Companions In-Home Senior Care</strong><br>
-          Troutman Enterprises LLC | 1331 N Stewart Ave, Springfield MO 65802<br>
-          📞 <strong>417-234-8494</strong> | Toll-free: <strong>866-863-5151</strong><br>
-          📧 <a href="mailto:samantha@ccseniorhomecare.com" style="color:var(--primary-light)">samantha@ccseniorhomecare.com</a><br>
-          NPI: <strong>1548725682</strong> | EIN: <strong>82-0968875</strong><br>
-          EVV: <strong>WellSky Personal Care</strong> | Portal: <a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light)">mycaringcds.com</a>
-        </div>
-        <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-bottom:8px">KEY CONTACTS</div>
-        <div style="font-size:12px;line-height:1.8">
-          📧 MMAC Contracts: <strong>mmac.ihscontracts@dss.mo.gov</strong><br>
-          📧 Submit Reports: <strong>MMAC.CDS@DSS.MO.GOV</strong><br>
-          📧 EVV Questions: <strong>ask.evv@dss.mo.gov</strong><br>
-          📞 MMAC: <strong>573-751-3399</strong><br>
-          📞 Fraud Hotline: <strong>573-751-3285</strong><br>
-          📞 Elder Abuse: <strong>1-800-392-0210</strong><br>
-          📞 Child Abuse: <strong>1-800-392-3738</strong>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="icon">⚖️</span> Regulatory Framework</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px">
-      <span class="tag">§§208.900–208.930 RSMo</span>
-      <span class="tag">19 CSR 15-8.100–.500 (CDS)</span>
-      <span class="tag">19 CSR 30-82.060 (Hiring Restrictions)</span>
-      <span class="tag">13 CSR 70-3.020 (Provider Enrollment)</span>
-      <span class="tag">13 CSR 70-3.030 (Fraud & False Claims)</span>
-      <span class="tag">13 CSR 70-3.320 (EVV)</span>
-      <span class="tag">RSMo 192.2490 (EDL)</span>
-      <span class="tag">RSMo 192.2495 (Disqualifying Offenses)</span>
-      <span class="tag">HIPAA / HITECH</span>
-      <span class="tag">Senate Bill 710 (Tax Penalties)</span>
-    </div>
   </div>
 </div>
 
@@ -1488,6 +1405,14 @@ button.fu-tile.check span { color:#14606F; }
           <tr>
             <td colspan="2"><strong>Annual Service Report</strong></td><td><strong>January 31</strong></td>
             <td><select onchange="saveQuarterStatus('annual',this.value)" id="qstat_annual" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)">
+              <option value="pending">⬜ Pending</option>
+              <option value="submitted">✅ Submitted</option>
+              <option value="late">🔴 Late</option>
+            </select></td>
+          </tr>
+          <tr>
+            <td colspan="2"><strong>DES wage reports</strong> (UInteract, one per registered consumer)</td><td><strong>Apr 30, Jul 31, Oct 31, Jan 31</strong></td>
+            <td><select onchange="saveQuarterStatus('des',this.value)" id="qstat_des" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)">
               <option value="pending">⬜ Pending</option>
               <option value="submitted">✅ Submitted</option>
               <option value="late">🔴 Late</option>
@@ -5115,7 +5040,7 @@ function renderConsumers() {
   // 2026-10-22 her ask: a clear roster. One row = who they are, this month's
   // call (the one thing the office does for everyone), the visit, and how much
   // is left. Everything else lives on the profile; the name opens it.
-  const active = consumers.filter(c => c.status !== 'inactive').sort((a, b) => a.name.localeCompare(b.name));
+  const active = consumers.filter(CDSRules.isActive).sort((a, b) => a.name.localeCompare(b.name));
   const callsLeft = active.filter(c => !(c.contacts && c.contacts[currentMonth])).length;
   document.getElementById('rosterCallHead').textContent = MONTHS[now.getMonth()] + ' call';
   document.getElementById('rosterSummary').textContent = active.length + ' active · ' +
@@ -5154,7 +5079,7 @@ function renderConsumers() {
 
   // Render monthly history
   const historyDiv = document.getElementById('monthlyContactHistory');
-  historyDiv.innerHTML = consumers.filter(c => c.status !== 'inactive').map(c => {
+  historyDiv.innerHTML = consumers.filter(CDSRules.isActive).map(c => {
     const months = [];
     const year = now.getFullYear();
     for (let m = 0; m < 12; m++) {
@@ -6950,7 +6875,7 @@ async function renderFollowups(reload) {
     ? cards.length + (cards.length === 1 ? ' call or text needs someone.' : ' calls and texts need someone.') + (who.length ? ' ' + who.length + ' from a number we do not know.' : '')
     : 'Nothing waiting. Every call and text has been answered.';
   // Monthly check-ins: kept apart from follow-ups (her rule). Same count as the consumer roster.
-  const active = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const active = getData('consumers').filter(CDSRules.isActive);
   const doneN = active.filter(c => ongoingRequirements(c).monthly.doneThisMonth).length;
   const monthWord = new Date().toLocaleDateString('en-US', { month: 'long' });
   document.getElementById('fuTiles').innerHTML =
@@ -7087,7 +7012,7 @@ async function fuCheckinsDraw() {
     try { _fuCheck = await _commCall({ action: 'checkins' }); }
     catch (e) { box.innerHTML = '<h2>Calls that could count</h2><div class="field-note">Could not load: ' + esc(e.message) + '</div>'; _fuCheck = null; return; }
   }
-  const byId = new Map(getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged').map(c => [String(c.id), c]));
+  const byId = new Map(getData('consumers').filter(CDSRules.isActive).map(c => [String(c.id), c]));
   const calls = (_fuCheck.calls || []).filter(x => byId.has(String(x.consumerId)) && !ongoingRequirements(byId.get(String(x.consumerId))).monthly.doneThisMonth);
   const monthWord = new Date().toLocaleDateString('en-US', { month: 'long' });
   const noCall = [...byId.values()].filter(c => !ongoingRequirements(c).monthly.doneThisMonth && !calls.some(x => String(x.consumerId) === String(c.id))).length;
@@ -7568,12 +7493,12 @@ function renderPendingOutreaches() {
   });
 
   // Active consumers not yet trained
-  consumers.filter(c => c.status !== 'inactive' && c.trained !== 'yes').forEach(c => {
+  consumers.filter(c => CDSRules.isActive(c) && c.trained !== 'yes').forEach(c => {
     items.push({ icon: '📺', label: `Orientation not complete — <strong>${c.name}</strong>`, action: `openConsumerOutreach('${c.id}','consumer_orientation')`, altLabel: 'Send Reminder' });
   });
 
   // Care plans expiring within 30 days
-  consumers.filter(c => c.status !== 'inactive' && c.carePlan && c.carePlan.endDate && daysUntil(c.carePlan.endDate) <= 30).forEach(c => {
+  consumers.filter(c => CDSRules.isActive(c) && c.carePlan && c.carePlan.endDate && daysUntil(c.carePlan.endDate) <= 30).forEach(c => {
     const days = daysUntil(c.carePlan.endDate);
     const urgency = days <= 7 ? 'color:var(--danger);font-weight:700' : days <= 14 ? 'color:var(--warn-text)' : '';
     items.push({ icon: '🔄', label: `<strong>${c.name}</strong> care plan expires in <span style="${urgency}">${days} day${days===1?'':'s'}</span>`, action: `openConsumerOutreach('${c.id}','care_renewal')`, altLabel: 'Send Renewal' });
@@ -7602,7 +7527,7 @@ function renderQuickSendGrid() {
 
   const attendants = (getData('attendants') || []).filter(a => a.status !== 'inactive');
   const pipeline   = (getData('pipeline')   || []).filter(p => p.status !== 'closed');
-  const consumers  = (getData('consumers')  || []).filter(c => c.status !== 'inactive');
+  const consumers  = (getData('consumers')  || []).filter(CDSRules.isActive);
 
   const cards = [
     { icon: '👋', title: 'Lead Welcome',        desc: 'Welcome a new lead to Caring Companions',          entityType: 'pipeline_lead', outreachType: 'lead_welcome',         items: pipeline.filter(p => p.type === 'lead') },
@@ -7823,7 +7748,7 @@ function einClock(c) {
 function renderComplianceClocks() {
   const host = document.getElementById('complianceClocks');
   if (!host) return;
-  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
 
   const desDue = [], desClose = [], einDue = [];
   consumers.forEach(c => {
@@ -7897,7 +7822,7 @@ function ongoingRequirements(c) {
 function renderOngoingRequirements() {
   const host = document.getElementById('ongoingReqs');
   if (!host) return;
-  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   if (!consumers.length) { host.innerHTML = ''; return; }
 
   const visitOverdue = [], visitSoon = [], monthDue = [], chronic = [];
@@ -7973,7 +7898,7 @@ function logAnnualVisit(cid) {
 let _bulkContacts = {};   // { consumerId: Set(monthKey) }
 
 function openBulkContacts() {
-  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   if (!consumers.length) { alert('No active consumers.'); return; }
 
   const today = new Date();
@@ -8290,7 +8215,7 @@ function renderProfile() {
   const host = document.getElementById('prof_body');
   const pick = document.getElementById('prof_pick');
   if (!host || !pick) return;
-  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive')
+  const consumers = getData('consumers').filter(CDSRules.isActive)
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!consumers.length) { host.innerHTML = '<div class="card"><p>No active consumers.</p></div>'; return; }
   if (!_profileId || !consumers.some(c => c.id === _profileId)) _profileId = consumers[0].id;
@@ -8655,7 +8580,7 @@ function renderCarePlans() {
   const el = document.getElementById('cp_table');
   const sel = document.getElementById('cp_consumer');
   if (!el || !sel) return;
-  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive')
+  const consumers = getData('consumers').filter(CDSRules.isActive)
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!sel.options.length) {
     sel.innerHTML = '<option value="">Choose a consumer…</option>' +
@@ -8974,7 +8899,7 @@ function renderAuthorizations() {
   // notice that, which is exactly how someone falls through the cracks.
   const byConsumer = {};
   list.forEach(a => { if (a.consumer) byConsumer[prNorm(a.consumer)] = a; });
-  const active = consumers.filter(c => (c.status || 'active') !== 'inactive');
+  const active = consumers.filter(CDSRules.isActive);
   const missing = active.filter(c => !byConsumer[prNorm(c.name)]);
   const orphans = list.filter(a => !a.consumer);   // documents that matched nobody
 
@@ -9380,7 +9305,7 @@ function renderUnmappedAttendants() {
   const un = aw.unmapped || {};
   const ids = Object.keys(un);
   if (!ids.length) { el.innerHTML = ''; return; }
-  const opts = getData('consumers').filter(c => (c.status || 'active') !== 'inactive')
+  const opts = getData('consumers').filter(CDSRules.isActive)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('');
   const total = ids.reduce((s, i) => s + un[i].net, 0);
@@ -10467,7 +10392,7 @@ function empeonStatus(c) {
 }
 
 function renderEmpeon() {
-  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const rows = consumers.map(c => ({ c, e: empeonStatus(c), s: taxStatus(c) }))
     .sort((a, b) => (a.e.clean - b.e.clean) || a.c.name.localeCompare(b.c.name));
 
@@ -10604,7 +10529,7 @@ function renderTaxBatches(rows) {
 }
 
 function renderTaxCompliance() {
-  const consumers = getData('consumers').filter(c => (c.status || 'active') !== 'inactive');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const rows = consumers.map(c => ({ c, s: taxStatus(c) }))
     .sort((a, b) => (LANE_ORDER[a.s.lane] - LANE_ORDER[b.s.lane]) || a.c.name.localeCompare(b.c.name));
 
@@ -11731,17 +11656,25 @@ function loadChecks() {
 // ============================================================
 // QUARTERLY STATUS
 // ============================================================
+// A Submitted mark is saved with the due date it was made for (2026-10-22), so Today can tell
+// this year's report from last year's. Reports with no due date (the audit) keep the old way.
 function saveQuarterStatus(key, val) {
-  const qs = getObj('quarterStatus');
+  const qs = Object.assign({}, getObj('quarterStatus'));
   qs[key] = val;
+  const r = CDSRules.reportDue(key);
+  if (r) qs[key + '_for'] = r.due;
   setObj('quarterStatus', qs);
+  try { renderTodayTop(); } catch (e) { console.error('today top:', e); }
 }
 
 function loadQuarterStatus() {
   const qs = getObj('quarterStatus');
   Object.entries(qs).forEach(([k, v]) => {
     const el = document.getElementById('qstat_' + k);
-    if (el) el.value = v;
+    if (!el) return;
+    // A Submitted mark from an earlier due date shows as Pending, the same as Today says.
+    const r = CDSRules.reportDue(k);
+    el.value = (v === 'submitted' && r && r.days <= 30 && !CDSRules.reportSubmitted(qs, k, r.due)) ? 'pending' : v;
   });
 }
 
@@ -11952,7 +11885,7 @@ function renderTodayTop() {
     const name = first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : '';
     hello.textContent = (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (name ? ', ' + name : '');
   }
-  const consumers = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged' && c.status !== 'inactive');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const counts = document.getElementById('todayCounts');
   if (counts) {
     const att = getData('attendants').filter(a => a.status !== 'inactive').length;
@@ -11962,15 +11895,17 @@ function renderTodayTop() {
   const host = document.getElementById('todayComing');
   if (!host) return;
   const rows = [];
+  // State reports due in the next 30 days, or late, until marked Submitted on Deadlines (her yes 10-22).
+  CDSRules.reportsDue(getObj('quarterStatus')).forEach(r => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill ' +
+    (r.late || r.days <= 7 ? 'bad' : 'warn') + '">' + (r.late ? 'Late' : r.days === 0 ? 'Due today' : r.days === 1 ? '1 day left' : r.days + ' days left') +
+    '</span> <b>' + esc(r.title) + '</b>, due ' + esc(_niceDay(r.due)) + '</span>' +
+    '<a href="#calendar" onclick="showPage(\'calendar\');return false">Mark it sent</a></div>'));
   const soon = consumers.map(c => ({ c, r: ongoingRequirements(c).annual })).filter(x => x.r.soon && !x.r.overdue)
     .sort((a, b) => a.r.days - b.r.days);
   soon.forEach(x => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill warn">' +
     (x.r.days > 31 ? '2 months left' : x.r.days + ' days left') + '</span> Face-to-face visit for <b>' + esc(x.c.name) +
     '</b>, due by ' + esc(_niceDay(x.r.due)) + '</span><a href="#" onclick="openProfile(\'' + x.c.id + '\');return false">Book it</a></div>'));
-  const callsLeft = consumers.filter(c => !ongoingRequirements(c).monthly.doneThisMonth).length;
-  if (callsLeft) rows.push('<div class="cp-line"><span style="color:var(--cute-ink)">Monthly check-in calls: ' + callsLeft +
-    ' consumer' + (callsLeft === 1 ? ' still needs' : 's still need') + ' this month\'s call</span>' +
-    '<a href="#consumers" onclick="showPage(\'consumers\');return false">See who</a></div>');
+  // The monthly check-in count is step 3 of the morning list, so it is not repeated here.
   consumers.forEach(c => {
     const p = CDSRules.firstShiftPrep(c, firstShiftOf(c));
     if (p.applies && !p.firstShift && p.start) rows.push('<div class="cp-line"><span style="color:var(--cute-ink)">' +
@@ -11992,15 +11927,15 @@ function updateDashboard() {
   try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   try { renderCdsGoal(); } catch (e) { console.error('cds goal:', e); }
   try { renderTodayTop(); } catch (e) { console.error('today top:', e); }
-  const consumers = getData('consumers').filter(c => c.status !== 'inactive');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const attendants = getData('attendants').filter(a => a.status !== 'inactive');
   const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 
   document.getElementById('statConsumers').textContent = consumers.length;
   document.getElementById('statAttendants').textContent = attendants.length;
 
-  const contactsDue = consumers.filter(c => !c.contacts || !c.contacts[currentMonth]).length;
+  // Same rule as Today's step 3 and the Follow-ups check-in tile.
+  const contactsDue = consumers.filter(c => !ongoingRequirements(c).monthly.doneThisMonth).length;
   document.getElementById('statContactsDue').textContent = contactsDue;
 
   // Screenings expiring (LEIE > 25 days old)
@@ -12013,7 +11948,7 @@ function updateDashboard() {
 
   // Progress bars
   if (consumers.length > 0) {
-    const contacted = consumers.filter(c => c.contacts && c.contacts[currentMonth]).length;
+    const contacted = consumers.length - contactsDue;
     const pct = Math.round((contacted / consumers.length) * 100);
     document.getElementById('contactPct').textContent = `${contacted}/${consumers.length} (${pct}%)`;
     document.getElementById('contactBar').style.width = pct + '%';
@@ -12043,19 +11978,6 @@ function updateDashboard() {
   document.getElementById('statReferrals').textContent = activePipeline.filter(p=>p.type==='referral').length;
   document.getElementById('statPCCP').textContent = activePipeline.filter(p=>p.type==='pccp').length;
 
-  // Pipeline follow-up overdue (update dashboard banner)
-  const today2 = new Date().toISOString().split('T')[0];
-  const followUpDue = activePipeline.filter(p => p.followup && p.followup <= today2 && !PIPELINE_DONE_STATUSES.includes(p.status));
-  const dashBanner = document.getElementById('pipelineFollowUpAlert');
-  if (dashBanner) {
-    if (followUpDue.length > 0) {
-      dashBanner.style.display = 'block';
-      dashBanner.innerHTML = `<div class="alert alert-danger">🔔 <strong>${followUpDue.length} pipeline follow-up${followUpDue.length!==1?'s':''} overdue!</strong> ${followUpDue.map(p=>'<strong>'+p.name+'</strong>').join(', ')} — <a href="#" onclick="showPage('pipeline');return false" style="color:inherit;text-decoration:underline">Go to Pipeline →</a></div>`;
-    } else {
-      dashBanner.style.display = 'none';
-    }
-  }
-
   // EVV Corrections this month
   const now2 = new Date();
   const thisMonth = `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
@@ -12070,17 +11992,17 @@ function updateDashboard() {
   if (corrTotal >= CORRECTION_DANGER_THRESHOLD) {
     document.getElementById('statCorrections').style.color = 'var(--danger)';
     corrCard.style.borderLeftColor = 'var(--danger-light)';
-    corrSub.textContent = '🔴 RED FLAG — ' + corrTotal + ' corrections this month. Review immediately.';
+    corrSub.textContent = 'Red flag: ' + corrTotal + ' corrections this month. Review them now.';
     corrSub.style.color = 'var(--danger)';
   } else if (corrTotal >= CORRECTION_WARN_THRESHOLD) {
     document.getElementById('statCorrections').style.color = 'var(--warn)';
     corrCard.style.borderLeftColor = 'var(--warn-light)';
-    corrSub.textContent = '🟡 Elevated — ' + corrTotal + ' corrections this month. Monitor closely.';
+    corrSub.textContent = 'Higher than usual: ' + corrTotal + ' corrections this month. Keep an eye on it.';
     corrSub.style.color = 'var(--warn)';
   } else {
     document.getElementById('statCorrections').style.color = 'var(--success)';
     corrCard.style.borderLeftColor = 'var(--success-light)';
-    corrSub.textContent = '✅ Within normal range — no red flag';
+    corrSub.textContent = 'Within normal range';
     corrSub.style.color = 'var(--success)';
   }
 
@@ -12109,24 +12031,6 @@ function updateDashboard() {
   document.getElementById('dashBillingRate').textContent = `@ $${rates.billing.toFixed(2)}/hr`;
   document.getElementById('dashPayRate').textContent     = `@ $${rates.pay.toFixed(2)}/hr`;
   document.getElementById('dashMarginPct').textContent   = totalAuthHrsMonth > 0 ? `${marginPct}% gross margin` : 'add consumers to calculate';
-
-  // Tax setup incomplete alert
-  const taxAlert = document.getElementById('taxSetupAlert');
-  if (taxAlert) {
-    const taxIncomplete = consumers.filter(c => {
-      const taxItems = [c.ein, c.irs8821, c.irs2678, c.mo2643a, c.mo2827, c.desRegistered];
-      return taxItems.some(v => !v);
-    });
-    if (taxIncomplete.length > 0) {
-      taxAlert.style.display = 'block';
-      taxAlert.innerHTML = `<div class="alert alert-danger">⚠️ <strong>Tax Setup Incomplete</strong> for ${taxIncomplete.length} consumer${taxIncomplete.length!==1?'s':''}: ${taxIncomplete.map(c=>'<strong>'+c.name+'</strong>').join(', ')} — EIN, IRS forms, MO registration, and/or DES may not be complete. <a href="#" onclick="showPage('consumers');return false" style="color:inherit;text-decoration:underline">Go to Consumers → Tax Setup column</a></div>`;
-    } else if (consumers.length > 0) {
-      taxAlert.style.display = 'block';
-      taxAlert.innerHTML = `<div class="alert" style="background:var(--success-pale);border-left:4px solid var(--success);color:var(--success)">✅ Tax setup complete for all active consumers.</div>`;
-    } else {
-      taxAlert.style.display = 'none';
-    }
-  }
 }
 
 // ============================================================
@@ -12326,7 +12230,7 @@ function previewWellskyImport() {
   });
 
   // Match to tracker consumers
-  const consumers = getData('consumers').filter(c => c.status !== 'inactive');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const results = Object.values(totals).map(t => {
     let match = null;
     // Try DCN first (exact)
@@ -12457,7 +12361,7 @@ function openComplaintModal(editId) {
   const consumers = getData('consumers');
   const sel = document.getElementById('cmp_consumer');
   sel.innerHTML = '<option value="">— General / Unknown —</option>' +
-    consumers.filter(c => c.status !== 'inactive').map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    consumers.filter(CDSRules.isActive).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
   if (editId) {
     const complaints = getData('complaints');
@@ -12550,7 +12454,7 @@ function renderQuarterlyReport() {
   if (!year || !quarter) return;
 
   const qMonths = getQuarterMonths(year, quarter);
-  const consumers = getData('consumers').filter(c => c.status !== 'inactive');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const complaints = getData('complaints');
   const qLabel = getQuarterLabel(year, quarter);
 
@@ -13019,7 +12923,7 @@ function renderFinancialActuals() {
 
 function renderFinancials() {
   renderFinancialActuals();
-  const consumers = getData('consumers').filter(c => c.status !== 'inactive');
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const rates = getRates();
   const WEEKS_PER_MONTH = 4.33;
   const WEEKS_PER_QUARTER = 13;
@@ -13454,7 +13358,7 @@ function renderBackupPoolCoverage() {
 
   // Which counties do we actually have consumers in? Those are the ones where a
   // gap hurts. Everything else is nice-to-have.
-  const consumers   = getData('consumers').filter(c => c.status !== 'Inactive' && c.status !== 'Discharged');
+  const consumers   = getData('consumers').filter(CDSRules.isActive);
   const withConsumers = new Set(consumers.map(c => (c.county || '').trim()).filter(Boolean));
 
   const counts = {};

@@ -124,7 +124,34 @@ const at = d => new Date(d + 'T12:00:00');
   ok(resolve('dashboard').page === 'dashboard', '#dashboard (the GoHighLevel link) still opens Today');
   { const d = html.indexOf('id="page-dashboard"'), n = html.indexOf('id="page-numbers"');
     ok(n > d && !/More numbers and reference/.test(html), 'the old Dashboard numbers are their own page, not folded under Today');
-    ok(['statConsumers', 'statLeads', 'dashMargin', 'upcomingDeadlines'].every(id => html.indexOf('id="' + id + '"') > n), 'the numbers updateDashboard fills are on the Dashboard tab'); }
+    ok(['statConsumers', 'statLeads', 'dashMargin', 'statContactsDue'].every(id => html.indexOf('id="' + id + '"') > n), 'the numbers updateDashboard fills are on the Dashboard tab');
+    // 2026-10-22 (her yes): the Dashboard is numbers only.
+    const f = html.indexOf('id="page-followups"'), dash = html.slice(n, f);
+    ok(!/upcomingDeadlines|pipelineFollowUpAlert|taxSetupAlert|EVV Hard Launch|Regulatory Framework|417-234-8494/.test(dash), 'no banners, typed-in deadlines, contacts or rules on the Dashboard');
+    ok(/Leads: New to CDS - Referral/.test(dash) && /Leads: Moving from Another Agency - PCCP/.test(dash), 'lead kinds use the Leads page names'); }
+
+// ── Today tidy-up (2026-10-22, her yes) ──
+{
+  ok(R.isActive({ status: 'active' }) && R.isActive({ status: 'pending' }) && R.isActive({}), 'active, pending and no status are active');
+  ok(!R.isActive({ status: 'inactive' }) && !R.isActive({ status: 'Inactive' }) && !R.isActive({ status: 'Discharged' }), 'inactive in any case, and discharged, are not');
+  const steps = R.dailyRoutine({ consumers: [{ id: '1', name: 'Gone Person', status: 'inactive', cdsStartDate: '2024-01-01' }], pipeline: [] }, at('2026-10-22'));
+  ok(steps.every(s => s.items.length === 0), 'an inactive consumer (lowercase, as the hub saves it) adds nothing to the morning list');
+  const fu = R.dailyRoutine({ consumers: [], pipeline: [{ name: 'Lee Lead', status: 'new', followup: '2026-10-20', calls: [{ at: 'x' }] }] }, at('2026-10-22'))
+    .find(s => s.n === 4).items.map(i => i.t).join('|');
+  ok(/1 lead to call back today or overdue/.test(fu) && !/follow-up/.test(fu), 'a lead call-back date says call back, not follow-up');
+  const d = at('2026-10-22');
+  let due = R.reportsDue({}, d);
+  ok(due.map(r => r.key).join() === 'q3,des' && due[0].due === '2026-10-31' && due[0].days === 9, 'Oct 22: the Q3 report and DES wage reports, due Oct 31');
+  ok(R.reportsDue({ q3: 'submitted', q3_for: '2026-10-31' }, d).map(r => r.key).join() === 'des', 'marked Submitted for Oct 31 drops it');
+  ok(R.reportsDue({ q3: 'submitted', q3_for: '2025-10-31' }, d).some(r => r.key === 'q3'), 'last year\'s Submitted mark does not hide this year');
+  ok(R.reportsDue({ q3: 'submitted' }, d).some(r => r.key === 'q3'), 'an old mark with no due date does not hide it');
+  ok(R.reportsDue({}, at('2026-09-30')).length === 0, 'nothing 31 days out');
+  due = R.reportsDue({}, at('2026-11-05'));
+  ok(due[0].key === 'q3' && due[0].late, 'a missed report stays on Today as late');
+  ok(R.reportsDue({}, at('2027-01-20')).map(r => r.key).join() === 'q4,annual,des', 'January: Q4, the annual report and DES');
+  ok(!/Monthly check-in calls: /.test(html), 'Coming up no longer repeats the check-in count');
+  ok(/id="qstat_des"/.test(html), 'Deadlines has a DES wage reports row');
+}
   ok(!/—/.test(html.slice(a, b)), 'no em dashes in the new menu');
   // The WellSky attendant check card now lives on Active Attendants.
   const aa = html.indexOf('id="page-activeattendants"');
