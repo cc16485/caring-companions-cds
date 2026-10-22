@@ -116,6 +116,8 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(/pre\.textContent = _plEditId \? 'Referral or PCCP answers:' : 'Add someone:'/.test(html), 'the form title says Referral or PCCP answers');
   ok(/set\('pl_county', p\.county\)/.test(html) && /set\('pl_status', p\.status\)/.test(html), 'the form fills in what Leads already knows');
   ok(/'firstContact','source','status','followup','stateSubmit'/.test(html), 'and keeps those on save');
+  ok(/if \(newContact\.notes\.length\) existing\.notes = \(existing\.notes \|\| \[\]\)\.concat\(newContact\.notes\)/.test(html), 'a note typed in the Referral or PCCP form is kept');
+  ok(/'pl_hours','pl_notes'\]\.forEach/.test(html), 'the notes box starts empty each time');
   ok((html.match(/New to CDS - Referral/g) || []).length >= 5 && (html.match(/Moving from Another Agency - PCCP/g) || []).length >= 5, 'her two names everywhere');
   ok(/'leavingAgency','whySwitching','readiness','medicaidStatus'/.test(html), 'a lead turned PCCP keeps its transfer answers');
 }
