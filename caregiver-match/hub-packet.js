@@ -18,10 +18,11 @@ const CHECK_NAMES = { edl: 'EDL', edr: 'DMH EDR', oig: 'OIG', mo_medicaid: 'MO M
 
 const CSS = `
 .hp{font-family:inherit;color:#1d2a36}
-.hp .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
-.hp .tabs button,.hp .pill-btn{border:2px solid #dfe6ec;background:#fff;color:#0D365F;border-radius:999px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:14px}
-.hp .tabs button.on{background:#0D365F;color:#fff;border-color:#0D365F}
-.hp .tabs{margin:10px 0 12px}
+/* Not "tabs": inside GHL the hub hides every .tabs bar (html.embedded.focused .tabs), which hid these (fixed 2026-10-22). */
+.hp .hp-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
+.hp .hp-tabs button,.hp .pill-btn{border:2px solid #dfe6ec;background:#fff;color:#0D365F;border-radius:999px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:14px}
+.hp .hp-tabs button.on{background:#0D365F;color:#fff;border-color:#0D365F}
+.hp .hp-tabs{margin:10px 0 12px}
 .hp .row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;width:100%;text-align:left;background:#fff;border:1px solid #dfe6ec;border-radius:12px;padding:12px 14px;margin-top:8px;cursor:pointer;font:inherit;color:inherit}
 .hp .row b{color:#0D365F;font-size:16px}.hp .row .meta{grid-column:1/-1;font-size:13.5px;color:#5b6977}
 .hp .pill{font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
@@ -296,7 +297,7 @@ export function mountHubPacket(el, opts) {
       <section class="grp"><div class="ghead"><h3>No longer working</h3><span>Marked no longer working. No rechecks.</span></div>
       ${g.ended.length ? g.ended.map(endedRow).join('') : '<p class="small">Nobody.</p>'}</section>`;
     el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><button data-act="reload" class="pill-btn">Refresh</button></div>
-      <div class="tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
+      <div class="hp-tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       ${body}
       <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>
