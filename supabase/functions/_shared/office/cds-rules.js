@@ -200,7 +200,8 @@
         // State reports and tax filings due in 30 days or late, until marked sent (only when the caller hands quarterStatus in).
         ...(data.quarterStatus ? [reportsDue(data.quarterStatus, now)].filter(r => r.length).map(r => ({
           t: plural(r.length, 'state report or tax filing', 'state reports and tax filings') + ' due', go: 'calendar', bad: r.some(x => x.late || x.days <= 7),
-          people: r.map(x => ({ name: x.title, why: x.late ? 'late' : x.days === 0 ? 'due today' : plural(x.days, 'day', 'days') + ' left', due: x.due, key: x.key, act: 'report' })) })) : [])
+          people: r.map(x => ({ name: x.title, why: x.late ? 'late' : x.days === 0 ? 'due today' : plural(x.days, 'day', 'days') + ' left', due: x.due, key: x.key, act: 'report' })) })) : []),
+        ...(data.agencyDates ? agencyDatesDue(data.agencyDates, now) : [])
       ].filter(Boolean),
       clear: 'Nothing outstanding with the state.'
     });
@@ -251,7 +252,8 @@
         visitsOverdue.length && { t: plural(visitsOverdue.length, 'annual face-to-face visit', 'annual face-to-face visits') + ' overdue', go: 'consumers', bad: true, people: byDue(visitsOverdue) },
         visitsSoon.length    && { t: plural(visitsSoon.length, 'face-to-face visit', 'face-to-face visits') + ' in the last 2 months, book ' + (visitsSoon.length === 1 ? 'it' : 'them') + ' now', go: 'consumers', people: byDue(visitsSoon) },
         monthDue.length      && { t: plural(monthDue.length, 'monthly check-in call', 'monthly check-in calls') + ' not yet logged this month', go: 'consumers', people: byDue(monthDue) },
-        ...dhssChanges(consumers, now)
+        ...dhssChanges(consumers, now),
+        ...(data.checks ? checklistDue(data.checks, now) : [])
       ].filter(Boolean),
       clear: 'Contacts and visits are up to date.'
     });
@@ -317,9 +319,89 @@
     const closing = closureItems(data.consumers || [], now, data.noShift);
     if (closing.length) steps.push({ n: steps.length + 1, title: 'Closings, pauses and missing shifts', items: closing,
                                      clear: 'No closings or missing shifts.' });
+    // Who owns each part of Today (build step 5, 2026-10-23). Her call 2026-10-21: everything is
+    // Zach's in the end, but the state and the money stay hers until she hands them over.
+    // data.owners = agency_data 'todayOwners'.owners, set in Settings by Samantha.
+    const PART = { 'Clear anything the state is waiting on': 'state', 'Protect the money': 'money', 'Keep the case files clean': 'files',
+                   'Call the people waiting': 'calls', 'Get new consumers ready for the first shift': 'firstshift', 'Attendants': 'attendants',
+                   'Closings, pauses and missing shifts': 'closings' };
+    const owners = Object.assign({}, TODAY_OWNERS, data.owners || {});
+    steps.forEach(st => { st.k = PART[st.title] || ''; st.owner = String(owners[st.k] || '').toLowerCase(); });
     return steps;
   }
+  const TODAY_OWNERS = { state: 'samantha@mo-care.com', money: 'samantha@mo-care.com', files: 'zach@caringcds.com', calls: 'zach@caringcds.com',
+                         firstshift: 'zach@caringcds.com', attendants: 'zach@caringcds.com', closings: 'zach@caringcds.com' };
+  const TODAY_PARTS = [['state', 'The state'], ['money', 'The money'], ['files', 'Case files'], ['calls', 'Calls'],
+                       ['firstshift', 'First shifts'], ['attendants', 'Attendants'], ['closings', 'Closings and missing shifts']];
 
+
+  // ---------- compliance checklist cycles and yearly agency dates (build step 5, 2026-10-23) ----------
+  // A recurring box counts only when ticked in its current period; a tick saves { at, by }. A plain
+  // true from before dates were kept counts for one-time boxes only (nobody knows when it was done).
+  // today: show on Today's step 3 when not done and the period ends within that many days
+  // (0 = do not show: tracked per consumer already, or a report that is on step 1). The yearly HIPAA
+  // training and disaster plan review are her yearly agency dates (AGENCY_DATES), not boxes here.
+  const CHECK_CYCLES = {
+    audit1: { every: 'week',    label: 'Weekly review of EVV records, tasks, visit notes and care plans', today: 7 },
+    audit2: { every: 'quarter', label: 'Quarterly audit of billing, participant funds and grievance reports', today: 21 },
+    audit3: { every: 'quarter', label: 'Quarterly payroll audit, employment taxes included', today: 21 },
+    audit4: { every: 'month',   label: 'Monthly case management contact with each participant', today: 0 },
+    rec2:   { every: 'month',   label: 'Monthly contact documented in each consumer file', today: 0 },
+    audit5: { every: 'year',    label: 'Annual face-to-face home visit with each participant', today: 0 },
+    rec3:   { every: 'year',    label: 'Annual face-to-face visits documented', today: 0 },
+    fin2:   { every: 'year',    label: 'Annual CPA audit', today: 0 },
+    fin3:   { every: 'quarter', label: 'Quarterly Financial & Service Reports', today: 0 },
+    fin4:   { every: 'year',    label: 'Annual Service Report', today: 0 },
+    emg3:   { every: 'year',    label: 'Consumer backup plans reviewed and updated', today: 45 },
+    staff4: { every: 'year',    label: 'All staff credentials and licenses current', today: 45 }
+  };
+  // The last day of the period (Sunday to Saturday week, calendar month, quarter, year) a date is in.
+  function periodEnd(every, iso) {
+    const d = new Date(iso + 'T12:00:00');
+    if (every === 'week') d.setDate(d.getDate() + (6 - d.getDay()));
+    else if (every === 'month') { d.setMonth(d.getMonth() + 1, 0); }
+    else if (every === 'quarter') { d.setMonth(Math.floor(d.getMonth() / 3) * 3 + 3, 0); }
+    else if (every === 'year') { d.setMonth(12, 0); }
+    return isoLocal(d);
+  }
+  function checkCurrent(key, rec, now) {
+    const c = CHECK_CYCLES[key];
+    if (!rec) return false;
+    if (!c) return true;                                   // one-time box: ticked is ticked
+    const at = typeof rec === 'object' && rec.at ? String(rec.at).slice(0, 10) : '';
+    if (!at) return false;                                 // ticked before dates were kept: tick again to record when
+    const today = isoLocal(now || new Date());
+    return periodEnd(c.every, at) === periodEnd(c.every, today);
+  }
+  function checklistDue(checks, now) {
+    const today = isoLocal(now || new Date()), ppl = [];
+    Object.entries(CHECK_CYCLES).forEach(([key, c]) => {
+      if (!c.today || checkCurrent(key, (checks || {})[key], now)) return;
+      const end = periodEnd(c.every, today);
+      if (daysBetween(today, end) <= c.today) ppl.push({ name: c.label, why: 'this ' + c.every, due: end, key, act: 'checklist' });
+    });
+    return ppl.length ? [{ t: plural(ppl.length, 'checklist item', 'checklist items') + ' due this period', go: 'compliance',
+                           people: ppl.sort((a, b) => a.due.localeCompare(b.due)) }] : [];
+  }
+  // Yearly agency dates she types in on the Deadlines page (her picks 2026-10-23). agencyDates =
+  // agency_data 'agencyDates' { [key]: { due: 'yyyy-mm-dd', done: 'yyyy-mm-dd'? } }. Shown on step 1
+  // from 30 days before until marked done; no date typed in yet = shown as a records gap, once.
+  const AGENCY_DATES = [['license', 'License renewal'], ['insurance', 'Insurance renewal'],
+                        ['policy', 'Policy and disaster plan review'], ['training', 'Staff and HIPAA training']];
+  function agencyDatesDue(agencyDates, now) {
+    const today = isoLocal(now || new Date()), due = [], missing = [];
+    AGENCY_DATES.forEach(([key, label]) => {
+      const r = (agencyDates || {})[key] || {};
+      if (!r.due) { missing.push(label); return; }
+      if (r.done && r.done >= addDays(r.due, -60)) return;   // done for this due date
+      const n = daysBetween(today, r.due);
+      if (n <= 30) due.push({ name: label, why: n < 0 ? 'late' : n === 0 ? 'due today' : plural(n, 'day', 'days') + ' left', due: r.due, key, act: 'agencydate' });
+    });
+    return [
+      due.length && { t: plural(due.length, 'yearly agency date', 'yearly agency dates') + ' coming up', go: 'calendar', bad: due.some(x => x.due < today), people: due },
+      missing.length && { t: 'Add the yearly agency dates on the Deadlines page: ' + missing.join(', '), go: 'calendar' }
+    ].filter(Boolean);
+  }
 
   // ---------- approved due dates (her answers 2026-10-23, build step 4 of the hub audit) ----------
   // EVV forms and payroll. data.evv = { corrections (agency_data evvCorrections), submissions
@@ -877,7 +959,7 @@
     // Due soon or late: OIG/LEIE older than 25 days, FCSR older than 335 days, or never done.
     const soon = atts.filter(a => !within(a, 25) || !(a.fcsrDate && days(a.fcsrDate) <= 335)).length;
     const total = o.checklistTotal || 0;
-    const done = Object.entries(o.checks || {}).filter(([k, v]) => v && (!o.checklistIds || o.checklistIds.includes(k))).length;
+    const done = Object.entries(o.checks || {}).filter(([k, v]) => checkCurrent(k, v, now) && (!o.checklistIds || o.checklistIds.includes(k))).length;
     const authRows = (o.hours || []);
     const fromWellSky = authRows.length > 0;
     const hoursMonth = fromWellSky ? authRows.reduce((s, r) => s + (Number(r.authorized) || 0), 0)
@@ -897,7 +979,7 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };

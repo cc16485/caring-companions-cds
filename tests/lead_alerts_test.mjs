@@ -214,7 +214,10 @@ ok(r.ok && r.live === false, 'morning email ran in practice ' + JSON.stringify(r
 const mm = (await pg.query(`select * from cds_outbox where template='morning_email' order by created_at`)).rows;
 eq(mm.length, 2, 'one per address');
 const body = mm[0].body;
-eq(body.split('\n')[0], 'CDS morning, Tue, Oct 27: 11 things waiting', 'morning subject (8 + leads needing a call back date, EVV forms, reports due)');
+eq(body.split('\n')[0], 'CDS morning, Tue, Oct 27: 13 things waiting', 'morning subject (8 + call back dates, EVV forms, reports, yearly dates to add, this week\'s checklist)');
+ok(body.includes('Add the yearly agency dates on the Deadlines page: License renewal, Insurance renewal, Policy and disaster plan review, Staff and HIPAA training'), 'no yearly dates yet: asks for them once');
+ok(body.includes('      Weekly review of EVV records, tasks, visit notes and care plans (this week, due Oct 31)'), 'this week\'s checklist item, due Saturday');
+ok(body.includes('1. Clear anything the state is waiting on (Samantha)') && body.includes('4. Call the people waiting (Zach)'), 'each part of the email says who owns it');
 ok(body.includes('4 state reports and tax filings due') && body.includes('      Federal 941, one per consumer EIN (4 days left, due Oct 31)'), 'the email lists the reports and tax filings due Oct 31');
 ok(body.includes('2 EVV forms to finish') && body.includes('needs the consumer and the attendant to sign'), 'the email lists the EVV forms waiting to be signed');
 for (const want of [
