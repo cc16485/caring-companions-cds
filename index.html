@@ -944,6 +944,11 @@ button.fu-tile.check span { color:#14606F; }
         <button type="button" id="rosterSegActive" class="on" onclick="setRosterView('active')">Active</button>
         <button type="button" id="rosterSegInactive" onclick="setRosterView('inactive')">Inactive</button>
       </div>
+      <label class="ld-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="ld-sr">Find a consumer</span>
+        <input type="search" id="rosterSearch" placeholder="Find a consumer or attendant by name" oninput="renderConsumers()">
+      </label>
       <button class="btn btn-outline btn-sm" id="openBulkContactsBtn" onclick="openBulkContacts()" style="font-size:12px">&#128197; Record completed monthly contacts</button>
     </div>
 
@@ -5011,7 +5016,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=15');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=16');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5266,8 +5271,12 @@ function renderConsumers() {
   // 2026-10-22 her ask: a clear roster. One row = who they are, this month's
   // call (the one thing the office does for everyone), the visit, and how much
   // is left. Everything else lives on the profile; the name opens it.
-  const active = consumers.filter(CDSRules.isActive).sort((a, b) => a.name.localeCompare(b.name));
-  const inactive = consumers.filter(c => !CDSRules.isActive(c)).sort((a, b) => a.name.localeCompare(b.name));
+  // Find by name (her ask 2026-10-23): the consumer's name, their attendant's name, or a phone number.
+  const allAtt = getData('attendants');
+  const find = rosterFind((document.getElementById('rosterSearch') || {}).value);
+  const hit = c => find(c.name, c.phone, ...allAtt.filter(a => (a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name))).map(a => a.name));
+  const active = consumers.filter(CDSRules.isActive).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
+  const inactive = consumers.filter(c => !CDSRules.isActive(c)).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
   document.getElementById('rosterSegActive').textContent = 'Active (' + active.length + ')';
   document.getElementById('rosterSegInactive').textContent = 'Inactive (' + inactive.length + ')';
   const showInactive = _rosterView === 'inactive';
@@ -5283,6 +5292,7 @@ function renderConsumers() {
     (callsLeft ? callsLeft + ' call' + (callsLeft === 1 ? '' : 's') + ' left this month' : 'every call done this month');
   const allAttendants = getData('attendants');
   const noShift = noShiftList();
+  if (!showInactive && !active.length && find.on) { tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><p>No active consumer matches. Try Inactive, or fewer letters.</p></div></td></tr>'; return; }
   const link = (c, html) => '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="color:inherit;text-decoration:none">' + html + '</a>';
 
   if (!showInactive) tbody.innerHTML = active.map(c => {
@@ -5319,6 +5329,18 @@ function renderConsumers() {
 // Active / Inactive switch on the roster (her ask 2026-10-22). Inactive
 // consumers keep their record and history; this list is where they live.
 let _rosterView = 'active';
+// "smith", "Pam Bell", "Bell, Pam" or "417 555" all find a person. Every word typed must be in
+// one of the names, in any order; digits match a phone.
+function rosterFind(q) {
+  const words = String(q || '').toLowerCase().replace(/[’']/g, '').split(/[\s,]+/).filter(Boolean);
+  const f = (...vals) => {
+    if (!words.length) return true;
+    const text = vals.filter(Boolean).map(v => String(v).toLowerCase().replace(/[’']/g, '')).join(' '), digits = vals.filter(Boolean).map(v => String(v).replace(/\D/g, '')).join(' ');
+    return words.every(w => /^\d+$/.test(w) ? digits.includes(w) : text.includes(w));
+  };
+  f.on = words.length > 0;
+  return f;
+}
 function setRosterView(v) { _rosterView = v; renderConsumers(); }
 
 function renderInactiveRoster(list, tbody) {
@@ -5326,7 +5348,7 @@ function renderInactiveRoster(list, tbody) {
     ? list.length + ' inactive · their records and history are kept'
     : '';
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><p>No inactive consumers.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><p>' + ((document.getElementById('rosterSearch') || {}).value ? 'No inactive consumer matches.' : 'No inactive consumers.') + '</p></div></td></tr>';
     return;
   }
   const link = (c, html) => '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="color:inherit;text-decoration:none">' + html + '</a>';

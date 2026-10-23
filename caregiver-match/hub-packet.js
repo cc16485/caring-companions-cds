@@ -268,10 +268,13 @@ export function mountHubPacket(el, opts) {
       ? new Date(p.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) : null; };   // the Central day, not the UTC one
   const ended = () => (opts.roster ? opts.roster() : []).filter(a => a.status === 'inactive');
   // Tabs (her ask 2026-10-22): Onboarding / Working / Inactive. Opens on Onboarding when someone is in it.
-  let list = [], open = null, err = '', tab = null;
+  let list = [], open = null, err = '', tab = null, query = '';
   if (!document.getElementById('hp_css')) { const s = document.createElement('style'); s.id = 'hp_css'; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add('hp');
   el.addEventListener('click', onClick);
+  // Find by name (her ask 2026-10-23): searches every tab at once.
+  el.addEventListener('input', e => { if (e.target.id !== 'hp_find') return; query = e.target.value; const pos = e.target.selectionStart; draw();
+    const i = el.querySelector('#hp_find'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch { /* not a text input */ } } });
   load();
 
   async function load() {
@@ -302,7 +305,17 @@ export function mountHubPacket(el, opts) {
     const tabBtn = (k, label, n) => `<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${label} (${n})</button>`;
     const endedRow = x => `<div class="row" style="cursor:default"><b>${esc(x.name)}</b><button class="btn o" data-reactivate="${esc(x.id)}">Make active again</button><span class="meta">${esc(x.meta)}</span>${x.said ? `<span class="meta">The consumer said: "${esc(x.said)}"</span>` : ''}</div>`;
     let body;
-    if (tab === 'onboarding') body = `<div class="ghead"><span>Consumer waiting goes first</span></div>
+    const words = query.toLowerCase().replace(/[’']/g, '').split(/[\s,]+/).filter(Boolean);
+    const hit = x => words.every(w => (x.name + ' ' + (x.meta || '')).toLowerCase().replace(/[’']/g, '').includes(w));
+    if (words.length) {
+      const found = [...g.starting.map(x => ({ ...x, where: 'Onboarding' })), ...g.working.map(x => ({ ...x, where: 'Working' })),
+        ...g.quiet.map(x => ({ ...x, where: 'Not working lately' }))].filter(hit);
+      const gone = g.ended.filter(hit);
+      body = `<div class="ghead"><span>${found.length + gone.length} found on every tab</span></div>
+        ${found.map(x => rowHtml({ ...x, meta: x.where + (x.meta ? ' · ' + x.meta : '') })).join('')}
+        ${gone.map(endedRow).join('')}
+        ${found.length + gone.length ? '' : '<p class="small">Nobody matches. Try fewer letters.</p>'}`;
+    } else if (tab === 'onboarding') body = `<div class="ghead"><span>Consumer waiting goes first</span></div>
       ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is onboarding. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}`;
     else if (tab === 'working') body = `<div class="ghead"><span>${ws.have ? 'Shift in WellSky in the last ' + WORKING_DAYS + ' days. WellSky ' + esc(asOf) + esc(hoursNote) : 'WellSky has not sent anything yet, so everyone shows here'}</span>
         <span>${t.due ? `<span class="pill r">${t.due} check due or overdue</span> ` : ''}${t.dates ? `<span class="pill y">${t.dates} with check dates to add</span>` : ''}</span></div>
@@ -312,6 +325,9 @@ export function mountHubPacket(el, opts) {
       <section class="grp"><div class="ghead"><h3>No longer working</h3><span>Marked no longer working. No rechecks.</span></div>
       ${g.ended.length ? g.ended.map(endedRow).join('') : '<p class="small">Nobody.</p>'}</section>`;
     el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><div class="btns" style="margin:0"><button class="btn o" data-act="ghl-import">Bring in papers and checks from GHL</button><button data-act="reload" class="pill-btn">Refresh</button></div></div>
+      <label style="display:flex;align-items:center;gap:8px;max-width:380px;margin:8px 0 0;padding:0 14px;min-height:42px;background:#fff;border:2px solid #dfe6ec;border-radius:999px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="hp_find" value="${esc(query)}" placeholder="Find an attendant or consumer by name" aria-label="Find an attendant or consumer by name" style="border:0;outline:0;font:inherit;font-size:14.5px;flex:1;min-width:0;background:transparent"></label>
       <div class="hp-tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       ${body}
