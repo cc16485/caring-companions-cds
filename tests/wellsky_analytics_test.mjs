@@ -54,6 +54,13 @@ eq(al.shifts, [{ consumer: 'Able, Ann', auth: 'Ann Able PC - CDS 4/01/2026-2/28/
                { consumer: 'Carr, Cal', auth: 'Cal Carr CDS Authorized Hours', clockIn: '2026-10-20T08:02:15', clockOut: '', hours: null }],
    'every shift with its clock in and out; a blank clock out stays blank (never clocked out)');
 eq(al.unread, ['Carr, Cal'], 'a row with an unreadable time is counted as unread');
+eq(al.columns.slice(0, 4), ['Client Last, First Name', 'Authorization ID', 'Clock In Time', 'Clock Out Time'], 'the columns that arrived are kept, to see what WellSky sends');
+// Her own copy of the dashboard (2026-10-21): Caregiver Full Name, end date, Initial Hours.
+const al2 = A.readReport({ report: 'Authorization Care Logs', files: [{ name: 'x.csv',
+  text: '"Client Last, First Name",Authorization ID,Clock In Time,Clock Out Time,Caregiver Full Name,Carelog Authorizations End Date,Initial Hours\n' +
+        '"Able, Ann",Ann Able PC,2026-10-15 09:41:23,2026-10-15 16:26:23,Jo Ray,2027-02-28,147.5\n' }] });
+eq(al2.shifts[0], { consumer: 'Able, Ann', auth: 'Ann Able PC', clockIn: '2026-10-15T09:41:23', clockOut: '2026-10-15T16:26:23', hours: 6.75, attendant: 'Jo Ray', authEnd: '2027-02-28', authHours: 147.5 },
+   'the attendant, authorization end date and Initial Hours are read when the dashboard has them');
 
 // ---------- saving, on a local Postgres copy ----------
 const pg = new PGlite();

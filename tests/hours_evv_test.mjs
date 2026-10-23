@@ -66,6 +66,22 @@ eq(v.overlaps.length, 1, 'an overlap marked checked on the Authorizations tab st
 eq(v.tiles.ending, 2, 'ended or ending in 30 days');
 ok(v.expectedShare > 0.6 && v.expectedShare < 0.75, 'the even-pace line is about two thirds through October');
 
+// ---------- shifts from the daily WellSky email (2026-10-22) ----------
+const emailCheck = { shifts, analytics: { authLogs: { at: '2026-10-22T12:00:00Z', shifts: [
+  { consumer: 'Tran, Huan', attendant: 'Nuong Pham', auth: 'x', clockIn: '2026-10-21T09:00:00', clockOut: '2026-10-21T13:00:00', hours: 4 },
+  { consumer: 'Tran, Huan', attendant: 'Tonya Lee', auth: 'x', clockIn: '2026-10-21T12:00:00', clockOut: '2026-10-21T14:00:00', hours: 2 },
+  { consumer: 'Barnwell, Susan', attendant: 'Anita Smith', auth: 'x', clockIn: '2026-10-20T08:00:00', clockOut: '', hours: null } ] } } };
+const m = H.mergedShifts(emailCheck);
+eq(m.emailFrom, '2026-10-20', 'the email covers from its first day');
+eq(m.consumers.find(c => c.name === 'Tran, Huan').shifts.map(x => x.date + ' ' + x.start + ' ' + x.attendant),
+   ['2026-10-21 9:00 AM Nuong Pham', '2026-10-21 12:00 PM Tonya Lee'], 'email shifts replace the schedule report for the days the email covers');
+ok(m.consumers.find(c => c.name === 'Barnwell, Susan').shifts.some(x => x.date === '2026-10-19'), 'days before the email still come from the schedule report');
+eq(H.mergedShifts({ shifts, analytics: { authLogs: { at: 'x', shifts: [{ consumer: 'Tran, Huan', clockIn: '2026-10-21T09:00:00', clockOut: '2026-10-21T13:00:00', hours: 4 }] } } }), shifts, 'an email with no attendant names changes nothing');
+eq(H.overlaps(m, NOW).length, 2, 'two attendants at once found in the email shifts too');
+const eo = H.emailOpen(emailCheck);
+eq([eo.pulledLocal, eo.rows.length, eo.rows[0].attendant], ['2026-10-22T07:00:00', 1, 'Anita Smith'], 'never clocked out, from the email, in Central time');
+eq(W.openShifts(eo, {}).length, 1, 'and the shared rule flags it (over 12 hours)');
+
 const src = readFileSync(ROOT + '/hours/hub-hours.js', 'utf8');
 ok(!/—/.test(src), 'no em dashes');
 ok(!/tel:|sms:/.test(src), 'no call or text buttons for attendants');

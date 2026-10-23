@@ -56,7 +56,7 @@ ok(R.CLOSED_LABELS.closed_pool === 'Moved to the Caregiver Pool', 'pool: label')
 const html = readFileSync(ROOT + '/index.html', 'utf8');
 ok(/const ldWhoLive = \(\) => getObj\('leadsWhoCalled'\)\.live === true;/.test(html), 'page: off unless leadsWhoCalled.live is true');
 ok(/'closed_pool'\]/.test(html), 'page: closed_pool is a closed status');
-ok(/cds-rules\.js\?v=14/.test(html), 'page loads rules v=14');
+ok(/cds-rules\.js\?v=(1[4-9]|[2-9]\d)\b/.test(html), 'page loads rules v=14 or later');
 ok(!/[—]/.test(Object.values(R.WHO_NEXT).join(' ') + Object.values(R.WHO_CALLED).join(' ')), 'no em dashes');
 
 // 2026-10-22 fix (#58): this hub has no _user; the switch row read it and stopped the Leads cards drawing

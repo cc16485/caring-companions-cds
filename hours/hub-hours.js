@@ -21,6 +21,33 @@ export const SOON_DAYS = 30;          // an authorization ending within this man
 export const OVERLAP_DAYS = 31;       // look for two attendants at once in the last month
 export const EVV_GOAL = 0.05;         // her internal standard: no more than 5% of shifts need a manual fix
 
+// ---------- 0. which shifts to read ----------
+// Two WellSky sources: the Chrome schedule report (check.shifts, stops when WellSky logs Chrome out)
+// and the daily email report (check.analytics.authLogs). The email has the attendant once her
+// dashboard includes Caregiver Full Name (2026-10-22). When it does, the email's shifts are used
+// for the days it covers, and the schedule report only for days before that. Same shape either way:
+// { at, consumers: [{ name, shifts: [{ attendant, date, start "9:41 AM", endDate, end, hours }] }] }.
+const t12 = naive => { const h = +naive.slice(11, 13), m = naive.slice(14, 16); return ((h % 12) || 12) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM'); };
+export function mergedShifts(check) {
+  const sh = check && check.shifts, al = check && check.analytics && check.analytics.authLogs;
+  const email = ((al && al.shifts) || []).filter(s => s.attendant && s.clockIn);
+  if (!email.length) return sh || null;
+  const from = email.map(s => s.clockIn.slice(0, 10)).sort()[0];
+  const by = new Map();
+  const add = (name, x) => { if (!by.has(name)) by.set(name, []); by.get(name).push(x); };
+  for (const c of (sh && sh.consumers) || []) for (const x of c.shifts || []) if (x.date < from) add(c.name, x);
+  for (const x of email) add(x.consumer, { attendant: x.attendant, date: x.clockIn.slice(0, 10), start: t12(x.clockIn),
+    endDate: x.clockOut ? x.clockOut.slice(0, 10) : x.clockIn.slice(0, 10), end: x.clockOut ? t12(x.clockOut) : '', hours: x.hours == null ? 0 : x.hours });
+  return { at: al.at, email: true, emailFrom: from, consumers: [...by].map(([name, shifts]) => ({ name, shifts: shifts.sort((a, b) => a.date.localeCompare(b.date)) })) };
+}
+// Shifts the email shows clocked in but never clocked out, in the shape CDSWellSky.openShifts reads.
+export function emailOpen(check) {
+  const al = check && check.analytics && check.analytics.authLogs;
+  if (!al || !al.at || !(al.shifts || []).some(s => s.attendant)) return null;
+  const local = new Date(al.at).toLocaleString('sv-SE', { timeZone: 'America/Chicago' }).replace(' ', 'T');
+  return { pulledLocal: local, rows: al.shifts.filter(s => s.clockIn && !s.clockOut).map(s => ({ consumer: s.consumer, attendant: s.attendant || '', clockIn: s.clockIn })) };
+}
+
 // ---------- 1. authorization end dates ----------
 // WellSky does not send the end date on its own yet, but most authorization names carry the
 // dates: "Susan Barnwell PC - CDS 4/01/2026-2/28/2027", "... Care Plan: 02/25/2026 - 12/31/2026".
@@ -105,17 +132,18 @@ export function monthView({ W, check, reviewed, corrections, submissions, now = 
   const today = isoLocal(now);
   const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
   const hours = W && check.auths ? W.hoursThisMonth(check.auths, check.shifts, pulledOn) : [];
-  const long = W && check.shifts ? W.longShifts(check.shifts, reviewed, today) : [];
-  const open = W && check.open ? W.openShifts(check.open, reviewed) : [];
-  const over = overlaps(check.shifts, now).filter(o => !(reviewed && reviewed[o.key]));
+  const shifts = mergedShifts(check), eo = emailOpen(check);
+  const long = W && shifts ? W.longShifts(shifts, reviewed, today) : [];
+  const open = W && (eo || check.open) ? W.openShifts(eo || check.open, reviewed) : [];
+  const over = overlaps(shifts, now).filter(o => !(reviewed && reviewed[o.key]));
   const ends = authEnds(check.auths, W, now);
-  const evv = evvStatus(corrections, submissions, shiftsThisMonth(check.shifts, now), now);
+  const evv = evvStatus(corrections, submissions, shiftsThisMonth(shifts, now), now);
   const rank = { over: 0, 'booked-over': 0, 'pace-over': 1, low: 2, ok: 3 };
   hours.sort((a, b) => rank[a.status] - rank[b.status] || a.consumer.localeCompare(b.consumer));
   const dayOfMonth = +pulledOn.slice(8, 10), dim = new Date(+pulledOn.slice(0, 4), +pulledOn.slice(5, 7), 0).getDate();
   return { hours, long, open, overlaps: over, ends, evv, have: !!(check.auths || check.shifts),
     expectedShare: Math.max(0, Math.min(1, (dayOfMonth - 1) / dim)),
-    asOf: [check.auths && check.auths.at, check.shifts && check.shifts.at].filter(Boolean).sort()[0] || null,
+    asOf: [check.auths && check.auths.at, shifts && shifts.at].filter(Boolean).sort()[0] || null, fromEmail: !!(shifts && shifts.email),
     tiles: { over: hours.filter(h => ['over', 'booked-over', 'pace-over'].includes(h.status)).length, low: hours.filter(h => h.status === 'low').length,
       ending: ends.filter(e => e.status === 'ended' || e.status === 'soon').length, checks: long.length + open.length + over.length, evv: evv.open } };
 }
