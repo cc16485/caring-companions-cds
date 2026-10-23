@@ -1389,7 +1389,7 @@ export function createMatch(deps) {
   };
 
   // The attendant packet (2026-10-21): same link, pool row and screening records.
-  const packet = createPacket({ q, one, nowIso, audit, setting, task, crypto, links, ensureProfile, caregiverLink, loadCaregiver, R, fail, deps });
+  const packet = createPacket({ q, one, nowIso, audit, setting, task, finishTask, media, crypto, links, ensureProfile, caregiverLink, loadCaregiver, R, fail, deps });
   Object.assign(pub, packet.pub); Object.assign(caregiver, packet.att); Object.assign(staff, packet.office);
   // The consumer enrollment packet (2026-10-22): consumers on their own private link.
   const enroll = createEnroll({ q, one, nowIso, audit, setting, task, crypto, links, R, fail, deps, isTestRecipient });

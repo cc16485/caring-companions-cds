@@ -110,5 +110,33 @@ ok(!/—/.test(src), 'no em dashes in the page');
 ok(!/Applying \(/.test(src), 'the old Active / Applying tabs are gone');
 ok(/data-tab="\$\{k\}"/.test(src) && /'Onboarding'/.test(src) && /'Inactive'/.test(src), 'Onboarding / Working / Inactive tabs');
 
+// ---------- step by step + FCSR finding (2026-10-23) ----------
+const base = { pool: { first: 'Jordan', last: 'Ellis' }, packet: { consumer_name: 'Ruth Caldwell' }, answers: { convicted: 'yes', offenses: [{ what: 'Stealing', when: '2014', where: 'Greene' }], gcw: 'no', fcsr: 'notsure' },
+  screening: { checks: [{ key: 'edl', label: 'EDL', clear: false }, { key: 'oig', clear: true }, { key: 'age18', clear: true }, { key: 'id_match', clear: false }] } };
+const stChecks = { step1: true, now: 'checks', label: 'Run EDL and FCSR', tone: 'r', next: '' };
+ok(H.fcsrState({}) === 'none' && H.fcsrState({ requested_at: 'x' }) === 'pending' && H.fcsrState({ result: 'findings' }) === 'finding' && H.fcsrState({ result: 'findings', review: 'gcw_needed' }) === 'gcw_needed' && H.fcsrState({ result: 'no_findings' }) === 'clear', 'FCSR state from the screening');
+let how = H.nextHow(stChecks, base);
+ok(how.title === "Run Jordan's checks: FCSR, EDL" && how.who === 'Office' && how.steps.length === 6 && how.links.some(([l, u]) => /cannot hire/.test(l) && u === H.LINKS.cannotHire), 'checks: how-to steps and the cannot-hire list');
+how = H.nextHow(stChecks, { ...base, screening: { ...base.screening, result: 'findings' } });
+ok(/Pick what Jordan's FCSR finding means/.test(how.title) && how.steps.some(x => /573-751-3399/.test(x)), 'finding not picked yet: pick it, MMAC number');
+how = H.nextHow({ ...stChecks, label: 'Waiting on Good Cause Waiver' }, { ...base, screening: { ...base.screening, result: 'findings', review: 'gcw_needed', notice: 'sent' } });
+ok(/Good Cause Waiver/.test(how.title) && how.steps.some(x => /Every 2 weeks/.test(x)) && how.steps.some(x => /No shifts/.test(x)) && how.tone === 'y', 'waiting on the waiver: what happens and the 2-week check');
+how = H.nextHow({ ...stChecks }, { ...base, screening: { ...base.screening, result: 'findings', review: 'edl' } });
+ok(/cannot work in CDS/.test(how.title) && how.steps.some(x => /Call Ruth Caldwell/.test(x)), 'EDL: call the consumer');
+ok(/Empeon/.test(H.nextHow({ step1: true, now: 'empeon_invite' }, base).title) && /I-9/.test(H.nextHow({ step1: true, now: 'i9' }, base).title), 'other steps have their own how-to');
+ok(/Step 1/.test(H.nextHow({ step1: false }, base).title) && /Nothing due/.test(H.nextHow({ active: true }, base).title), 'before Step 1 and when active');
+let fp = H.fcsrPanelHtml(base);
+ok(/Clear: add the screenshot/.test(fp) && /Something came up/.test(fp) && /Still pending at the state/.test(fp) && fp.includes(H.LINKS.cannotHire), 'FCSR: the three buttons and the list');
+fp = H.fcsrPanelHtml(base, true);
+ok(/value="gcw_needed"/.test(fp) && /value="edl"/.test(fp) && /value="cleared_no_waiver"/.test(fp) && /Stealing, 2014, Greene/.test(fp) && /Save and send to Jordan/.test(fp) && /told them by phone/.test(fp) && /Pick the file/.test(fp), 'Something came up: picker, Step 1 disclosure, file, two saves');
+fp = H.fcsrPanelHtml({ ...base, answers: { convicted: '<b>x</b>' }, pool: { first: '<i>J</i>' } }, true);
+ok(!/<i>J<\/i>/.test(fp), 'names are escaped');
+fp = H.fcsrPanelHtml({ ...base, screening: { result: 'findings', review: 'gcw_needed', notice: 'phone', reviewed_at: '2026-10-23T15:00:00Z' } });
+ok(/Waiting on Good Cause Waiver/.test(fp) && /told by phone/.test(fp) && /Pick the letter/.test(fp) && /Clear to continue/.test(fp) && /Not moving forward/.test(fp), 'waiting: letter, clear to continue, not moving forward');
+fp = H.fcsrPanelHtml({ ...base, screening: { result: 'findings', review: 'edl' } });
+ok(/On the EDL/.test(fp) && !/Clear to continue/.test(fp), 'EDL: no clear button');
+ok(/Clear: waiver approved/.test(H.fcsrPanelHtml({ ...base, screening: { result: 'findings', review: 'cleared_waiver' } })), 'cleared with a waiver');
+ok(!/—/.test(src), 'no em dashes in the page');
+
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);

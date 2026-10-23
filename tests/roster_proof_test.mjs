@@ -52,6 +52,7 @@ await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='
 await pg.exec(`create table if not exists agency_data (id uuid primary key default gen_random_uuid(), agency_id text, data_key text, data_value jsonb, unique (agency_id, data_key))`);
 await pg.exec(strip(readFileSync(ROOT + '/oig_check.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/fcsr_waiver.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/consumer_packet.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/consumer_forms.sql', 'utf8')));
 const SQL = strip(readFileSync(ROOT + '/roster_proof.sql', 'utf8'));

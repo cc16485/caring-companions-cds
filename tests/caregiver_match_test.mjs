@@ -30,6 +30,7 @@ ok(true, 'Phase 1 SQL runs twice');
 // The attendant application tables (Caregiver Match lists leave out applicants with a consumer unless they chose to be listed).
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
 await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/fcsr_waiver.sql', 'utf8')));
 
 const match = createMatch(practiceDeps(db, { familyBase: 'https://x.test/directory/', caregiverBase: 'https://x.test/caregiver/' }));
 const H = (role, a, i) => match.handle(role, a, i);

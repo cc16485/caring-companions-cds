@@ -63,6 +63,16 @@ const CSS = `
 .hp .ok{color:#1f7a4d;font-weight:700;margin-top:6px}
 .hp .ask{background:#f7f9fb;border-radius:10px;padding:10px 12px;margin-top:6px}
 .hp .btn.bad{background:#b42318}
+.hp .nextcard{border:2px solid #0f7a7c;border-radius:14px;padding:14px 16px;margin-top:12px;background:#fff}
+.hp .nextcard .kick{font-size:12px;font-weight:700;letter-spacing:.06em;color:#0f7a7c;text-transform:uppercase}
+.hp .nextcard h3{margin:4px 0 6px;text-transform:none;letter-spacing:0;font-size:19px}
+.hp .how{background:#f3f7f8;border-radius:10px;padding:10px 14px;margin-top:8px}
+.hp .how ol{margin:6px 0 0;padding-left:20px;font-size:14.5px;line-height:1.55}
+.hp .how a{color:#0f7a7c;font-weight:600}
+.hp .fcsr{border:1px solid #dfe6ec;border-radius:12px;padding:12px 14px;margin-top:8px}
+.hp .pick{display:grid;grid-template-columns:24px 1fr;gap:8px;border:1px solid #dfe6ec;border-radius:10px;padding:10px 12px;margin-top:8px;cursor:pointer}
+.hp .pick:has(input:checked){border:2px solid #0f7a7c;background:#f3f9f9}
+.hp .btn.good{background:#1f7a4d;color:#fff}.hp .btn.warn{background:#8a5a00}
 .hp .hp-print p{font-size:14.5px;line-height:1.5}
 @media print{body *{visibility:hidden!important}.hp .hp-print,.hp .hp-print *{visibility:visible!important}
 .hp .hp-print{position:absolute;left:0;top:0;width:100%;border:0;margin:0;padding:0}.hp .hp-noprint{display:none!important}
@@ -193,6 +203,110 @@ export function trackOf(steps, hasShift) {
   let at = t.findIndex(x => !x.done && x.key !== 'orientation');
   if (at < 0) at = t.findIndex(x => !x.done);
   return { steps: t, at: at < 0 ? t.length : at };
+}
+
+// ---------- step by step, like the Onboarding tab in the Caring Companions hub (2026-10-23) ----------
+// Her ask: each attendant's next step with "How do I do this?", the FCSR "cannot hire" list linked, and the
+// Good Cause Waiver handled on the profile. Links checked 2026-10-23.
+export const LINKS = {
+  fcsrSite: 'https://healthapps.dhss.mo.gov/BSEES/Main.aspx',
+  cannotHire: 'https://mmac.mo.gov/wp-content/uploads/Disqaulifying-Factors-FCSR-2023.pdf',
+  gcw: 'https://health.mo.gov/providers/good-cause-waiver',
+  mmacFcsr: 'https://mmac.mo.gov/providers/provider-enrollment/home-and-community-based-services/fcsr-for-in-home-and-consumer-directed-services',
+  edl: 'https://health.mo.gov/business-professionals/employee-disqualification-list-edl',
+};
+// Where the FCSR stands, from packetGet's screening: one of
+// none | pending | clear | finding (not picked yet) | gcw_needed | edl | not_moving | cleared_no_waiver | cleared_waiver
+export function fcsrState(sc) {
+  sc = sc || {};
+  if (sc.review) return sc.review;
+  if (sc.result === 'findings') return 'finding';
+  if (sc.result === 'no_findings') return 'clear';
+  return sc.requested_at ? 'pending' : 'none';
+}
+// The Next step card: { title, who, mins, tone, steps[], links[[label, url]] }.
+export function nextHow(st, g) {
+  const first = (g && g.pool && g.pool.first) || 'them', p = (g && g.packet) || {}, f = fcsrState(g && g.screening);
+  const consumer = p.consumer_name || 'their consumer';
+  if (st.active) return { title: 'Nothing due', who: 'Done', tone: 'g', steps: [first + ' is ready to work. Their first shift in WellSky moves them to Working.'] };
+  if (!st.step1) return { title: 'Waiting on ' + first + ' to finish Step 1', who: 'Attendant', tone: 'b', steps: ['Nothing to do. Reminder texts go out on their own on day 2 and day 4.', 'You get an alert the moment they sign.'] };
+  if (st.now === 'checks' || f === 'gcw_needed' || f === 'edl' || f === 'not_moving' || f === 'finding') {
+    if (f === 'gcw_needed') return { title: 'Waiting on ' + first + '\'s Good Cause Waiver', who: 'Attendant, then office', tone: 'y', steps: [
+      first + ' applies to the state. They have the steps by email' + (g.screening.notice === 'phone' ? ' (you told them by phone)' : '') + '.',
+      'No shifts while the waiver is pending, and no Step 2 papers.',
+      'Every 2 weeks a to-do reminds you to check the status: FCSR site, Good Cause Waiver tab, Waiver Status, enter their SSN.',
+      'When they send you the approval letter, add it below and pick Clear to continue or Not moving forward.'],
+      links: [['Good Cause Waiver page', LINKS.gcw], ['Open the FCSR site', LINKS.fcsrSite]] };
+    if (f === 'edl') return { title: first + ' cannot work in CDS', who: 'Office', tone: 'r', steps: [
+      'They are on the EDL. A Good Cause Waiver is not possible for the EDL.', 'Call ' + consumer + ' so they can pick someone else (there is a to-do for it).',
+      'Then tap Not moving forward below to close this out.'] };
+    if (f === 'not_moving') return { title: 'Not moving forward', who: 'Done', tone: 'b', steps: ['Nothing due.'] };
+    if (f === 'finding') return { title: 'Pick what ' + first + '\'s FCSR finding means', who: 'Office', mins: 'About 5 minutes', tone: 'r', steps: [
+      'Open the FCSR "cannot hire" list and find the finding on it.', 'On the list: Needs a Good Cause Waiver. On the EDL: cannot work in CDS. Not on the list: no waiver needed.',
+      'Not sure? Call MMAC at 573-751-3399 before you pick.', 'Pick it below. The hub tells ' + first + ' and gives you a to-do to call ' + consumer + '.'],
+      links: [['FCSR "cannot hire" list', LINKS.cannotHire]] };
+    const left = ((g && g.screening && g.screening.checks) || []).filter(c => !c.clear && c.key !== 'id_match' && c.key !== 'age18').map(c => CHECK_NAMES[c.key] || c.label);
+    return { title: f === 'clear' || f === 'cleared_no_waiver' || f === 'cleared_waiver' ? 'Finish ' + first + '\'s checks: ' + left.join(', ') : 'Run ' + first + '\'s checks: ' + ['FCSR'].concat(left).join(', '),
+      who: 'Office', mins: 'About 10 minutes', tone: 'r', steps: [
+      'Tap Copy for FCSR. It shows their legal name, other names, birth date and address.',
+      'Open the FCSR site and sign in with the agency\'s provider login. If they are not registered yet, register them first.',
+      'Tap Show SSN and enter it. Run every SSN they listed.',
+      'Submit the screening. Save the result page as a PDF or a screenshot.',
+      'Under FCSR below, tap what came back: Clear, Something came up, or Still pending.',
+      'Record the other checks in the table with their screenshot (OIG usually ran by itself).'],
+      links: [['Open the FCSR site', LINKS.fcsrSite], ['FCSR "cannot hire" list', LINKS.cannotHire]] };
+  }
+  const H = {
+    papers: { title: 'Waiting on ' + first + ' to sign their papers', who: 'Attendant', tone: 'b', steps: ['They sign the contract, pay rate, unit agreement and handbook from their private link. They were sent it when checks cleared.', 'Nothing to do unless it has been 3 days. Then call them.'] },
+    empeon_invite: { title: 'Send ' + first + '\'s Empeon invite', who: 'Office', mins: 'About 3 minutes', tone: 'r', steps: ['Tap Copy for Empeon below.', 'In Empeon, start a new hire and paste the details. ' + consumer + ' is the employer.', 'Send the invite.', 'Tap Empeon invite sent.'] },
+    empeon: { title: 'Waiting on ' + first + ' in Empeon', who: 'Attendant', tone: 'b', steps: ['They fill out the W-4, I-9 part 1 and direct deposit, and upload photos of their ID front and back.', 'Nothing to do unless it has been 3 days. Then call them.'] },
+    call: { title: '5-minute ID check with ' + first, who: 'Office and attendant', mins: '5 minutes', tone: 'r', steps: [p.call_slot ? 'Booked for ' + p.call_slot + '.' : 'They book a time from their link.', 'Video call them. They hold up the same ID they uploaded to Empeon, front and back.', 'Check the name and photo match.', 'Tap ID seen on the video call.'] },
+    i9: { title: 'I-9 Section 2 in Empeon', who: 'Office', mins: 'About 5 minutes', tone: 'r', steps: ['Open their I-9 in Empeon.', 'Fill out Section 2 with the documents you saw on the call.', 'Tick the box for the remote exam (E-Verify alternative procedure).', 'Tap I-9 Section 2 done in Empeon.'] },
+    countersign: { title: 'Countersign ' + first + '\'s contract', who: 'Office', mins: '1 minute', tone: 'r', steps: ['Type your full name in the box below and tap Countersign.'] },
+  };
+  return H[st.now] || { title: st.label, who: '', tone: st.tone, steps: [st.next] };
+}
+
+export function nextCardHtml(how) {
+  const tone = { r: '#b42318', y: '#8a5a00', g: '#1f7a4d', b: '#0f5f61' }[how.tone] || '#0f7a7c';
+  return `<div class="nextcard" style="border-color:${tone}"><span class="kick" style="color:${tone}">Next step${how.who ? ' · ' + esc(how.who) : ''}${how.mins ? ' · ' + esc(how.mins) : ''}</span>
+    <h3>${esc(how.title)}</h3>
+    <div class="how"><b>How do I do this?</b><ol>${how.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol>
+    ${(how.links || []).length ? `<div class="btns">${how.links.map(([l, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(l)} ↗</a>`).join(' · ')}</div>` : ''}</div></div>`;
+}
+const FCSR_WORDS = { none: 'To run', pending: 'Pending at the state', clear: 'Clear', finding: 'Something came up', gcw_needed: 'Waiting on Good Cause Waiver',
+  edl: 'On the EDL', not_moving: 'Not moving forward', cleared_no_waiver: 'Clear after review', cleared_waiver: 'Clear: waiver approved' };
+// What they said about their record on Step 1 (her CC rule: the office sees what they told us).
+function disclosed(a) {
+  a = a || {};
+  const off = (a.offenses || []).filter(o => o.what).map(o => [o.what, o.when, o.where].filter(Boolean).join(', ')).join('; ');
+  return `<b>What they told us on Step 1:</b> Convicted of a crime: ${a.convicted === 'yes' ? 'Yes' + (off ? ' (' + esc(off) + ')' : '') : a.convicted === 'no' ? 'No' : 'not answered'}.
+    Has a Good Cause Waiver: ${a.gcw === 'yes' ? 'Yes' : a.gcw === 'no' ? 'No' : 'not answered'}. Registered with FCSR: ${{ yes: 'Yes', no: 'No', notsure: 'Not sure' }[a.fcsr] || 'not answered'}.`;
+}
+// The FCSR box on the profile. form = true shows the "Something came up" picker.
+export function fcsrPanelHtml(g, form) {
+  const sc = g.screening || {}, f = fcsrState(sc), first = esc(g.pool.first);
+  const fileBtn = (act, label) => `<button class="btn o" data-act="${act}">${label}</button> <span class="small" id="hp_fname"></span>`;
+  if (form || f === 'finding') return `<b>Something came up on ${first}'s FCSR</b>
+    ${f === 'finding' ? '<p class="small">The result page is already on file.</p>' : `<p><b>1. Add the FCSR result page</b></p>${fileBtn('fcsr-file', 'Pick the file')}`}
+    <div class="ask">${disclosed(g.answers)}</div>
+    <p><b>${f === 'finding' ? '1' : '2'}. Which one is it?</b> <span class="small">Check it against the <a href="${LINKS.cannotHire}" target="_blank" rel="noopener">FCSR "cannot hire" list ↗</a>. Not sure? Call MMAC at 573-751-3399 first.</span></p>
+    <label class="pick"><input type="radio" name="hp_kind" value="gcw_needed"><span><b>Needs a Good Cause Waiver</b><br><span class="small">On the list. ${first} can't be approved or paid for CDS hours until the state approves a waiver. They apply; we send the steps.</span></span></label>
+    <label class="pick"><input type="radio" name="hp_kind" value="edl"><span><b>On the EDL: can't work in CDS</b><br><span class="small">A waiver is not available for someone on the Employee Disqualification List.</span></span></label>
+    <label class="pick"><input type="radio" name="hp_kind" value="cleared_no_waiver"><span><b>Not on the list: no waiver needed</b><br><span class="small">For example a misdemeanor or a local ordinance. Recorded as clear after review. Nothing is sent.</span></span></label>
+    <p class="small">Save and send: ${first} gets a text (never says what came up) and an email with the next steps. You get a to-do to call ${esc((g.packet || {}).consumer_name || 'the consumer')}: you tell the consumer, not the hub.</p>
+    <div class="btns"><button class="btn" data-fcsr-save="send">Save and send to ${first}</button><button class="btn o" data-fcsr-save="phone">Save, I told them by phone</button>${f === 'finding' ? '' : '<button class="btn o" data-act="fcsr-cancel">Cancel</button>'}</div>`;
+  if (f === 'gcw_needed' || f === 'edl') return `<b>${f === 'edl' ? 'On the EDL: cannot work in CDS' : 'Waiting on Good Cause Waiver'}</b>
+    <p class="small">Recorded ${esc(fmtD(sc.reviewed_at))}${sc.reviewed_by ? ' by ' + esc(String(sc.reviewed_by).split('@')[0]) : ''}. ${first} ${sc.notice === 'phone' ? 'was told by phone' : 'was sent the text and email (see Messages)'}.</p>
+    ${f === 'gcw_needed' ? `<p><b>Waiver approved?</b> Add the approval letter, then pick.</p>${fileBtn('gcw-file', 'Pick the letter')}
+    <div class="btns"><button class="btn good" data-waiver="clear">Clear to continue</button><button class="btn o" data-act="waiver-no">Not moving forward…</button></div>`
+      : '<div class="btns"><button class="btn o" data-act="waiver-no">Not moving forward…</button></div>'}
+    <div id="hp_why_box"></div>`;
+  if (f === 'not_moving') return `<b>Not moving forward</b><p class="small">${esc(sc.note || '')} ${esc(fmtD(sc.decided_at))}</p>`;
+  if (f === 'clear' || f === 'cleared_no_waiver' || f === 'cleared_waiver') return `<b>FCSR: ${FCSR_WORDS[f]}</b> <span class="small">${esc(fmtD(sc.result_at))}</span>`;
+  return `<b>FCSR: what came back?</b>${f === 'pending' ? ` <span class="small">Asked the state ${esc(fmtD(sc.requested_at))}. There is a follow-up to-do.</span>` : ''}
+    <div class="btns"><button class="btn good" data-act="fcsr-clear">Clear: add the screenshot</button><button class="btn warn" data-act="fcsr-found">Something came up</button>${f === 'pending' ? '' : '<button class="btn o" data-act="fcsr-pending">Still pending at the state</button>'}</div>
+    <p class="small">Not sure if it counts? <a href="${LINKS.cannotHire}" target="_blank" rel="noopener">FCSR "cannot hire" list ↗</a></p>`;
 }
 
 // Weekdays (Mon to Fri) from iso to now, not counting the day it happened.
@@ -501,18 +615,19 @@ export function mountHubPacket(el, opts) {
     if (print) setTimeout(() => window.print(), 150);
   }
 
-  async function openPacket(id) {
+  let pendingProof = null;
+  async function openPacket(id, note) {
+    pendingProof = null;
     el.innerHTML = '<div class="small" style="padding:12px">Loading…</div>';
     let g;
     try { g = await api('packetGet', { pool_id: id }); } catch (e) { open = null; err = e.message; draw(); return; }
     open = { kind: 'packet', id, g };
     const st = g.status, p = g.packet;
-    const nextCls = st.tone === 'r' ? 'r' : st.tone === 'y' ? 'y' : st.tone === 'g' ? 'g' : 'b';
     const nowKey = (st.steps.find(s => !s.done) || {}).key;
     const checks = (g.screening.checks || []);
     el.innerHTML = `<div class="btns" style="margin:0"><button class="pill-btn" data-act="back">← All attendants</button><button class="btn o" data-act="file">Print attendant file</button></div>
       <div class="card"><h2>${esc(g.pool.first + ' ' + g.pool.last)}</h2><span class="pill ${st.tone}">${esc(st.label)}</span>
-      <div class="next ${nextCls}"><b>Next:</b> ${esc(st.next)}</div>
+      ${nextCardHtml(nextHow(st, g))}${note ? `<p class="ok">${esc(note)}</p>` : ''}
       <dl><dt>Phone</dt><dd>${esc(g.pool.phone)}</dd><dt>Email</dt><dd>${esc(g.pool.email)}</dd><dt>Works for</dt><dd>${esc(p.consumer_name || '')}</dd>
       <dt>Caregiver list</dt><dd>${p.list_choice === 'join' ? 'Yes, wants to be listed' : 'No, works for their consumer only'}</dd></dl>
 
@@ -520,19 +635,20 @@ export function mountHubPacket(el, opts) {
 
       <h3>Background checks</h3>
       <table><thead><tr><th>Check</th><th>Result</th><th>Done</th><th></th></tr></thead><tbody>
-      <tr><td><b>FCSR</b></td><td>${g.screening.findings ? 'Findings' : (g.screening.missing || []).some(m => /FCSR|Registration/.test(m)) ? 'Not finished' : 'Clear'}</td><td></td><td><button class="btn o" data-act="match">Record in Caregiver Match</button></td></tr>
+      <tr><td><b>FCSR</b></td><td>${esc(FCSR_WORDS[fcsrState(g.screening)])}</td><td>${esc(fmtD(g.screening.result_at))}</td><td></td></tr>
       ${checks.map(c => `<tr><td><b>${esc(CHECK_NAMES[c.key] || c.label)}</b></td><td>${c.clear ? 'Clear' : c.result === 'not_clear' ? 'Not clear' : 'To run'}</td><td>${esc(fmtD(c.at))}</td>
         <td>${c.clear || c.key === 'id_match' || c.key === 'age18' ? '' : `<button class="btn o" data-clear="${c.key}">Clear: add screenshot</button>`}</td></tr>`).join('')}
       </tbody></table>
+      <div class="fcsr" id="hp_fcsr">${fcsrPanelHtml(g)}</div>
       <input type="file" id="hp_proof" accept="image/*,application/pdf" hidden>
-      <p class="small">Clear: pick the screenshot or PDF of the search result, and it is recorded as clear today with that proof. Age 18 records itself from the date of birth. The ID match is recorded by the 5-minute ID check below. FCSR registration and result need the proof upload in Caregiver Match.</p>
+      <p class="small">Clear: pick the screenshot or PDF of the search result, and it is recorded as clear today with that proof. Age 18 records itself from the date of birth. The ID match is recorded by the 5-minute ID check below.</p>
       <div class="btns"><button class="btn o" data-copy="fcsr">Copy for FCSR</button><button class="btn o" data-copy="edl">Copy for EDL</button><button class="btn o" data-act="ssn">Show SSN for the FCSR request</button></div>
       <div id="hp_copy"></div>
 
       <h3>Office steps</h3>
       <div class="btns">
         <button class="btn o" data-copy="empeon">Copy for Empeon</button>
-        ${p.empeon_invited_at ? `<span class="pill g">Empeon invite sent ${esc(fmtD(p.empeon_invited_at))}</span>` : '<button class="btn" data-mark="empeon_invited">Empeon invite sent</button>'}
+        ${p.empeon_invited_at ? `<span class="pill g">Empeon invite sent ${esc(fmtD(p.empeon_invited_at))}</span>` : ['gcw_needed', 'edl', 'not_moving', 'finding'].includes(fcsrState(g.screening)) ? '' : '<button class="btn" data-mark="empeon_invited">Empeon invite sent</button>'}
         ${p.id_checked_at ? `<span class="pill g">ID seen ${esc(fmtD(p.id_checked_at))}</span>` : st.checksClear ? `<button class="btn" data-mark="id_checked">ID seen on the video call</button>` : ''}
         ${p.i9_done_at ? `<span class="pill g">I-9 done ${esc(fmtD(p.i9_done_at))}</span>` : p.id_checked_at ? '<button class="btn" data-mark="i9_done">I-9 Section 2 done in Empeon</button>' : ''}
       </div>
@@ -738,6 +854,44 @@ export function mountHubPacket(el, opts) {
         };
         inp.click();
         return;
+      }
+      // FCSR result and Good Cause Waiver (2026-10-23).
+      const pick = then => {
+        const inp = el.querySelector('#hp_proof'); inp.value = '';
+        inp.onchange = async () => {
+          const f = inp.files[0]; if (!f) return;
+          if (f.size > 15 * 1024 * 1024) return fail('That file is too big (15 MB limit).');
+          const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+          try { await then({ mime: f.type || 'application/pdf', name: f.name, data }); } catch (x) { fail(x.message); }
+        };
+        inp.click();
+      };
+      if (act === 'fcsr-found') { el.querySelector('#hp_fcsr').innerHTML = fcsrPanelHtml(open.g, true); return; }
+      if (act === 'fcsr-cancel') { pendingProof = null; el.querySelector('#hp_fcsr').innerHTML = fcsrPanelHtml(open.g); return; }
+      if (act === 'fcsr-pending') { await api('packetFcsr', { pool_id: open.id, result: 'pending' }); return openPacket(open.id, 'Recorded as pending at the state. A follow-up to-do is set for 7 days.'); }
+      if (act === 'fcsr-clear') return pick(async proof => { await api('packetFcsr', { pool_id: open.id, result: 'clear', proof }); openPacket(open.id, 'FCSR recorded as clear with the result page.'); });
+      if (act === 'fcsr-file' || act === 'gcw-file') return pick(async proof => { pendingProof = proof; const n = el.querySelector('#hp_fname'); if (n) n.textContent = proof.name + ' added'; });
+      if (b.dataset.fcsrSave) {
+        const k = el.querySelector('input[name="hp_kind"]:checked');
+        if (!k) return fail('Pick which one it is.');
+        const r = await api('packetFcsr', { pool_id: open.id, result: 'finding', kind: k.value, notify: b.dataset.fcsrSave, proof: pendingProof });
+        const held = (r.sent || []).filter(m => m.status === 'held').length, failed = (r.sent || []).filter(m => m.status === 'failed').length;
+        const who = open.g.pool.first;
+        return openPacket(open.id, k.value === 'cleared_no_waiver' ? 'Recorded as clear after review. Nothing was sent.'
+          : b.dataset.fcsrSave === 'phone' ? 'Recorded. Nothing was sent, since you told ' + who + ' by phone. Call the consumer next (it is on your to-dos).'
+          : failed ? 'Recorded, but ' + failed + ' message' + (failed > 1 ? 's' : '') + ' to ' + who + ' failed to send. See Messages, and call them.'
+          : held ? 'Recorded. The text and email to ' + who + ' are waiting in Messages: the FCSR notices switch is off.'
+          : 'Recorded. ' + who + ' was sent the text and email. Call the consumer next (it is on your to-dos).');
+      }
+      if (act === 'waiver-no') {
+        el.querySelector('#hp_why_box').innerHTML = `<div class="ask"><b>Why are we not moving forward?</b><textarea id="hp_why" rows="2" style="width:100%;font:inherit;padding:7px 9px;border:2px solid #dfe6ec;border-radius:8px" placeholder="For example: waiver denied, or consumer chose someone else"></textarea>
+          <div class="btns"><button class="btn bad" data-waiver="not_moving">Save: not moving forward</button></div><p class="small">Nothing is sent. Tell ${esc(open.g.pool.first)} yourself.</p></div>`;
+        return;
+      }
+      if (b.dataset.waiver) {
+        if (b.dataset.waiver === 'clear' && !pendingProof) return fail('Add the approval letter first (Pick the letter).');
+        await api('packetWaiver', { pool_id: open.id, decision: b.dataset.waiver, proof: pendingProof, reason: (el.querySelector('#hp_why') || {}).value || '' });
+        return openPacket(open.id, b.dataset.waiver === 'clear' ? 'Waiver recorded. The FCSR now counts as clear; once the other checks are clear, Step 2 opens and they get the "checks are clear" text.' : 'Recorded as not moving forward.');
       }
       if (b.dataset.mark) { await api('packetMark', { pool_id: open.id, what: b.dataset.mark }); return openPacket(open.id); }
       if (act === 'countersign') { await api('packetCountersign', { pool_id: open.id, typed_name: el.querySelector('#hp_cs').value }); return openPacket(open.id); }

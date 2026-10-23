@@ -103,6 +103,16 @@ export function callSlots(nowIso) {
   return out;
 }
 
+// What an FCSR finding means once the office picks (2026-10-23, her yes to the mockup). The two
+// "cleared" picks never reach here: the screening counts them as clear.
+export const FINDING = {
+  none: { label: 'FCSR found something', tone: 'r', next: 'Pick what the FCSR finding means: waiver needed, on the EDL, or not on the list.' },
+  gcw_needed: { label: 'Waiting on Good Cause Waiver', tone: 'y', next: 'They apply to the state for a Good Cause Waiver. Check the waiver status every 2 weeks. When the approval letter comes, add it here.' },
+  edl: { label: 'Cannot work in CDS (EDL)', tone: 'r', next: 'They are on the EDL, so they cannot be approved for CDS. Nothing else to do once the consumer knows.' },
+  not_moving: { label: 'Not moving forward', tone: 'b', next: 'Nothing due.' },
+};
+export const FINDING_PICKS = ['gcw_needed', 'edl', 'cleared_no_waiver'];
+
 // Where an attendant is, who moves next, and the 8 to 11 steps the office sees.
 // p = cds_packets row, forms = { key: row }, scr = screeningSummary() result,
 // profile = { approved, review_status } or null.
@@ -119,7 +129,7 @@ export function status(p, forms, scr, profile) {
     { key: 'step1', label: 'Step 1 application', who: 'Attendant', done: s1 },
     { key: 'orientation', label: 'Orientation video and handbook link', who: 'Sent by itself after Step 1', done: !!p.orientation_done_at },
     { key: 'checks', label: 'Background checks (FCSR, EDL, OIG)', who: 'Office', done: clear,
-      detail: scr ? (scr.findings ? 'FCSR findings: owner review' : scr.missing.filter(m => !/^Identity/.test(m)).join(', ')) : '' },
+      detail: scr ? (scr.findings ? (FINDING[scr.review] || FINDING.none).label : scr.missing.filter(m => !/^Identity/.test(m)).join(', ')) : '' },
     { key: 'papers', label: 'Contract, pay, units, handbook', who: 'Attendant', done: s2 },
     { key: 'empeon_invite', label: 'Empeon invite', who: 'Office', done: !!p.empeon_invited_at },
     { key: 'empeon', label: 'Empeon: W-4, I-9 part 1, direct deposit, ID photos', who: 'Attendant', done: !!p.empeon_done_at },
@@ -136,7 +146,7 @@ export function status(p, forms, scr, profile) {
   let label, tone, next;
   if (active) { label = 'Active'; tone = 'g'; next = p.list_choice === 'join' && !(profile && profile.review_status === 'approved') && clear ? 'Approve their profile for findcdscaregivers.com.' : 'Nothing due.'; }
   else if (!s1) { label = 'Filling out Step 1'; tone = 'b'; next = 'Nothing to do. Reminder texts go out on their own.'; }
-  else if (scr && scr.findings) { label = 'FCSR findings'; tone = 'r'; next = 'Owner review of the FCSR findings.'; }
+  else if (scr && scr.findings) { const f = FINDING[scr.review] || FINDING.none; label = f.label; tone = f.tone; next = f.next; }
   else if (!clear) { label = 'Run EDL and FCSR'; tone = 'r'; next = 'Run the checks: ' + ((scr && scr.missing) || []).filter(m => !/^Identity/.test(m)).join(', ') + '.'; }
   else if (!p.empeon_invited_at) { label = 'Send Empeon invite'; tone = 'r'; next = 'Checks are clear. Send the Empeon invite (Copy for Empeon).'; }
   else {
