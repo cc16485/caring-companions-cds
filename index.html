@@ -6889,7 +6889,7 @@ function renderPipeline() {
   const qDigits = q.replace(/\D/g, '');
   const match = x => !q || String(x.p.name || '').toLowerCase().includes(q) || (qDigits.length >= 3 && String(x.p.phone || '').replace(/\D/g, '').includes(qDigits));
   let shown = q ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
-  renderLdWho(shown, wcOn);
+  try { renderLdWho(shown, wcOn); } catch (e) { console.error('who called:', e); }
   if (wcOn && _ldWhoFilter !== 'all') shown = shown.filter(x => x.c.whoCalled === _ldWhoFilter);
   shown.sort((a, b) => a.c.sort - b.c.sort || String(a.c.followup).localeCompare(String(b.c.followup)));
   if (showClosed) shown = shown.concat(closed.filter(match));
@@ -6938,8 +6938,10 @@ function renderPipeline() {
 const LD_WHO_OWNERS = ['samantha@mo-care.com', 'samantha@caringcds.com'];
 let _ldWhoFilter = 'all', _ldWhoEdit = '', _ldPoolAskId = '', _ldPoolErr = null;
 const ldWhoLive = () => getObj('leadsWhoCalled').live === true;
-const ldWhoOwner = () => !!_user && LD_WHO_OWNERS.includes(String(_user.email || '').toLowerCase());
-const _ldWhoBy = () => _user && _user.email ? _user.email.split('@')[0] : 'office';
+// The signed-in email is the header line (the same place _acWho reads); there is no _user in this hub.
+const _ldMe = () => String((document.getElementById('header_user') || {}).textContent || '').trim().toLowerCase();
+const ldWhoOwner = () => LD_WHO_OWNERS.includes(_ldMe());
+const _ldWhoBy = () => _ldMe() ? _ldMe().split('@')[0] : 'office';
 
 function renderLdWho(shown, on) {
   const host = document.getElementById('ldWho');
