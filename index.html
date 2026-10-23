@@ -5673,7 +5673,13 @@ function renderEndTax() {
         '<div class="et-d">' + esc(st.d) + '</div></div></label>').join('') +
     (kind === 'transfer'
       ? '<div style="font-size:12px;color:var(--gray-600);margin-top:8px">Nothing changes in Fusion: their numbers and proof stay on their case record and go with them.</div>'
-      : '');
+      : '') +
+    // Not a step: Missouri has no way for us to withdraw a 2827 (12 CSR 10-41.030(8) only lets the consumer revoke it).
+    '<div style="font-size:12px;color:var(--gray-600);margin-top:8px"><strong>Form 2827 (Missouri power of attorney):</strong> ' +
+      'nothing required. ' + (kind === 'transfer'
+        ? 'The new agency files its own 2827 and can check the box that cancels ours. '
+        : 'Closing their Missouri withholding account ends what it covers. ') +
+      'If you want it on record, email businesstaxregister@dor.mo.gov with their name, Missouri Tax ID and the date we stopped representing them.</div>';
 }
 
 function endTaxTick(k, on) {
