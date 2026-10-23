@@ -942,13 +942,6 @@ button.fu-tile.check span { color:#14606F; }
         </table>
       </div>
     </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">🗓️</span> Monthly Contact History (by Consumer)</div>
-      <div id="monthlyContactHistory">
-        <p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>
-      </div>
-    </div>
   </div><!-- end csub-active -->
 </div>
 
@@ -5156,7 +5149,6 @@ function renderConsumers() {
 
   if (consumers.length === 0) {
     tbody.innerHTML = '<tr id="emptyConsumerRow"><td colspan="5"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td></tr>';
-    document.getElementById('monthlyContactHistory').innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>';
     return;
   }
 
@@ -5208,27 +5200,6 @@ function renderConsumers() {
       <td style="font-size:13px">${visitCell}</td>
       <td style="font-size:13px">${todoCell}</td>
     </tr>`;
-  }).join('');
-
-  // Render monthly history
-  const historyDiv = document.getElementById('monthlyContactHistory');
-  historyDiv.innerHTML = consumers.filter(CDSRules.isActive).map(c => {
-    const months = [];
-    const year = now.getFullYear();
-    for (let m = 0; m < 12; m++) {
-      const key = `${year}-${String(m+1).padStart(2,'0')}`;
-      const isPast = m <= now.getMonth();
-      const isDone = c.contacts && c.contacts[key];
-      const logDetail = isDone && typeof isDone === 'object' ? isDone : null;
-      const dhss = logDetail && logDetail.dhssFlag;
-      const tip = isDone ? `${MONTHS[m]} ${year}: ✓ Logged ${logDetail ? '(' + logDetail.method + ' on ' + logDetail.date + ')' : ''} — click to edit` : `${MONTHS[m]} ${year}: Not recorded — click to log`;
-      months.push(`<div class="month-cell ${isDone ? 'done' : (isPast ? 'overdue' : 'future')}" onclick="toggleContactMonth('${c.id}','${key}')" title="${tip}" style="${dhss ? 'outline:2px solid var(--danger)' : ''}">
-        <div class="mo">${MONTHS[m]}${dhss ? '<span style="color:var(--danger);font-size:9px">⚠</span>' : ''}</div><div class="dot"></div></div>`);
-    }
-    return `<div style="margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px">${c.name} <span style="font-weight:400;color:var(--gray-600);font-size:12px">${c.county ? '— ' + c.county : ''}</span></div>
-      <div class="month-grid">${months.join('')}</div>
-    </div>`;
   }).join('');
 }
 
