@@ -8943,8 +8943,6 @@ function renderProfile() {
       return profChip('DES registered', 'warn',
         'not yet — $' + d.latestAmount.toFixed(2) + ' in ' + d.latestQuarter + ', $' + d.shortfall.toFixed(2) + ' to go');
     })(),
-    profChip('Empeon correct', e.clean ? 'ok' : 'bad',
-      e.clean ? (c.empeonUpdated ? 'updated ' + esc(c.empeonUpdated) : 'matches our record') : e.needs.map(n => n.text).join('; ')),
     (function () {
       const m = ongoingRequirements(c).monthly;
       if (m.doneThisMonth) return profChip('Monthly contact', 'ok',
@@ -8975,7 +8973,6 @@ function renderProfile() {
     !s.hasEin && 'a federal EIN', !s.hasMoId && 'a Missouri Tax ID',
     !s.inFusion && 'entering both numbers in Fusion', !(s.uploaded || s.exempt) && 'proof uploaded to Fusion',
     !auth && 'an authorization', auth && daysLeft < 0 && 'a renewed authorization',
-    !e.clean && 'Empeon corrected',
     (function () { const d = desThreshold(c.name);
       return (!c.desRegistered && d.known && d.crossed) ? 'DES registration (passed $1,000 in ' + d.crossed + ')' : ''; })()
   ].filter(Boolean);
