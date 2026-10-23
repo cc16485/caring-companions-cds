@@ -30,6 +30,18 @@ eq(ends.map(e => [e.consumer, e.status]), [['Michael Gasper', 'ended'], ['Shasta
 eq(ends[1].days, 19, 'days left');
 eq(ends[3].label, 'Susan Barnwell PC - CDS 4/01/2026-2/28/2027', 'the personal care line, not FMS');
 
+// ---------- DSDS end dates first (her switch 'authSlim', 2026-10-23) ----------
+const dsds = { 'Pamela Bell': { end: '2027-03-31', priorAuth: 'PA-1' }, 'Michael Gasper': { end: '2026-12-31', priorAuth: '' },
+               'Susan Barnwell': { end: '2026-09-30', priorAuth: 'PA-2' } };
+const ends2 = H.authEnds(auths, W, NOW, n => dsds[n] || null);
+const by2 = Object.fromEntries(ends2.map(e => [e.consumer, e]));
+eq([by2['Pamela Bell'].status, by2['Pamela Bell'].end, by2['Pamela Bell'].from, by2['Pamela Bell'].label], ['ok', '2027-03-31', 'dsds', 'DSDS authorization PA-1'], 'no date in the WellSky name: the DSDS date fills it');
+eq([by2['Michael Gasper'].status, by2['Michael Gasper'].end, by2['Michael Gasper'].label], ['ok', '2026-12-31', 'DSDS authorization'], 'a newer DSDS date beats an old WellSky name');
+eq([by2['Susan Barnwell'].end, by2['Susan Barnwell'].from], ['2027-02-28', 'wellsky'], 'an older hub copy does not beat WellSky');
+ok(/upload the new authorization/.test(by2['Susan Barnwell'].label), 'and it says to upload the new authorization');
+eq(by2['Shasta Reed'].from, 'wellsky', 'nothing uploaded: WellSky as before');
+eq(H.authEnds(auths, W, NOW, null).map(e => e.end), ends.map(e => e.end), 'switch off: same as before');
+
 // ---------- two attendants at once ----------
 const shifts = { at: '2026-10-22T11:00:00Z', consumers: [
   { name: 'Tran, Huan', shifts: [{ attendant: 'Pham, Nuong', date: '2026-10-20', start: '9:00 AM', endDate: '2026-10-20', end: '1:00 PM', hours: 4 },

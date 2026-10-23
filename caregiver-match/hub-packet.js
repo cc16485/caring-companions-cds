@@ -10,7 +10,7 @@
 // the onboarding track, WellSky shown on each card, Roster check dates typed in on the card.
 // No em dashes in anything a person reads.
 
-import { mergedShifts } from '../hours/hub-hours.js?v=3';
+import { mergedShifts } from '../hours/hub-hours.js?v=4';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtD = iso => (iso ? new Date(String(iso).length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' }) : '');
 const ymd = d => d.toISOString().slice(0, 10);

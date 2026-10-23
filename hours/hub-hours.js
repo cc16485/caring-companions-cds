@@ -62,7 +62,10 @@ export function authEnd(label) {
   return ds.length && ds[ds.length - 1] ? ds[ds.length - 1] : null;
 }
 // One row per consumer: their personal care authorization (case management / FMS lines are not hours).
-export function authEnds(auths, W, now = new Date()) {
+// dsds (her switch 'authSlim', 2026-10-23): name -> { end, priorAuth } from the DSDS authorization
+// uploaded to the hub, or null. When it ends on or after the WellSky name's date it is the one shown;
+// an older hub copy keeps the WellSky date and says to upload the new authorization.
+export function authEnds(auths, W, now = new Date(), dsds = null) {
   const today = isoLocal(now), soon = isoLocal(new Date(now.getTime() + SOON_DAYS * DAY));
   const out = [];
   for (const c of (auths && auths.consumers) || []) {
@@ -70,9 +73,12 @@ export function authEnds(auths, W, now = new Date()) {
     if (!pc.length) continue;
     const ends = pc.map(a => ({ label: a.label, end: authEnd(a.label) }));
     const known = ends.filter(e => e.end).sort((x, y) => y.end.localeCompare(x.end))[0];
-    const end = known ? known.end : null;
+    let end = known ? known.end : null, label = (known || ends[0]).label, from = 'wellsky';
+    const d = dsds ? dsds(firstLast(c.name)) || dsds(c.name) : null;
+    if (d && d.end && (!end || d.end >= end)) { end = d.end; from = 'dsds'; label = 'DSDS authorization' + (d.priorAuth ? ' ' + d.priorAuth : ''); }
+    else if (d && d.end) label += '. The hub copy ended ' + shortDay(d.end) + ', so upload the new authorization';
     const status = !end ? 'unknown' : end < today ? 'ended' : end <= soon ? 'soon' : 'ok';
-    out.push({ consumer: firstLast(c.name), end, status, label: (known || ends[0]).label,
+    out.push({ consumer: firstLast(c.name), end, status, label, from,
       days: end ? Math.round((Date.parse(end + 'T12:00:00') - Date.parse(today + 'T12:00:00')) / DAY) : null });
   }
   const rank = { ended: 0, soon: 1, unknown: 2, ok: 3 };
@@ -128,7 +134,7 @@ export function shiftsThisMonth(shifts, now = new Date()) {
 }
 
 // ---------- the page, all together ----------
-export function monthView({ W, check, reviewed, corrections, submissions, now = new Date() }) {
+export function monthView({ W, check, reviewed, corrections, submissions, dsdsEnd = null, now = new Date() }) {
   check = check || {};
   const today = isoLocal(now);
   const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
@@ -137,7 +143,7 @@ export function monthView({ W, check, reviewed, corrections, submissions, now = 
   const long = W && shifts ? W.longShifts(shifts, reviewed, today) : [];
   const open = W && (eo || check.open) ? W.openShifts(eo || check.open, reviewed) : [];
   const over = overlaps(shifts, now).filter(o => !(reviewed && reviewed[o.key]));
-  const ends = authEnds(check.auths, W, now);
+  const ends = authEnds(check.auths, W, now, dsdsEnd);
   const evv = evvStatus(corrections, submissions, shiftsThisMonth(shifts, now), now);
   const rank = { over: 0, 'booked-over': 0, 'pace-over': 1, low: 2, ok: 3 };
   hours.sort((a, b) => rank[a.status] - rank[b.status] || a.consumer.localeCompare(b.consumer));
@@ -185,7 +191,8 @@ export function mountHours(el, opts) {
   async function draw() {
     let subs = [], subsErr = '';
     try { subs = opts.submissions ? await opts.submissions() : []; } catch (e) { subsErr = e.message || String(e); }
-    const v = monthView({ W: opts.W, check: opts.check(), reviewed: opts.reviewed(), corrections: opts.corrections(), submissions: subs });
+    const dsdsEnd = opts.dsdsEnd ? opts.dsdsEnd() : null;
+    const v = monthView({ W: opts.W, check: opts.check(), reviewed: opts.reviewed(), corrections: opts.corrections(), submissions: subs, dsdsEnd });
     const phone = name => { const c = (opts.consumers ? opts.consumers() : []).find(x => String(x.name || '').toLowerCase() === name.toLowerCase()); return c && c.phone ? c.phone : ''; };
     const tile = (n, label, tone) => `<div class="tile${n && tone ? ' ' + tone : ''}"><div class="n">${n}</div><div class="t">${esc(label)}</div></div>`;
     const asOf = v.asOf ? new Date(v.asOf).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) : '';
@@ -200,7 +207,7 @@ export function mountHours(el, opts) {
     };
     // A Checked button on every row (2026-10-22): two attendants at once had no way to be cleared.
     const checkRow = (title, meta, tone, key) => `<div class="row${tone === 'r' ? ' hot' : ''}"><b>${esc(title)}</b><span class="pill ${tone}">${tone === 'r' ? 'Needs a correction form' : 'Check with the consumer'}</span><span class="meta">${esc(meta)}${key && opts.markChecked ? ` <button class="link" data-check="${esc(key)}">Checked</button>` : ''}</span></div>`;
-    const endPill = { ended: ['r', 'Ended'], soon: ['y', 'Ends soon'], unknown: ['b', 'End date not in WellSky name'], ok: ['g', 'Current'] };
+    const endPill = { ended: ['r', 'Ended'], soon: ['y', 'Ends soon'], unknown: ['b', dsdsEnd ? 'End date unknown: upload the authorization' : 'End date not in WellSky name'], ok: ['g', 'Current'] };
     const e = v.evv;
     el.innerHTML = `<div class="ghead"><h2>This month</h2><span>${v.have ? 'From WellSky, ' + esc(asOf) : ''} <button class="link" data-act="reload">Refresh</button></span></div>
       ${!v.have ? '<div class="warn">WellSky has not sent its reports yet, so there is nothing to show.</div>' : stale ? `<div class="warn">The WellSky reports were last updated ${esc(asOf)}, so this may be out of date.</div>` : ''}
@@ -223,7 +230,7 @@ export function mountHours(el, opts) {
       ${e.toFix.map(c => `<div class="row"><b>${esc(c.consumer)} · ${esc(shortDay(String(c.visitdate || '').slice(0, 10)))}</b><span class="pill y">Fix in WellSky</span><span class="meta">Form on file. Update the shift in WellSky, then mark it done on EVV forms.</span></div>`).join('')}
       ${subsErr ? `<p class="small">Could not load the forms sent in online: ${esc(subsErr)}</p>` : ''}</section>
 
-      <section class="grp"><div class="ghead"><h3>Authorization end dates</h3><span>From the authorization names in WellSky</span></div>
+      <section class="grp"><div class="ghead"><h3>Authorization end dates</h3><span>${dsdsEnd ? 'From the DSDS authorization when it is uploaded, otherwise the WellSky name' : 'From the authorization names in WellSky'}</span></div>
       ${v.ends.length ? v.ends.map(a => { const [tone, label] = endPill[a.status]; return `<div class="row${a.status === 'ended' ? ' hot' : ''}"><b>${esc(a.consumer)}</b><span class="pill ${tone}">${esc(a.status === 'soon' ? 'Ends in ' + plural(a.days, 'day', 'days') : label)}</span>
         <span class="meta">${a.end ? (a.status === 'ended' ? 'Ended ' : 'Ends ') + esc(shortDay(a.end)) + ' · ' : ''}${esc(a.label)}</span></div>`; }).join('') : '<p class="small">No authorizations in the WellSky report.</p>'}</section>`;
   }
