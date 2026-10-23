@@ -83,9 +83,22 @@ eq(G.working[1].kind, 'packet', 'a packet attendant with a shift counts as Worki
 eq(G.quiet.map(r => [r.name, r.label]), [['Andrew Wiggins', 'Last shift Sep 5'], ['Kiersten Ackerman', 'No WellSky shifts']], 'Not working lately: newest last shift first');
 eq(G.tiles, { starting: 3, working: 2, due: 1, dates: 2, quiet: 2 }, 'the tiles (a missing date counts even when another check is overdue)');
 const E = H.buildGroups({ packets: [], roster: [], ended: [{ id: 'x1', name: 'Faith Long', consumer: 'Michael Gasper', status: 'inactive' }, { id: 'x2', name: 'Anita Smith', wellskyName: 'Smith, Anita', status: 'inactive' }], wellsky, now: NOW });
-eq(E.ended.map(r => [r.name, r.meta]), [['Anita Smith', 'last shift Oct 21'], ['Faith Long', 'Was with Michael Gasper']], 'No longer working: listed for the Inactive tab, with last shift when WellSky has one');
+eq(E.ended.map(r => [r.name, r.meta]), [['Anita Smith', 'No record of how the consumer told us · last shift Oct 21'], ['Faith Long', 'No record of how the consumer told us · was with Michael Gasper']], 'No longer working: listed for the Inactive tab, with last shift when WellSky has one');
 const none = H.buildGroups({ packets: [], roster, autoOig: () => null, wellsky: null, now: NOW });
 eq([none.working.length, none.quiet.length], [3, 0], 'no WellSky data: nobody is called not working');
+
+// ---------- ending an attendant: the consumer's decision on record (her rule 2026-10-22) ----------
+const endIn = { why: 'consumer', how: 'call', on: '2026-10-22', said: 'Mary called and said she does not want Jo working for her anymore.', by: 'samantha@mo-care.com' };
+eq(H.endRecord({ ...endIn, why: '' }, NOW).error, 'Pick why they are no longer working.', 'why is required');
+eq(H.endRecord({ ...endIn, how: '' }, NOW).error, 'Pick how the consumer told us.', 'how the consumer told us is required');
+eq(H.endRecord({ ...endIn, on: '2026-10-30' }, NOW).error, 'Pick the date the consumer told us (not in the future).', 'no future date');
+eq(H.endRecord({ ...endIn, said: 'ok' }, NOW).error, 'Write what the consumer said, or paste their text or email.', 'their words are required');
+const rec = H.endRecord(endIn, NOW).record;
+eq([rec.why, rec.how, rec.on, rec.by], ['consumer', 'call', '2026-10-22', 'samantha@mo-care.com'], 'saved with who recorded it');
+eq(H.endWords(rec), 'Ended Oct 22: the consumer ended it (phone call), recorded by samantha', 'how it reads on the Inactive tab');
+const E2 = H.buildGroups({ packets: [], roster: [], ended: [{ id: 'x3', name: 'Jo Ray', consumer: 'Mary Lee', status: 'inactive', ended: rec }, { id: 'x4', name: 'Old Person', status: 'inactive' }], wellsky: null, now: NOW });
+eq(E2.ended.map(r => r.meta), ['Ended Oct 22: the consumer ended it (phone call), recorded by samantha · was with Mary Lee', 'No record of how the consumer told us'], 'the record shows; an old one without a record says so');
+eq(E2.ended[0].said, endIn.said, 'their words show too');
 
 // ---------- words ----------
 const src = readFileSync(ROOT + '/caregiver-match/hub-packet.js', 'utf8');

@@ -4958,7 +4958,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=6');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=7');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -4968,6 +4968,7 @@ async function renderActiveAttendants() {
         renderAttendants(); updateDashboard(); renderAttendantCheck();
       },
       wellsky: () => getObj('wellskyCheck'),
+      who: () => ((document.getElementById('header_user') || {}).textContent || '').trim(),
       oigPeople: () => { const d = oig && oig.data(); return d && d.live ? d.people : {}; },
       openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch') });
     _hpMounted = true;
@@ -5611,7 +5612,8 @@ function renderAttendantCheck(note) {
   }
   if (r.quiet.length) {
     h += head('On this list, no shifts in WellSky since ' + A.short(r.from));
-    h += r.quiet.map(q => row('<strong>' + esc(q.name) + '</strong>', btn('Mark inactive', "acInactive('" + q.id + "')") + btn('Still active', "acStill('" + q.key + "')"))).join('');
+    // Ending an attendant needs the consumer's decision on record (her rule 2026-10-22), so it happens on their card.
+    h += r.quiet.map(q => row('<strong>' + esc(q.name) + '</strong> <span style="color:var(--gray-600)">To end them, open their card below and tap No longer working.</span>', btn('Still active', "acStill('" + q.key + "')"))).join('');
     h += '<div style="font-size:11.5px;color:var(--gray-600);margin-top:2px">Still active hides them here for 30 days.</div>';
   }
   if (r.different.length) {
