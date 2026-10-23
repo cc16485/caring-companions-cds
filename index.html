@@ -5331,7 +5331,8 @@ function makeConsumerActive(cid) {
   const c = consumers.find(x => x.id === cid);
   if (!c || !confirm('Make ' + c.name + ' active again? They go back on the roster.')) return;
   c.status = 'active';
-  c.reactivatedAt = new Date().toISOString().slice(0, 10);
+  c.reactivatedAt = _endToday();
+  c.reactivations = (c.reactivations || []).concat([{ date: c.reactivatedAt, by: _endWho() }]);
   setData('consumers', consumers);
   renderConsumers();
   updateDashboard();
@@ -5720,8 +5721,8 @@ function saveLetter(andPrint) {
   renderProfile();
   if (andPrint) printLetter(c);
 }
-function printLetter(c) {
-  const L = c.ending && c.ending.letter;
+function printLetter(c, letter) {
+  const L = letter || (c.ending && c.ending.letter);
   if (!L) return;
   const e2 = t => esc(t || '').replace(/\n/g, '<br>');
   const lines = t => (t || '').split('\n').filter(x => x.trim()).map(x => '<li>' + esc(x) + '</li>').join('');
@@ -5792,9 +5793,70 @@ function setNoShiftReport(cid, date) {
   if (!c) return;
   const p = noShiftList().people.find(x => x.id === cid);
   c.noShiftReport = date ? { date, by: _endWho(), at: new Date().toISOString(), lastShift: p ? p.last : '' } : null;
+  // Every report stays on file for the records tab, even if the date box is changed later.
+  if (date) c.noShiftHistory = (c.noShiftHistory || []).concat([c.noShiftReport]);
   setData('consumers', consumers);
   renderProfile();
   renderConsumers();
+}
+
+// Closure plan step 6 (her yes 2026-10-22): the record of every closing, pause, letter and
+// no-shift report for one consumer, newest first. Read-only; nothing here can be deleted.
+// Kept 6 years (19 CSR 15-8.400(10)).
+function printPastLetter(cid, i) {
+  const c = getData('consumers').find(x => x.id === cid);
+  const e = c && (c.pastEndings || [])[i];
+  if (e && e.letter) printLetter(c, e.letter);
+}
+function closingRecords(c) {
+  const day = d => d ? esc(_niceDay(String(d).slice(0, 10))) : '';
+  const stamp = iso => iso ? esc(new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })) : '';
+  const row = (k, v) => '<tr><th style="text-align:left;font-weight:600;padding:5px 10px 5px 0;vertical-align:top;width:45%;text-transform:none;letter-spacing:0;font-size:13px;color:inherit;background:none">' + k + '</th><td style="padding:5px 0;vertical-align:top">' + v + '</td></tr>';
+  const one = (e, i, open) => {
+    const r = CDSRules.endingReason(e.kind) || { t: e.kind, cite: '', steps: [] };
+    const d = e.steps || {};
+    const outcome = open ? '<span class="badge badge-warn">' + (r.pause ? 'Paused now' : 'Closing now') + '</span>'
+      : e.closedAt ? '<span class="badge" style="background:#fdecea;color:var(--danger)">DSDS closed the case</span>'
+      : '<span class="badge badge-green">' + (r.pause ? 'Back home' : 'Kept active') + '</span>';
+    const appeal = CDSRules.appealEnds(e.dsdsNotice);
+    const rows = [
+      row('Started', day(e.startedAt) + (e.startedBy ? ' by ' + esc(e.startedBy) : '')),
+      r.eventLabel && e.eventDate ? row(esc(r.eventLabel), day(e.eventDate)) : '',
+      ...r.steps.map(s => row(esc(s.t), d[s.k] && d[s.k].date ? day(d[s.k].date) + (d[s.k].by ? ' by ' + esc(d[s.k].by) : '') : '<span style="color:var(--gray-600)">' + (s.need ? 'not dated' : 'not used') + '</span>')),
+      r.pause ? '' : row('DSDS closing notice', e.dsdsNotice ? day(e.dsdsNotice) + (appeal ? ' (appeal window ended ' + day(appeal) + ')' : '') : '<span style="color:var(--gray-600)">none</span>'),
+      e.lastDay ? row('Last day of services', day(e.lastDay)) : '',
+      e.closedAt ? row('Marked inactive', day(e.closedAt)) : '',
+      e.endedAt ? row(r.pause ? 'Back home' : 'Stopped, kept active', day(e.endedAt)) : '',
+      e.letter ? row('Written notice', 'saved ' + stamp(e.letter.savedAt) + (e.letter.by ? ' by ' + esc(e.letter.by) : '') + ' · ' +
+        (open ? '<a href="#" onclick="printLetter(getData(\'consumers\').find(x => x.id === \'' + c.id + '\'));return false">Print</a>'
+              : '<a href="#" onclick="printPastLetter(\'' + c.id + '\',' + i + ');return false">Print</a>')) : ''
+    ].join('');
+    const log = (e.log || []).slice().reverse().map(l => '<li>' + stamp(l.at) + ' · ' + esc(l.by || '') + ': ' + esc(l.t) + '</li>').join('');
+    return '<div style="border:1px solid var(--gray-300);border-radius:10px;padding:14px 16px;margin-top:12px">' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline">' +
+        '<div style="font-weight:700;font-size:15px">' + esc(r.t) + '</div>' + outcome + '</div>' +
+      '<div class="end-cite" style="margin-bottom:6px">' + esc(r.cite || '') + '</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px">' + rows + '</table>' +
+      (e.notes ? '<div style="font-size:13px;margin-top:8px;white-space:pre-wrap"><strong>Notes:</strong> ' + esc(e.notes) + '</div>' : '') +
+      (log ? '<details style="margin-top:8px;font-size:12.5px"><summary style="cursor:pointer;color:var(--primary)">Who did what (' + (e.log || []).length + ')</summary><ul style="margin:6px 0 0 18px;padding:0">' + log + '</ul></details>' : '') +
+    '</div>';
+  };
+  const past = (c.pastEndings || []).map((e, i) => ({ e, i })).reverse();
+  const reports = (c.noShiftHistory || (c.noShiftReport ? [c.noShiftReport] : [])).slice().reverse();
+  const back = (c.reactivations || (c.reactivatedAt ? [{ date: c.reactivatedAt }] : [])).slice().reverse();
+  const oldInactive = c.inactiveAt && !past.some(x => x.e.closedAt) ? c.inactiveAt : '';
+  const parts = [];
+  if (c.ending) parts.push(one(c.ending, -1, true));
+  past.forEach(x => parts.push(one(x.e, x.i, false)));
+  let extra = '';
+  if (reports.length) extra += '<h4 style="margin:18px 0 4px;font-size:14px">Told DSDS about no worked shifts</h4><ul style="margin:0 0 0 18px;padding:0;font-size:13px">' +
+    reports.map(r => '<li>' + day(r.date) + (r.by ? ' by ' + esc(r.by) : '') + (r.lastShift ? ' (last worked shift ' + day(r.lastShift) + ')' : ' (no worked shift on file)') + '</li>').join('') + '</ul>';
+  if (back.length) extra += '<h4 style="margin:18px 0 4px;font-size:14px">Made active again</h4><ul style="margin:0 0 0 18px;padding:0;font-size:13px">' +
+    back.map(b => '<li>' + day(b.date) + (b.by ? ' by ' + esc(b.by) : '') + '</li>').join('') + '</ul>';
+  if (oldInactive) extra += '<p style="font-size:13px;margin-top:14px;color:var(--gray-600)">Marked inactive ' + day(oldInactive) + (c.inactiveReason ? ' (' + esc(c.inactiveReason) + ')' : '') + ', before these records were kept.</p>';
+  if (!parts.length && !extra) return '<p style="font-size:14px;color:#55677a;margin-top:10px">No closings, pauses or DSDS reports for ' + esc(c.name) + '.</p>';
+  return '<p style="font-size:12.5px;color:var(--gray-600);margin:10px 0 0">Every closing, pause and letter, newest first. Kept 6 years (19 CSR 15-8.400(10)). Nothing here can be deleted.</p>' +
+    parts.join('') + extra;
 }
 
 function endingCard(c) {
@@ -9605,7 +9667,7 @@ function renderProfile() {
 
   // Tabs
   const tab = _profTab;
-  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['calls', 'Calls and texts'], ['notes', 'Notes']]
+  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['calls', 'Calls and texts'], ['closings', 'Closings and pauses'], ['notes', 'Notes']]
     .map(([k, l]) => '<button type="button" class="' + (tab === k ? 'on' : '') + '" onclick="_profTab=\'' + k + '\';renderProfile()">' + l + '</button>').join('');
   const line = (k, v) => '<div class="cp-line"><span>' + k + '</span><span>' + v + '</span></div>';
   let body = '';
@@ -9642,6 +9704,7 @@ function renderProfile() {
     line('Kept after wages', wages && billed ? fmt(margin) + ' (' + Math.round(margin / billed * 100) + '%)' : 'needs both sides') +
     (wages && billed && (margin < 0 || margin / billed > 0.6)
       ? '<div class="alert alert-warn" style="margin-top:10px;font-size:13px">Treat this with care: invoices count on the day they were raised, so one consumer\'s figure swings. The Money page has the agency figure.</div>' : '');
+  else if (tab === 'closings') body = closingRecords(c);
   else if (tab === 'calls') body =
     '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(c.phone || '') + '"></div>';
   else body = c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>';
