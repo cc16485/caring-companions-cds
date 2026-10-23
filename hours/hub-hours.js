@@ -121,7 +121,7 @@ export function monthView({ W, check, reviewed, corrections, submissions, now = 
 }
 
 const CSS = `
-.hx{max-width:900px;color:#1d2a36}
+.hx{color:#1d2a36}
 .hx h2{font-size:22px;color:#0D365F;margin:4px 0}
 .hx h3{font-size:15px;color:#0D365F;margin:0;text-transform:uppercase;letter-spacing:.04em}
 .hx .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:10px 0}
