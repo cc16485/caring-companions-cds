@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=13"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=14"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -518,6 +518,20 @@ input, select, textarea { border-radius:10px; }
 .ld-log:hover { background:#155A68; }
 .ld-shut { flex:0 0 auto !important; padding:0 16px; border:1.5px solid #e4e1d8; background:#fff; color:#55677a; }
 .ld-shut:hover { border-color:#9B2C1A; color:#9B2C1A; }
+/* Who called (2026-10-22) */
+.ld-wc { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.ld-wc-lbl { font-size:11.5px; font-weight:700; color:#55677a; text-transform:uppercase; letter-spacing:.04em; }
+.wc { display:inline-block; padding:4px 12px; border-radius:999px; font-size:12.5px; font-weight:700; white-space:nowrap; }
+.wc-pair { background:#ece6f7; color:#4b2e83; } .wc-family { background:#e3eefb; color:#164a7d; }
+.wc-self { background:#e2f2e8; color:#1e5c3a; } .wc-unsure { background:#fff1d6; color:#7a4b00; } .wc-solo { background:#ececec; color:#3d3d3d; }
+.ld-wc-pick { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.ld-wc-pick button { padding:7px 11px; border-radius:999px; border:1.5px solid #d9d2c4; background:#fff; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; min-height:36px; }
+.ld-wc-change { align-self:flex-start; padding:0; border:0; background:none; color:#1d6f73; font:inherit; font-size:13px; font-weight:600; text-decoration:underline; cursor:pointer; }
+.ld-pool { background:#4a5563; color:#fff; border:0; }
+.ld-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:4px 0 14px; }
+.ld-filters button { padding:8px 14px; border-radius:999px; border:1.5px solid #d9d2c4; background:#fff; color:#14304d; font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; min-height:40px; }
+.ld-filters button.on { background:#14304d; border-color:#14304d; color:#fff; }
+.ld-switch { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:13px; color:#55677a; margin:0 0 10px; }
 .ld-came { font-weight:700; color:#0D365F; }
 .ld-move { flex:1.4 !important; border:0; background:var(--cute-honey); color:var(--cute-ink); }
 .ld-empty { grid-column:1/-1; background:#fff; border-radius:20px; padding:28px; text-align:center; color:#55677a; font-size:15px; box-shadow:var(--cute-shadow); }
@@ -884,6 +898,8 @@ button.fu-tile.check span { color:#14606F; }
       <div><span class="ld-kind k-pccp">Moving from Another Agency - PCCP</span><p>Has CDS now with someone else. We send the transfer to DSDS. Usually 2 to 4 weeks.</p></div>
     </div>
 
+    <!-- Who called (2026-10-22, her mockup 9FKrkUhoS3cmbTyymKpaSj): the switch row and filters, only when on -->
+    <div id="ldWho"></div>
     <div class="ld-grid" id="ldCards"></div>
   </div>
 
@@ -5724,9 +5740,9 @@ const PIPELINE_STATUS_LABELS = {
   new: 'New, not called yet', nurturing: 'Following up', submitted: 'Sent to the state',
   processing: 'The state is working on it', authorized: 'Approved by the state', transfer_complete: 'Transfer done',
   closed_ni: 'Closed, not interested', closed_other: 'Closed, went with another agency',
-  closed_inactive: 'Closed, inactive', closed_spam: 'Closed, spam'
+  closed_inactive: 'Closed, inactive', closed_spam: 'Closed, spam', closed_pool: 'Closed, moved to Caregiver Pool'
 };
-const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other','closed_inactive','closed_spam'];
+const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other','closed_inactive','closed_spam','closed_pool'];
 const PIPELINE_DONE_STATUSES = ['authorized','transfer_complete'];
 
 // ============================================================================
@@ -6840,7 +6856,8 @@ function renderPipeline() {
 
   // Already on the Consumers list: an approved lead stops showing as Ready.
   const onRoster = new Set(getData('consumers').map(c => String(c.name || '').trim().toLowerCase()).filter(Boolean));
-  const people = pipeline.map(p => ({ p, c: R.leadCard(p, _leadCalls, today, !!p.movedToConsumers || onRoster.has(String(p.name || '').trim().toLowerCase())) }));
+  const wcOn = ldWhoLive();
+  const people = pipeline.map(p => ({ p, c: R.leadCard(p, _leadCalls, today, !!p.movedToConsumers || onRoster.has(String(p.name || '').trim().toLowerCase()), { whoCalled: wcOn }) }));
   const open = people.filter(x => x.c.step !== 'closed');
   const closed = people.filter(x => x.c.step === 'closed');
 
@@ -6872,6 +6889,8 @@ function renderPipeline() {
   const qDigits = q.replace(/\D/g, '');
   const match = x => !q || String(x.p.name || '').toLowerCase().includes(q) || (qDigits.length >= 3 && String(x.p.phone || '').replace(/\D/g, '').includes(qDigits));
   let shown = q ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
+  renderLdWho(shown, wcOn);
+  if (wcOn && _ldWhoFilter !== 'all') shown = shown.filter(x => x.c.whoCalled === _ldWhoFilter);
   shown.sort((a, b) => a.c.sort - b.c.sort || String(a.c.followup).localeCompare(String(b.c.followup)));
   if (showClosed) shown = shown.concat(closed.filter(match));
 
@@ -6889,19 +6908,119 @@ function renderPipeline() {
     const main = c.step === 'ready'
       ? '<button type="button" class="ld-move" onclick="convertToConsumer(\'' + id + '\')">Move to Consumers</button>'
       : c.step === 'closed' ? (PIPELINE_CLOSED_STATUSES.includes(p.status) ? '<button type="button" class="ld-open" onclick="reopenLead(\'' + id + '\')">Reopen</button>' : '')
+      : c.whoCalled === 'solo' ? '<button type="button" class="ld-pool" onclick="ldPoolAsk(\'' + id + '\')">Move to Caregiver Pool</button>'
       : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
     const shut = c.step !== 'closed'
       ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + ': inactive or spam">Close</button>' : '';
     return '<article class="ld-card' + (c.step === 'closed' ? ' closed' : '') + '">' +
       '<div class="ld-top"><h3>' + esc(p.name || 'No name') + '</h3><span class="ld-kind ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '">' + esc(c.kind) + '</span></div>' +
+      (c.whoLabel ? '<div class="ld-wc"><span class="ld-wc-lbl">Who called</span><span class="wc wc-' + c.whoCalled + '">' + esc(c.whoLabel) + '</span></div>' : '') +
       '<p class="ld-who">' + esc(c.who) + '</p>' +
       '<div class="ld-meta">' + (c.came ? '<span class="ld-came">' + esc(c.came) + '</span>' : '') + (p.county ? '<span>' + esc(p.county) + ' County</span>' : '') + phone +
         (p.fromWebsite ? '<span class="ld-web">From website</span>' : '') + '</div>' +
       '<div class="ld-next"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span>' +
-        '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span></div>' +
+        '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span>' + ldWhoPicker(p, c) + '</div>' +
       '<div class="ld-btns"><button type="button" class="ld-open" onclick="openLeadProfile(\'' + id + '\')">Open</button>' + main + shut + '</div>' +
+      ldPoolConfirm(p) +
+      (c.whoLabel && c.whoCalled !== 'unsure' && c.step === 'call' && _ldWhoEdit !== p.id ? '<button type="button" class="ld-wc-change" onclick="ldWhoChange(\'' + id + '\')">Change who called</button>' : '') +
     '</article>';
   }).join('');
+}
+
+// ============================================================================
+// WHO CALLED (2026-10-22, her approved mockup 9FKrkUhoS3cmbTyymKpaSj). A Still deciding lead can be
+// a caregiver with a consumer, a caregiver with nobody to care for, someone calling for family, or
+// someone calling for themself. The form answers set it (CDSRules.whoCalled); the office sets it after
+// the first call. A caregiver with no consumer moves to the Caregiver Pool and leaves Leads.
+// Her switch: agency_data 'leadsWhoCalled' {live}. Off = the Leads page exactly as before.
+// Only Samantha turns it on or off (the same people as the Switches card). Nothing is sent to anyone.
+// ============================================================================
+const LD_WHO_OWNERS = ['samantha@mo-care.com', 'samantha@caringcds.com'];
+let _ldWhoFilter = 'all', _ldWhoEdit = '', _ldPoolAskId = '', _ldPoolErr = null;
+const ldWhoLive = () => getObj('leadsWhoCalled').live === true;
+const ldWhoOwner = () => !!_user && LD_WHO_OWNERS.includes(String(_user.email || '').toLowerCase());
+const _ldWhoBy = () => _user && _user.email ? _user.email.split('@')[0] : 'office';
+
+function renderLdWho(shown, on) {
+  const host = document.getElementById('ldWho');
+  if (!host) return;
+  const sw = getObj('leadsWhoCalled');
+  let h = '';
+  if (ldWhoOwner()) h += '<div class="ld-switch"><span><strong>Who called labels:</strong> ' + (on ? 'On' : 'Off') +
+    (sw.by ? ' (changed by ' + esc(sw.by) + ')' : '') + '. Only you see this switch.</span>' +
+    '<button type="button" class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" onclick="ldWhoSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button></div>';
+  if (on) {
+    const kinds = Object.keys(CDSRules.WHO_CALLED);
+    const n = k => shown.filter(x => x.c.whoCalled === k).length;
+    h += '<div class="ld-filters" role="group" aria-label="Who called"><span class="ld-wc-lbl">Who called:</span>' +
+      ['all'].concat(kinds).map(k => '<button type="button" class="' + (_ldWhoFilter === k ? 'on' : '') + '" aria-pressed="' + (_ldWhoFilter === k) + '" onclick="ldWhoFilter(\'' + k + '\')">' +
+        (k === 'all' ? 'All' : esc(CDSRules.WHO_CALLED[k])) + ' <b>' + (k === 'all' ? shown.length : n(k)) + '</b></button>').join('') + '</div>';
+  }
+  host.innerHTML = h;
+}
+function ldWhoFilter(k) { _ldWhoFilter = k; renderPipeline(); }
+async function ldWhoSwitch(on) {
+  if (!ldWhoOwner()) return;
+  await setObj('leadsWhoCalled', { live: !!on, by: _ldWhoBy(), at: new Date().toISOString() });
+  _ldWhoFilter = 'all';
+  renderPipeline();
+}
+// The one-tap chooser: on a Not sure yet card, or after "Change who called".
+function ldWhoPicker(p, c) {
+  if (!c.whoLabel || c.step !== 'call') return '';
+  if (c.whoCalled !== 'unsure' && _ldWhoEdit !== p.id) return '';
+  const id = esc(p.id);
+  const pick = ['pair', 'family', 'self', 'solo'].map(k => '<button type="button" class="wc-' + k + '" onclick="ldSetWho(\'' + id + '\',\'' + k + '\')">' + esc(CDSRules.WHO_CALLED[k]) + '</button>').join('') +
+    (_ldWhoEdit === p.id ? '<button type="button" onclick="ldWhoChange(\'\')">Cancel</button>' : '');
+  return '<div style="margin-top:8px"><span style="font-size:12.5px;font-weight:600;color:#55677a">' + (c.whoCalled === 'unsure' ? 'After the call, tap who it was:' : 'Who was it?') + '</span>' +
+    '<div class="ld-wc-pick">' + pick + '</div></div>';
+}
+function ldWhoChange(id) { _ldWhoEdit = id; renderPipeline(); }
+async function ldSetWho(id, kind) {
+  const pipeline = getData('pipeline');
+  const p = pipeline.find(x => x.id === id);
+  if (!p || !CDSRules.WHO_CALLED[kind]) return;
+  const today = new Date().toISOString().split('T')[0];
+  p.whoCalled = kind; p.whoCalledBy = _ldWhoBy(); p.whoCalledAt = new Date().toISOString();
+  p.notes = (Array.isArray(p.notes) ? p.notes : []).concat({ date: today, text: 'Who called: ' + CDSRules.WHO_CALLED[kind] + ' (set by ' + p.whoCalledBy + ').', whoCalled: true });
+  _ldWhoEdit = '';
+  await setData('pipeline', pipeline);
+  renderPipeline();
+}
+// Move to Caregiver Pool: the confirm sits inside the card (pop-ups can be blocked inside GoHighLevel).
+function ldPoolAsk(id) { _ldPoolAskId = id; _ldPoolErr = null; renderPipeline(); }
+function ldPoolConfirm(p) {
+  if (_ldPoolAskId !== p.id) return '';
+  const id = esc(p.id);
+  return '<div class="alert alert-warn" style="font-size:13px;margin-top:8px"><div><strong>Move ' + esc(p.name || 'this person') + ' to the Caregiver Pool?</strong><br>' +
+    'They go on the Caregiver Pool list as someone who wants to be a caregiver, and this lead closes. Nothing is sent to them.' +
+    (_ldPoolErr ? '<div style="color:var(--danger);font-weight:600;margin-top:6px">' + esc(_ldPoolErr) + '</div>' : '') +
+    '<div style="margin-top:8px"><button type="button" class="btn btn-sm btn-primary" onclick="ldToPool(\'' + id + '\')">Yes, move them</button> ' +
+    '<button type="button" class="btn btn-sm btn-outline" onclick="ldPoolAsk(\'\')">Cancel</button></div></div></div>';
+}
+async function ldToPool(id) {
+  const pipeline = getData('pipeline');
+  const p = pipeline.find(x => x.id === id);
+  if (!p) return;
+  const fail = m => { _ldPoolErr = m; renderPipeline(); };
+  if (!_db) return fail('Not signed in. Nothing was moved.');
+  if (!String(p.phone || '').replace(/\D/g, '')) return fail('Add their phone number first (Open). The Caregiver Pool needs one. Nothing was moved.');
+  const parts = String(p.name || '').trim().split(/\s+/);
+  const today = new Date().toISOString().split('T')[0];
+  const form = (p.notes || []).find(n => CDSRules.isFormNote(n));
+  const row = { agency_id: AGENCY_ID, first_name: parts[0] || 'Unknown', last_name: parts.slice(1).join(' ') || '(not given)',
+    phone: p.phone, email: p.email || null, counties: p.county ? [p.county] : null, source: 'staff', status: 'new',
+    staff_notes: 'Moved from Leads ' + today + ' by ' + _ldWhoBy() + ' (wants to be a caregiver, no consumer yet).' + (form ? ' Their form: ' + String(form.text).replace(/\n/g, ' / ') : '') };
+  const { error } = await _db.from('attendant_pool').insert(row);
+  if (error) return fail(/attendant_pool/.test(error.message) && /schema cache|does not exist/i.test(error.message)
+    ? 'The Caregiver Pool is not set up yet (its table is missing). Nothing was moved. Tell Claude.'
+    : 'Could not add them to the Caregiver Pool: ' + error.message + '. Nothing was moved.');
+  p.status = 'closed_pool';
+  p.followup = '';   // so the 8am email (its own copy of the rules) never lists a call back for them
+  p.notes = (Array.isArray(p.notes) ? p.notes : []).concat({ date: today, text: 'Moved to the Caregiver Pool by ' + _ldWhoBy() + '.' });
+  _ldPoolAskId = ''; _ldPoolErr = null;
+  await setData('pipeline', pipeline);
+  renderPipeline();
 }
 
 // ============================================================================

@@ -14,9 +14,10 @@
   'use strict';
   const DAY = 864e5;
   // closed_inactive and closed_spam added 2026-10-22 (her ask: a way to make a lead inactive or mark it spam).
-  const CLOSED = ['closed_ni', 'closed_other', 'closed_inactive', 'closed_spam'];
+  const CLOSED = ['closed_ni', 'closed_other', 'closed_inactive', 'closed_spam', 'closed_pool'];
   const CLOSED_LABELS = { closed_ni: 'Not interested', closed_other: 'Went with another agency',
-                          closed_inactive: 'Inactive, stopped answering', closed_spam: 'Spam, not a real lead' };
+                          closed_inactive: 'Inactive, stopped answering', closed_spam: 'Spam, not a real lead',
+                          closed_pool: 'Moved to the Caregiver Pool' };  // closed_pool: Who called, 2026-10-22
   // One rule for "active" (2026-10-22): the hub saves "inactive" lowercase and old
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
   const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
@@ -327,14 +328,44 @@
       ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // ---------- Who called (her approved mockup 2026-10-22, artifact 9FKrkUhoS3cmbTyymKpaSj) ----------
+  // A "Still deciding" lead can be one of 5 kinds of caller. The website form answers set it by
+  // themselves; the office sets it after the first call (p.whoCalled) and that always wins.
+  // "Caregiver, no consumer" is only ever set by the office: no form can tell us that.
+  const WHO_CALLED = { pair: 'Caregiver with a consumer', family: 'For a family member', self: 'For themself',
+                       unsure: 'Not sure yet', solo: 'Caregiver, no consumer' };
+  const WHO_NEXT = {
+    pair: 'Get the consumer’s name, phone and Medicaid number. The consumer is the lead; the caller will be their attendant.',
+    family: 'Ask about the person needing care: Medicaid, the care they need, and who would be their caregiver.',
+    self: 'Ask about Medicaid and the help they need, and if they have a caregiver in mind or need us to find one.',
+    unsure: 'Ask: "Are you the person needing care, calling for someone, or wanting to be a caregiver?" Then tap who it was.',
+    solo: 'Not a consumer lead. Move them to the Caregiver Pool so we can match them with a consumer who needs someone.'
+  };
+  function whoCalled(p) {
+    if (!p) return 'unsure';
+    if (WHO_CALLED[p.whoCalled]) return p.whoCalled;
+    const form = (Array.isArray(p.notes) ? p.notes : []).find(n => isFormNote(n));
+    const text = form ? String(form.text || '') : '';
+    const m = text.match(/^Who needs care: *(.+)$/mi), who = m ? m[1].trim() : '';
+    // the caller would be the paid caregiver (eligibility check "person" / "Caregiver situation" answers)
+    const callerCares = /would be the caregiver|is the caregiver/i.test(text);
+    const hasSomeone = /has someone in mind|already helping/i.test(text);
+    if (/wants? to be the (paid )?caregiver|be the paid caregiver|be paid to care/i.test(who)) return hasSomeone ? 'pair' : 'unsure';
+    if (/family/i.test(who)) return callerCares ? 'pair' : 'family';
+    if (/^(yes|self)\b|i need the care|for myself/i.test(who)) return 'self';
+    return 'unsure';
+  }
+
   // p = a pipeline record, calls = cds_lead_calls rows, todayIso = yyyy-mm-dd,
   // moved = true when this person is already on the Consumers list.
   // tone: late (red), today (honey), later, none, ready.
-  function leadCard(p, calls, todayIso, moved) {
+  // opts.whoCalled (the Leads switch is on): Still deciding leads get who called and a next step for it.
+  function leadCard(p, calls, todayIso, moved, opts) {
     const notes = (Array.isArray(p.notes) ? p.notes : []).filter(Boolean);
     const form = notes.find(n => isFormNote(n));
     const real = notes.filter(n => !isFormNote(n));
-    const last = real.length ? real[real.length - 1] : null;
+    const talk = real.filter(n => !n.whoCalled);   // a Who called tap is not a call note to show
+    const last = talk.length ? talk[talk.length - 1] : null;
     const kind = LEAD_KINDS[p.type] || 'Still deciding';
     const closed = CLOSED.includes(p.status);
     const done = DONE.includes(p.status);
@@ -351,6 +382,7 @@
     if (!who) who = 'No details yet. Open the profile to add them.';
     if (step === 'state') who = (p.stateSubmit ? 'Sent to the state ' + shortDay(p.stateSubmit) + '. ' : '') + who;
 
+    const wc = opts && opts.whoCalled && (p.type || 'lead') === 'lead' ? whoCalled(p) : '';
     let due = '', tone = 'none', next = '', sort = 3;
     if (step === 'call') {
       if (leadWaiting(p, calls)) {
@@ -358,6 +390,7 @@
         const old = added && added < todayIso;
         due = 'Not called yet'; tone = old ? 'late' : 'today'; sort = old ? 0 : 1;
         next = 'First call. Find out who needs care and if they have Medicaid.';
+        if (wc) next = WHO_NEXT[wc];
       } else {
         if (p.followup && p.followup < todayIso) {
           const n = daysBetween(p.followup, todayIso);
@@ -370,6 +403,7 @@
           : 'Call back and see if they are ready to start.';
         if (!p.followup) next = 'Set a call back date so they are not forgotten. ' + next;
       }
+      if (wc === 'solo' || (wc === 'unsure' && !leadWaiting(p, calls))) next = WHO_NEXT[wc];
       if (last && !noteIsWho && !leadWaiting(p, calls)) next += ' Last note: "' + clip(last.text) + '"';
     } else if (step === 'state') {
       if (!p.stateSubmit) { due = 'Sent date missing'; tone = 'today'; sort = 1; next = 'Add the date it went to the state.'; }
@@ -389,7 +423,8 @@
     }
     // needsToday: a call that should happen today (the Leads summary line).
     const needsToday = (step === 'call' && (tone === 'late' || tone === 'today')) || (step === 'state' && tone === 'late');
-    return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '', came: cameIn(p, todayIso) };
+    return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '', came: cameIn(p, todayIso),
+             whoCalled: wc, whoLabel: wc ? WHO_CALLED[wc] : '' };
   }
 
   // State reports with a due date (2026-10-22, her yes): shown on Today's Coming up from 30 days
@@ -503,5 +538,6 @@
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
-                    leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers };
+                    leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
+                    whoCalled, WHO_CALLED, WHO_NEXT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
