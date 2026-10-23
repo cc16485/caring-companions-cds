@@ -296,12 +296,11 @@ export function mountHubPacket(el, opts) {
       ${g.quiet.length ? g.quiet.map(rowHtml).join('') : '<p class="small">Nobody.</p>'}</section>
       <section class="grp"><div class="ghead"><h3>No longer working</h3><span>Marked no longer working. No rechecks.</span></div>
       ${g.ended.length ? g.ended.map(endedRow).join('') : '<p class="small">Nobody.</p>'}</section>`;
-    el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><button data-act="reload" class="pill-btn">Refresh</button></div>
+    el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><div class="btns" style="margin:0"><button class="btn o" data-act="ghl-import">Bring in check PDFs from GHL</button><button data-act="reload" class="pill-btn">Refresh</button></div></div>
       <div class="hp-tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       ${body}
-      <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>
-      ${tab === 'working' ? '<div class="btns"><button class="btn o" data-act="ghl-import">Bring in check PDFs from GHL</button></div>' : ''}`;
+      <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>`;
   }
 
   // Check PDFs from GHL: copied into the hub, dates read from each PDF, the office reviews and saves.
@@ -419,7 +418,7 @@ export function mountHubPacket(el, opts) {
       if (!open || open.id !== id) return;
       box.innerHTML = items.length ? `<table><tbody>${items.map(x => `<tr><td><b>${CHECK_LABEL[x.check]}</b></td><td>${esc(fmtD(x.checked_on || x.date_found) || 'No date yet')}</td>
         <td>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.file_name || 'View')}</a>` : esc(x.file_name)}</td><td>${x.source === 'ghl' ? 'From GHL' : 'Added in the hub'}</td></tr>`).join('')}</tbody></table>`
-        : 'No proof in the hub yet. Use "Bring in check PDFs from GHL" on the Working tab, or add a recheck below.';
+        : '<p>No proof in the hub yet.</p><div class="btns"><button class="btn" data-act="ghl-import">Bring in check PDFs from GHL</button></div><p>This brings in everyone\'s FCSR, EDL and OIG PDFs at once. Or add a recheck below.</p>';
     } catch (e) { box.textContent = 'Proof could not load: ' + e.message; }
   }
 
