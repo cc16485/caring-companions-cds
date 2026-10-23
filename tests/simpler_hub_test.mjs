@@ -97,9 +97,9 @@ const at = d => new Date(d + 'T12:00:00');
                'compliance', 'onboarding', 'reference', 'quarterly', 'financials', 'statesubmissions', 'payroll', 'taxcompliance',
                'authorizations', 'careplans', 'profile', 'caregivermatch', 'backuppool', 'caregiverpool', 'activeattendants',
                'leads', 'money'];
-  const NEW = ['today', 'help', 'switches', 'roster', 'leadprofile', 'directory', 'dirreview', 'dirnetwork', 'dirintros', 'dirfamilies', 'dirtasks', 'dirmessages', 'findcdscaregivers'];
+  const NEW = ['today', 'help', 'switches', 'roster', 'leadprofile', 'directory', 'dirreview', 'dirnetwork', 'dirintros', 'dirfamilies', 'dirtasks', 'dirmessages', 'findcdscaregivers', 'hours', 'hoursmonth', 'evv'];
   const want = { dashboard: 'today', pipeline: 'leads', statesubmissions: 'leads', leads: 'leads', attendants: 'attendants',
-                 evvcorrections: 'attendants', automations: 'help', guides: 'help', quarterly: 'money', financials: 'money',
+                 evvcorrections: 'hours', authorizations: 'hours', hours: 'hours', evv: 'hours', automations: 'help', guides: 'help', quarterly: 'money', financials: 'money',
                  payroll: 'money', money: 'money', consumers: 'consumers', taxcompliance: 'consumers', profile: 'consumers',
                  caregiverpool: 'directory', backuppool: 'directory', caregivermatch: 'directory', directory: 'directory',
                  dirtasks: 'directory', dirmessages: 'directory', findcdscaregivers: 'directory', today: 'today', help: 'help', switches: 'help', roster: 'attendants' };
@@ -120,10 +120,12 @@ const at = d => new Date(d + 'T12:00:00');
   Object.entries(STACKED).forEach(([k, v]) => v.forEach(x => ok(pages.has(x) && pages.has(k === 'pipeline' ? 'consumers' : k), 'stacked ' + k + ' + ' + x)));
   SECTIONS.forEach(s => s.tabs.forEach(t => ok(pages.has(t.page) || guideSubs.includes(t.page) || DIR_VIEWS[t.page], 'tab ' + t.label + ' has a page')));
   // 2026-10-22 (her ask): Switches became the Settings tab at the right of Help; Caregiver Directory got its own section.
-  ok(SECTIONS.length === 7 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,directory,money,help', 'the seven sections, in order');
+  ok(SECTIONS.length === 8 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,directory,hours,money,help', 'the eight sections, in order (Hours & EVV added 10-22)');
+  ok(SECTIONS.find(s => s.id === 'hours').tabs.map(t => t.page).join() === 'hoursmonth,authorizations,evvcorrections', 'Hours & EVV: This month, Authorizations, EVV forms');
+  ok(resolve('hours').page === 'hoursmonth' && resolve('evv').page === 'evvcorrections', '#hours and #evv open the new section');
   ok(SECTIONS.find(s => s.id === 'help').tabs.map(t => t.label).join() === 'Deadlines,Compliance,Onboarding,Reference,Settings', 'Help ends with a Settings tab, the old Switches page');
   const tabCount = SECTIONS.reduce((t, s) => t + s.tabs.length, 0);
-  ok(tabCount <= 20, 'tabs (' + tabCount + '; Settings, Goals and the 5 Caregiver Directory tabs)');
+  ok(tabCount <= 21, 'tabs (' + tabCount + '; Settings, Goals, 5 Caregiver Directory tabs, This month)');
   const today = SECTIONS.find(x => x.id === 'today');
   ok(today.tabs.map(t => t.page).join() === 'dashboard,followups,numbers,goals', 'Today has Today, Follow-ups, Dashboard and Goals tabs (her calls 10-22)');
   ok(resolve('numbers').page === 'numbers' && resolve('numbers').section === 'today', '#numbers opens the Dashboard tab inside Today');

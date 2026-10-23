@@ -1016,6 +1016,9 @@ button.fu-tile.check span { color:#14606F; }
 </div>
 
 <!-- ==================== AUTHORIZATIONS ==================== -->
+<!-- Hours & EVV · This month (2026-10-22, part c of the Attendants plan): drawn by hours/hub-hours.js -->
+<div id="page-hoursmonth" class="page"><div id="hx_root"></div></div>
+
 <div id="page-authorizations" class="page">
   <div class="section-header">
     <div class="section-title">📑 Authorizations &amp; Units</div>
@@ -4657,11 +4660,9 @@ const SECTIONS = [
   { id: 'consumers',  label: 'Consumers',   chips: true, tabs: [
       { page: 'consumers',      label: 'Everyone' },
       { page: 'taxcompliance',  label: 'Tax & EIN' },
-      { page: 'authorizations', label: 'Hours & authorizations' },
       { page: 'careplans',      label: 'Care plans' } ] },
   { id: 'attendants', label: 'Attendants',  tabs: [
-      { page: 'activeattendants', label: 'Active Attendants' },
-      { page: 'evvcorrections',   label: 'EVV Forms' } ] },
+      { page: 'activeattendants', label: 'Active Attendants' } ] },
   // Caregiver Directory (her yes 2026-10-22): findcdscaregivers.com in its own section.
   // Four tabs are views inside Caregiver Match (DIR_VIEWS); the last is the old Caregiver Pool page.
   // Tasks and Messages open from the tiles at the top of the Directory (#dirtasks, #dirmessages also work).
@@ -4671,6 +4672,12 @@ const SECTIONS = [
       { page: 'dirintros',   label: 'Family requests' },
       { page: 'dirfamilies', label: 'Families and eligibility' },
       { page: 'backuppool',  label: 'Sign-ups and county gaps' } ] },
+  // Hours & EVV (her yes 2026-10-22): hours against the authorization, shift checks and EVV
+  // corrections in one place. Authorizations moved here from Consumers, EVV forms from Attendants.
+  { id: 'hours',      label: 'Hours & EVV', tabs: [
+      { page: 'hoursmonth',     label: 'This month' },
+      { page: 'authorizations', label: 'Authorizations' },
+      { page: 'evvcorrections', label: 'EVV forms' } ] },
   { id: 'money',      label: 'Money',       tabs: [] },
   { id: 'help',       label: 'Help',        quiet: true, tabs: [
       { page: 'calendar',    label: 'Deadlines' },
@@ -4694,6 +4701,7 @@ const PAGE_TO_SECTION = (() => {
     attendants: 'attendants', roster: 'attendants',
     caregivermatch: 'directory', backuppool: 'directory', caregiverpool: 'directory', directory: 'directory',
     dirtasks: 'directory', dirmessages: 'directory',
+    hours: 'hours', evv: 'hours', hoursevv: 'hours',
     payroll: 'money', financials: 'money', quarterly: 'money', money: 'money',
     guides: 'help', help: 'help',
     automations: 'help', switches: 'help', settings: 'help'
@@ -4703,7 +4711,7 @@ const PAGE_TO_SECTION = (() => {
 
 // Landing page when a section is opened by name rather than a specific page.
 const SECTION_DEFAULT = { today: 'dashboard', dashboard: 'dashboard', leads: 'pipeline', consumers: 'consumers',
-                          attendants: 'activeattendants', directory: 'dirreview', money: 'payroll', help: 'calendar', guides: 'calendar',
+                          attendants: 'activeattendants', directory: 'dirreview', hours: 'hoursmonth', evv: 'evvcorrections', money: 'payroll', help: 'calendar', guides: 'calendar',
                           switches: 'automations', settings: 'automations' };
 
 // Spellings that are not themselves page ids, kept because they are live links.
@@ -4826,6 +4834,8 @@ function showPage(id) {
   if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); renderComplianceClocks(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
+  if (id === 'hoursmonth') renderHoursMonth();
+  if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); }
   if (id === 'backuppool') renderBackupPool();
   if (id === 'caregivermatch') renderCaregiverMatch(dirView);
   if (id === 'activeattendants') { renderActiveAttendants(); renderAttendantCheck(); }
@@ -4900,6 +4910,31 @@ async function renderActiveAttendants() {
     _hpMounted = true;
   } catch (e) {
     root.innerHTML = '<div style="padding:24px;color:#a8342a">Active Attendants could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
+  }
+}
+
+// Hours & EVV · This month (2026-10-22). Reads the WellSky reports, the EVV corrections and the
+// forms sent in online; it never writes. Mounted once, redrawn each time the tab opens.
+let _hx = null;
+async function renderHoursMonth() {
+  if (_hx) { _hx.draw(); return; }
+  const root = document.getElementById('hx_root');
+  root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
+  try {
+    const { mountHours } = await import('./hours/hub-hours.js?v=1');
+    root.innerHTML = '';
+    _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
+      check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
+      consumers: () => getData('consumers'), go: page => showPage(page),
+      submissions: async () => {
+        if (!_db) return [];
+        const { data, error } = await _db.from('evv_submissions').select('consumer, attendant, visitdate, sig_attendant, sig_consumer, processed')
+          .eq('agency_id', AGENCY_ID).eq('processed', false);
+        if (error) throw new Error(error.message);
+        return (data || []).map(r => ({ ...r, sig_attendant: !!r.sig_attendant, sig_consumer: !!r.sig_consumer }));
+      } });
+  } catch (e) {
+    root.innerHTML = '<div style="padding:24px;color:#a8342a">This month could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
   }
 }
 
