@@ -140,7 +140,7 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   const m = html.slice(html.indexOf('id="closeLeadModal"'), html.indexOf('id="addPipelineModal"'));
   ['closed_inactive', 'closed_ni', 'closed_other', 'closed_spam'].forEach(st => ok(m.includes("closeLeadAs('" + st + "')"), 'Close offers ' + st));
-  ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam'\]/.test(html), 'the hub knows all four');
+  ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam'(,'closed_pool')?\]/.test(html), 'the hub knows all four (and closed_pool from Who called)');
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(r.includes('openCloseLead(') && r.includes('reopenLead(') && r.includes('ld-came'), 'cards have Close, Reopen and the came-in date');
   const f = html.slice(html.indexOf('function closeLeadAs('), html.indexOf('function reopenLead('));
