@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=15"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=16"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -2812,6 +2812,27 @@ button.fu-tile.check span { color:#14606F; }
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('endingModal')">Cancel</button>
       <button class="btn btn-primary" onclick="startEnding()">Start</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="letterModal">
+  <div class="modal" style="width:680px">
+    <div class="modal-header"><div class="modal-title">Written notice to the consumer and DSDS</div>
+      <button class="modal-close" onclick="closeModal('letterModal')" aria-label="Close">×</button></div>
+    <p style="font-size:13px;color:var(--gray-600);margin:4px 0 10px">The rule asks for the specific reasons (19 CSR 15-8.400(7)(B)). Check every box, then print. Mail or hand it to the consumer, and send DSDS a copy the same day.</p>
+    <div class="form-row"><div class="form-group"><label>Date</label><input type="date" id="lt_date"></div>
+      <div class="form-group"><label>DCN</label><input type="text" id="lt_dcn"></div></div>
+    <div class="form-group"><label>To (name and mailing address)</label><textarea id="lt_to" rows="3"></textarea></div>
+    <div class="form-group"><label>The reason</label><textarea id="lt_reason" rows="3"></textarea></div>
+    <div class="form-group"><label>What happened (dates, what we tried, what they said)</label><textarea id="lt_facts" rows="5"></textarea></div>
+    <div class="form-group"><label>What happens next</label><textarea id="lt_next" rows="4"></textarea></div>
+    <div class="form-row"><div class="form-group"><label>Signed by</label><input type="text" id="lt_signer"></div>
+      <div class="form-group"><label>Title</label><input type="text" id="lt_title"></div></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('letterModal')">Cancel</button>
+      <button class="btn btn-outline" onclick="saveLetter(false)">Save</button>
+      <button class="btn btn-primary" onclick="saveLetter(true)">Save and print</button>
     </div>
   </div>
 </div>
@@ -5661,6 +5682,76 @@ function endTaxTick(k, on) {
   if (_profileId === c.id) renderProfile();
 }
 
+// The written notice (step 3 of her closure plan, 2026-10-22). The wording starts
+// from CDSRules.endingLetter; whatever the office changes is saved on the ending
+// (ending.letter) so the exact letter sent stays on file.
+const LETTER_IDS = ['date', 'dcn', 'to', 'reason', 'facts', 'next', 'signer', 'title'];
+function openLetter(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c || !c.ending) return;
+  _endCid = cid;
+  const base = CDSRules.endingLetter(c, c.ending, _endToday()) || {};
+  const saved = c.ending.letter || {};
+  const v = Object.assign({ signer: 'Samantha Troutman', title: 'Owner' }, base, saved);
+  LETTER_IDS.forEach(k => { document.getElementById('lt_' + k).value = v[k] || ''; });
+  openModal('letterModal');
+}
+function saveLetter(andPrint) {
+  const vals = {};
+  LETTER_IDS.forEach(k => { vals[k] = document.getElementById('lt_' + k).value.trim(); });
+  if (!vals.reason) { alert('Write the reason. The rule asks for specific reasons.'); return; }
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === _endCid);
+  if (!c || !c.ending) return;
+  const base = CDSRules.endingLetter(c, c.ending, vals.date) || {};
+  // The address line under the name becomes the consumer's mailing address.
+  const addr = vals.to.split('\n').slice(1).join('\n').trim();
+  if (addr) c.mailAddress = addr;
+  c.ending.letter = Object.assign({ subject: base.subject, opening: base.opening, cite: base.cite }, vals,
+    { savedAt: new Date().toISOString(), by: _endWho() });
+  c.ending.log.push({ at: new Date().toISOString(), by: _endWho(), t: 'Letter saved' + (andPrint ? ' and printed' : '') });
+  setData('consumers', consumers);
+  closeModal('letterModal');
+  renderProfile();
+  if (andPrint) printLetter(c);
+}
+function printLetter(c) {
+  const L = c.ending && c.ending.letter;
+  if (!L) return;
+  const e2 = t => esc(t || '').replace(/\n/g, '<br>');
+  const lines = t => (t || '').split('\n').filter(x => x.trim()).map(x => '<li>' + esc(x) + '</li>').join('');
+  const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Notice: ' + esc(c.name) + '</title><style>' +
+    '@page{margin:20mm}body{font-family:Georgia,"Times New Roman",serif;font-size:13.5px;line-height:1.55;color:#222;max-width:720px;margin:0 auto;padding:24px}' +
+    '.head{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;border-bottom:2px solid #0e3860;padding-bottom:10px;margin-bottom:22px}' +
+    '.head img{height:54px;max-width:100%}.head div{white-space:nowrap;text-align:right;font-family:-apple-system,Segoe UI,sans-serif;font-size:12px;color:#0e3860}' +
+    'h1{font-size:17px;margin:22px 0 12px}h2{font-size:14px;margin:18px 0 6px}ul{margin:4px 0 0 18px;padding:0}' +
+    '.sig{margin-top:40px}.line{border-bottom:1px solid #222;width:260px;height:34px}.cc{margin-top:28px;font-size:12px;color:#444}' +
+    '@media print{.noprint{display:none}}</style></head><body>' +
+    '<div class="noprint" style="background:#0e3860;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px;font-family:sans-serif;display:flex;justify-content:space-between;align-items:center;gap:12px">' +
+      '<span>Print it, or choose <strong>Save as PDF</strong>. Keep a copy in the consumer file.</span>' +
+      '<button onclick="window.print()" style="background:#54bdb8;color:#08343a;border:0;border-radius:6px;padding:9px 18px;font-weight:700;cursor:pointer">Print / Save as PDF</button></div>' +
+    '<div class="head"><img src="' + location.origin + '/cds-logo.png" alt="Caring Companions CDS"><div>417-218-2888<br>caringcds.com</div></div>' +
+    '<div>' + esc(_niceDayLong(L.date)) + '</div><br>' +
+    '<div>' + e2(L.to) + '</div>' + (L.dcn ? '<div>DCN: ' + esc(L.dcn) + '</div>' : '') +
+    '<h1>' + esc(L.subject) + '</h1>' +
+    '<p>' + e2(L.opening) + '</p>' +
+    '<h2>The reason</h2><p>' + e2(L.reason) + '</p>' +
+    (L.facts ? '<h2>What happened</h2><p>' + e2(L.facts) + '</p>' : '') +
+    '<h2>What happens next</h2><ul>' + lines(L.next) + '</ul>' +
+    '<p>If you have questions, call us at 417-218-2888.</p>' +
+    '<div class="sig">Sincerely,<div class="line"></div>' + esc(L.signer) + (L.title ? ', ' + esc(L.title) : '') + '<br>Caring Companions CDS</div>' +
+    '<div class="cc">Copy sent to: Missouri Department of Health and Senior Services, Division of Senior and Disability Services (DSDS)<br>' + esc(L.cite) + '</div>' +
+    '</body></html>';
+  const w = window.open('', '_blank');
+  if (!w) { alert('Your browser blocked the letter window. Allow pop-ups for this page and try again.'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+function _niceDayLong(iso) {
+  if (!iso) return '';
+  return new Date(String(iso).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
 // The card at the top of the profile while a consumer is Closing or Paused.
 function endingCard(c) {
   const e = c.ending;
@@ -5673,6 +5764,9 @@ function endingCard(c) {
     const v = d[s.k];
     return '<div class="end-step"><span class="t">' + (v && v.date ? '✓ ' : '') + esc(s.t) + (s.need ? '' : ' <span class="end-cite">(if it applies)</span>') +
       (s.cite ? '<br><span class="end-cite">' + esc(s.cite) + '</span>' : '') +
+      (s.print && r.letter ? '<br><a href="#" onclick="openLetter(\'' + id + '\');return false">' + (e.letter ? 'Open the letter' : 'Write the letter') + '</a>' +
+        (e.letter ? ' <span class="end-cite">saved ' + esc(new Date(e.letter.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) + ' by ' + esc(e.letter.by || '') + ' · <a href="#" onclick="printLetter(getData(\'consumers\').find(x => x.id === \'' + id + '\'));return false">Print again</a></span>' : '') +
+        '<br><span class="end-cite">Mail or hand it to the consumer. Send DSDS a copy the same day.</span>' : '') +
       (s.form ? '<br><a href="' + CDSRules.DSDS_FORM + '" target="_blank" rel="noopener">Open the DSDS form</a> <span class="end-cite">then check it in Fusion, PCCP Request tab</span>' : '') +
       '</span>' + dateIn(v && v.date, "endSetStep('" + id + "','" + s.k + "',this.value)") +
       (v && v.date ? '<span class="who">by ' + esc(v.by || '') + '</span>' : '') + '</div>';

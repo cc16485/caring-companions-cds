@@ -32,5 +32,17 @@ ok(R.appealEnds('2026-10-22') === '2026-11-01', '10 days after the notice');
 ok(R.appealEnds('2026-12-25') === '2027-01-04', 'across the year');
 ok(R.appealEnds('') === '', 'no notice, no date');
 
+// ── the written notice (step 3) ──
+ok(R.ENDING_REASONS.filter(r => r.steps.some(s => s.k === 'letter')).every(r => r.letter), 'every reason that needs a letter has its wording');
+ok(!R.endingReason('death').letter && !R.endingReason('hospital').letter, 'no letter for a death or a hospital stay');
+const L = R.endingLetter({ name: 'Ruth Caldwell', dcn: '123', mailAddress: '1 Elm St\nOzark, MO' }, { kind: 'noAttendant', notes: ' offered help twice ' }, '2026-10-22');
+ok(L.to === 'Ruth Caldwell\n1 Elm St\nOzark, MO', 'letter is addressed to the consumer with the saved address');
+ok(L.dcn === '123' && L.date === '2026-10-22', 'DCN and date');
+ok(L.facts === 'offered help twice', 'what happened comes from the notes');
+ok(/Only DSDS can close/.test(L.next) && /866-835-3505/.test(L.next), 'says only DSDS closes, with the DSDS number');
+ok(/15-8\.400\(7\)\(B\)/.test(L.cite), 'names the rule');
+ok(R.endingLetter({ name: 'X' }, { kind: 'death' }, '2026-10-22') === null, 'no letter for a death');
+ok(!Object.values(L).join(' ').includes('\u2014'), 'no em dashes in the letter');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
