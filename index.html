@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=20"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=21"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=8"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -13052,8 +13052,44 @@ const _TODAY_ACT = {
   tax:     ['Open tax setup', 'openTaxSetup(this.dataset.id)'],
   shift:   ['Checked',        'markShiftChecked(this.dataset.k)'],
   lead:    ['Open lead',      'openLeadProfile(this.dataset.id)'],
-  profile: ['Open',           'openProfile(this.dataset.id)']
+  profile: ['Open',           'openProfile(this.dataset.id)'],
+  task:    ['Done',           '_todayTaskDone(this)'],
+  oig:     ['Open OIG card',  "showPage('activeattendants')"],
+  attendant: ['Open',         "showPage('activeattendants')"]
 };
+// The Attendants step (2026-10-22): office to-dos and applications come from the cds-match server,
+// the Roster from this page, the automatic OIG clears from cds-oig. Loaded when Today draws, again
+// after 2 minutes or on Refresh. A load that fails says so on Today; nothing goes quiet.
+let _todayAtt = { at: 0, busy: false, data: null, error: '' };
+async function _todayAttLoad(force) {
+  if (_todayAtt.busy || typeof _db === 'undefined' || !_db) return;
+  if (!force && _todayAtt.at && Date.now() - _todayAtt.at < 120000) return;
+  _todayAtt.busy = true;
+  try {
+    const [t, p] = await Promise.all([cdsMatchApi('tasks'), cdsMatchApi('packetList')]);
+    _todayAtt.data = { tasks: t.tasks || [], applications: p.attendants || [] };
+    _todayAtt.error = '';
+  } catch (e) { _todayAtt.error = e.message || String(e); }
+  _todayAtt.at = Date.now(); _todayAtt.busy = false;
+  try { _loadDashOig(); } catch (e) {}
+  renderDailyRoutine();
+}
+async function _todayTaskDone(btn) {
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try { await cdsMatchApi('completeTask', { id: btn.dataset.id }); await _todayAttLoad(true); }
+  catch (e) { btn.disabled = false; btn.textContent = 'Done'; alert('Could not mark it done: ' + (e.message || e)); }
+}
+function _todayAttWork() {
+  if (!_todayAtt.data) return null;
+  const auto = {};
+  let oigPeople = null;
+  try { oigPeople = _dashOig; } catch (e) {}   // declared further down the page
+  Object.entries(oigPeople || {}).forEach(([ref, x]) => {
+    if (/^attendant:/.test(ref) && x && (x.result === 'clear' || x.review === 'not_them') && x.checked_at)
+      auto[ref.slice(10)] = new Date(x.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  });
+  return Object.assign({}, _todayAtt.data, { roster: getData('attendants').filter(a => a.status !== 'inactive'), autoOig: auto });
+}
 function _todayPeople(n, i) {
   const ppl = i.people || [];
   if (!ppl.length) return '';
@@ -13067,7 +13103,7 @@ function _todayPeople(n, i) {
     const id = p.id || (p.act === 'lead' ? '' : (consumers.find(c => CDSWellSky.nameKey(c.name) === CDSWellSky.nameKey(p.name)) || {}).id || '');
     const act = p.act === undefined ? 'profile' : p.act;
     const a = _TODAY_ACT[act];
-    const can = a && (act === 'shift' ? p.key : id);
+    const can = a && (act === 'shift' ? p.key : act === 'oig' || act === 'attendant' ? true : id);
     const due = p.due ? '<span class="td-due ' + (p.due < today ? 'late' : p.due <= soon ? 'soon' : '') + '">' +
       (p.due < today ? 'Late, was due ' : 'Due ') + esc(_niceDay(p.due)) + '</span>' : '';
     const why = p.why || [p.county, p.at && !isNaN(Date.parse(p.at)) ? 'since ' + _niceDay(/T/.test(p.at) ? CDSWellSky.isoLocal(new Date(p.at)) : String(p.at).slice(0, 10)) : ''].filter(Boolean).join(', ');
@@ -13097,14 +13133,19 @@ function renderDailyRoutine() {
     authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages'), calls: _leadCalls,
     wellskyItems: wsAll.filter(i => !i.system),
     wsPeople: _activePeople(), nameKey: CDSWellSky.nameKey,
-    firstShiftOf, followups: commForToday(), noShift: noShiftList()
+    firstShiftOf, followups: commForToday(), noShift: noShiftList(),
+    attendantWork: _todayAttWork()
   });
+  _todayAttLoad(false);
   const owner = ldWhoOwner();
   const staleSince = (wsSystem.find(i => i.since) || {}).since;
   const s2 = steps.find(st => st.n === 2);
   if (s2 && wsSystem.length && !owner)
     s2.note = (staleSince ? 'WellSky numbers here are from ' + _niceDay(staleSince) + '.' : 'WellSky numbers here may be out of date.') +
               ' Samantha has been told and is fixing the WellSky check.';
+  const attErr = _todayAtt.error
+    ? '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>The attendant to-dos did not load:</strong> ' + esc(_todayAtt.error) +
+      (/refresh/i.test(_todayAtt.error) ? '' : ' Press Refresh to try again.') + '</div></div>' : '';
   const systemHtml = owner && wsSystem.length
     ? '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>For you, Samantha (the team does not see this):</strong>' +
       wsSystem.map(i => '<div style="margin-top:4px">' + esc(i.t) + '</div>').join('') + '</div></div>'
@@ -13125,14 +13166,14 @@ function renderDailyRoutine() {
     '<div class="card" style="border-left:4px solid var(--accent, #54bdb8)">' +
       '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:4px">' +
         '<div style="font-size:16px;font-weight:700;color:var(--primary)">Do this first, every morning</div>' +
-        '<button class="btn btn-outline btn-sm" onclick="renderDailyRoutine()" style="font-size:11px">↻ Refresh</button>' +
+        '<button class="btn btn-outline btn-sm" onclick="renderDailyRoutine();_todayAttLoad(true)" style="font-size:11px">↻ Refresh</button>' +
       '</div>' +
       '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:14px">' +
         (totalOpen
           ? 'Work down the list. Everything else can wait until it is clear.'
           : 'Nothing outstanding. This is what a clear morning looks like.') +
       '</div>' +
-      systemHtml + failedHtml +
+      systemHtml + attErr + failedHtml +
       steps.map(st =>
         '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--gray-200)">' +
           '<span style="flex:none;width:26px;height:26px;border-radius:50%;background:' +

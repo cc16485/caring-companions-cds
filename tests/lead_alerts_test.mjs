@@ -259,6 +259,21 @@ ok(zach && !zach.body.includes('has not run since') && !zach.body.includes('For 
 ok(zach && zach.body.includes('WellSky numbers in this email are from Oct 20. Samantha has been told and is fixing the WellSky check.'), 'Zach gets the one line instead');
 ok(zach && zach.body.includes('   1 monthly check-in call not yet logged this month') && !zach.body.includes('2 monthly check-in'), 'only Pat (worked a WellSky shift) counts as active, like Today');
 
+// Attendants step (2026-10-22): new-attendant to-dos and overdue rechecks, by name, in the email.
+await pg.query(`insert into attendant_pool (agency_id, first_name, last_name, phone) values ('caring-companions-cds','Amy','Ash','4175550111')`);
+const amy = (await pg.query(`select id from attendant_pool where first_name='Amy' and last_name='Ash'`)).rows[0].id;
+await pg.query(`insert into cds_tasks (kind, title, pool_id, dedupe_key, due_at) values ('packet_empeon', 'Checks clear: send the Empeon invite to Amy Ash (Copy for Empeon).', $1, 'packet_empeon:t', '2026-11-04T21:00:00Z')`, [amy]);
+await pg.query(`insert into agency_data (agency_id, data_key, data_value) values ('caring-companions-cds','attendants',$1::jsonb)`,
+  [JSON.stringify([{ id: 'r1', name: 'Gil Gray', leieDate: '2026-10-20', edlDate: '2026-09-01', fcsrDate: '2025-10-01' }, { id: 'r2', name: 'Old Gone', status: 'inactive', fcsrDate: '2020-01-01' }])]);
+at('2026-11-04T14:00:00Z');
+await jobs.morning();
+const am = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
+ok(/\d\. Attendants/.test(am), 'the email has an Attendants step');
+ok(am.includes('1 office step for new attendants') && am.includes('      Amy (Checks clear: send the Empeon invite to Amy Ash (Copy for Empeon)., due Nov 4)'), 'Amy\'s Empeon invite, by name, due Nov 4');
+ok(am.includes('1 attendant with a background recheck overdue') && am.includes('      Gil Gray (FCSR overdue, late, was due Oct 1)'), 'Gil\'s FCSR overdue, by name');
+ok(!am.includes('Old Gone'), 'an attendant marked inactive is left out');
+ok(!am.includes('could not be read'), 'the attendant to-dos were read');
+
 const clear = LA.morningEmail([{ n: 1, title: 'Clear anything the state is waiting on', items: [] }], {}, Date.parse('2026-10-27T13:00:00Z'));
 ok(clear.subject === 'CDS morning, Tue, Oct 27: nothing waiting' && clear.text.includes('   Nothing waiting here.'), 'a clear morning says so');
 
