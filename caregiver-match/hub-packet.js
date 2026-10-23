@@ -140,7 +140,11 @@ export function proofPatches(items, roster) {
   }
   return out;
 }
-const CHECK_LABEL = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG' };
+const CHECK_LABEL = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG', application: 'Application', onboarding: 'Onboarding papers' };
+const IS_CHECK = k => k === 'fcsr' || k === 'edl' || k === 'oig';
+// A paper's link: the copy in the hub, else the signed record in GHL.
+const paperLink = x => x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.file_name || 'View')}</a>`
+  : x.ghl_link ? `${esc(x.file_name)} <a href="${esc(x.ghl_link)}" target="_blank" rel="noopener">Open in GHL</a>` : esc(x.file_name);
 
 // Ending an attendant (her rule 2026-10-22): the consumer's decision, on record.
 export const END_WHY = [['consumer', 'The consumer ended it'], ['attendant', 'The attendant quit (consumer told)'], ['other', 'Other (say what in the note)']];
@@ -296,7 +300,7 @@ export function mountHubPacket(el, opts) {
       ${g.quiet.length ? g.quiet.map(rowHtml).join('') : '<p class="small">Nobody.</p>'}</section>
       <section class="grp"><div class="ghead"><h3>No longer working</h3><span>Marked no longer working. No rechecks.</span></div>
       ${g.ended.length ? g.ended.map(endedRow).join('') : '<p class="small">Nobody.</p>'}</section>`;
-    el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><div class="btns" style="margin:0"><button class="btn o" data-act="ghl-import">Bring in check PDFs from GHL</button><button data-act="reload" class="pill-btn">Refresh</button></div></div>
+    el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><div class="btns" style="margin:0"><button class="btn o" data-act="ghl-import">Bring in papers and checks from GHL</button><button data-act="reload" class="pill-btn">Refresh</button></div></div>
       <div class="hp-tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       ${body}
@@ -306,27 +310,37 @@ export function mountHubPacket(el, opts) {
   // Check PDFs from GHL: copied into the hub, dates read from each PDF, the office reviews and saves.
   async function openImport(note) {
     open = { kind: 'import' };
-    el.innerHTML = '<button class="pill-btn" data-act="back">← All attendants</button><div class="card"><h2>Check PDFs from GHL</h2><p class="small">Copying the FCSR, EDL and OIG files from each attendant\'s GHL contact. This can take a minute.</p></div>';
+    el.innerHTML = '<button class="pill-btn" data-act="back">← All attendants</button><div class="card"><h2>Papers and checks from GHL</h2><p class="small">Copying each attendant\'s application, onboarding papers and FCSR, EDL and OIG files from GHL. This can take a few minutes.</p></div>';
     let r;
     try { r = await api('rosterProofScan'); } catch (e) { open = { kind: 'import' }; el.querySelector('.card').insertAdjacentHTML('beforeend', `<div class="err">${esc(e.message)}</div>`); return; }
     open = { kind: 'import', r };
     const byAtt = {};
-    for (const x of r.items) (byAtt[x.attendant_id] = byAtt[x.attendant_id] || []).push(x);
+    const checks = r.items.filter(x => IS_CHECK(x.check)), papers = r.items.filter(x => !IS_CHECK(x.check));
+    for (const x of checks) (byAtt[x.attendant_id] = byAtt[x.attendant_id] || []).push(x);
     const cur = Object.fromEntries((r.roster || []).map(a => [a.id, a]));
-    const blank = r.items.filter(x => !(x.checked_on || x.date_found)).length;
+    const blank = checks.filter(x => !(x.checked_on || x.date_found)).length;
+    const paperBy = {};
+    for (const x of papers) (paperBy[x.name] = paperBy[x.name] || []).push(x);
+    const paperList = Object.keys(paperBy).sort().map(n => `<li><b>${esc(n)}</b>: ${paperBy[n].map(x => esc(CHECK_LABEL[x.check]) + ' ' + paperLink(x)).join(' · ')}</li>`).join('');
+    const noApp = (r.roster || []).filter(a => !papers.some(x => x.attendant_id === a.id && x.check === 'application') && !r.skipped.some(k => k.attendant_id === a.id && /No GHL contact/.test(k.why)));
     const rows = Object.entries(byAtt).sort((x, y) => x[1][0].name.localeCompare(y[1][0].name)).map(([id, xs]) => xs
-      .sort((a, b) => ['fcsr', 'edl', 'oig'].indexOf(a.check) - ['fcsr', 'edl', 'oig'].indexOf(b.check))
+      .sort((a, b) => ['fcsr', 'edl', 'oig'].indexOf(a.check) - ['fcsr', 'edl', 'oig'].indexOf(b.check) || String(b.checked_on || b.date_found).localeCompare(String(a.checked_on || a.date_found)))
       .map((x, i) => `<tr>${i ? '<td></td>' : `<td><b>${esc(x.name)}</b></td>`}<td><b>${CHECK_LABEL[x.check]}</b></td>
-        <td>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.file_name || 'View')}</a>` : esc(x.file_name)}${x.ghl_result ? `<div class="small">GHL: ${esc(x.ghl_result.replace(/^[^A-Za-z]+/, ''))}</div>` : ''}</td>
+        <td>${paperLink(x)}${x.ghl_result ? `<div class="small">GHL: ${esc(x.ghl_result.replace(/^[^A-Za-z]+/, ''))}</div>` : ''}</td>
         <td><input type="date" data-proof="${esc(x.id)}" value="${esc(x.checked_on || x.date_found || '')}" max="${isoLocal(new Date())}" aria-label="${CHECK_LABEL[x.check]} date for ${esc(x.name)}">
         ${x.checked_on ? '<div class="small">Saved</div>' : x.date_found ? '<div class="small">From the PDF</div>' : '<div><span class="pill y">Open the PDF, type the date</span></div>'}
         ${cur[id] && cur[id][PROOF_FIELD[x.check]] ? `<div class="small">On the Roster: ${esc(fmtD(cur[id][PROOF_FIELD[x.check]]))}</div>` : ''}</td></tr>`).join('')).join('');
     el.innerHTML = `<button class="pill-btn" data-act="back">← All attendants</button>
-      <div class="card"><h2>Check PDFs from GHL</h2>
-      <p class="small">Copied from each attendant's GHL contact (Upload FCSR, Upload EDL, Upload OIG) and kept in the hub. The date is the day the PDF was saved, which is the day the search was run. Open any that look wrong, fix the date, then save. Nothing in GHL changes.</p>
-      ${r.items.length ? `<table><thead><tr><th>Attendant</th><th>Check</th><th>File</th><th>Date of the check</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No check files found in GHL.</p>'}
+      <div class="card"><h2>Papers and checks from GHL</h2>
+      <p class="small">Copied from each attendant's GHL contact (the Upload boxes and the Documents panel) and kept in the hub. ID photos, Social Security cards and E-Verify stay in GHL only. Nothing in GHL changes.</p>
+      <h3>Checks</h3>
+      <p class="small">The date is the day the PDF was saved, which is the day the search was run (or the day it was put in GHL, when the PDF has no date). Open any that look wrong, fix the date, then save.</p>
+      ${checks.length ? `<table><thead><tr><th>Attendant</th><th>Check</th><th>File</th><th>Date of the check</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No check files found in GHL.</p>'}
+      <h3>Application and onboarding papers</h3>
+      ${paperList ? `<ul>${paperList}</ul>` : '<p class="small">None found in GHL.</p>'}
+      ${noApp.length ? `<p class="small">No application found in GHL for: ${noApp.map(a => esc(a.name)).join(', ')}.</p>` : ''}
       ${r.skipped.length ? `<h3>Not brought in</h3><ul>${r.skipped.map(x => `<li><b>${esc(x.name)}</b>: ${esc(x.why)}</li>`).join('')}</ul>` : ''}
-      ${r.items.length ? `<div class="btns"><button class="btn" data-act="ghl-save">Save dates</button></div>
+      ${checks.length ? `<div class="btns"><button class="btn" data-act="ghl-save">Save check dates</button></div>
       <p class="small">${blank ? blank + (blank === 1 ? ' file has' : ' files have') + ' no date in the PDF. Those are skipped until you type the date. ' : ''}Each attendant's Roster date moves to the newest check, never back, so their recheck dates show on their card.</p>` : ''}
       <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}</div>`;
   }
@@ -396,7 +410,7 @@ export function mountHubPacket(el, opts) {
       <div class="btns"><button class="btn" data-act="dates">Save dates</button></div>
       <p class="small">OIG every month (runs by itself), EDL every 3 months, FCSR every year. Use the date on the search result you have on file.</p>
       <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}
-      <h3>Proof on file</h3>
+      <h3>Papers and proof on file</h3>
       <div id="hp_proofs" class="small">Loading…</div>
       <div class="copy"><b>Add a recheck</b>
         <div><select id="hp_pk" aria-label="Which check"><option value="edl">EDL</option><option value="fcsr">FCSR</option><option value="oig">OIG</option></select>
@@ -416,9 +430,9 @@ export function mountHubPacket(el, opts) {
     try {
       const { items } = await api('rosterProofList', { attendant_id: id });
       if (!open || open.id !== id) return;
-      box.innerHTML = items.length ? `<table><tbody>${items.map(x => `<tr><td><b>${CHECK_LABEL[x.check]}</b></td><td>${esc(fmtD(x.checked_on || x.date_found) || 'No date yet')}</td>
-        <td>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.file_name || 'View')}</a>` : esc(x.file_name)}</td><td>${x.source === 'ghl' ? 'From GHL' : 'Added in the hub'}</td></tr>`).join('')}</tbody></table>`
-        : '<p>No proof in the hub yet.</p><div class="btns"><button class="btn" data-act="ghl-import">Bring in check PDFs from GHL</button></div><p>This brings in everyone\'s FCSR, EDL and OIG PDFs at once. Or add a recheck below.</p>';
+      box.innerHTML = items.length ? `${items.some(x => x.check === 'application') ? '' : '<p>No application on file. Check their GHL Documents panel.</p>'}<table><tbody>${items.map(x => `<tr><td><b>${CHECK_LABEL[x.check]}</b></td><td>${esc(fmtD(x.checked_on || x.date_found) || (IS_CHECK(x.check) ? 'No date yet' : ''))}</td>
+        <td>${paperLink(x)}</td><td>${x.source === 'ghl' ? 'From GHL' : 'Added in the hub'}</td></tr>`).join('')}</tbody></table>`
+        : '<p>No proof in the hub yet.</p><div class="btns"><button class="btn" data-act="ghl-import">Bring in papers and checks from GHL</button></div><p>This brings in everyone\'s application, onboarding papers and FCSR, EDL and OIG PDFs at once. Or add a recheck below.</p>';
     } catch (e) { box.textContent = 'Proof could not load: ' + e.message; }
   }
 

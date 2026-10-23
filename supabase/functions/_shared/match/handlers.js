@@ -8,7 +8,7 @@
 //   crypto: { token(), hash(s), code(), encrypt(s) }          (all async)
 //   media:  { put({ pool_id, kind, mime, data, by }) -> id, url(id) -> string|null }
 //   ghl:    { upsert({ first_name, last_name, phone, email, tags }) -> id, get(id) -> contact|null }
-//           live also find(query), contact(id), fields() for Roster check proof (read only)
+//           live also find(query), contact(id), fields(), documents({ contactId, documentType, folderId }) for Roster papers (read only)
 //   files:  { fetch(url) -> { bytes, mime } }  (live: GHL file hosts only)
 //   send:   async ({ channel, to, subject, body }) -> void   (only called when messages are live)
 //   links:  { family(token), caregiver(token) } -> full URL
