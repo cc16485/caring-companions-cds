@@ -4867,7 +4867,7 @@ async function renderOigCard() {
   const host = document.getElementById('oigCard');
   if (!host || !_db) return null;
   try {
-    const { mountOigCard } = await import('./caregiver-match/hub-oig.js?v=1');
+    const { mountOigCard } = await import('./caregiver-match/hub-oig.js?v=2');
     const call = async body => {
       const { data } = await _db.auth.getSession();
       const jwt = data && data.session ? data.session.access_token : '';
@@ -4895,7 +4895,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=4');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=5');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -4921,7 +4921,7 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=1');
+    const { mountHours } = await import('./hours/hub-hours.js?v=2');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),

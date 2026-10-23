@@ -20,7 +20,7 @@ export function nextRun(now = new Date()) {
 }
 
 const CSS = `
-.oc{background:#fff;border:1px solid #dfe6ec;border-radius:14px;padding:16px;margin:0 0 14px;max-width:760px;color:#1d2a36}
+.oc{background:#fff;border:1px solid #dfe6ec;border-radius:14px;padding:16px;margin:0 0 14px;color:#1d2a36}
 .oc h3{margin:0;font-size:17px;color:#0D365F;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .oc .pill{font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px}
 .oc .g{background:#e7f5ee;color:#1f7a4d}.oc .y{background:#f6e7b8;color:#6b4e00}.oc .r{background:#fdecea;color:#b42318}

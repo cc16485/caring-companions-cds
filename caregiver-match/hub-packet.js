@@ -17,7 +17,7 @@ const addM = (iso, m) => { const d = new Date(iso + 'T12:00:00'); d.setMonth(d.g
 const CHECK_NAMES = { edl: 'EDL', edr: 'DMH EDR', oig: 'OIG', mo_medicaid: 'MO Medicaid exclusion', age18: 'Age 18+', id_match: 'ID matches (video call)' };
 
 const CSS = `
-.hp{font-family:inherit;color:#1d2a36;max-width:760px}
+.hp{font-family:inherit;color:#1d2a36}
 .hp .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
 .hp .tabs button,.hp .pill-btn{border:2px solid #dfe6ec;background:#fff;color:#0D365F;border-radius:999px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:14px}
 .hp .tabs button.on{background:#0D365F;color:#fff;border-color:#0D365F}
