@@ -9721,10 +9721,15 @@ function renderProfile() {
       '<div style="font-size:13.5px;color:#55677a;margin-top:4px">' +
         [c.county ? esc(c.county) + ' County' : '', c.dcn ? 'DCN ' + esc(c.dcn) : '', attendants.length ? 'Attendant: ' + attendants.map(esc).join(', ') : ''].filter(Boolean).join(' · ') +
       '</div>' +
-      '<div class="cp-next' + (next.warn ? ' warn' : '') + '"><div style="flex:1 1 300px"><div style="font-weight:600;color:#0D365F">Next step: ' + esc(next.t) + '</div>' +
-        (next.d ? '<div style="font-size:13px;color:#55677a">' + esc(next.d) + '</div>' : '') + '</div>' + next.b + '</div>' +
-      prepCard + lateCard +
-      '<div class="cp-pair">' + callBox + visitBox + '</div>' +
+      // Inactive (her ask 2026-10-22): no monthly call or visit reminders, just when and why.
+      (!CDSRules.isActive(c)
+        ? '<div class="cp-next"><div style="flex:1 1 300px"><div style="font-weight:600;color:#0D365F">Inactive' + (c.inactiveAt ? ' since ' + esc(_niceDay(c.inactiveAt)) : '') + '</div>' +
+            '<div style="font-size:13px;color:#55677a">' + (c.inactiveReason ? esc(c.inactiveReason) + '. ' : '') + 'No monthly calls or visits are due. The full record is under Closings and pauses.</div></div>' +
+            btn('Make active again', "makeConsumerActive('" + c.id + "');renderProfile()") + '</div>'
+        : '<div class="cp-next' + (next.warn ? ' warn' : '') + '"><div style="flex:1 1 300px"><div style="font-weight:600;color:#0D365F">Next step: ' + esc(next.t) + '</div>' +
+            (next.d ? '<div style="font-size:13px;color:#55677a">' + esc(next.d) + '</div>' : '') + '</div>' + next.b + '</div>' +
+          prepCard + lateCard +
+          '<div class="cp-pair">' + callBox + visitBox + '</div>') +
       moFormsBox(c) +
       endingCard(c) + noShiftCard(c) +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
