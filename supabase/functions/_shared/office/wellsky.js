@@ -368,18 +368,26 @@
   // month, so it always covers 30 days; someone missing from it has had no shift since
   // at least shifts.from.
   const NO_SHIFT_DAYS = 30;
-  function noShifts(shifts, pulledOn, consumers, days) {
+  // 2026-10-22 fix: also reads analytics.firstLast (the emailed "First and Last Carelog",
+  // every active WellSky consumer's last worked care log), so a morning the Chrome check
+  // fails no longer makes working consumers look like they have no shifts. The freshest of
+  // the two wins, per consumer and for the "as of" day.
+  function noShifts(shifts, pulledOn, consumers, days, firstLast) {
     days = days || NO_SHIFT_DAYS;
-    if (!shifts || !shifts.consumers || !pulledOn) return { known: false, days, people: [] };
-    const cutoff = isoLocal(new Date(Date.parse(pulledOn + 'T12:00:00') - days * 864e5));
+    const shOk = !!(shifts && shifts.consumers && pulledOn);
+    const flOk = !!(firstLast && firstLast.consumers && firstLast.at);
+    if (!shOk && !flOk) return { known: false, days, people: [] };
+    const flOn = flOk ? isoLocal(new Date(firstLast.at)) : '';
+    const asOf = [shOk ? pulledOn : '', flOn].sort().pop();
+    const cutoff = isoLocal(new Date(Date.parse(asOf + 'T12:00:00') - days * 864e5));
     const cutoffMs = Date.parse(cutoff + 'T00:00:00-05:00');
     const last = {};
-    shifts.consumers.forEach(c => {
-      const worked = (c.shifts || []).filter(s => s.date < pulledOn).map(s => s.date).sort();
-      if (!worked.length) return;
-      const k = nameKey(c.name);
-      if (!last[k] || worked[worked.length - 1] > last[k]) last[k] = worked[worked.length - 1];
-    });
+    const seen = d => (k, date) => { if (date && date < d && (!last[k] || date > last[k])) last[k] = date; };
+    if (shOk) shifts.consumers.forEach(c => (c.shifts || []).forEach(x => seen(pulledOn)(nameKey(c.name), x.date)));
+    if (flOk) firstLast.consumers.forEach(c => seen('9999-12-31')(nameKey(c.name), c.last));   // carelogs are worked shifts
+    // With firstLast, someone missing has no worked shift on file at all; without it, only
+    // since the schedule report's first day.
+    const since = flOk ? '' : (shifts.from || '');
     const people = (consumers || []).filter(c => {
       const st = String(c.status || '').toLowerCase();
       if (['inactive', 'discharged', 'closing', 'paused', 'pending'].includes(st) || c.ending) return false;
@@ -388,11 +396,11 @@
       return !l || l < cutoff;
     }).map(c => {
       const l = last[nameKey(c.name)] || '';
-      const from = l || shifts.from || '';
-      return { id: c.id, name: c.name, last: l, since: shifts.from || '',
-               days: from ? Math.round((Date.parse(pulledOn + 'T12:00:00') - Date.parse(from + 'T12:00:00')) / 864e5) : null };
+      const from = l || since;
+      return { id: c.id, name: c.name, last: l, since,
+               days: from ? Math.round((Date.parse(asOf + 'T12:00:00') - Date.parse(from + 'T12:00:00')) / 864e5) : null };
     }).sort((a, b) => (a.last || '').localeCompare(b.last || '') || a.name.localeCompare(b.name));
-    return { known: true, days, cutoff, people };
+    return { known: true, days, cutoff, asOf, people };
   }
 
   root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
