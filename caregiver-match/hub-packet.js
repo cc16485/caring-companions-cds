@@ -63,6 +63,10 @@ const CSS = `
 .hp .ok{color:#1f7a4d;font-weight:700;margin-top:6px}
 .hp .ask{background:#f7f9fb;border-radius:10px;padding:10px 12px;margin-top:6px}
 .hp .btn.bad{background:#b42318}
+.hp .hp-print p{font-size:14.5px;line-height:1.5}
+@media print{body *{visibility:hidden!important}.hp .hp-print,.hp .hp-print *{visibility:visible!important}
+.hp .hp-print{position:absolute;left:0;top:0;width:100%;border:0;margin:0;padding:0}.hp .hp-noprint{display:none!important}
+.hp .hp-print h3{break-after:avoid}.hp .hp-print dl{break-inside:avoid}}
 `;
 
 // ---------- the three groups (pure, tested in tests/attendants_page_test.mjs) ----------
@@ -352,6 +356,36 @@ export function mountHubPacket(el, opts) {
       <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}</div>`;
   }
 
+  // One signed form, as they signed it (her ask 2026-10-22: View and Print on the profile).
+  async function openForm(poolId, form, print) {
+    el.innerHTML = '<div class="small" style="padding:12px">Loading the signed form…</div>';
+    let f;
+    try { f = await api('packetFormView', { pool_id: poolId, form }); } catch (e) { return openPacket(poolId); }
+    open = { kind: 'form', id: poolId };
+    const when = d => d ? new Date(d).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) + ' Central' : '';
+    const note = f.wording === 'exact' ? '' : f.wording === 'names_changed'
+      ? '<p class="small"><b>Note:</b> a name in this form changed after it was signed, so the wording below has today\'s names. Version and fingerprint are what they signed.</p>'
+      : '<p class="small"><b>Note:</b> this form was signed on version ' + esc(f.version) + ', and the wording has changed since. Their answers and signature below are exactly as signed.</p>';
+    el.innerHTML = `<div class="hp-noprint btns" style="margin:0 0 8px"><button class="pill-btn" data-act="form-back">← Back to ${esc(f.attendant)}</button><button class="btn" data-act="form-print">Print</button></div>
+      <article class="card hp-print">
+      <div class="small">${esc(f.company)}</div>
+      <h2>${esc(f.title)}</h2>
+      <dl><dt>Attendant</dt><dd>${esc(f.attendant)}</dd>${f.consumer ? `<dt>Consumer</dt><dd>${esc(f.consumer)}</dd>` : ''}</dl>
+      ${note}
+      ${f.blocks.map(b => b.h ? `<h3>${esc(b.h)}${f.initials && f.initials[b.h.split('.')[0]] ? ` <span class="pill b">Initialed ${esc(f.initials[b.h.split('.')[0]])}</span>` : ''}</h3>` : `<p>${esc(b.p)}</p>`).join('')}
+      ${f.answers.map(sec => `<h3>${esc(sec.h)}</h3><dl>${sec.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`).join('')}
+      <h3>Signature</h3>
+      <dl><dt>Signed by</dt><dd style="font-family:'Brush Script MT',cursive;font-size:22px">${esc(f.signed_name)}</dd>
+      <dt>Signed</dt><dd>${esc(when(f.signed_at))}</dd>
+      <dt>How</dt><dd>Typed name, electronic signature (they agreed to sign electronically first)</dd>
+      ${f.signed_ip ? `<dt>From</dt><dd>${esc(f.signed_ip)}${f.signed_agent ? '<div class="small">' + esc(f.signed_agent) + '</div>' : ''}</dd>` : ''}
+      ${f.countersigned_at ? `<dt>Countersigned</dt><dd>${esc(f.countersigned_name)}, ${esc(when(f.countersigned_at))}</dd>` : ''}
+      <dt>Form version</dt><dd>${esc(f.version)}<div class="small">Fingerprint ${esc(String(f.fingerprint || '').slice(0, 16))}…</div></dd></dl>
+      </article>`;
+    el.scrollIntoView({ block: 'start' });
+    if (print) setTimeout(() => window.print(), 150);
+  }
+
   async function openPacket(id) {
     el.innerHTML = '<div class="small" style="padding:12px">Loading…</div>';
     let g;
@@ -391,7 +425,8 @@ export function mountHubPacket(el, opts) {
       ${p.list_choice === 'join' ? `<p class="small">Their caregiver profile is in Caregiver Match. Approve it there (one tap) once their checks are clear.</p>` : ''}
 
       <h3>Signed forms</h3>
-      <dl>${Object.values(g.forms).map(f => `<dt>${esc(f.title)}</dt><dd>${esc(f.signed_name)}, ${esc(fmtD(f.signed_at))}${f.countersigned_at ? ' · countersigned by ' + esc(f.countersigned_name) : ''}</dd>`).join('') || '<dt>None yet</dt><dd></dd>'}</dl>
+      ${Object.keys(g.forms).length ? `<table><tbody>${Object.entries(g.forms).map(([k, f]) => `<tr><td><b>${esc(f.title)}</b><div class="small">${esc(f.signed_name)}, ${esc(fmtD(f.signed_at))}${f.countersigned_at ? ' · countersigned by ' + esc(f.countersigned_name) : ''}</div></td>
+        <td style="white-space:nowrap"><button class="btn o" data-form="${esc(k)}">View</button> <button class="btn o" data-form="${esc(k)}" data-print="1">Print</button></td></tr>`).join('')}</tbody></table>` : '<p class="small">None yet.</p>'}
       <div class="cds-comm-history" data-refs="pool:${esc(id)}" data-phones="${esc(g.pool.phone || '')}"></div>
       <div class="err" id="hp_err"></div></div>`;
     if (window.cdsCommHistory) window.cdsCommHistory(el);
@@ -496,6 +531,9 @@ export function mountHubPacket(el, opts) {
         await opts.saveRoster(open.id, { status: 'inactive', ended: rec.record }); open = null; tab = 'inactive'; return draw();
       }
       if (act === 'ghl-import') return openImport();
+      if (b.dataset.form) return openForm(open.id, b.dataset.form, !!b.dataset.print);
+      if (act === 'form-back') return openPacket(open.id);
+      if (act === 'form-print') return window.print();
       if (act === 'ghl-save') {
         const items = [...el.querySelectorAll('input[data-proof]')].filter(i => i.value).map(i => ({ id: i.dataset.proof, checked_on: i.value }));
         if (!items.length) return fail('Type at least one date.');
