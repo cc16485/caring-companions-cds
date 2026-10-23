@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=21"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=8"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=9"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -5006,7 +5006,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=13');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=14');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5033,7 +5033,7 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=2');
+    const { mountHours } = await import('./hours/hub-hours.js?v=3');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
@@ -5782,9 +5782,10 @@ function _niceDayLong(iso) {
 // No worked shifts in 30 days (closure plan step 4, her rule 2026-10-22). The rule is
 // CDSWellSky.noShifts; this reads this morning's WellSky schedule report.
 function noShiftList() {
-  const sh = getObj('wellskyCheck').shifts;
+  const w = getObj('wellskyCheck'), sh = w.shifts;
   const pulledOn = sh && sh.at ? CDSWellSky.isoLocal(new Date(sh.at)) : '';
-  return CDSWellSky.noShifts(sh, pulledOn, getData('consumers'));
+  // The emailed First and Last Carelog too, so a failed Chrome check cannot fake a gap (2026-10-22).
+  return CDSWellSky.noShifts(sh, pulledOn, getData('consumers'), 0, w.analytics && w.analytics.firstLast);
 }
 function noShiftCard(c) {
   const r = noShiftList();
@@ -5793,7 +5794,8 @@ function noShiftCard(c) {
   const rep = c.noShiftReport || {};
   const when = p.last
     ? 'Last worked shift in WellSky: <strong>' + esc(_niceDay(p.last)) + '</strong> (' + p.days + ' days ago).'
-    : 'No worked shift in WellSky since at least <strong>' + esc(_niceDay(p.since)) + '</strong>.';
+    : p.since ? 'No worked shift in WellSky since at least <strong>' + esc(_niceDay(p.since)) + '</strong>.'
+    : 'No worked shift on file in WellSky.';
   return '<div class="end-card" style="border-color:#e3a59b;background:#fff6f4">' +
     '<div style="font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--danger)">NO SHIFTS IN ' + r.days + '+ DAYS</div>' +
     '<div style="font-size:14px;margin:6px 0">' + when + '</div>' +

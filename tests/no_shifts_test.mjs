@@ -39,5 +39,24 @@ ok(ids[0] === 'June Hale' || ids[0] === 'Pat Moss', 'longest gap (no shift on fi
 ok(!W.noShifts(null, '2026-10-22', consumers).known, 'no report, nothing flagged');
 ok(W.noShifts(sh, '2026-10-22', consumers, 60).people.length < r.people.length, 'the days setting changes the list');
 
+// ── the emailed First and Last Carelog wins when it is fresher (fix 2026-10-22) ──
+{
+  const stale = { from: '2026-09-01', consumers: [{ name: 'Barnwell, Susan', shifts: [{ date: '2026-09-17' }] }] };
+  const fl = { at: '2026-10-22T11:45:00Z', consumers: [
+    { name: 'Barnwell, Susan', first: '2025-06-24', last: '2026-10-21' },
+    { name: 'Moss, Pat', first: '2025-01-02', last: '2026-07-30' } ] };
+  const cs = [{ id: '1', name: 'Susan Barnwell' }, { id: '2', name: 'Pat Moss' }, { id: '3', name: 'Never Worked' }];
+  const r2 = W.noShifts(stale, '2026-10-20', cs, 0, fl);
+  const names = r2.people.map(p => p.name);
+  ok(r2.known && r2.asOf === '2026-10-22', 'as of the fresher email day');
+  ok(!names.includes('Susan Barnwell'), 'a shift yesterday in the email beats a stale Chrome pull');
+  ok(names.includes('Pat Moss') && r2.people.find(p => p.name === 'Pat Moss').days === 84, 'last care log Jul 30 is 84 days');
+  const nw = r2.people.find(p => p.name === 'Never Worked');
+  ok(nw && nw.last === '' && nw.since === '' && nw.days === null, 'not in either report: no worked shift on file');
+  const onlyFl = W.noShifts(null, '', cs, 0, fl);
+  ok(onlyFl.known && onlyFl.people.length === 2, 'works with only the email data');
+  ok(W.noShifts(stale, '2026-10-20', cs).people.some(p => p.name === 'Susan Barnwell'), 'without the email it still reads the Chrome pull');
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

@@ -104,7 +104,7 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(/if \(id === 'statesubmissions'\) \{ _ldStep = 'state'; id = 'pipeline'; \}/.test(html), 'the old #statesubmissions link opens Sent to state');
   const add = html.slice(html.indexOf('id="addSomeoneModal"'), html.indexOf('id="addPipelineModal"'));
   ['lead', 'referral', 'pccp'].forEach(t => ok(add.includes("openAddPipeline('" + t + "')"), 'Add someone offers ' + t));
-  ok(/cds-rules\.js\?v=(1[3-9])\b/.test(html), 'the page loads the new rules file (v=13 since close reasons)');
+  ok(/cds-rules\.js\?v=(1[3-9]|[2-9]\d)\b/.test(html), 'the page loads the new rules file (v=13 since close reasons)');
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(!/Packet Sent|Send Welcome/.test(r), 'Welcome and Packet are off the cards');
   ok(/Text the welcome/.test(html) && /Tell them the packet is on its way/.test(html), 'and on the profile');

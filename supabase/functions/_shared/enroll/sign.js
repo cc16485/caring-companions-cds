@@ -19,9 +19,9 @@ const V = '2026-10-22';
 const OFFICE = '(417) 218-2888';
 const SIGN_OFF = 'Caring Companions CDS\n' + OFFICE + ' (toll free (866) 863-5151)';
 
-// The pandemic policy as the consumer reads it. Her full policy is the doc
+// The pandemic policy as the consumer reads it. Her full policy (approved 2026-10-22) is the doc
 // claude.ai/artifact/23cZNgtd2264rB42LbkdW6; when she changes it, change this text AND the version.
-export const PANDEMIC_VERSION = '2026-10-22-draft';
+export const PANDEMIC_VERSION = '2026-10-22';   // approved by Samantha 2026-10-22
 
 export const SIGN_FORMS = {
   rights: { version: V, yearly: false, title: 'Your Rights and Responsibilities in CDS', what: 'Your right to a hearing, and what you are responsible for as the employer.',
@@ -77,8 +77,8 @@ export function signDoc(key, a = {}) {
       'Our monthly check-in call keeps going by phone or video.'] },
     { h: 'If services have to stop' },
     { li: ['We call you the same day to make sure someone can care for you.',
-      'We tell DHSS right away, and we tell you and your attendant in writing.',
-      'We call you at least once a week until services start again, and we tell DHSS when they restart.'] },
+      'We tell your DHSS case manager right away, and we tell you and your attendant in writing.',
+      'We call you at least once a week until services start again, and we tell your DHSS case manager when they restart.'] },
     { p: 'Questions any time: ' + OFFICE + ', answered 24 hours a day.' },
     ...(key === 'pandemic_att' ? [{ kv: [['Attendant', a.att_name || '']] }] : []),
   ];

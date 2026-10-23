@@ -10,6 +10,7 @@
 // the onboarding track, WellSky shown on each card, Roster check dates typed in on the card.
 // No em dashes in anything a person reads.
 
+import { mergedShifts } from '../hours/hub-hours.js?v=3';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtD = iso => (iso ? new Date(String(iso).length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' }) : '');
 const ymd = d => d.toISOString().slice(0, 10);
@@ -91,7 +92,8 @@ export function wellskyByAttendant(w, now = new Date()) {
   const today = isoLocal(now), month = today.slice(0, 7), by = {};
   const get = raw => { const k = nameKey(raw); if (!k) return null; return by[k] || (by[k] = { key: k, name: display(raw), last: '', first: '', hours: 0, consumers: [] }); };
   const addC = (x, c) => { const n = display(c); if (n && !x.consumers.includes(n)) x.consumers.push(n); };
-  const sh = w.shifts, fl = w.analytics && w.analytics.firstLast;
+  // Shifts from the daily WellSky email when it names the attendant, else the Chrome schedule report.
+  const sh = mergedShifts(w), fl = w.analytics && w.analytics.firstLast;
   for (const c of (sh && sh.consumers) || []) for (const s of c.shifts || []) {
     if (!s.date || s.date > today) continue;
     const x = get(s.attendant); if (!x) continue;

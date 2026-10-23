@@ -122,6 +122,10 @@ export function readAuthLogs(files) {
   const t = table(f.text);
   const iN = col(t.head, /^client last first name$/, /client.*name/), iA = col(t.head, /^authorization id$/, /authorization/),
         iI = col(t.head, /^clock in time$/, /clock in/), iO = col(t.head, /^clock out time$/, /clock out/);
+  // Her own copy of this dashboard (2026-10-21) adds Caregiver Full Name, the authorization end date
+  // and Initial Hours. Read when there; the older dashboard without them still works (2026-10-22).
+  const iC = col(t.head, /^caregiver full name$/, /^caregiver name$/, /caregiver.*name/),
+        iE = col(t.head, /authorizations? end date/, /^end date$/), iH = col(t.head, /^initial hours$/);
   if (iN < 0 || iI < 0 || iO < 0) fail('The Authorization Care Logs file changed shape. Columns: ' + t.head.join(', '));
   const shifts = [], unread = [];
   t.rows.forEach(r => {
@@ -130,9 +134,13 @@ export function readAuthLogs(files) {
     if (!clockIn) { unread.push(r[iN]); return; }
     const out = stamp(r[iO]);
     const hours = out ? Math.round((Date.parse(out + 'Z') - Date.parse(clockIn + 'Z')) / 36e3) / 100 : null;
-    shifts.push({ consumer: r[iN], auth: iA >= 0 ? r[iA] : '', clockIn, clockOut: out, hours });
+    const x = { consumer: r[iN], auth: iA >= 0 ? r[iA] : '', clockIn, clockOut: out, hours };
+    if (iC >= 0 && r[iC]) x.attendant = r[iC];
+    if (iE >= 0 && day(r[iE])) x.authEnd = day(r[iE]);
+    if (iH >= 0 && r[iH] !== '' && !isNaN(+r[iH])) x.authHours = +r[iH];
+    shifts.push(x);
   });
-  return { shifts, unread };
+  return { shifts, unread, columns: t.head.slice(0, 40) };
 }
 
 // body = { kind: 'analytics', report: '<email subject>', received: ISO time, files: [{ name, text }] }
