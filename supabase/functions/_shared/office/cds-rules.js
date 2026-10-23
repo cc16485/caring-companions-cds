@@ -294,39 +294,52 @@
   const ENDING_REASONS = [
     { id: 'death', group: 'tell', t: 'The consumer died', cite: '19 CSR 15-8.400(6)(A)1', eventLabel: 'Date of death',
       steps: [S.learned, S.dsds, S.file] },
-    { id: 'facility', group: 'tell', t: 'Moved into a nursing home or other long-term care facility', cite: '19 CSR 15-8.400(6)(A)2', eventLabel: 'Date they moved in',
+    { id: 'facility', group: 'tell', t: 'Moved into a nursing home or other long-term care facility', letter: 'You moved into a nursing home or other long-term care facility. CDS is a service for people living in their own home.',
+      cite: '19 CSR 15-8.400(6)(A)2', eventLabel: 'Date they moved in',
       steps: [S.learned, S.dsds, S.file] },
-    { id: 'noNeed', group: 'tell', t: 'No longer needs services', cite: '19 CSR 15-8.400(6)(A)3',
+    { id: 'noNeed', group: 'tell', t: 'No longer needs services', letter: 'You no longer need the help that CDS provides.',
+      cite: '19 CSR 15-8.400(6)(A)3',
       steps: [S.learned, S.dsds, S.file] },
-    { id: 'selfDirect', group: 'tell', t: 'Can no longer direct their own care, or a big change needs a new care plan', cite: '19 CSR 15-8.400(6)(A)4 and (7)(A)1',
+    { id: 'selfDirect', group: 'tell', t: 'Can no longer direct their own care, or a big change needs a new care plan', letter: 'You are no longer able to direct your own care (hire, train, schedule and supervise your attendant), and no representative is directing it for you. CDS requires this.',
+      cite: '19 CSR 15-8.400(6)(A)4 and (7)(A)1',
       tip: 'Ask first if a representative can direct care for them. DSDS decides.',
       steps: [S.learned, S.dsds, S.paused, S.file] },
-    { id: 'moreHours', group: 'tell', t: 'Needs more hours than the plan allows to be safe', cite: '19 CSR 15-8.400(6)(A)5',
+    { id: 'moreHours', group: 'tell', t: 'Needs more hours than the plan allows to be safe', letter: 'The care you need to be safe is more than the hours your care plan allows.',
+      cite: '19 CSR 15-8.400(6)(A)5',
       steps: [S.learned, S.dsds, S.file] },
-    { id: 'fraud', group: 'pause', t: 'Fraud or false records, including false EVV', cite: '19 CSR 15-8.400(7)(A)2 and (5)(B)5',
+    { id: 'fraud', group: 'pause', t: 'Fraud or false records, including false EVV', letter: 'Records for your services were falsified. This may include false clock-in or clock-out (EVV) records. Missouri rules treat false records as fraud.',
+      cite: '19 CSR 15-8.400(7)(A)2 and (5)(B)5',
       tip: 'False EVV counts as fraud and is also reported to MMAC.',
       steps: [S.learned, S.dsds, S.letter, S.paused, { k: 'mmac', t: 'Reported to MMAC', need: true }, S.file] },
-    { id: 'noncompliance', group: 'pause', t: 'Keeps not following the care plan', cite: '19 CSR 15-8.400(7)(A)3 and 15-8.200(8)(C)',
+    { id: 'noncompliance', group: 'pause', t: 'Keeps not following the care plan', letter: 'There have been repeated actions that go against your care plan and keep the services from working.',
+      cite: '19 CSR 15-8.400(7)(A)3 and 15-8.200(8)(C)',
       tip: 'Persistent actions that undo the services. Missed monthly calls, a refused visit or unsigned EVV count here when they keep happening.',
       steps: [S.learned, S.fixTried, S.dsds, S.letter, S.paused, S.file] },
-    { id: 'threats', group: 'pause', t: 'The consumer or someone in the home threatened or abused the attendant or our staff', cite: '19 CSR 15-8.400(7)(A)4 and RSMo 208.924.1(4)',
+    { id: 'threats', group: 'pause', t: 'The consumer or someone in the home threatened or abused the attendant or our staff', letter: 'Your attendant or our staff were threatened or abused by you or someone in your home, and our efforts to correct it did not work.',
+      cite: '19 CSR 15-8.400(7)(A)4 and RSMo 208.924.1(4)',
       tip: 'Corrective action must have failed first.',
       steps: [S.learned, S.fixTried, S.dsds, S.letter, S.paused, S.file] },
-    { id: 'attendant', group: 'pause', t: 'The attendant is not following the care plan', cite: '19 CSR 15-8.400(7)(A)5',
+    { id: 'attendant', group: 'pause', t: 'The attendant is not following the care plan', letter: 'Your attendant is not giving your care the way your care plan says, and our efforts to fix it did not work.',
+      cite: '19 CSR 15-8.400(7)(A)5',
       tip: 'Attempts to fix it must have failed first.',
       steps: [S.learned, S.fixTried, S.dsds, S.letter, S.paused, S.file] },
-    { id: 'asked', group: 'other', t: 'The consumer asked to stop services', cite: 'HCBS Manual 4.40, voluntary withdrawal',
+    { id: 'asked', group: 'other', t: 'The consumer asked to stop services', letter: 'You asked us to stop your CDS services. DSDS requires you to call them at 866-835-3505 to confirm.',
+      cite: 'HCBS Manual 4.40, voluntary withdrawal',
       steps: [S.learned, S.dsds, { k: 'confirm', t: 'Consumer called DSDS to confirm (' + DSDS_PHONE + ')', need: true }, S.file] },
-    { id: 'noAttendant', group: 'other', t: 'No attendant, and they do not want our help finding one', cite: '19 CSR 15-8.400(5)(A), (B), (F)1; HCBS Manual 4.40',
+    { id: 'noAttendant', group: 'other', t: 'No attendant, and they do not want our help finding one', letter: 'You do not have an attendant, so you are not receiving the services in your care plan. We offered to help you find one, and you told us you do not want that help.',
+      cite: '19 CSR 15-8.400(5)(A), (B), (F)1; HCBS Manual 4.40',
       tip: 'No rule sets a number of days. Log every offer of help and their answer first.',
       steps: [S.learned, { k: 'offers', t: 'Offers of help to find an attendant logged (date, what we offered, their answer)', need: true },
               { k: 'notServed', t: 'Told DSDS services are not being given as authorized', need: true, cite: '19 CSR 15-8.400(5)(F)1' },
               S.dsds, S.letter, S.file] },
-    { id: 'medicaid', group: 'other', t: 'Lost Medicaid', cite: '19 CSR 15-8.200(1)(A)7; HCBS Manual 4.40',
+    { id: 'medicaid', group: 'other', t: 'Lost Medicaid', letter: 'Your MO HealthNet (Medicaid) coverage has ended. It is required for CDS.',
+      cite: '19 CSR 15-8.200(1)(A)7; HCBS Manual 4.40',
       steps: [S.learned, S.dsds, S.file] },
-    { id: 'moved', group: 'other', t: 'Moved out of our area or out of state', cite: 'HCBS Manual 4.20 and 5.00',
+    { id: 'moved', group: 'other', t: 'Moved out of our area or out of state', letter: 'You moved outside the area we serve.',
+      cite: 'HCBS Manual 4.20 and 5.00',
       steps: [S.learned, S.dsds, S.file] },
-    { id: 'transfer', group: 'other', t: 'Moving to another CDS agency', cite: 'HCBS Manual 4.20',
+    { id: 'transfer', group: 'other', t: 'Moving to another CDS agency', letter: 'You chose to move your CDS services to another agency.',
+      cite: 'HCBS Manual 4.20',
       tip: 'Keep serving until DSDS approves the new agency. The new agency may not start before that.',
       steps: [S.learned, { k: 'newAgency', t: 'DSDS approved the new agency (write its name in the notes)', need: true }, S.file] },
     { id: 'hospital', group: 'hospital', t: 'In the hospital or rehab for a short stay', cite: 'HCBS Manual 3.00', pause: true,
@@ -334,6 +347,25 @@
       eventLabel: 'Went in on',
       steps: [S.learned, { k: 'dsdsTold', t: 'Told DSDS about the stay', need: true }, { k: 'noBill', t: 'Checked no hours were entered for hospital days' }] }
   ];
+  // The written notice to the consumer and DSDS (19 CSR 15-8.400(7)(B): "listing
+  // specific reasons"). Returns the parts; the hub fills, edits and prints them.
+  function endingLetter(c, ending, today) {
+    const r = endingReason(ending && ending.kind);
+    if (!r || !r.letter) return null;
+    return {
+      date: today,
+      to: (c.name || '') + (c.mailAddress ? '\n' + c.mailAddress : ''),
+      dcn: c.dcn || '',
+      subject: 'Request to close your Consumer Directed Services (CDS)',
+      opening: 'Dear ' + (c.name || '') + ',\n\nCaring Companions CDS is asking the Missouri Department of Health and Senior Services, Division of Senior and Disability Services (DSDS), to close your Consumer Directed Services with our agency. We are sending this letter to you and to DSDS.',
+      reason: r.letter,
+      facts: (ending.notes || '').trim(),
+      next: 'Only DSDS can close your services. DSDS will review this request.\n' +
+            'If DSDS decides to close your services, DSDS will send you a written notice. That notice explains your right to appeal.\n' +
+            'Until DSDS decides, please call us with any questions. You may also call DSDS at ' + DSDS_PHONE + '.',
+      cite: 'This notice is sent under 19 CSR 15-8.400(7)(B).'
+    };
+  }
   const endingReason = id => ENDING_REASONS.find(r => r.id === id) || null;
   // The required steps still missing a date, and whether DSDS's closing date is in.
   function endingMissing(ending) {
@@ -624,5 +656,5 @@
                     dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
-                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds };
+                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
