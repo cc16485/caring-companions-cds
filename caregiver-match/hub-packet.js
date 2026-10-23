@@ -5,7 +5,9 @@
 //     cds-match server (packetList / packetGet ...), full profile + onboarding tracker
 //   - attendants already on the Roster (agency_data 'attendants'): their roster card,
 //     with rechecks due worked out from the dates already typed there.
-// mountHubPacket(el, { api, roster, openRoster, openMatch })
+// mountHubPacket(el, { api, roster, saveRoster, wellsky, oigPeople, openRoster, openMatch })
+// 2026-10-22 (her yes to the Attendants plan): three groups instead of Active / Applying tabs,
+// the onboarding track, WellSky shown on each card, Roster check dates typed in on the card.
 // No em dashes in anything a person reads.
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -42,27 +44,171 @@ const CSS = `
 .hp .copy div{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0;font-size:14px;flex-wrap:wrap}
 .hp .small{font-size:13px;color:#5b6977}.hp .err{color:#b42318;font-weight:700;margin-top:6px}
 .hp input[type=text],.hp input[type=date]{font:inherit;padding:7px 9px;border:2px solid #dfe6ec;border-radius:8px}
+.hp .hp-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.hp .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0 4px}
+.hp .tile{background:#fff;border:1px solid #dfe6ec;border-radius:12px;padding:10px 12px}
+.hp .tile .n{font-size:24px;font-weight:800;color:#0D365F;line-height:1.1;font-variant-numeric:tabular-nums}
+.hp .tile .t{font-size:13px;color:#5b6977}
+.hp .tile.r .n{color:#b42318}.hp .tile.y .n{color:#6b4e00}
+.hp .grp{margin-top:16px}
+.hp .ghead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.hp .ghead h3{margin:0}.hp .ghead span{font-size:13px;color:#5b6977}
+.hp .track{grid-column:1/-1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-top:6px}
+.hp .track i{height:7px;border-radius:99px;background:#e5eaef}
+.hp .track i.d{background:#0f7a7c}.hp .track i.n{background:#e9a92c}
+.hp .row .stepname{color:#0D365F;font-size:13.5px}
+.hp .ok{color:#1f7a4d;font-weight:700;margin-top:6px}
+.hp .ask{background:#f7f9fb;border-radius:10px;padding:10px 12px;margin-top:6px}
+.hp .btn.bad{background:#b42318}
 `;
 
-// Roster attendants: next due dates from what was typed on the Roster.
+// ---------- the three groups (pure, tested in tests/attendants_page_test.mjs) ----------
+// Her calls 2026-10-22: one page with Getting started / Working / Not working lately; an
+// attendant counts as Working from their first clock-in in WellSky; no shift in 31 days moves
+// them to Not working lately, and rechecks stop only when someone taps "No longer working".
+const DAY = 864e5;
+export const WORKING_DAYS = 31;
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const isoLocal = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+export const shortDay = iso => iso ? MON[+iso.slice(5, 7) - 1] + ' ' + (+iso.slice(8, 10)) : '';
+// "Pham, Nuong" and "Nuong Pham" are the same person (same rule as the Check against WellSky card).
+export function nameKey(name) {
+  return String(name || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z\s-]/g, ' ')
+    .split(/\s+/).map(t => t.replace(/^-+|-+$/g, '')).filter(t => t.length > 1).sort().join(' ');
+}
+const display = name => { const s = String(name || '').trim().replace(/\s+/g, ' '); const m = /^([^,]+),\s*(.+)$/.exec(s); return m ? m[2] + ' ' + m[1] : s; };
+
+// What WellSky says about each attendant, from agency_data 'wellskyCheck':
+//   .shifts                 the schedule report: every shift with its attendant and hours
+//   .analytics.firstLast    the daily email: each consumer's last care log and who worked their
+//                           first shift. It is usually newer than the schedule, so its last date also
+//                           counts for that first-shift attendant (a CDS consumer almost always has one).
+// -> { by: { [nameKey]: { name, last, hours (this month), consumers } }, have, asOf, hoursAsOf }
+export function wellskyByAttendant(w, now = new Date()) {
+  w = w || {};
+  const today = isoLocal(now), month = today.slice(0, 7), by = {};
+  const get = raw => { const k = nameKey(raw); if (!k) return null; return by[k] || (by[k] = { key: k, name: display(raw), last: '', hours: 0, consumers: [] }); };
+  const addC = (x, c) => { const n = display(c); if (n && !x.consumers.includes(n)) x.consumers.push(n); };
+  const sh = w.shifts, fl = w.analytics && w.analytics.firstLast;
+  for (const c of (sh && sh.consumers) || []) for (const s of c.shifts || []) {
+    if (!s.date || s.date > today) continue;
+    const x = get(s.attendant); if (!x) continue;
+    addC(x, c.name);
+    if (s.date > x.last) x.last = s.date;
+    if (s.date.slice(0, 7) === month && typeof s.hours === 'number') x.hours += s.hours;
+  }
+  for (const c of (fl && fl.consumers) || []) {
+    const x = c.attendant ? get(c.attendant) : null; if (!x) continue;
+    addC(x, c.name);
+    if (c.last && c.last <= today && c.last > x.last) x.last = c.last;
+  }
+  Object.values(by).forEach(x => { x.hours = Math.round(x.hours * 4) / 4; });
+  return { by, have: !!((sh && sh.consumers) || (fl && fl.consumers)),
+    asOf: [sh && sh.at, fl && fl.at].filter(Boolean).sort().pop() || null, hoursAsOf: (sh && sh.at) || null };
+}
+
+// Roster attendants: rechecks from the dates typed on the Roster, plus the automatic OIG.
 // autoOig: the date the automatic OIG check (cds-oig) last found them clear, when the OIG switch is on.
-function rosterDue(a, autoOig) {
-  const t = ymd(new Date()), soon = ymd(new Date(Date.now() + 7 * 864e5));
+// A date never typed in is "add the date" (yellow), not overdue: it is a records gap.
+export function rosterDue(a, autoOig, now = new Date()) {
+  const t = isoLocal(now), soon = isoLocal(new Date(now.getTime() + 7 * DAY));
   const oig = autoOig && (!a.leieDate || autoOig > a.leieDate) ? autoOig : a.leieDate;
   const rows = [['OIG', oig, 1, oig && oig === autoOig], ['EDL', a.edlDate, 3], ['FCSR', a.fcsrDate, 12]].map(([k, d, m, auto]) => {
     const due = d ? addM(d, m) : null;
-    return { k, done: d, auto: !!auto, due, tone: !d ? 'r' : due < t ? 'r' : due <= soon ? 'y' : 'g' };
+    return { k, done: d || null, auto: !!auto, due, tone: !d ? 'y' : due < t ? 'r' : due <= soon ? 'y' : 'g', missing: !d };
   });
-  const worst = rows.find(r => r.tone === 'r') || rows.find(r => r.tone === 'y');
-  return { rows, label: worst ? (worst.done ? worst.k + (worst.tone === 'r' ? ' overdue' : ' due soon') : worst.k + ' date missing') : 'Active', tone: worst ? worst.tone : 'g' };
+  const over = rows.find(r => r.tone === 'r'), soonR = rows.find(r => r.tone === 'y' && !r.missing), miss = rows.filter(r => r.missing);
+  const label = over ? over.k + ' overdue' : soonR ? soonR.k + ' due ' + shortDay(soonR.due)
+    : miss.length ? 'Add ' + miss.map(r => r.k).join(' and ') + (miss.length > 1 ? ' dates' : ' date') : 'All checks good';
+  return { rows, label, tone: over ? 'r' : soonR || miss.length ? 'y' : 'g', due: !!(over || soonR), missing: miss.length > 0 };
+}
+
+// The onboarding track: the packet's steps folded into the 7 the office sees, the last one
+// being the first clock-in in WellSky.
+export const TRACK = [
+  { key: 'step1', label: 'Application signed', keys: ['step1'] },
+  { key: 'checks', label: 'Checks', keys: ['checks'] },
+  { key: 'orientation', label: 'Orientation', keys: ['orientation'] },
+  { key: 'papers', label: 'Papers signed', keys: ['papers'] },
+  { key: 'empeon', label: 'Empeon', keys: ['empeon_invite', 'empeon'] },
+  { key: 'call', label: 'ID call and I-9', keys: ['call', 'i9', 'countersign'] },
+  { key: 'shift', label: 'First shift in WellSky', keys: [] },
+];
+export function trackOf(steps, hasShift) {
+  const done = Object.fromEntries((steps || []).map(s => [s.key, !!s.done]));
+  const t = TRACK.map(x => ({ key: x.key, label: x.label, done: x.key === 'shift' ? !!hasShift : x.keys.every(k => done[k]) }));
+  // Orientation can finish any time, so it is "where they are" only when everything else is done.
+  let at = t.findIndex(x => !x.done && x.key !== 'orientation');
+  if (at < 0) at = t.findIndex(x => !x.done);
+  return { steps: t, at: at < 0 ? t.length : at };
+}
+
+// Weekdays (Mon to Fri) from iso to now, not counting the day it happened.
+export function weekdaysSince(iso, now = new Date()) {
+  if (!iso) return 0;
+  let n = 0;
+  const d = new Date(iso); d.setHours(12, 0, 0, 0);
+  const end = new Date(now); end.setHours(12, 0, 0, 0);
+  while (d < end) { d.setDate(d.getDate() + 1); if (d.getDay() % 6 !== 0 && d <= end) n++; }
+  return n;
+}
+const daysSince = (iso, now) => iso ? Math.floor((now - new Date(iso)) / DAY) : 0;
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+const lastWords = (iso, now) => { const d = daysSince(iso + 'T12:00:00', now); return d <= 0 ? 'today' : d === 1 ? 'yesterday' : shortDay(iso); };
+
+// packets: packetList rows, plus steps and updated_at from packetGet for anyone not yet active.
+// roster: the Roster attendants not marked inactive. -> { starting, working, quiet, tiles, wellsky }
+export function buildGroups({ packets = [], roster = [], autoOig = () => null, wellsky, now = new Date() }) {
+  const ws = wellskyByAttendant(wellsky, now);
+  const cutoff = isoLocal(new Date(now.getTime() - WORKING_DAYS * DAY));
+  const find = name => ws.by[nameKey(name)] || null;
+  const workMeta = (consumers, w) => [consumers ? 'Works for ' + consumers : '',
+    w && w.hours ? w.hours + ' hrs this month' : '', w && w.last ? 'last shift ' + lastWords(w.last, now) : ''].filter(Boolean).join(' · ');
+  const starting = [], working = [], quiet = [];
+
+  for (const a of packets) {
+    const w = find(a.name), shift = !!(w && w.last);
+    if (a.active && shift) {
+      working.push({ kind: 'packet', id: a.pool_id, name: a.name, label: 'All checks good', tone: 'g', due: false, missing: false,
+        meta: workMeta(w.consumers.join(' and ') || a.consumer, w) });
+      continue;
+    }
+    const tr = a.steps ? trackOf(a.steps, shift) : null;
+    const since = a.updated_at || a.step1_at || a.started_at;
+    let flag = null;
+    if (a.active) flag = daysSince(a.active_at || since, now) >= 10 ? { tone: 'y', text: 'No shift yet after ' + plural(daysSince(a.active_at || since, now), 'day', 'days') } : null;
+    else if (a.consumer_waiting && a.step1_at && weekdaysSince(since, now) >= 2) flag = { tone: 'r', text: 'No change in ' + plural(weekdaysSince(since, now), 'weekday', 'weekdays') };
+    else if (daysSince(since, now) >= 10) flag = { tone: 'y', text: 'Quiet ' + plural(daysSince(since, now), 'day', 'days') };
+    starting.push({ kind: 'packet', id: a.pool_id, name: a.name, waiting: !!a.consumer_waiting && !a.active, ready: !!a.active,
+      label: a.active ? 'Waiting on first shift' : a.label, tone: a.active ? 'b' : a.tone, track: tr, flag, since: a.step1_at || a.started_at,
+      meta: [a.consumer ? (a.consumer_waiting ? 'For ' + a.consumer + ' (consumer waiting)' : 'For ' + a.consumer) : '',
+        a.step1_at ? 'Step 1 signed ' + shortDay(String(a.step1_at).slice(0, 10)) : 'Started ' + shortDay(String(a.started_at || '').slice(0, 10)),
+        a.active ? 'Ready: their first clock-in in WellSky moves them to Working' : a.next].filter(Boolean).join(' · ') });
+  }
+  for (const a of roster) {
+    const w = find(a.wellskyName || a.name), d = rosterDue(a, autoOig(a.id), now);
+    const row = { kind: 'roster', id: a.id, name: a.name, label: d.label, tone: d.tone, due: d.due, missing: d.missing, last: w ? w.last : '' };
+    if (!ws.have || (w && w.last >= cutoff)) working.push({ ...row, meta: workMeta((w && w.consumers.join(' and ')) || a.consumer, w) });
+    else quiet.push({ ...row, label: w && w.last ? 'Last shift ' + shortDay(w.last) : 'No WellSky shifts', tone: 'b',
+      meta: [a.consumer ? 'Was with ' + a.consumer : '', 'Still working? Open to mark them no longer working.'].filter(Boolean).join(' · ') });
+  }
+  const rank = r => r.tone === 'r' ? 0 : r.due ? 1 : r.missing ? 2 : 3;
+  // Consumer waiting first, then everyone still onboarding (oldest first), then the ready ones waiting on a first shift.
+  starting.sort((x, y) => (y.waiting - x.waiting) || (x.ready - y.ready) || String(x.since).localeCompare(String(y.since)));
+  working.sort((x, y) => rank(x) - rank(y) || x.name.localeCompare(y.name));
+  quiet.sort((x, y) => String(y.last).localeCompare(String(x.last)) || x.name.localeCompare(y.name));
+  return { starting, working, quiet, wellsky: ws,
+    tiles: { starting: starting.length, working: working.length, due: [...working, ...quiet].filter(r => r.due).length,
+      dates: [...working, ...quiet].filter(r => r.missing).length, quiet: quiet.length } };
 }
 
 export function mountHubPacket(el, opts) {
   const { api } = opts;
   const roster = () => (opts.roster ? opts.roster() : []).filter(a => a.status !== 'inactive');
   const autoOig = id => { const p = opts.oigPeople && (opts.oigPeople() || {})['attendant:' + id];
-    return p && (p.result === 'clear' || p.review === 'not_them') ? String(p.checked_at || '').slice(0, 10) || null : null; };
-  let tab = 'active', list = [], open = null, err = '';
+    return p && (p.result === 'clear' || p.review === 'not_them') && p.checked_at
+      ? new Date(p.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) : null; };   // the Central day, not the UTC one
+  let list = [], open = null, err = '';
   if (!document.getElementById('hp_css')) { const s = document.createElement('style'); s.id = 'hp_css'; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add('hp');
   el.addEventListener('click', onClick);
@@ -70,31 +216,38 @@ export function mountHubPacket(el, opts) {
 
   async function load() {
     el.innerHTML = '<div class="small" style="padding:12px">Loading attendants…</div>';
-    try { list = (await api('packetList')).attendants || []; err = ''; } catch (e) { list = []; err = e.message; }
+    try {
+      list = (await api('packetList')).attendants || []; err = '';
+      // Anyone not active yet: their steps for the track (a handful of people at most).
+      await Promise.all(list.filter(a => !a.active).map(async a => {
+        try { const g = await api('packetGet', { pool_id: a.pool_id }); a.steps = g.status.steps; a.updated_at = g.packet.updated_at; } catch (e) { /* the row still shows, without the track */ }
+      }));
+    } catch (e) { list = []; err = e.message; }
     draw();
   }
-  function rows() {
-    // A consumer is waiting on every applicant from caringcds.com/apply: those go first,
-    // oldest first, with how long it has been (her call 2026-10-21: these are urgent).
-    const ago = iso => { if (!iso) return ''; const h = Math.round((Date.now() - new Date(iso)) / 36e5); return h < 1 ? 'just now' : h < 24 ? h + ' hr ago' : Math.round(h / 24) + (Math.round(h / 24) === 1 ? ' day ago' : ' days ago'); };
-    const pk = list.map(a => ({ kind: 'packet', id: a.pool_id, name: a.name, label: a.label, tone: a.tone, active: a.active, waiting: a.consumer_waiting,
-      since: a.step1_at || a.started_at,
-      meta: a.consumer_waiting ? ['Consumer waiting: ' + a.consumer, a.step1_at ? 'Step 1 signed ' + ago(a.step1_at) : 'started ' + ago(a.started_at), a.next].filter(Boolean).join(' · ')
-        : [a.consumer, a.next].filter(Boolean).join(' · ') }));
-    const ro = roster().map(a => { const d = rosterDue(a, autoOig(a.id)); return { kind: 'roster', id: a.id, name: a.name, label: d.label, tone: d.tone, active: true,
-      meta: [a.consumer, 'From the Roster'].filter(Boolean).join(' · ') }; });
-    return { active: [...pk.filter(r => r.active), ...ro].sort((x, y) => x.name.localeCompare(y.name)), applying: pk.filter(r => !r.active).sort((x, y) => (y.waiting - x.waiting) || String(x.since).localeCompare(String(y.since))) };
+  const groups = () => buildGroups({ packets: list, roster: roster(), autoOig, wellsky: opts.wellsky ? opts.wellsky() : null });
+  function rowHtml(x) {
+    const edge = x.flag && x.flag.tone === 'r' || x.waiting ? ' style="border-left:5px solid #b42318"' : '';
+    const track = x.track ? `<div class="track" aria-label="Step ${Math.min(x.track.at + 1, 7)} of 7">${x.track.steps.map((s, i) => `<i class="${s.done ? 'd' : i === x.track.at ? 'n' : ''}" title="${esc(s.label)}"></i>`).join('')}</div>
+      <span class="meta"><b class="stepname">Step ${Math.min(x.track.at + 1, 7)} of 7: ${esc((x.track.steps[x.track.at] || x.track.steps[6]).label)}</b>${x.flag ? ` <span class="pill ${x.flag.tone}">${esc(x.flag.text)}</span>` : ''}</span>` : x.flag ? `<span class="meta"><span class="pill ${x.flag.tone}">${esc(x.flag.text)}</span></span>` : '';
+    return `<button class="row" data-open="${x.kind}:${esc(x.id)}"${edge}><b>${esc(x.name)}</b><span class="pill ${x.tone}">${esc(x.label)}</span><span class="meta">${esc(x.meta)}</span>${track}</button>`;
   }
   function draw() {
     if (open) return;
-    const r = rows(), show = r[tab];
-    el.innerHTML = `<h2>Attendants</h2>
-      <div class="tabs"><button class="${tab === 'active' ? 'on' : ''}" data-tab="active">Active (${r.active.length})</button><button class="${tab === 'applying' ? 'on' : ''}" data-tab="applying">Applying (${r.applying.length})</button>
-      <button data-act="reload" class="pill-btn">Refresh</button></div>
+    const g = groups(), t = g.tiles, ws = g.wellsky;
+    const tile = (n, label, tone) => `<div class="tile${n && tone ? ' ' + tone : ''}"><div class="n">${n}</div><div class="t">${esc(label)}</div></div>`;
+    const asOf = ws.asOf ? new Date(ws.asOf).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) : '';
+    const hoursNote = ws.hoursAsOf && ws.asOf && ws.hoursAsOf.slice(0, 10) !== ws.asOf.slice(0, 10)
+      ? '; hours this month as of ' + shortDay(new Date(ws.hoursAsOf).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : '';
+    el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><button data-act="reload" class="pill-btn">Refresh</button></div>
+      <div class="tiles">${tile(t.starting, 'Getting started')}${tile(t.working, 'Working')}${tile(t.due, 'Check due or overdue', 'r')}${t.dates ? tile(t.dates, 'Check dates to add', 'y') : ''}${tile(t.quiet, 'Not working lately')}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
-      ${show.length ? show.map(x => `<button class="row" data-open="${x.kind}:${esc(x.id)}"${x.waiting ? ' style="border-left:5px solid #b42318"' : ''}><b>${esc(x.name)}</b><span class="pill ${x.tone}">${esc(x.label)}</span><span class="meta">${esc(x.meta)}</span></button>`).join('')
-        : `<p class="small">${tab === 'applying' ? 'Nobody is applying right now. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.' : 'No active attendants yet.'}</p>`}
-      <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Attendants from the Roster show their recheck dates; edit them on the Roster.</p>`;
+      <section class="grp"><div class="ghead"><h3>Getting started</h3><span>Consumer waiting goes first</span></div>
+      ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is getting started. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}</section>
+      <section class="grp"><div class="ghead"><h3>Working</h3><span>${ws.have ? 'Shift in WellSky in the last ' + WORKING_DAYS + ' days. WellSky ' + esc(asOf) + esc(hoursNote) : 'WellSky has not sent anything yet, so everyone shows here'}</span></div>
+      ${g.working.length ? g.working.map(rowHtml).join('') : '<p class="small">Nobody yet.</p>'}</section>
+      ${g.quiet.length ? `<section class="grp"><div class="ghead"><h3>Not working lately</h3><span>No WellSky shift in ${WORKING_DAYS} days</span></div>${g.quiet.map(rowHtml).join('')}</section>` : ''}
+      <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>`;
   }
 
   async function openPacket(id) {
@@ -141,20 +294,30 @@ export function mountHubPacket(el, opts) {
       <div class="err" id="hp_err"></div></div>`;
     if (window.cdsCommHistory) window.cdsCommHistory(el);
   }
-  function openRosterCard(id) {
-    const a = roster().find(x => x.id === id); if (!a) { draw(); return; }
+  function openRosterCard(id, note) {
+    const a = roster().find(x => x.id === id); if (!a) { open = null; draw(); return; }
     open = { kind: 'roster', id };
     const d = rosterDue(a, autoOig(a.id));
+    const ws = wellskyByAttendant(opts.wellsky ? opts.wellsky() : null), w = ws.by[nameKey(a.wellskyName || a.name)];
+    const field = { EDL: 'edlDate', FCSR: 'fcsrDate', OIG: 'leieDate' };
     el.innerHTML = `<button class="pill-btn" data-act="back">← All attendants</button>
       <div class="card"><h2>${esc(a.name)}</h2><span class="pill ${d.tone}">${esc(d.label)}</span>
-      <dl><dt>Phone</dt><dd>${esc(a.phone)}</dd><dt>Email</dt><dd>${esc(a.email)}</dd><dt>Works for</dt><dd>${esc(a.consumer)}</dd><dt>Hired</dt><dd>${esc(fmtD(a.hiredate))}</dd>
-      <dt>FCSR number</dt><dd>${esc(a.fcsrNum)}</dd><dt>Empeon</dt><dd>${esc(a.empeon)}</dd><dt>Contract</dt><dd>${esc(a.contract)}</dd><dt>EVV</dt><dd>${esc(a.evv)}</dd></dl>
+      <dl><dt>Works for</dt><dd>${esc((w && w.consumers.join(' and ')) || a.consumer)}</dd>
+      <dt>In WellSky</dt><dd>${w && w.last ? 'Last shift ' + esc(fmtD(w.last)) + (w.hours ? ' · ' + w.hours + ' hrs this month' : '') : ws.have ? 'No shifts in the WellSky reports' : 'WellSky has not sent anything yet'}</dd>
+      ${[['Phone', a.phone], ['Email', a.email], ['Hired', fmtD(a.hiredate)], ['FCSR number', a.fcsrNum], ['Empeon', a.empeon], ['Contract', a.contract], ['EVV', a.evv]]
+        .filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
       <h3>Rechecks</h3>
       <table><thead><tr><th>Check</th><th>Last done</th><th>Next due</th></tr></thead><tbody>
-      ${d.rows.map(r => `<tr><td><b>${r.k}</b></td><td>${esc(fmtD(r.done)) || 'Not on the Roster'}${r.auto ? ' <span class="small">(checked automatically)</span>' : ''}</td><td>${r.due ? `<span class="pill ${r.tone}">${esc(fmtD(r.due))}</span>` : ''}</td></tr>`).join('')}
+      ${d.rows.map(r => `<tr><td><b>${r.k}</b></td><td>${r.auto ? esc(fmtD(r.done)) + ' <span class="small">(ran by itself)</span>'
+        : `<input type="date" id="hp_${field[r.k]}" value="${esc(r.done || '')}" max="${ymd(new Date())}" aria-label="${r.k} last done">`}</td>
+        <td>${r.due ? `<span class="pill ${r.tone}">${esc(fmtD(r.due))}</span>` : '<span class="small">Add the date it was last done</span>'}</td></tr>`).join('')}
       </tbody></table>
-      <p class="small">OIG every month, EDL every 3 months, FCSR every year (the hub's onboarding checklist).</p>
-      <div class="btns"><button class="btn" data-act="roster">Update on the Roster</button></div>
+      <div class="btns"><button class="btn" data-act="dates">Save dates</button></div>
+      <p class="small">OIG every month (runs by itself), EDL every 3 months, FCSR every year. Use the date on the search result you have on file.</p>
+      <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}
+      <h3>Not working anymore?</h3>
+      <div id="hp_leave"><div class="btns"><button class="btn o" data-act="leave">No longer working</button></div>
+      <p class="small">Moves them off this list and stops their rechecks. You can make them active again on the old Roster.</p></div>
       <div class="cds-comm-history" data-refs="attendant:${esc(a.id)}" data-phones="${esc(a.phone || '')}"></div></div>`;
     if (window.cdsCommHistory) window.cdsCommHistory(el);
   }
@@ -164,12 +327,26 @@ export function mountHubPacket(el, opts) {
     const errEl = () => el.querySelector('#hp_err');
     const fail = m => { const x = errEl(); if (x) x.textContent = m; else alert(m); };
     try {
-      if (b.dataset.tab) { tab = b.dataset.tab; draw(); return; }
       if (b.dataset.open) { const [k, id] = b.dataset.open.split(':'); return k === 'packet' ? openPacket(id) : openRosterCard(id); }
       const act = b.dataset.act;
       if (act === 'reload') return load();
       if (act === 'back') { open = null; return load(); }
       if (act === 'roster') return opts.openRoster && opts.openRoster(open.id);
+      if (act === 'dates') {
+        const patch = {};
+        for (const k of ['edlDate', 'fcsrDate', 'leieDate']) { const i = el.querySelector('#hp_' + k); if (i) patch[k] = i.value || ''; }
+        if (Object.values(patch).some(v => v && v > ymd(new Date()))) return fail('A check date cannot be in the future.');
+        await opts.saveRoster(open.id, patch);
+        return openRosterCard(open.id, 'Saved.');
+      }
+      if (act === 'leave') {
+        const a = roster().find(x => x.id === open.id);
+        el.querySelector('#hp_leave').innerHTML = `<div class="ask"><b>Mark ${esc(a ? a.name : 'them')} as no longer working?</b><p class="small">Their rechecks stop and they leave the Attendants list.</p>
+          <div class="btns"><button class="btn bad" data-act="leave-yes">Yes, no longer working</button><button class="btn o" data-act="leave-no">Keep them</button></div></div>`;
+        return;
+      }
+      if (act === 'leave-no') return openRosterCard(open.id);
+      if (act === 'leave-yes') { await opts.saveRoster(open.id, { status: 'inactive' }); open = null; return draw(); }
       if (act === 'match') return opts.openMatch && opts.openMatch();
       if (b.dataset.copy) {
         const r = await api('packetCopy', { pool_id: open.id, kind: b.dataset.copy });
