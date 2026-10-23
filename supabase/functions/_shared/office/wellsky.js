@@ -357,7 +357,43 @@
              people, leftOut: all.filter(p => left[p.key]), activeDays: ACTIVE_DAYS };
   }
 
+  // ---------- no worked shifts in 30 days (her rule 2026-10-22) ----------
+  // Closure plan step 4. A CDS vendor must tell DHSS when services are not being given
+  // as authorized (19 CSR 15-8.400(5)(F)1); no rule sets a number of days, she chose 30.
+  // Who: hub consumers that are active and not already Closing or Paused, not pending,
+  // and in the hub for 30 days or more (a new consumer waiting on a first shift is the
+  // first-shift checklist's job). The schedule report reaches back to the 1st of last
+  // month, so it always covers 30 days; someone missing from it has had no shift since
+  // at least shifts.from.
+  const NO_SHIFT_DAYS = 30;
+  function noShifts(shifts, pulledOn, consumers, days) {
+    days = days || NO_SHIFT_DAYS;
+    if (!shifts || !shifts.consumers || !pulledOn) return { known: false, days, people: [] };
+    const cutoff = isoLocal(new Date(Date.parse(pulledOn + 'T12:00:00') - days * 864e5));
+    const cutoffMs = Date.parse(cutoff + 'T00:00:00-05:00');
+    const last = {};
+    shifts.consumers.forEach(c => {
+      const worked = (c.shifts || []).filter(s => s.date < pulledOn).map(s => s.date).sort();
+      if (!worked.length) return;
+      const k = nameKey(c.name);
+      if (!last[k] || worked[worked.length - 1] > last[k]) last[k] = worked[worked.length - 1];
+    });
+    const people = (consumers || []).filter(c => {
+      const st = String(c.status || '').toLowerCase();
+      if (['inactive', 'discharged', 'closing', 'paused', 'pending'].includes(st) || c.ending) return false;
+      if (Number(c.id) > cutoffMs) return false;   // in the hub less than 30 days
+      const l = last[nameKey(c.name)];
+      return !l || l < cutoff;
+    }).map(c => {
+      const l = last[nameKey(c.name)] || '';
+      const from = l || shifts.from || '';
+      return { id: c.id, name: c.name, last: l, since: shifts.from || '',
+               days: from ? Math.round((Date.parse(pulledOn + 'T12:00:00') - Date.parse(from + 'T12:00:00')) / 864e5) : null };
+    }).sort((a, b) => (a.last || '').localeCompare(b.last || '') || a.name.localeCompare(b.name));
+    return { known: true, days, cutoff, people };
+  }
+
   root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
-                      mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL,
+                      mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL, noShifts, NO_SHIFT_DAYS,
                       LONG_HOURS, LONG_FACTOR, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
