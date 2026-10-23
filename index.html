@@ -13118,6 +13118,8 @@ function renderTodayTop() {
     const name = first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : '';
     hello.textContent = (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (name ? ', ' + name : '');
   }
+  // Visits, forms and first-shift rows below: everyone not marked inactive, as before #83.
+  const consumers = getData('consumers').filter(CDSRules.isActive);
   const counts = document.getElementById('todayCounts');
   if (counts) {
     // Same count as the Dashboard's Active Consumers card (CDSRules.dashboardNumbers).
