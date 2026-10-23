@@ -411,7 +411,7 @@ export function mountHubPacket(el, opts) {
       if (b.dataset.val != null) { try { await navigator.clipboard.writeText(b.dataset.val); b.textContent = 'Copied'; } catch { b.textContent = 'Select it'; } return; }
       if (act === 'ssn') {
         const r = await api('revealSsn', { id: open.id, reason: 'FCSR screening request' });
-        b.outerHTML = `<span class="pill y" style="user-select:all">${esc(r.ssn)}</span> <span class="small">Shown once for the FCSR request. This view is recorded.</span>`;
+        b.outerHTML = `<span class="pill y" style="user-select:all">${esc(r.ssn)}</span>${r.other ? ` <span class="small">Also used:</span> <span class="pill y" style="user-select:all">${esc(r.other)}</span> <span class="small">Run FCSR and EDL on every number.</span>` : ''} <span class="small">Shown once for the FCSR request. This view is recorded.</span>`;
         return;
       }
       if (b.dataset.clear) {

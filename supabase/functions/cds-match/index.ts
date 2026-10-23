@@ -6,6 +6,7 @@
 //   family    : x-cds-session header after the invite + code sign-in
 //   caregiver : input.link, the caregiver's private link token
 //   consumer  : input.link, the consumer's enrollment packet link (caringcds.com/enroll, 2026-10-22)
+//               or a Missouri form link (caringcds.com/sign, 2026-10-22)
 //   staff     : Authorization: Bearer <CDS Hub sign-in>; the email comes from
 //               the verified sign-in, never from the request body.
 //
@@ -144,7 +145,8 @@ const match = createMatch({
   },
   links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}`,
            packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}`,
-           enroll: (t: string) => `https://www.caringcds.com/enroll/?c=${t}` },
+           enroll: (t: string) => `https://www.caringcds.com/enroll/?c=${t}`,
+           sign: (t: string) => `https://www.caringcds.com/sign/?c=${t}` },
 });
 
 function cors(origin: string | null) {

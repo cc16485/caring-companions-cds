@@ -2442,6 +2442,8 @@ button.fu-tile.check span { color:#14606F; }
 
   <!-- CDS manager training (2026-10-22, 19 CSR 15-8.400(1)(D)(E)); drawn by renderManagerCard() while her switch is on -->
   <div id="managerCard"></div>
+  <!-- Office details and office staff (2026-10-22): drawn by renderOfficeCard() while her switches are on -->
+  <div id="officeCard"></div>
 
   <!-- GHL CONTACT SYNC -->
   <div class="card" style="margin-bottom:20px">
@@ -4993,7 +4995,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=7');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=8');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5481,7 +5483,8 @@ function consumerToFinish(c) {
     !authOk && (auth ? 'Renewed authorization' : 'Authorization'),
     !plan && 'Care plan',
     !c.backupPlan && 'Backup plan',
-    c.trained !== 'yes' && 'Consumer training'
+    c.trained !== 'yes' && 'Consumer training',
+    ...moFormsMissing(c)
   ].filter(Boolean);
 }
 
@@ -8217,6 +8220,7 @@ function clearOutreachLog() {
 function renderAutomations() {
   renderSwitches();
   renderManagerCard();
+  renderOfficeCard();
   renderPendingOutreaches();
   renderQuickSendGrid();
   renderOutreachLog();
@@ -8740,6 +8744,10 @@ function saveVisitLog() {
 const HUB_SWITCHES = [
   { key: 'visitForm', label: 'Face-to-face visit form',
     does: 'On: Log the visit opens one form with every item Missouri requires (time, who was there, in person, service delivery, quality of care). Off: the three short questions as before.' },
+  { key: 'moForms', label: 'Missouri forms on the consumer profile',
+    does: 'On: each profile shows Rights and responsibilities, Office details and the yearly Pandemic policy (3 steps), with Send buttons; Today counts who still needs them. Texts reach consumers only when Missouri forms texts is on too. Off: hidden.' },
+  { key: 'moStaffOig', label: 'Monthly OIG check for office staff',
+    does: 'On: the Office staff list on Settings is checked against the OIG list every month on the 11th with the attendants, other names too. Off: staff are not checked.' },
   { key: 'moManager', label: 'CDS manager training',
     does: 'On: Settings tracks the MMAC manager test (6 months) and the yearly MMAC meeting, and Today reminds you. Off: hidden.' },
 ];
@@ -8765,6 +8773,7 @@ function hubSwitch(key, on) {
   setObj(key, { live: !!on, by: me.split('@')[0], at: new Date().toISOString() });
   renderHubSwitches();
   if (key === 'moManager') renderManagerCard();
+  if (key === 'moForms' || key === 'moStaffOig') renderOfficeCard();
 }
 
 // The CDS manager named to MMAC (2026-10-22, her approved mockup). 19 CSR 15-8.400(1)(E): the manager
@@ -8851,6 +8860,162 @@ async function mgrOpenProof(path) {
     if (error) throw error;
     window.open(data.signedUrl, '_blank');
   } catch (e) { alert('Could not open the file: ' + (e.message || e)); }
+}
+
+// Missouri forms on the consumer profile (2026-10-22, her approved mockup). Signed on the consumer's
+// phone at caringcds.com/sign through the cds-match server (signSend / signStatus):
+//   Rights and responsibilities   19 CSR 15-8.400(5)(H)7, once
+//   Office details                MMAC CDS Program Requirements 2.3(e), once
+//   Pandemic policy, every year   19 CSR 15-8.400(2): 1 given (signed), 2 consumer trained (marked here),
+//                                 3 consumer trained their attendant (both sign)
+// Her switch 'moForms'. Texts reach consumers only when the server switch consumer_forms is on.
+let _moForms = { at: 0, year: new Date().getFullYear(), consumers: {}, error: '' };
+async function moFormsLoad(force) {
+  if (!_db || !hubSwitchOn('moForms')) return _moForms;
+  if (!force && Date.now() - _moForms.at < 5 * 60000) return _moForms;
+  const ids = getData('consumers').filter(CDSRules.isActive).map(c => c.id);
+  try { const r = await cdsMatchApi('signStatus', { consumer_ids: ids }); _moForms = { at: Date.now(), year: r.year || new Date().getFullYear(), consumers: r.consumers || {}, error: '' }; }
+  catch (e) { _moForms.error = e.message; _moForms.at = Date.now(); }
+  return _moForms;
+}
+// One consumer's state, from the cache: { rights, office, given, trained, att } with the latest request each.
+function moFormsOf(c) {
+  const o = _moForms.consumers[c.id] || {}, y = _moForms.year;
+  const last = (k, yr) => (o[k] || []).filter(r => yr === undefined || r.year === yr).slice(-1)[0] || null;
+  return { rights: last('rights'), office: last('office'), given: last('pandemic', y), att: last('pandemic_att', y),
+           trained: ((c.pandemicTrained || {})[y]) || null, year: y };
+}
+function moFormsMissing(c) {
+  if (!hubSwitchOn('moForms') || !_moForms.at || _moForms.error) return [];
+  const f = moFormsOf(c), signed = r => r && r.signed_at;
+  return [!signed(f.rights) && 'Rights form', !signed(f.office) && 'Office details form',
+    !(signed(f.given) && f.trained && signed(f.att)) && 'Pandemic policy ' + f.year].filter(Boolean);
+}
+function moFormsBox(c) {
+  if (!hubSwitchOn('moForms') || !CDSRules.isActive(c)) return '';
+  return '<div class="cp-box" id="moForms_' + esc(c.id) + '" style="margin-top:14px"><h4>Missouri forms</h4><div style="font-size:13px;color:#55677a">Loading…</div></div>';
+}
+async function moFormsFill(c) {
+  const host = document.getElementById('moForms_' + c.id);
+  if (!host) return;
+  await moFormsLoad();
+  if (_moForms.error) { host.innerHTML = '<h4>Missouri forms</h4><div style="font-size:13px;color:var(--danger)">Could not load: ' + esc(_moForms.error) + '</div>'; return; }
+  const f = moFormsOf(c), d = iso => esc(_niceDay(String(iso).slice(0, 10)));
+  const state = r => !r ? '' : r.signed_at ? '<span style="color:var(--cute-teal);font-weight:600">Signed ' + d(r.signed_at) + (r.signer_role === 'rep' ? ' by a representative' : '') + '</span>'
+    : r.opened_at ? 'Opened ' + d(r.opened_at) + ', not signed yet' : r.sent_at ? 'Sent ' + d(r.sent_at) + ', waiting' : '';
+  const sendBtn = (form, label, again) => '<button class="btn btn-sm ' + (again ? 'btn-outline' : 'btn-primary') + '" onclick="moFormsSend(\'' + c.id + '\',\'' + form + '\')">' + (again ? 'Send again' : label) + '</button>';
+  const row = (title, sub, right, done) => '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:11px 0;border-top:1px solid #EEE9DF">' +
+    '<span aria-hidden="true" style="flex:none;width:22px;height:22px;border-radius:50%;' + (done ? 'background:#1F7A8C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px">✓' : 'border:2px solid #C8C2B4;box-sizing:border-box">') + '</span>' +
+    '<div style="flex:1 1 220px"><div style="font-weight:600;font-size:14px">' + title + '</div><div style="font-size:12.5px;color:#55677a">' + sub + '</div></div>' + (done ? '' : right) + '</div>';
+  const once = (r, title, form, what) => row(title, state(r) || what, sendBtn(form, 'Send for signature', r && r.sent_at), r && r.signed_at);
+  const att = (getData('attendants').filter(a => a.status !== 'inactive' && String(a.consumer || '').trim().toUpperCase() === String(c.name || '').trim().toUpperCase())[0] || {}).name || '';
+  const pdone = f.given && f.given.signed_at && f.trained && f.att && f.att.signed_at;
+  host.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h4>Missouri forms</h4>' +
+      '<span class="cp-pill' + (pdone ? '' : ' warn') + '">Pandemic ' + f.year + ': ' + [f.given && f.given.signed_at, f.trained, f.att && f.att.signed_at].filter(Boolean).length + ' of 3</span></div>' +
+    once(f.rights, 'Rights and responsibilities', 'rights', 'Hearing rights and consumer responsibilities, signed once.') +
+    once(f.office, 'Office details', 'office', 'Our address, phones and hours in writing, signed once.') +
+    row('Pandemic policy ' + f.year + ': given to ' + esc(c.name.split(' ')[0]), state(f.given) || 'They sign that they received it, every year.', sendBtn('pandemic', 'Send the policy', f.given && f.given.sent_at), f.given && f.given.signed_at) +
+    row('Pandemic policy ' + f.year + ': ' + esc(c.name.split(' ')[0]) + ' trained on it', f.trained ? 'Marked ' + d(f.trained.at) + ' by ' + esc(f.trained.by) : 'On the monthly call or the visit, about 5 minutes.',
+      '<button class="btn btn-sm btn-primary" onclick="moFormsTrained(\'' + c.id + '\')">Mark trained</button>', !!f.trained) +
+    row('Pandemic policy ' + f.year + ': ' + esc(c.name.split(' ')[0]) + ' trained their attendant', state(f.att) || 'The consumer and the attendant both sign one link.',
+      sendBtn('pandemic_att', 'Send the sign link', f.att && f.att.sent_at), f.att && f.att.signed_at) +
+    '<div id="moForms_msg_' + esc(c.id) + '" style="font-size:12.5px;margin-top:6px"></div>' +
+    (att ? '<input type="hidden" id="moForms_att_' + esc(c.id) + '" value="' + esc(att) + '">' : '');
+}
+async function moFormsSend(cid, form) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c) return;
+  const say = (m, bad) => { const el = document.getElementById('moForms_msg_' + cid); if (el) el.innerHTML = '<span style="color:' + (bad ? 'var(--danger)' : 'var(--cute-teal)') + '">' + m + '</span>'; };
+  const input = { consumer: { id: c.id, name: c.name, phone: c.phone, email: c.email }, form };
+  if (form === 'pandemic_att') {
+    const pre = (document.getElementById('moForms_att_' + cid) || {}).value || '';
+    const name = prompt('The attendant’s full name (they type it on the link too):', pre);
+    if (!name) return;
+    input.att_name = name.trim();
+  }
+  if (form === 'office') input.hours = getObj('officeDetails').hours || '';
+  say('Sending…');
+  try {
+    const r = await cdsMatchApi('signSend', input);
+    const st = (r.messages || []).join(', ');
+    say(st.includes('held') ? 'Saved. The text is waiting in Messages: Missouri forms texts is switched off.' : st.includes('failed') ? 'A message FAILED to send. Check Messages.' : st.includes('practice') ? 'Practice: nothing was sent.' + (r.practice_link ? ' <a href="' + esc(r.practice_link) + '" target="_blank">Open the link</a>' : '') : 'Sent.', st.includes('failed'));
+    await moFormsLoad(true); moFormsFill(c);
+  } catch (e) { say(esc(e.message), true); }
+}
+function moFormsTrained(cid) {
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const y = _moForms.year;
+  if (!confirm('Mark ' + c.name + ' trained on the pandemic policy for ' + y + ' today?')) return;
+  c.pandemicTrained = Object.assign({}, c.pandemicTrained, { [y]: { at: new Date().toISOString(), by: _acWho().split('@')[0] || 'office' } });
+  setData('consumers', consumers);
+  moFormsFill(c);
+}
+
+// Settings: office hours (printed on the Office details form) and the office staff the monthly OIG
+// check covers (MMAC CDS Program Requirements 5.2). agency_data 'officeDetails' and 'officeStaff'.
+let _officeOig = null;
+async function oigCall(body) {
+  const { data } = await _db.auth.getSession();
+  const jwt = data && data.session ? data.session.access_token : '';
+  let r;
+  try {
+    r = await fetch(SUPABASE_URL + '/functions/v1/cds-oig', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt }, body: JSON.stringify(body) });
+  } catch (e) { throw new Error('The OIG check could not be reached. Check the connection and try again.'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'The OIG check could not be reached.');
+  return j;
+}
+function renderOfficeCard() {
+  const host = document.getElementById('officeCard');
+  if (!host) return;
+  const forms = hubSwitchOn('moForms'), oig = hubSwitchOn('moStaffOig');
+  if (!forms && !oig) { host.innerHTML = ''; return; }
+  const od = getObj('officeDetails'), staff = getData('officeStaff').filter(x => !x.leftAt);
+  const can = LD_WHO_OWNERS.includes(_acWho().trim().toLowerCase());
+  const res = id => { const p = _officeOig && _officeOig.people && _officeOig.people['staff:' + id]; if (!p) return '<span class="cp-pill warn">Never checked</span>';
+    return p.result === 'possible_match' && !p.review ? '<span class="cp-pill bad">Possible match: decide on Attendants</span>' : '<span class="cp-pill">' + (p.review === 'is_them' ? 'On the OIG list' : 'Clear') + ' ' + esc(_niceDay(String(p.checked_at).slice(0, 10))) + '</span>'; };
+  host.innerHTML = '<div class="card" style="margin-bottom:20px"><div class="card-title"><span class="icon">🏢</span> Office</div>' +
+    (forms ? '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;padding-bottom:12px">' +
+      '<div><label class="form-label" for="od_hours">Office hours (printed on the Office details form)</label><input id="od_hours" class="form-input" value="' + esc(od.hours || '') + '" placeholder="For example: Monday to Friday, 8am to 4:30pm"></div>' +
+      '<button class="btn btn-sm btn-outline" onclick="officeHoursSave()">Save</button></div>' : '') +
+    (oig ? '<div style="border-top:1px solid var(--gray-200);padding-top:12px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">' +
+        '<div style="font-weight:700;font-size:13.5px">Office staff: monthly OIG check</div><div style="font-size:12.5px;color:var(--gray-600)">Runs by itself on the 11th with the attendants.</div></div>' +
+      (staff.length ? '<table class="table" style="margin-top:8px"><thead><tr><th>Name</th><th>Other names checked</th><th>Started</th><th>Last OIG check</th><th></th></tr></thead><tbody>' +
+        staff.map(x => '<tr><td><b>' + esc(x.name) + '</b></td><td>' + esc(x.otherNames || 'none given') + '</td><td>' + esc(x.startedAt ? _niceDay(x.startedAt) : '') + '</td><td>' + res(x.id) + '</td>' +
+          '<td><a href="#" onclick="officeStaffEdit(\'' + x.id + '\');return false">Change</a></td></tr>').join('') + '</tbody></table>'
+        : '<div style="font-size:13px;color:var(--gray-600);margin-top:8px">Nobody added yet.</div>') +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-sm btn-primary" onclick="officeStaffEdit()">Add a staff member</button>' +
+        (can ? '<button class="btn btn-sm btn-outline" onclick="officeStaffCheckNow()">Check everyone now</button>' : '') + '</div>' +
+      '<div id="os_status" style="font-size:12.5px;margin-top:8px"></div></div>' : '') + '</div>';
+  if (oig && _db && !_officeOig) oigCall({ action: 'list' }).then(r => { _officeOig = r; renderOfficeCard(); }).catch(() => {});
+}
+function officeHoursSave() {
+  setObj('officeDetails', Object.assign({}, getObj('officeDetails'), { hours: document.getElementById('od_hours').value.trim(), by: _acWho(), at: new Date().toISOString() }));
+  renderOfficeCard();
+}
+function officeStaffEdit(id) {
+  const list = getData('officeStaff').slice(), x = list.find(y => y.id === id) || {};
+  const name = prompt('Full legal name:', x.name || '');
+  if (name === null) return;
+  if (!name.trim()) { if (id && confirm('Take ' + x.name + ' off the list? Their past checks stay on file.')) { x.leftAt = new Date().toISOString().slice(0, 10); setData('officeStaff', list); renderOfficeCard(); } return; }
+  if (name.trim().split(/\s+/).length < 2) { alert('Please give a first and last name.'); return; }
+  const other = prompt('Any other names they have used, such as a maiden name (separate with commas, or leave empty):', x.otherNames || '');
+  if (other === null) return;
+  const start = prompt('Date they started (YYYY-MM-DD), or leave empty:', x.startedAt || '');
+  if (start && !/^\d{4}-\d{2}-\d{2}$/.test(start)) { alert('Please use YYYY-MM-DD.'); return; }
+  const rec = Object.assign(x, { name: name.trim(), otherNames: other.trim(), startedAt: start || '', by: _acWho() });
+  if (!id) { rec.id = 'st' + Date.now().toString(36); list.push(rec); }
+  setData('officeStaff', list);
+  renderOfficeCard();
+}
+async function officeStaffCheckNow() {
+  const el = document.getElementById('os_status');
+  el.textContent = 'Checking…';
+  try { const r = await oigCall({ action: 'recheck' }); el.textContent = 'Checked ' + r.checked + ' people. ' + (r.possible ? r.possible + ' possible match' + (r.possible === 1 ? '' : 'es') + ' to look at on Attendants.' : 'No possible matches.');
+        _officeOig = await oigCall({ action: 'list' }); renderOfficeCard(); }
+  catch (e) { el.innerHTML = '<span style="color:var(--danger)">' + esc(e.message) + '</span>'; }
 }
 
 // ── BULK CONTACT BACKFILL ──────────────────────────────────────────────────
@@ -9450,6 +9615,7 @@ function renderProfile() {
         (next.d ? '<div style="font-size:13px;color:#55677a">' + esc(next.d) + '</div>' : '') + '</div>' + next.b + '</div>' +
       prepCard + lateCard +
       '<div class="cp-pair">' + callBox + visitBox + '</div>' +
+      moFormsBox(c) +
       endingCard(c) +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
@@ -9460,6 +9626,7 @@ function renderProfile() {
           : (endTaxOpen(c) ? '<a href="#" onclick="openEndTax(\'' + c.id + '\');return false">Tax steps for ending</a>' : '') +
             '<a href="#" onclick="makeConsumerActive(\'' + c.id + '\');if(_profileId)renderProfile();return false">Make active again</a></div>') +
     '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
+  if (hubSwitchOn('moForms') && CDSRules.isActive(c)) moFormsFill(c);
 }
 
 let _profTab = 'overview';
@@ -12834,6 +13001,15 @@ function renderTodayTop() {
   soon.forEach(x => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill warn">' +
     (x.r.days > 31 ? '2 months left' : x.r.days + ' days left') + '</span> Face-to-face visit for <b>' + esc(x.c.name) +
     '</b>, due by ' + esc(_niceDay(x.r.due)) + '</span><a href="#" onclick="openProfile(\'' + x.c.id + '\');return false">Book it</a></div>'));
+  // Missouri forms (her switch 'moForms'): who still needs this year's pandemic steps, or a signed form.
+  if (hubSwitchOn('moForms')) {
+    if (!_moForms.at) moFormsLoad().then(() => { if (_moForms.at) renderTodayTop(); });
+    else if (!_moForms.error) {
+      const need = consumers.filter(c => moFormsMissing(c).length);
+      if (need.length) rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill warn">Missouri forms</span> ' + need.length + ' consumer' + (need.length === 1 ? '' : 's') +
+        ' still need a signed form or this year\u2019s pandemic steps</span><a href="#consumers" onclick="showPage(\'consumers\');return false">See who</a></div>');
+    }
+  }
   // The CDS manager's MMAC test and yearly meeting (her switch 'moManager').
   if (hubSwitchOn('moManager')) {
     const m = getObj('cdsManager'), st = managerStatus(m);

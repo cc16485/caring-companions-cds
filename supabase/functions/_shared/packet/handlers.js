@@ -157,7 +157,8 @@ export function createPacket(h) {
         identity_done: await identityDone(x.pool_id, scr),
         signed: Object.fromEntries(Object.entries(x.forms).map(([k, f]) => [k, { at: f.signed_at, name: f.signed_name }])),
         step: !x.st.step1 ? 1 : !x.st.step2Open ? 'checks' : !x.st.step2Signed || !x.p.call_slot ? 2 : 'done',
-        missing: { application: P.applicationMissing(x.p.answers || {}), background: P.backgroundMissing(x.p.answers || {}, await identityDone(x.pool_id, scr)) },
+        mo_questions: (await setting('apply_questions', { live: false })).live === true ? P.MO_QUESTIONS : null,
+        missing: { application: P.applicationMissing(x.p.answers || {}, { mo: (await setting('apply_questions', { live: false })).live === true }), background: P.backgroundMissing(x.p.answers || {}, await identityDone(x.pool_id, scr)) },
         docs, contract_parts: CONTRACT_PARTS, company: COMPANY,
         orientation_done: !!x.p.orientation_done_at, empeon_done: !!x.p.empeon_done_at, call_slot: x.p.call_slot,
         call_slots: x.st.step2Open && !x.p.call_slot ? P.callSlots(x.now) : [],
@@ -219,7 +220,7 @@ export function createPacket(h) {
       if (name.split(' ').length < 2) fail('Please type your full name, first and last, to sign.');
       if (f.step === 2 && !x.st.step2Open) fail('This opens once your background checks are clear.');
       const a = x.p.answers || {};
-      if (form === 'application') { const m = P.applicationMissing(a); if (m.length) fail('Before you sign, please add: ' + m.join('; ') + '.'); }
+      if (form === 'application') { const m = P.applicationMissing(a, { mo: (await setting('apply_questions', { live: false })).live === true }); if (m.length) fail('Before you sign, please add: ' + m.join('; ') + '.'); }
       if (form === 'background') {
         if (!x.forms.application) fail('Please sign your application first.');
         const m = P.backgroundMissing(a, await identityDone(x.pool_id, x.c.screening.raw || {}));
