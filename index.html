@@ -1193,81 +1193,34 @@ button.fu-tile.check span { color:#14606F; }
 <div id="page-taxcompliance" class="page">
   <div class="section-header">
     <div class="section-title">🧾 Tax &amp; EIN Compliance</div>
-
-  <div id="complianceClocks" style="margin-bottom:18px"></div>
     <div style="display:flex;gap:8px">
       <a class="btn btn-primary" href="tax-training.html" style="font-size:12px;text-decoration:none;display:inline-flex;align-items:center">🎓 Training &amp; Help</a>
-      <button class="btn btn-outline" onclick="renderTaxCompliance();renderEmpeon()" style="font-size:12px">↻ Refresh</button>
+      <button class="btn btn-outline" onclick="renderTaxCompliance();renderComplianceClocks()" style="font-size:12px">↻ Refresh</button>
     </div>
   </div>
 
-
+  <!-- 2026-10-22 simplified: one status line, the to-do cards, one table. The
+       Empeon cross-check is gone because Empeon has been corrected. -->
   <div id="taxDeadlineBanner"></div>
 
-  <!-- The two things on this page that cannot be fixed by working faster: an EIN
-       on two people, and payroll filed under a placeholder. They used to sit below
-       a sixteen-row table. -->
-  <div id="empeonAlert"></div>
+  <!-- Only shows when a dated clock is actually running out. -->
+  <div id="complianceClocks"></div>
 
-  <!-- Sixteen consumers are not sixteen problems; they are two batches. Each card
-       is one action, done once, with the people it applies to. -->
   <div id="taxBatches" style="margin-bottom:18px"></div>
 
-  <div id="taxStatTiles" style="margin-bottom:14px"></div>
-
   <div class="card" style="margin-bottom:18px">
-    <div class="card-title"><span class="icon">📋</span> Remediation Worklist</div>
+    <div class="card-title"><span class="icon">📋</span> Every consumer</div>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
-      What DHSS audits is two things per consumer: both numbers typed into Fusion under <strong>HCBS Eligibility</strong>,
-      and acceptable proof uploaded to the <strong>Documents</strong> tab under <strong>EIN Tax Documents</strong>.
-      Sorted hardest first. What to do is on the batch cards above; this is the detail behind them.
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
-      <select id="taxFilterLane" onchange="renderTaxCompliance()" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--gray-300);border-radius:6px">
-        <option value="">All lanes</option>
-        <option value="D">Lane D — no EIN yet</option>
-        <option value="C">Lane C — need IRS letter</option>
-        <option value="B">Lane B — ready to upload</option>
-        <option value="A">Lane A — just enter in Fusion</option>
-        <option value="OK">Compliant</option>
-      </select>
-      <span style="font-size:12px;color:var(--gray-600);margin-left:auto" id="taxCount"></span>
+      Done means both numbers are typed into Fusion under <strong>HCBS Eligibility</strong> and the proof is
+      uploaded to the <strong>Documents</strong> tab under <strong>EIN Tax Documents</strong>.
     </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr>
-            <th>Consumer</th>
-            <th>Federal EIN</th><th>MO Tax ID</th><th>DES / UInteract</th>
-            <th>Proof held</th><th>In Fusion</th><th>Proof uploaded</th><th></th>
-          </tr>
+          <tr><th>Consumer</th><th>Federal EIN</th><th>MO Tax ID</th><th>DES</th><th>Next step</th><th></th></tr>
         </thead>
         <tbody id="taxComplianceBody">
-          <tr><td colspan="8"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:18px">
-    <div class="card-title"><span class="icon">🔀</span> Three systems — where each number lives</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
-      The same two numbers have to be right in three places, and they are maintained separately.
-      <strong>Empeon</strong> uses them to file payroll returns, <strong>Fusion</strong> is what DHSS audits, and
-      this hub is our own record. A number can be correct in one and wrong in another, which is exactly how the
-      placeholder EINs went unnoticed.
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Consumer</th><th>ER code</th>
-            <th>Empeon FEIN</th><th>Empeon State EIN</th>
-            <th>Our record</th><th>In Fusion</th><th>Empeon needs</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="empeonBody">
-          <tr><td colspan="8"><div class="empty"><div class="empty-icon">🔀</div><p>No consumers yet.</p></div></td></tr>
+          <tr><td colspan="6"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -1284,20 +1237,6 @@ button.fu-tile.check span { color:#14606F; }
       <strong>Entered but not uploaded, or uploaded but not entered, is still a finding.</strong> Both halves are required.<br>
       <span style="color:var(--gray-600)">Two free passes: a single document showing <strong>both</strong> numbers covers both, and
       no upload is needed at all where a <strong>previous CDS vendor</strong> already uploaded proof to that case record.</span>
-    </div>
-  </div>
-
-  <div class="card" style="margin-bottom:18px;border-left:4px solid var(--accent)">
-    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-      <div style="flex:1;min-width:240px">
-        <div style="font-weight:700;font-size:14px;margin-bottom:3px">New to this, or training someone?</div>
-        <div style="font-size:12.5px;color:var(--gray-600)">
-          Step-by-step walkthrough for every part of consumer tax setup, with the exact fields to enter, what needs a
-          wet signature, what gets faxed, screenshots from the state's own vendor packet, and a help assistant that
-          answers questions about any of it.
-        </div>
-      </div>
-      <a class="btn btn-primary" href="tax-training.html" style="text-decoration:none;white-space:nowrap">Open the training →</a>
     </div>
   </div>
 </div>
@@ -4890,7 +4829,7 @@ function showPage(id) {
   // The state submission list is built by renderPipeline (it reads the same
   // pipeline records), which finds the container by id wherever it now lives.
   if (id === 'statesubmissions') renderPipeline();
-  if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); renderComplianceClocks(); }
+  if (id === 'taxcompliance') { renderTaxCompliance(); renderComplianceClocks(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'hoursmonth') renderHoursMonth();
@@ -5542,7 +5481,6 @@ function saveTaxSetup() {
   closeModal('taxSetupModal');
   renderConsumers();
   renderTaxCompliance();
-  renderEmpeon();
   updateDashboard();
 }
 
@@ -8162,35 +8100,31 @@ function renderComplianceClocks() {
   einDue.sort((a, b) => a.k.days - b.k.days);
 
   if (!desDue.length && !desClose.length && !einDue.length) {
-    // Deliberately narrow wording. This checks two dated clocks and nothing else,
-    // and it used to read as an all-clear at the top of a page showing nobody
-    // compliant with eleven days to go.
-    host.innerHTML = '<div class="alert alert-info" style="font-size:13px">⏱ <strong>Clocks clear.</strong> ' +
-      'No consumer has passed $1,000 in a quarter while unregistered, and no 90-day EIN clock is inside three weeks. ' +
-      'This says nothing about the remediation work below.</div>';
+    // Nothing running out: say nothing. The status line above already covers it.
+    host.innerHTML = '';
     return;
   }
 
   let html = '';
   if (einDue.length) {
-    html += '<div class="alert alert-danger" style="font-size:13px"><strong>⏳ 90-day EIN clock running out for ' +
+    html += '<div class="alert alert-danger" style="font-size:13px"><div><strong>⏳ 90-day EIN clock running out for ' +
       einDue.length + ' consumer' + (einDue.length !== 1 ? 's' : '') + ':</strong><br>' +
       einDue.map(x => esc(x.c.name) + ' — ' +
         (x.k.days < 0 ? '<strong>overdue by ' + Math.abs(x.k.days) + ' days</strong>' : x.k.days + ' days left') +
-        ' (due ' + x.k.due + ')').join('<br>') + '</div>';
+        ' (due ' + x.k.due + ')').join('<br>') + '</div></div>';
   }
   if (desDue.length) {
-    html += '<div class="alert alert-danger" style="font-size:13px"><strong>💵 Register these consumers in UInteract now — they have passed $1,000 in a quarter:</strong><br>' +
+    html += '<div class="alert alert-danger" style="font-size:13px"><div><strong>💵 Register these consumers in UInteract now — they have passed $1,000 in a quarter:</strong><br>' +
       desDue.map(x => esc(x.c.name) + ' — $' +
         x.d.crossedAmount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) +
         ' in ' + x.d.crossed).join('<br>') +
       '<div style="margin-top:8px;font-size:12px">DES will not issue an account number before $1,000 is actually paid, and the quarterly wage report is late at 10% or $100 a month once it is. ' +
-      '<a href="https://uinteract.labor.mo.gov" target="_blank" style="color:inherit;text-decoration:underline">uinteract.labor.mo.gov</a></div></div>';
+      '<a href="https://uinteract.labor.mo.gov" target="_blank" style="color:inherit;text-decoration:underline">uinteract.labor.mo.gov</a></div></div></div>';
   }
   if (desClose.length) {
-    html += '<div class="alert alert-warn" style="font-size:13px"><strong>Approaching $1,000 this quarter:</strong> ' +
+    html += '<div class="alert alert-warn" style="font-size:13px"><div><strong>Approaching $1,000 this quarter:</strong> ' +
       desClose.map(x => esc(x.c.name) + ' ($' + x.d.shortfall.toFixed(2) + ' to go)').join(', ') +
-      '. Do not register yet — DES will refuse before the threshold is actually crossed.</div>';
+      '. Do not register yet, DES will refuse before the threshold is actually crossed.</div></div>';
   }
   const anyEstimated = consumers.some(c => { const d = desThreshold(c.name); return d.known && d.estimated; });
   if (anyEstimated) {
@@ -8751,7 +8685,6 @@ function renderProfile() {
 
   const c = consumers.find(x => x.id === _profileId);
   const s = taxStatus(c);
-  const e = empeonStatus(c);
   const auths = getAuths();
   const auth = Object.values(auths.records).find(a => prNorm(a.consumer || '') === prNorm(c.name));
   const plan = getObj('carePlans')[c.id];
@@ -8775,7 +8708,7 @@ function renderProfile() {
   // ── the obligation strip ──
   const chips = [
     profChip('Federal EIN', s.hasEin ? 'ok' : 'bad',
-      s.hasEin ? esc(c.ein) : (e.placeholder ? 'Empeon holds the placeholder ' + EMPEON_PLACEHOLDER : 'none on file')),
+      s.hasEin ? esc(c.ein) : 'none on file'),
     profChip('Missouri Tax ID', s.hasMoId ? 'ok' : 'bad', s.hasMoId ? esc(c.moTaxId) : 'needs form 2643A'),
     profChip('Entered in Fusion', s.inFusion ? 'ok' : 'bad', s.inFusion ? 'HCBS Eligibility' : 'both numbers required'),
     profChip('Proof uploaded', s.uploaded ? 'ok' : (s.exempt ? 'ok' : 'bad'),
@@ -10814,7 +10747,6 @@ function refreshPacketHold() {
 // Lane D is first because Missouri cannot issue a Tax ID until the IRS issues an
 // EIN, so it is the only one that cannot be parallelised.
 // ============================================================
-const TAX_DEADLINE_INTERNAL = '2026-08-15';
 const TAX_DEADLINE_DHSS     = '2026-08-31';
 
 // Proof accepted by HCBS Manual 3.25 Appendix 1. A W-9 is deliberately absent:
@@ -10857,7 +10789,7 @@ function taxStatus(c) {
 
   let lane, next;
   if (exempt || (inFusion && uploaded)) {
-    lane = 'OK';  next = exempt ? 'Exempt — a prior vendor uploaded proof' : 'Nothing outstanding';
+    lane = 'OK';  next = exempt ? 'Done, a prior vendor uploaded proof' : 'Done';
   } else if (!hasEin) {
     lane = 'D';   next = 'Apply for the EIN at irs.gov, then register the MO Tax ID on 2643A';
   } else if (!hasProof) {
@@ -10880,119 +10812,7 @@ function taxStatus(c) {
 // out with a fake employer number on it.
 const EMPEON_PLACEHOLDER = '12-3456789';
 
-// What still has to change in Empeon for this consumer. Deliberately separate
-// from the audit lanes: Empeon is payroll, Fusion is what DHSS checks.
-function empeonStatus(c) {
-  const ours   = (c.ein || '').trim();
-  const theirs = (c.empeonFein || '').trim();
-  const theirMo= (c.empeonStateEin || '').trim();
-  const ourMo  = (c.moTaxId || '').trim();
-  const needs = [];
-
-  // Once it has been uploaded, stop nagging. The stored Empeon values came from
-  // an export taken before the upload, so comparing against them would keep
-  // reporting differences that have already been fixed.
-  if ((c.empeonUpdated || '').trim()) {
-    return { needs: [], clean: true, placeholder: false, uploadedOn: c.empeonUpdated };
-  }
-
-  if (theirs === EMPEON_PLACEHOLDER) {
-    needs.push({ level: 'bad', text: 'Replace the placeholder FEIN' });
-  } else if (theirs && ours && theirs !== ours) {
-    needs.push({ level: 'bad', text: 'FEIN disagrees with our record' });
-  } else if (!theirs) {
-    needs.push({ level: 'warn', text: 'No FEIN in Empeon' });
-  }
-
-  if (!theirMo) {
-    needs.push(ourMo
-      ? { level: 'warn', text: 'Add the MO Tax ID we hold' }
-      : { level: 'info', text: 'MO Tax ID once Missouri issues it' });
-  } else if (ourMo && theirMo !== ourMo) {
-    needs.push({ level: 'bad', text: 'MO Tax ID disagrees with our record' });
-  }
-
-  return { needs, clean: !needs.length, placeholder: theirs === EMPEON_PLACEHOLDER };
-}
-
-function renderEmpeon() {
-  const consumers = getData('consumers').filter(CDSRules.isActive);
-  const rows = consumers.map(c => ({ c, e: empeonStatus(c), s: taxStatus(c) }))
-    .sort((a, b) => (a.e.clean - b.e.clean) || a.c.name.localeCompare(b.c.name));
-
-  // A real-looking EIN shared by two consumers is more dangerous than an obvious
-  // placeholder, because nothing about it looks wrong in any report.
-  const byEin = {};
-  consumers.forEach(c => {
-    const e = (c.empeonFein || c.ein || '').trim();
-    if (!e || e === EMPEON_PLACEHOLDER) return;
-    (byEin[e] = byEin[e] || []).push(c.name);
-  });
-  const collisions = Object.entries(byEin).filter(([, names]) => names.length > 1);
-
-  const placeholders = rows.filter(r => r.e.placeholder);
-  const alertEl = document.getElementById('empeonAlert');
-  if (alertEl) {
-    // Built as one string and assigned once, so a resolved problem actually
-    // disappears instead of lingering from the previous render.
-    let html = '';
-    collisions.forEach(([ein, names]) => {
-      html += '<div class="alert" style="margin-bottom:12px;background:var(--danger-pale);' +
-        'border-left:4px solid var(--danger);color:var(--danger)">' +
-        '⛔ <strong>The same EIN is recorded against ' + names.length + ' consumers: ' + esc(ein) + '</strong>, ' +
-        names.map(esc).join(' and ') + '. An EIN belongs to one person, so at least one of these is wrong. ' +
-        'Unlike a placeholder it looks perfectly valid in every report, which is why nothing has caught it. ' +
-        '<strong>Do not enter it in Fusion for either consumer</strong> until Empeon and the IRS have sorted out ' +
-        'whose it is.</div>';
-    });
-    if (placeholders.length) {
-      html += '<div class="alert alert-warn" style="margin-bottom:12px">⚠️ <strong>' + placeholders.length +
-        ' consumer' + (placeholders.length === 1 ? '' : 's') + ' carry the placeholder FEIN ' + EMPEON_PLACEHOLDER +
-        ' in Empeon:</strong> ' + placeholders.map(r => esc(r.c.name)).join(', ') +
-        '. That is a dummy number, so any payroll return filed for them went out under a fake employer number. ' +
-        'Two consequences: Empeon has to be corrected once a real EIN exists, and <strong>a filed 941 cannot be ' +
-        'used as audit proof for these consumers</strong>, because it shows the wrong number.</div>';
-    }
-    alertEl.innerHTML = html;
-  }
-
-  const body = document.getElementById('empeonBody');
-  if (!body) return;
-  if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🔀</div><p>No consumers yet.</p></div></td></tr>';
-    return;
-  }
-  const LEVEL = { bad: 'badge-red', warn: 'badge-warn', info: 'badge-blue' };
-  body.innerHTML = rows.map(({ c, e, s }) => {
-    const ph = (c.empeonFein || '').trim() === EMPEON_PLACEHOLDER;
-    return '<tr>' +
-      '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a></td>' +
-      '<td style="font-size:12px;color:var(--gray-600)">' + (c.empeonErCode || '—') + '</td>' +
-      '<td style="font-size:12px">' + (ph
-        ? '<span class="badge badge-red">' + EMPEON_PLACEHOLDER + '</span>'
-        : (c.empeonFein || '<span style="color:var(--gray-600)">—</span>')) + '</td>' +
-      '<td style="font-size:12px">' + (c.empeonStateEin || '<span style="color:var(--gray-600)">—</span>') + '</td>' +
-      '<td style="font-size:12px">' + (c.ein || '<span style="color:var(--gray-600)">no EIN</span>') +
-        (c.moTaxId ? '<div style="font-size:11px;color:var(--gray-600)">MO ' + c.moTaxId + '</div>' : '') + '</td>' +
-      '<td>' + (s.inFusion ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-red">no</span>') + '</td>' +
-      '<td style="font-size:12px">' + (e.clean
-        ? (e.uploadedOn
-            ? '<span class="badge badge-green">✓ uploaded ' + e.uploadedOn + '</span>'
-            : '<span class="badge badge-green">nothing</span>')
-        : e.needs.map(n => '<div style="margin-bottom:3px"><span class="badge ' + LEVEL[n.level] + '">' + n.text + '</span></div>').join('')) + '</td>' +
-      '<td><button class="btn btn-sm btn-outline" style="font-size:11px;white-space:nowrap" onclick="openTaxSetup(\'' + c.id + '\')">Open</button></td>' +
-      '</tr>';
-  }).join('');
-}
-
 const LANE_ORDER = { D: 0, C: 1, B: 2, A: 3, OK: 4 };
-const LANE_STYLE = {
-  D:  ['badge-red',   'D · no EIN'],
-  C:  ['badge-warn',  'C · IRS letter'],
-  B:  ['badge-blue',  'B · upload'],
-  A:  ['badge-blue',  'A · enter'],
-  OK: ['badge-green', 'compliant'],
-};
 
 // ============================================================
 // WORK BATCHES
@@ -11027,16 +10847,12 @@ function renderTaxBatches(rows) {
   const cards = TAX_BATCHES.map(b => {
     const people = rows.filter(r => r.s.lane === b.lane);
     if (!people.length) return '';
-    // Said once here rather than repeated on every row of the table below.
-    const alsoMo = people.filter(r => !r.s.hasMoId).length;
     return '<div class="card" style="margin-bottom:12px;border-left:4px solid ' + b.colour + '">' +
       '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">' +
         '<div style="font-weight:700;font-size:14px">' + b.title + '</div>' +
         '<div style="font-size:12px;color:var(--gray-600)">' + people.length + ' consumer' +
           (people.length === 1 ? '' : 's') + '</div></div>' +
-      '<div style="font-size:12.5px;color:var(--gray-600);line-height:1.6;margin-bottom:8px">' + b.action +
-        (alsoMo ? ' <strong>' + alsoMo + ' of these also still need the Missouri Tax ID</strong> (form 2643A), ' +
-          'which cannot be applied for until the EIN exists.' : '') + '</div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);line-height:1.6;margin-bottom:8px">' + b.action + '</div>' +
       (b.link ? '<a class="btn btn-primary btn-sm" href="' + b.link.href + '"' +
         (b.link.href.indexOf('http') === 0 ? ' target="_blank" rel="noopener"' : '') +
         ' style="text-decoration:none;font-size:12px;margin-bottom:8px;display:inline-block">' +
@@ -11052,58 +10868,42 @@ function renderTaxBatches(rows) {
     'numbers and proof uploaded to Fusion.</div>';
 }
 
+const TAX_STEP = { D: 'Apply for the EIN', C: 'Get the 147C letter', B: 'Upload proof to Fusion', A: 'Type both numbers into Fusion' };
+
 function renderTaxCompliance() {
   const consumers = getData('consumers').filter(CDSRules.isActive);
   const rows = consumers.map(c => ({ c, s: taxStatus(c) }))
     .sort((a, b) => (LANE_ORDER[a.s.lane] - LANE_ORDER[b.s.lane]) || a.c.name.localeCompare(b.c.name));
 
-  // ---- deadline banner ----
-  const dLeft = daysUntil(TAX_DEADLINE_INTERNAL);
+  // ---- one status line: deadline + how many are done ----
   const open  = rows.filter(r => r.s.lane !== 'OK').length;
+  const done  = rows.length - open;
   const bEl = document.getElementById('taxDeadlineBanner');
   if (bEl) {
-    const late = dLeft < 0;
+    const late = daysUntil('2026-08-31') < 0;
     bEl.innerHTML = !open && rows.length
-      ? '<div class="alert alert-success" style="margin-bottom:18px">✅ <strong>All active consumers are compliant.</strong> Reply to DHSS in writing that remediation is complete, and keep this page as your record.</div>'
-      : '<div class="alert ' + (late || dLeft <= 7 ? 'alert-warn' : 'alert-info') + '" style="margin-bottom:18px">' +
-        (late ? '⚠️ <strong>Internal target has passed.</strong> ' : '⏳ ') +
-        '<strong>' + Math.abs(dLeft) + ' day' + (Math.abs(dLeft) === 1 ? '' : 's') + '</strong> ' +
-        (late ? 'past the Aug 15 internal target' : 'to the Aug 15 internal target') +
-        ' · DHSS deadline Aug 31, then referral to MMAC · <strong>' + open + '</strong> consumer' +
-        (open === 1 ? '' : 's') + ' still outstanding</div>';
+      ? '<div class="alert alert-success" style="margin-bottom:18px"><div>✅ <strong>All ' + rows.length +
+        ' consumers are done.</strong> Reply to DHSS in writing that remediation is complete.</div></div>'
+      : '<div class="alert ' + (late ? 'alert-warn' : 'alert-info') + '" style="margin-bottom:18px"><div>' +
+        '<strong>' + done + ' of ' + rows.length + ' done.</strong> ' +
+        (late ? 'The DHSS deadline was Aug 31; the rest go to MMAC until they are fixed.'
+              : 'DHSS deadline Aug 31.') +
+        '</div></div>';
   }
 
   renderTaxBatches(rows);
 
-  // ---- one quiet line; the batch cards above carry the numbers that matter ----
-  const count = f => rows.filter(f).length;
-  const tEl = document.getElementById('taxStatTiles');
-  if (tEl) tEl.innerHTML =
-    '<div style="font-size:12.5px;color:var(--gray-600)">' +
-    '<strong>' + count(r => r.s.lane === 'OK') + '</strong> of <strong>' + rows.length + '</strong> compliant · ' +
-    '<strong>' + count(r => !r.s.hasEin) + '</strong> without an EIN · ' +
-    '<strong>' + count(r => !r.s.hasMoId && r.s.lane !== 'OK') + '</strong> without a Missouri Tax ID</div>';
-
-  // ---- worklist ----
-  const filter = (document.getElementById('taxFilterLane') || {}).value || '';
-  const shown = filter ? rows.filter(r => r.s.lane === filter) : rows;
-  const cEl = document.getElementById('taxCount');
-  if (cEl) cEl.textContent = shown.length + ' of ' + rows.length + ' shown';
-
   const body = document.getElementById('taxComplianceBody');
   if (!body) return;
-  if (!shown.length) {
-    body.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="empty-icon">🧾</div><p>' +
-      (rows.length ? 'No consumers in this lane.' : 'No active consumers yet.') + '</p></div></td></tr>';
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="empty-icon">🧾</div><p>No active consumers yet.</p></div></td></tr>';
     return;
   }
 
-  const yes = '<span class="badge badge-green">✓</span>';
-  const no  = '<span class="badge badge-red">missing</span>';
+  const no = '<span class="badge badge-red">missing</span>';
 
-  // Showing the number itself rather than a tick. A column of ticks is exactly
-  // what let one EIN sit on two consumers, and a placeholder sit on seven, for
-  // long enough to become a finding: both look correct as a tick.
+  // The number itself, not a tick: a tick is how one EIN sat on two consumers
+  // and a placeholder sat on seven without anyone noticing.
   const einCounts = {};
   rows.forEach(({ c }) => {
     const e = (c.ein || '').trim();
@@ -11121,12 +10921,11 @@ function renderTaxCompliance() {
   };
 
   // DES is the one place "missing" would be wrong: the state will not issue an
-  // account until the consumer has paid $1,000 in a quarter, so anyone under
-  // that is not behind, they are not yet eligible.
+  // account until the consumer has paid $1,000 in a quarter.
   const desCell = (c) => {
     const ean = (c.desEan || '').trim();
     if (ean) return '<span style="font-variant-numeric:tabular-nums;font-size:12px">' + esc(ean) + '</span>';
-    if (c.desRegistered) return yes;
+    if (c.desRegistered) return '<span class="badge badge-green">✓</span>';
     const d = desThreshold(c.name);
     if (d.known && d.crossed) return '<span class="badge badge-warn">register now</span>';
     if (d.known) return '<span style="color:var(--gray-600);font-size:12px" title="Under the $1,000 quarterly ' +
@@ -11134,10 +10933,8 @@ function renderTaxCompliance() {
     return '<span style="color:var(--gray-600)">—</span>';
   };
 
-  body.innerHTML = shown.map(({ c, s }) => {
-    // The 90-day clock is a warning, not a column: it was empty on every row.
-    // It only governs genuinely new participants, so it appears under the name
-    // when it is actually running.
+  body.innerHTML = rows.map(({ c, s }) => {
+    // The 90-day clock only shows when it is actually running.
     let clock = '';
     if (s.dueBy && s.lane !== 'OK') {
       const d = daysUntil(s.dueBy);
@@ -11146,16 +10943,17 @@ function renderTaxCompliance() {
       else if (d >= 0 && d <= 21) clock = '<div style="font-size:11px;color:var(--warn)">90-day upload due ' +
         s.dueBy + '</div>';
     }
+    // Short labels: the cards above already say how to do each one.
+    const step = s.lane === 'OK'
+      ? '<span class="badge badge-green">✓ ' + esc(s.next) + '</span>'
+      : '<span style="font-size:12px">' + TAX_STEP[s.lane] +
+        (s.lane !== 'D' && !s.hasMoId ? ', and get the MO Tax ID' : '') + '</span>';
     return '<tr>' +
-      '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a>' +
-        (c.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(c.dcn) + '</div>' : '') + clock + '</td>' +
+      '<td><a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(c.name) + '</a>' + clock + '</td>' +
       '<td>' + number(c.ein, true) + '</td>' +
       '<td>' + number(c.moTaxId, false) + '</td>' +
       '<td>' + desCell(c) + '</td>' +
-      '<td style="font-size:12px">' + (s.hasProof ? labelFor(EIN_PROOF_DOCS, c.proofDocType) : '<span style="color:var(--gray-600)">none</span>') +
-        ((c.proofFiles || []).length ? '<div style="font-size:11px;color:var(--success)">📎 ' + c.proofFiles.length + ' on file</div>' : '') + '</td>' +
-      '<td>' + (s.inFusion ? yes : no) + '</td>' +
-      '<td style="font-size:12px">' + (s.uploaded ? c.proofUploaded : (s.exempt ? '<span style="font-size:11px">prior vendor</span>' : no)) + '</td>' +
+      '<td style="max-width:340px">' + step + '</td>' +
       '<td><button class="btn btn-sm btn-outline" style="font-size:11px;white-space:nowrap" onclick="openTaxSetup(\'' + c.id + '\')">Open</button></td>' +
       '</tr>';
   }).join('');
