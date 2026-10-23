@@ -8717,7 +8717,7 @@ function renderProfile() {
 
   // Tabs
   const tab = _profTab;
-  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['notes', 'Notes']]
+  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['calls', 'Calls and texts'], ['notes', 'Notes']]
     .map(([k, l]) => '<button type="button" class="' + (tab === k ? 'on' : '') + '" onclick="_profTab=\'' + k + '\';renderProfile()">' + l + '</button>').join('');
   const line = (k, v) => '<div class="cp-line"><span>' + k + '</span><span>' + v + '</span></div>';
   let body = '';
@@ -8754,6 +8754,8 @@ function renderProfile() {
     line('Kept after wages', wages && billed ? fmt(margin) + ' (' + Math.round(margin / billed * 100) + '%)' : 'needs both sides') +
     (wages && billed && (margin < 0 || margin / billed > 0.6)
       ? '<div class="alert alert-warn" style="margin-top:10px;font-size:13px">Treat this with care: invoices count on the day they were raised, so one consumer\'s figure swings. The Money page has the agency figure.</div>' : '');
+  else if (tab === 'calls') body =
+    '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(c.phone || '') + '"></div>';
   else body = c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>';
 
   host.innerHTML =
@@ -8767,7 +8769,6 @@ function renderProfile() {
       prepCard + lateCard +
       '<div class="cp-pair">' + callBox + visitBox + '</div>' +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
-      '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(c.phone || '') + '"></div>' +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
         '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
         '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a>' +
