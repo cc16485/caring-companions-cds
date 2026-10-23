@@ -114,7 +114,7 @@ eq(I.map(i => i.t), [
   'Practice: 1 consumer on pace to go over this month',
   'Practice: 1 consumer barely using their hours',
   'Practice: 1 consumer with no November authorization showing in WellSky'], 'Dashboard lines, marked Practice');
-eq(I[0].people[1], { name: 'Able, Ann', why: 'Oct 9, Baker, Bea, 13 hrs, usually about 2.75 hrs' }, 'who and why for a long shift');
+eq(I[0].people[1], { name: 'Able, Ann', why: 'Oct 9, Baker, Bea, 13 hrs, usually about 2.75 hrs', key: 'Able, Ann|2026-10-09|6:02 AM', act: 'shift' }, 'who and why for a long shift');
 ok(I.every(i => i.go === 'authorizations'), 'every line opens the Authorizations page');
 ok(!I.some(i => /—/.test(i.t + JSON.stringify(i.people))), 'no em dashes');
 eq(W.items({}, {}, now), [], 'nothing at all before the first pull');
@@ -150,7 +150,7 @@ ok(/CDS: Consumer/.test(t2), 'the report losing its CDS filter is refused');
 const withOpen = Object.assign({}, fresh, { open: Object.assign({ at: new Date(2026, 9, 19, 6, 32).toISOString() }, O) });
 const IO = W.items(withOpen, {}, now);
 eq(IO[1].t, 'Practice: 2 shifts never clocked out (still In Progress in WellSky)', 'the Dashboard line, right after long shifts');
-eq(IO[1].people[0], { name: 'Able Ann', why: 'Bea Baker, clocked in Sep 5, 5:52 PM, never clocked out (44 days ago)' }, 'who and why for an open shift');
+eq(IO[1].people[0], { name: 'Able Ann', why: 'Bea Baker, clocked in Sep 5, 5:52 PM, never clocked out (44 days ago)', key: 'open|Able Ann|2026-09-05T17:52', act: 'shift' }, 'who and why for an open shift');
 ok(IO[1].bad, 'open shifts are red');
 const staleOpen = Object.assign({}, withOpen, { open: Object.assign({}, withOpen.open, { at: new Date(2026, 9, 17, 6, 0).toISOString() }) });
 ok(/has not run since Oct 17/.test(W.items(staleOpen, {}, now)[0].t), 'once the open report is in use, it going stale is red too');

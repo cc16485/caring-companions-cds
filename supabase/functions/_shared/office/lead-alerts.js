@@ -142,7 +142,9 @@ export function morningEmail(steps, extra, nowMs) {
   const subject = 'CDS morning, ' + dayLong(nowMs) + ': ' + (count ? count + ' thing' + (count !== 1 ? 's' : '') + ' waiting' : 'nothing waiting');
   const intro = count ? 'Good morning. Here is what is waiting in the CDS hub today.' : 'Good morning. Nothing is waiting in the CDS hub today.';
   const foot = 'Sent to Samantha and Krystal every weekday at 8am. Nothing here goes to families.';
-  const who = p => p.name + (p.why ? ' (' + p.why + ')' : (p.county ? ', ' + countyOf(p.county) : '') + (p.at && !isNaN(Date.parse(p.at)) ? ', came in ' + whenShort(Date.parse(p.at), nowMs) : ''));
+  // p.due (names on Today, 2026-10-22): the date goes after the reason, like the pill in the hub.
+  const dueTxt = p => !p.due ? '' : (p.due < new Date(nowMs).toISOString().slice(0, 10) ? ', late, was due ' : ', due ') + monthDay(p.due);
+  const who = p => p.name + (p.why ? ' (' + p.why + dueTxt(p) + ')' : (p.county ? ', ' + countyOf(p.county) : '') + (p.at && !isNaN(Date.parse(p.at)) ? ', came in ' + whenShort(Date.parse(p.at), nowMs) : '') + dueTxt(p));
   const textLines = [intro, ''].concat(extra.staleNote ? [extra.staleNote, ''] : []);
   all.forEach(s => {
     textLines.push((s.n ? s.n + ' ' : '') + s.title);
