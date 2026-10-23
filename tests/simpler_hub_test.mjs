@@ -149,14 +149,17 @@ const at = d => new Date(d + 'T12:00:00');
   ok(/1 lead to call back today or overdue/.test(fu) && !/follow-up/.test(fu), 'a lead call-back date says call back, not follow-up');
   const d = at('2026-10-22');
   let due = R.reportsDue({}, d);
-  ok(due.map(r => r.key).join() === 'q3,des' && due[0].due === '2026-10-31' && due[0].days === 9, 'Oct 22: the Q3 report and DES wage reports, due Oct 31');
-  ok(R.reportsDue({ q3: 'submitted', q3_for: '2026-10-31' }, d).map(r => r.key).join() === 'des', 'marked Submitted for Oct 31 drops it');
+  ok(due.map(r => r.key).join() === 'q3,des,f941,mo941' && due[0].due === '2026-10-31' && due[0].days === 9, 'Oct 22: the Q3 report, DES wage reports, Federal 941 and MO 941, due Oct 31');
+  ok(R.reportsDue({ q3: 'submitted', q3_for: '2026-10-31' }, d).map(r => r.key).join() === 'des,f941,mo941', 'marked Submitted for Oct 31 drops it');
   ok(R.reportsDue({ q3: 'submitted', q3_for: '2025-10-31' }, d).some(r => r.key === 'q3'), 'last year\'s Submitted mark does not hide this year');
   ok(R.reportsDue({ q3: 'submitted' }, d).some(r => r.key === 'q3'), 'an old mark with no due date does not hide it');
   ok(R.reportsDue({}, at('2026-09-30')).length === 0, 'nothing 31 days out');
+  // 2026-10-23 (her answers): the CPA audit is due May 30 (fiscal year ends Dec 31).
+  const may = R.reportsDue({}, at('2027-05-10')).find(r => r.key === 'audit');
+  ok(may && may.due === '2027-05-30' && may.days === 20 && !may.late, 'May: the CPA audit, due May 30');
   due = R.reportsDue({}, at('2026-11-05'));
   ok(due[0].key === 'q3' && due[0].late, 'a missed report stays on Today as late');
-  ok(R.reportsDue({}, at('2027-01-20')).map(r => r.key).join() === 'q4,annual,des', 'January: Q4, the annual report and DES');
+  ok(R.reportsDue({}, at('2027-01-20')).map(r => r.key).join() === 'q4,annual,des,f941,mo941,w2', 'January: Q4, the annual report, DES, both 941s and W-2s (MO W-3 is Feb 28)');
   ok(!/Monthly check-in calls: /.test(html), 'Coming up no longer repeats the check-in count');
   ok(/id="qstat_des"/.test(html), 'Deadlines has a DES wage reports row');
 }

@@ -339,9 +339,19 @@ export function createLeadAlerts(deps) {
             attendantWork.autoOig[r.person_ref.slice(10)] = new Date(r.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
       }
     } catch (e) { attendantWork.error = String((e && e.message) || e).slice(0, 200); }
+    // Approved due dates (2026-10-23), same as Today: reports and tax filings, EVV forms, payroll uploads.
+    const due = await store(['quarterStatus', 'evvCorrections', 'payrollTotals']);
+    let evvSubs = [];
+    try { evvSubs = await q(`select consumer, attendant, visitdate::text as visitdate, sig_attendant is not null and sig_attendant <> '' as sig_attendant,
+                                    sig_consumer is not null and sig_consumer <> '' as sig_consumer, processed from evv_submissions
+                             where agency_id = $1 and not coalesce(processed, false)`, [AGENCY_ID]); }
+    catch (e) { evvSubs = [{ consumer: 'EVV forms sent in online could not be read: ' + String((e && e.message) || e).slice(0, 120), sig_attendant: true, sig_consumer: true }]; }
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
                                    attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems, followups,
-                                   wsPeople, nameKey: W.nameKey, attendantWork }, noon);
+                                   wsPeople, nameKey: W.nameKey, attendantWork,
+                                   quarterStatus: due.quarterStatus || {},
+                                   evv: { corrections: Array.isArray(due.evvCorrections) ? due.evvCorrections : [], submissions: evvSubs },
+                                   payroll: { runs: (due.payrollTotals || {}).runs || [], registers: (s.attendantWages || {}).registers || [] } }, noon);
     const pipeline = s.pipeline || [];
     // The attendant check against WellSky joins the email only once setting attendant_check.live is true.
     const acfg = await setting('attendant_check', null);

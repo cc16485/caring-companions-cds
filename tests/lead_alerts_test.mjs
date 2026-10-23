@@ -27,7 +27,8 @@ await pg.exec(`alter table attendant_pool add column if not exists office_review
 await pg.exec(strip(readFileSync(ROOT + '/caregiver_signup_alert.sql', 'utf8')));
 await pg.exec(`
   create table agency_data (id uuid primary key default gen_random_uuid(), agency_id text, data_key text, data_value jsonb, unique (agency_id, data_key));
-  create table evv_submissions (id uuid primary key default gen_random_uuid(), agency_id text, processed bool default false, submitted_at timestamptz default now());
+  create table evv_submissions (id uuid primary key default gen_random_uuid(), agency_id text, processed bool default false, submitted_at timestamptz default now(),
+    consumer text, attendant text, visitdate date, sig_attendant text, sig_consumer text);
   -- live: the website forms add leads with the public key (insert only)
   alter table site_leads enable row level security; grant insert on site_leads to anon;
   create policy public_insert_site_leads on site_leads for insert to anon with check (true);
@@ -213,7 +214,9 @@ ok(r.ok && r.live === false, 'morning email ran in practice ' + JSON.stringify(r
 const mm = (await pg.query(`select * from cds_outbox where template='morning_email' order by created_at`)).rows;
 eq(mm.length, 2, 'one per address');
 const body = mm[0].body;
-eq(body.split('\n')[0], 'CDS morning, Tue, Oct 27: 8 things waiting', 'morning subject');
+eq(body.split('\n')[0], 'CDS morning, Tue, Oct 27: 11 things waiting', 'morning subject (8 + leads needing a call back date, EVV forms, reports due)');
+ok(body.includes('4 state reports and tax filings due') && body.includes('      Federal 941, one per consumer EIN (4 days left, due Oct 31)'), 'the email lists the reports and tax filings due Oct 31');
+ok(body.includes('2 EVV forms to finish') && body.includes('needs the consumer and the attendant to sign'), 'the email lists the EVV forms waiting to be signed');
 for (const want of [
   'Good morning. Here is what is waiting in the CDS hub today.',
   '1. Clear anything the state is waiting on',
@@ -234,7 +237,11 @@ for (const want of [
   '   2 EVV correction forms to review',
   'Sent to Samantha and Krystal every weekday at 8am. Nothing here goes to families.']) ok(body.includes(want), 'morning email has: ' + want);
 for (const name of ['Gil Ames', 'Hal Bent', 'Jo Cobb', 'Mo Fry']) ok(!body.includes(name), 'morning email leaves out ' + name + ' (reached from GoHighLevel)');
-ok(!body.includes('Ann Lee') && !body.includes('Bo Park') && !body.includes('Cy Ray'), 'people already called are not listed (status, note or a logged call)');
+// Already reached: not on the never-contacted list (they are on "need a call back date" instead, her approved rule 2026-10-23).
+const never = (body.split('never contacted')[1] || '').split('\n').slice(1).filter(l => /^      /.test(l)).join('\n');
+const nl = body.split('\n'), ni = nl.findIndex(l => /never contacted/.test(l)), neverList = []; for (let i = ni + 1; i < nl.length && /^      /.test(nl[i]); i++) neverList.push(nl[i]);
+ok(!neverList.join().match(/Ann Lee|Bo Park|Cy Ray/), 'people already called are not on the never-contacted list (status, note or a logged call)');
+ok(/leads? needs? a call back date/.test(body), 'reached leads with no call back date are asked for one');
 ok(/      Old Lead, came in [A-Z][a-z]{2} \d{1,2}\n/.test(body), 'a lead older than 6 days shows its date, not a weekday');
 eq((await jobs.morning()).skipped, 'already sent today', 'only one a day');
 at('2026-10-27T14:00:00Z'); eq((await jobs.morning()).skipped, 'not 8am on a weekday in Central time', '9am: nothing (the winter schedule)');

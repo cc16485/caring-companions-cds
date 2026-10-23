@@ -25,8 +25,8 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=23"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=10"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=24"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -1433,7 +1433,7 @@ button.fu-tile.check span { color:#14606F; }
             </select></td>
           </tr>
           <tr>
-            <td colspan="2"><strong>Annual CPA Audit</strong></td><td><strong>Within 150 days of fiscal year end</strong></td>
+            <td colspan="2"><strong>Annual CPA Audit</strong> (fiscal year ends Dec 31)</td><td><strong>May 30</strong> (150 days later)</td>
             <td><select onchange="saveQuarterStatus('audit',this.value)" id="qstat_audit" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)">
               <option value="pending">⬜ Pending</option>
               <option value="submitted">✅ Submitted</option>
@@ -1449,15 +1449,15 @@ button.fu-tile.check span { color:#14606F; }
       <div class="card-title"><span class="icon">💰</span> Tax Filing Calendar (Per Consumer EIN)</div>
       <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;font-style:italic">⚠️ All taxes filed under CONSUMER's EIN, not agency EIN. Vendor liable for IRS penalties per Senate Bill 710.</div>
       <table>
-        <thead><tr><th>Form</th><th>Frequency</th><th>Due</th><th>Description</th></tr></thead>
+        <thead><tr><th>Form</th><th>Frequency</th><th>Due</th><th>Description</th><th>Status (also on Today)</th></tr></thead>
         <tbody>
-          <tr><td><strong>Federal 941</strong></td><td>Quarterly</td><td>Apr 30, Jul 31, Oct 31, Jan 31</td><td>Federal payroll taxes</td></tr>
+          <tr><td><strong>Federal 941</strong></td><td>Quarterly</td><td>Apr 30, Jul 31, Oct 31, Jan 31</td><td>Federal payroll taxes</td><td><select onchange="saveQuarterStatus('f941',this.value)" id="qstat_f941" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)"><option value="pending">⬜ Pending</option><option value="submitted">✅ Submitted</option></select></td></tr>
           <tr><td><strong>Federal 944</strong></td><td>Annual alt.</td><td>January 31</td><td>Small employer alternative</td></tr>
-          <tr><td><strong>MO 941</strong></td><td>Quarterly</td><td>Apr 30, Jul 31, Oct 31, Jan 31</td><td>Missouri state payroll taxes</td></tr>
+          <tr><td><strong>MO 941</strong></td><td>Quarterly</td><td>Apr 30, Jul 31, Oct 31, Jan 31</td><td>Missouri state payroll taxes</td><td><select onchange="saveQuarterStatus('mo941',this.value)" id="qstat_mo941" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)"><option value="pending">⬜ Pending</option><option value="submitted">✅ Submitted</option></select></td></tr>
           <tr><td><strong>DES Wage Report (UInteract)</strong></td><td>Quarterly</td><td>Q1: Apr 30 | Q2: Jul 31 | Q3: Oct 31 | Q4: Jan 31</td><td>Filed per consumer under CONSUMER's EIN via <a href="https://uinteract.labor.mo.gov" target="_blank" style="color:var(--primary-light)">uinteract.labor.mo.gov</a>. Separate payment per consumer. Penalty: 10% or $100/month, max 20%/$200. Consumer must have paid $1,000+ in quarter to get account number.</td></tr>
           <tr><td><strong>KC/STL Local</strong></td><td>Quarterly</td><td>Varies</td><td>Kansas City & St. Louis only</td></tr>
-          <tr><td><strong>W-2 / W-3</strong></td><td>Annual</td><td>January 31</td><td>Federal annual wage reporting</td></tr>
-          <tr><td><strong>MO W-3</strong></td><td>Annual</td><td>February 28</td><td>Missouri annual reconciliation</td></tr>
+          <tr><td><strong>W-2 / W-3</strong></td><td>Annual</td><td>January 31</td><td>Federal annual wage reporting</td><td><select onchange="saveQuarterStatus('w2',this.value)" id="qstat_w2" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)"><option value="pending">⬜ Pending</option><option value="submitted">✅ Submitted</option></select></td></tr>
+          <tr><td><strong>MO W-3</strong></td><td>Annual</td><td>February 28</td><td>Missouri annual reconciliation</td><td><select onchange="saveQuarterStatus('mow3',this.value)" id="qstat_mow3" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)"><option value="pending">⬜ Pending</option><option value="submitted">✅ Submitted</option></select></td></tr>
           <tr><td><strong>Local Annual Rec.</strong></td><td>Annual</td><td>Varies</td><td>KC & STL local reconciliation</td></tr>
         </tbody>
       </table>
@@ -2323,8 +2323,8 @@ button.fu-tile.check span { color:#14606F; }
       <div style="text-align:center;padding:14px;background:var(--gray-100);border-radius:8px">
         <div style="font-size:12px;color:var(--gray-600);margin-bottom:6px">Internal thresholds</div>
         <div style="font-size:11px">✅ Target: <strong>≥95%</strong> real-time EVV rate</div>
-        <div style="font-size:11px;margin-top:4px">🟡 Agency-wide: <strong id="threshAgencyWarn">5+</strong> corrections/month = review</div>
-        <div style="font-size:11px;margin-top:4px">🔴 Agency-wide: <strong id="threshAgencyDanger">10+</strong> = red flag</div>
+        <div style="font-size:11px;margin-top:4px">🔴 Agency-wide: more than <strong>5%</strong> of this month's shifts = red flag</div>
+        <div style="font-size:11px;margin-top:4px">This month: <strong id="threshAgencyWarn">—</strong></div>
         <div style="font-size:11px;margin-top:4px">🔴 Per attendant: <strong>3+</strong>/month = red flag</div>
       </div>
     </div>
@@ -12371,8 +12371,7 @@ function saveCarePlan() {
 // ============================================================
 // EVV CORRECTIONS
 // ============================================================
-const CORRECTION_WARN_THRESHOLD = 5;   // agency-wide yellow
-const CORRECTION_DANGER_THRESHOLD = 10; // agency-wide red
+// Agency-wide EVV standard: CDSWellSky.EVV_GOAL, 5% of this month's shifts (her call 2026-10-23; the old 5 and 10 counts are gone).
 const CORRECTION_PER_ATTENDANT_LIMIT = 3; // per-attendant red flag
 
 function addCorrection() {
@@ -12530,9 +12529,11 @@ function renderCorrections() {
   const total = thisMonthCorrections.length;
 
   document.getElementById('threshMonthTotal').textContent = total;
-  document.getElementById('threshMonthTotal').style.color = total >= CORRECTION_DANGER_THRESHOLD ? 'var(--danger)' : total >= CORRECTION_WARN_THRESHOLD ? 'var(--warn)' : 'var(--success)';
-  document.getElementById('threshAgencyWarn').textContent = CORRECTION_WARN_THRESHOLD + '+';
-  document.getElementById('threshAgencyDanger').textContent = CORRECTION_DANGER_THRESHOLD + '+';
+  // One standard (2026-10-23): more than 5% of this month's shifts is the red flag (same as the Dashboard and Hours page).
+  const evvShifts = CDSWellSky.shiftsThisMonth(getObj('wellskyCheck').shifts, new Date());
+  const evvShare = evvShifts ? total / evvShifts : null;
+  document.getElementById('threshMonthTotal').style.color = evvShare != null && evvShare > CDSWellSky.EVV_GOAL ? 'var(--danger)' : 'var(--success)';
+  document.getElementById('threshAgencyWarn').textContent = evvShare == null ? 'no WellSky shift count yet' : (Math.round(evvShare * 1000) / 10) + '% of ' + evvShifts + ' shifts';
 
   // Per-attendant counts
   const byAttendant = {};
@@ -13114,8 +13115,32 @@ const _TODAY_ACT = {
   profile: ['Open',           'openProfile(this.dataset.id)'],
   task:    ['Done',           '_todayTaskDone(this)'],
   oig:     ['Open OIG card',  "showPage('activeattendants')"],
-  attendant: ['Open',         "showPage('activeattendants')"]
+  attendant: ['Open',         "showPage('activeattendants')"],
+  report:  ['Mark it sent',   '_todayReportSent(this)'],
+  evv:     ['Open EVV forms', "showPage('evvcorrections')"],
+  payroll: ['Open Payroll',   "showPage('payroll')"],
+  dhss:    ['Reported',       '_todayDhssReported(this)']
 };
+// Approved due dates (2026-10-23): a report or tax filing marked sent for its current due date,
+// and a DHSS change report recorded on the check-in call that found the change.
+function _todayReportSent(btn) {
+  const r = CDSRules.reportDue(btn.dataset.k);
+  if (!r || !confirm('Mark "' + r.title + '" (due ' + _niceDay(r.due) + ') as sent?')) return;
+  saveQuarterStatus(btn.dataset.k, 'submitted');
+  try { loadQuarterStatus(); } catch (e) {}
+  renderDailyRoutine();
+}
+function _todayDhssReported(btn) {
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === btn.dataset.id);
+  const log = c && c.contacts && c.contacts[btn.dataset.k];
+  if (!log) return;
+  const date = prompt('Date you reported the change to DHSS (YYYY-MM-DD):', _todayIso());
+  if (!date) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('Please use YYYY-MM-DD.'); return; }
+  log.dhssReported = { date, by: _acWho(), at: new Date().toISOString() };
+  setData('consumers', consumers);
+  renderDailyRoutine();
+}
 // The Attendants step (2026-10-22): office to-dos and applications come from the cds-match server,
 // the Roster from this page, the automatic OIG clears from cds-oig. Loaded when Today draws, again
 // after 2 minutes or on Refresh. A load that fails says so on Today; nothing goes quiet.
@@ -13126,9 +13151,17 @@ async function _todayAttLoad(force) {
   _todayAtt.busy = true;
   try {
     const [t, p] = await Promise.all([cdsMatchApi('tasks'), cdsMatchApi('packetList')]);
-    _todayAtt.data = { tasks: t.tasks || [], applications: p.attendants || [] };
+    _todayAtt.data = Object.assign(_todayAtt.data || {}, { tasks: t.tasks || [], applications: p.attendants || [] });
     _todayAtt.error = '';
   } catch (e) { _todayAtt.error = e.message || String(e); }
+  // EVV forms sent in online (2026-10-23): for the EVV due dates on Today and the 5% standard.
+  try {
+    const { data, error } = await _db.from('evv_submissions').select('consumer, attendant, visitdate, sig_attendant, sig_consumer, processed')
+      .eq('agency_id', AGENCY_ID).eq('processed', false);
+    if (error) throw new Error(error.message);
+    _todayAtt.data = Object.assign(_todayAtt.data || {}, { evvSubs: (data || []).map(r => ({ ...r, sig_attendant: !!r.sig_attendant, sig_consumer: !!r.sig_consumer })) });
+    _todayAtt.evvError = '';
+  } catch (e) { _todayAtt.evvError = e.message || String(e); }
   _todayAtt.at = Date.now(); _todayAtt.busy = false;
   try { _loadDashOig(); } catch (e) {}
   renderDailyRoutine();
@@ -13147,7 +13180,14 @@ function _todayAttWork() {
     if (/^attendant:/.test(ref) && x && (x.result === 'clear' || x.review === 'not_them') && x.checked_at)
       auto[ref.slice(10)] = new Date(x.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
   });
-  return Object.assign({}, _todayAtt.data, { roster: getData('attendants').filter(a => a.status !== 'inactive'), autoOig: auto });
+  // First worked shift per attendant (WellSky), for the I-9 due date of anyone not finished onboarding.
+  const first = {}, sh = getObj('wellskyCheck').shifts, today = _todayIso();
+  ((sh && sh.consumers) || []).forEach(c => (c.shifts || []).forEach(x => {
+    if (!x.attendant || !x.date || x.date >= today) return;
+    const k = CDSWellSky.firstLast(x.attendant).toLowerCase();
+    if (!first[k] || x.date < first[k]) first[k] = x.date;
+  }));
+  return Object.assign({}, _todayAtt.data, { roster: getData('attendants').filter(a => a.status !== 'inactive'), autoOig: auto, firstShift: first });
 }
 function _todayPeople(n, i) {
   const ppl = i.people || [];
@@ -13162,13 +13202,15 @@ function _todayPeople(n, i) {
     const id = p.id || (p.act === 'lead' ? '' : (consumers.find(c => CDSWellSky.nameKey(c.name) === CDSWellSky.nameKey(p.name)) || {}).id || '');
     const act = p.act === undefined ? 'profile' : p.act;
     const a = _TODAY_ACT[act];
-    const can = a && (act === 'shift' ? p.key : act === 'oig' || act === 'attendant' ? true : id);
+    const can = a && (act === 'shift' || act === 'report' ? p.key : ['oig', 'attendant', 'evv', 'payroll'].includes(act) ? true : id);
     const due = p.due ? '<span class="td-due ' + (p.due < today ? 'late' : p.due <= soon ? 'soon' : '') + '">' +
       (p.due < today ? 'Late, was due ' : 'Due ') + esc(_niceDay(p.due)) + '</span>' : '';
     const why = p.why || [p.county, p.at && !isNaN(Date.parse(p.at)) ? 'since ' + _niceDay(/T/.test(p.at) ? CDSWellSky.isoLocal(new Date(p.at)) : String(p.at).slice(0, 10)) : ''].filter(Boolean).join(', ');
-    return '<div class="td-row"><span class="td-name">' + esc(CDSWellSky.firstLast(p.name)) + '</span>' +
+    // "Last, First" from WellSky reads "First Last"; a report title keeps its comma.
+    const shown = act === 'report' || act === 'payroll' ? p.name : CDSWellSky.firstLast(p.name);
+    return '<div class="td-row"><span class="td-name">' + esc(shown) + '</span>' +
       (why ? '<span class="td-why">' + esc(why) + '</span>' : '') + due +
-      (can ? '<button class="btn btn-sm btn-outline td-btn" data-id="' + esc(id) + '" data-k="' + esc(p.key || '') + '" onclick="' + a[1] + '">' + a[0] + '</button>' : '') +
+      (can ? '<button class="btn btn-sm btn-outline td-btn" data-id="' + esc(id) + '" data-k="' + esc(p.key || p.month || '') + '" onclick="' + a[1] + '">' + a[0] + '</button>' : '') +
       '</div>';
   }).join('');
   return ' <button class="td-toggle" data-k="' + esc(key) + '" onclick="_todayToggle(this.dataset.k,' + (open ? 'false' : 'true') + ')">' +
@@ -13193,7 +13235,11 @@ function renderDailyRoutine() {
     wellskyItems: wsAll.filter(i => !i.system),
     wsPeople: _activePeople(), nameKey: CDSWellSky.nameKey,
     firstShiftOf, followups: commForToday(), noShift: noShiftList(), wsAuth: wsAuthFor,
-    attendantWork: _todayAttWork()
+    attendantWork: _todayAttWork(),
+    // Approved due dates (2026-10-23): reports and tax filings, EVV forms, payroll uploads.
+    quarterStatus: getObj('quarterStatus'),
+    evv: { corrections: getData('evvCorrections'), submissions: (_todayAtt.data && _todayAtt.data.evvSubs) || [] },
+    payroll: { runs: getObj('payrollTotals').runs || [], registers: getObj('attendantWages').registers || [] }
   });
   _todayAttLoad(false);
   const owner = ldWhoOwner();
@@ -13202,9 +13248,11 @@ function renderDailyRoutine() {
   if (s2 && wsSystem.length && !owner)
     s2.note = (staleSince ? 'WellSky numbers here are from ' + _niceDay(staleSince) + '.' : 'WellSky numbers here may be out of date.') +
               ' Samantha has been told and is fixing the WellSky check.';
-  const attErr = _todayAtt.error
+  const attErr = (_todayAtt.error
     ? '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>The attendant to-dos did not load:</strong> ' + esc(_todayAtt.error) +
-      (/refresh/i.test(_todayAtt.error) ? '' : ' Press Refresh to try again.') + '</div></div>' : '';
+      (/refresh/i.test(_todayAtt.error) ? '' : ' Press Refresh to try again.') + '</div></div>' : '') +
+    (_todayAtt.evvError ? '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>The EVV forms sent in online did not load:</strong> ' +
+      esc(_todayAtt.evvError) + ' Press Refresh to try again.</div></div>' : '');
   const systemHtml = owner && wsSystem.length
     ? '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>For you, Samantha (the team does not see this):</strong>' +
       wsSystem.map(i => '<div style="margin-top:4px">' + esc(i.t) + '</div>').join('') + '</div></div>'
@@ -13294,10 +13342,7 @@ function renderTodayTop() {
   if (!host) return;
   const rows = [];
   // State reports due in the next 30 days, or late, until marked Submitted on Deadlines (her yes 10-22).
-  CDSRules.reportsDue(getObj('quarterStatus')).forEach(r => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill ' +
-    (r.late || r.days <= 7 ? 'bad' : 'warn') + '">' + (r.late ? 'Late' : r.days === 0 ? 'Due today' : r.days === 1 ? '1 day left' : r.days + ' days left') +
-    '</span> <b>' + esc(r.title) + '</b>, due ' + esc(_niceDay(r.due)) + '</span>' +
-    '<a href="#calendar" onclick="showPage(\'calendar\');return false">Mark it sent</a></div>'));
+  // State reports and tax filings moved to Today's step 1 with their due dates (2026-10-23).
   const soon = consumers.map(c => ({ c, r: ongoingRequirements(c).annual })).filter(x => x.r.soon && !x.r.overdue)
     .sort((a, b) => a.r.days - b.r.days);
   soon.forEach(x => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill warn">' +
@@ -13415,25 +13460,26 @@ function updateDashboard() {
   const allCorrections = getData('evvCorrections');
   const monthCorrections = allCorrections.filter(c => c.visitdate && c.visitdate.startsWith(thisMonth));
   const pendingCorrections = allCorrections.filter(c => getStatusFromCorrection(c) !== 'complete' && getStatusFromCorrection(c) !== 'denied');
-  const corrTotal = monthCorrections.length;
+  // Her standard (2026-10-23): no more than 5% of this month's shifts need a manual fix. Counts the
+  // forms logged plus those sent in online this month, as the Hours page does.
+  const subsMonth = ((_todayAtt.data && _todayAtt.data.evvSubs) || []).filter(x => String(x.visitdate || '').startsWith(thisMonth)).length;
+  const corrTotal = monthCorrections.length + subsMonth;
+  const shiftsMonth = CDSWellSky.shiftsThisMonth(getObj('wellskyCheck').shifts, new Date());
+  const corrShare = shiftsMonth ? corrTotal / shiftsMonth : null;
   document.getElementById('statCorrections').textContent = corrTotal;
   document.getElementById('statCorrectionsPending').textContent = pendingCorrections.length;
   const corrCard = document.getElementById('correctionStatCard');
   const corrSub = document.getElementById('correctionStatSub');
-  if (corrTotal >= CORRECTION_DANGER_THRESHOLD) {
+  const pctTxt = corrShare == null ? '' : (Math.round(corrShare * 1000) / 10) + '% of ' + shiftsMonth + ' shifts';
+  if (corrShare != null && corrShare > CDSWellSky.EVV_GOAL) {
     document.getElementById('statCorrections').style.color = 'var(--danger)';
     corrCard.style.borderLeftColor = 'var(--danger-light)';
-    corrSub.textContent = 'Red flag: ' + corrTotal + ' corrections this month. Review them now.';
+    corrSub.textContent = 'Over the 5% goal: ' + pctTxt + ' needed a manual fix. Review them now.';
     corrSub.style.color = 'var(--danger)';
-  } else if (corrTotal >= CORRECTION_WARN_THRESHOLD) {
-    document.getElementById('statCorrections').style.color = 'var(--warn)';
-    corrCard.style.borderLeftColor = 'var(--warn-light)';
-    corrSub.textContent = 'Higher than usual: ' + corrTotal + ' corrections this month. Keep an eye on it.';
-    corrSub.style.color = 'var(--warn)';
   } else {
     document.getElementById('statCorrections').style.color = 'var(--success)';
     corrCard.style.borderLeftColor = 'var(--success-light)';
-    corrSub.textContent = 'Within normal range';
+    corrSub.textContent = corrShare == null ? 'Goal: 5% of shifts or less (no WellSky shift count yet)' : 'Within the 5% goal: ' + pctTxt;
     corrSub.style.color = 'var(--success)';
   }
 
