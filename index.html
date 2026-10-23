@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=12"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=13"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -516,6 +516,9 @@ input, select, textarea { border-radius:10px; }
 .ld-open:hover { background:var(--cute-teal-pale); }
 .ld-log { flex:1.4 !important; border:0; background:var(--cute-teal); color:#fff; }
 .ld-log:hover { background:#155A68; }
+.ld-shut { flex:0 0 auto !important; padding:0 16px; border:1.5px solid #e4e1d8; background:#fff; color:#55677a; }
+.ld-shut:hover { border-color:#9B2C1A; color:#9B2C1A; }
+.ld-came { font-weight:700; color:#0D365F; }
 .ld-move { flex:1.4 !important; border:0; background:var(--cute-honey); color:var(--cute-ink); }
 .ld-empty { grid-column:1/-1; background:#fff; border-radius:20px; padding:28px; text-align:center; color:#55677a; font-size:15px; box-shadow:var(--cute-shadow); }
 .ld-choice { display:flex; flex-direction:column; gap:4px; width:100%; text-align:left; padding:14px 18px; margin-bottom:10px; border-radius:18px;
@@ -3650,6 +3653,25 @@ button.fu-tile.check span { color:#14606F; }
   </div>
 </div>
 
+<!-- Close a lead (2026-10-22, her ask: make a lead inactive or mark it spam) -->
+<div class="modal-overlay" id="closeLeadModal">
+  <div class="modal" style="width:520px;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:24px" id="closeLeadTitle">Close this lead</div>
+      <button class="modal-close" onclick="closeModal('closeLeadModal')" aria-label="Close">×</button>
+    </div>
+    <input type="hidden" id="cl_id">
+    <p style="margin:0 0 14px;font-size:14.5px;color:#55677a">Why are they leaving the list? They move to Show closed, and you can reopen them any time.</p>
+    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_inactive')"><b>Inactive</b><span>Stopped answering, or went quiet.</span></button>
+    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_ni')"><b>Not interested</b><span>Told us they do not want CDS right now.</span></button>
+    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_other')"><b>Went with another agency</b><span>Chose someone else.</span></button>
+    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_spam')"><b>Spam</b><span>Not a real person, a sales pitch, or a fake form.</span></button>
+    <div class="form-group" style="margin-top:6px"><label for="cl_note">Note (optional)</label>
+      <textarea id="cl_note" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:10px;font-family:inherit;font-size:13px" placeholder="For example: no answer after 3 calls"></textarea>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addPipelineModal">
   <div class="modal">
     <div class="modal-header">
@@ -3706,6 +3728,8 @@ button.fu-tile.check span { color:#14606F; }
           <option value="transfer_complete">Transfer done</option>
           <option value="closed_ni">Closed, not interested</option>
           <option value="closed_other">Closed, went with another agency</option>
+          <option value="closed_inactive">Closed, inactive (stopped answering)</option>
+          <option value="closed_spam">Closed, spam (not a real lead)</option>
         </select>
       </div>
       <div class="form-group"><label>Call back on</label><input type="date" id="pl_followup"></div>
@@ -4075,6 +4099,8 @@ button.fu-tile.check span { color:#14606F; }
           <option value="transfer_complete">Transfer done</option>
           <option value="closed_ni">Closed, not interested</option>
           <option value="closed_other">Closed, went with another agency</option>
+          <option value="closed_inactive">Closed, inactive (stopped answering)</option>
+          <option value="closed_spam">Closed, spam (not a real lead)</option>
         </select>
       </div>
       <div class="form-group"><label>Call back on</label><input type="date" id="ep_followup"></div>
@@ -4085,7 +4111,7 @@ button.fu-tile.check span { color:#14606F; }
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('editPipelineModal')">Cancel</button>
-      <button class="btn btn-danger" onclick="closePipelineContact(document.getElementById('ep_id').value)">Close this lead</button>
+      <button class="btn btn-danger" onclick="closeModal('editPipelineModal');openCloseLead(document.getElementById('ep_id').value)">Close this lead</button>
       <button class="btn btn-primary" onclick="savePipelineUpdate()">Save</button>
     </div>
   </div>
@@ -5697,9 +5723,10 @@ const PIPELINE_TYPE_LABELS = { lead: 'Still deciding', referral: 'New to CDS - R
 const PIPELINE_STATUS_LABELS = {
   new: 'New, not called yet', nurturing: 'Following up', submitted: 'Sent to the state',
   processing: 'The state is working on it', authorized: 'Approved by the state', transfer_complete: 'Transfer done',
-  closed_ni: 'Closed, not interested', closed_other: 'Closed, went with another agency'
+  closed_ni: 'Closed, not interested', closed_other: 'Closed, went with another agency',
+  closed_inactive: 'Closed, inactive', closed_spam: 'Closed, spam'
 };
-const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other'];
+const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other','closed_inactive','closed_spam'];
 const PIPELINE_DONE_STATUSES = ['authorized','transfer_complete'];
 
 // ============================================================================
@@ -6045,13 +6072,46 @@ function savePipelineUpdate() {
   updateDashboard();
 }
 
-function closePipelineContact(id) {
-  if (!confirm('Close this lead? You can still find them with Show closed.')) return;
+// Close a lead with a reason, or reopen one (2026-10-22). The reason is the status, so every
+// place that already skips closed leads (Today, the 8am email, alerts) skips these too. The call
+// back date is cleared so nothing comes due for a closed lead. Nothing is sent and GoHighLevel is not touched.
+function openCloseLead(id) {
+  const p = getData('pipeline').find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('cl_id').value = id;
+  document.getElementById('closeLeadTitle').textContent = 'Close ' + (p.name || 'this lead');
+  document.getElementById('cl_note').value = '';
+  openModal('closeLeadModal');
+}
+
+function closeLeadAs(status) {
+  const id = document.getElementById('cl_id').value;
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === id);
-  if (p) { p.status = 'closed_ni'; }
+  if (!p) return;
+  p.status = status;
+  p.closedAt = new Date().toISOString();
+  p.followup = '';
+  const note = document.getElementById('cl_note').value.trim();
+  if (!p.notes) p.notes = [];
+  p.notes.push({ date: new Date().toLocaleDateString('en-CA'),
+                 text: 'Closed: ' + (CDSRules.CLOSED_LABELS[status] || status) + (note ? '. ' + note : '') });
   setData('pipeline', pipeline);
-  closeModal('editPipelineModal');
+  closeModal('closeLeadModal');
+  renderPipeline();
+  if (document.getElementById('page-leadprofile')?.classList.contains('active')) renderLeadProfile();
+  updateDashboard();
+}
+
+function reopenLead(id) {
+  const pipeline = getData('pipeline');
+  const p = pipeline.find(x => x.id === id);
+  if (!p) return;
+  p.status = 'nurturing';
+  delete p.closedAt;
+  if (!p.notes) p.notes = [];
+  p.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: 'Reopened.' });
+  setData('pipeline', pipeline);
   renderPipeline();
   if (document.getElementById('page-leadprofile')?.classList.contains('active')) renderLeadProfile();
   updateDashboard();
@@ -6233,6 +6293,9 @@ function renderLeadProfile(){
     '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
       '<button class="btn btn-primary" onclick="openPipelineEdit(\'' + pid + '\')">Log a call</button>' +
       (card && card.step === 'ready' ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
+      (PIPELINE_CLOSED_STATUSES.includes(p.status)
+        ? '<button class="btn btn-outline" onclick="reopenLead(\'' + pid + '\')">Reopen</button>'
+        : card && card.step !== 'closed' ? '<button class="btn btn-outline" onclick="openCloseLead(\'' + pid + '\')">Close: inactive or spam</button>' : '') +
     '</div>' +
     '<div style="margin-top:14px;font-weight:700;color:var(--primary);font-size:14px">Messages</div>' +
     '<div class="field-note" style="margin-top:2px">Each one opens the text and email first. Nothing sends until you press Send.</div>' +
@@ -6825,16 +6888,18 @@ function renderPipeline() {
     const phone = p.phone ? '<a href="tel:' + tel + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>' + esc(p.phone) + '</a>' : '<span>No phone yet</span>';
     const main = c.step === 'ready'
       ? '<button type="button" class="ld-move" onclick="convertToConsumer(\'' + id + '\')">Move to Consumers</button>'
-      : c.step === 'closed' ? ''
+      : c.step === 'closed' ? (PIPELINE_CLOSED_STATUSES.includes(p.status) ? '<button type="button" class="ld-open" onclick="reopenLead(\'' + id + '\')">Reopen</button>' : '')
       : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
+    const shut = c.step !== 'closed'
+      ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + ': inactive or spam">Close</button>' : '';
     return '<article class="ld-card' + (c.step === 'closed' ? ' closed' : '') + '">' +
       '<div class="ld-top"><h3>' + esc(p.name || 'No name') + '</h3><span class="ld-kind ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '">' + esc(c.kind) + '</span></div>' +
       '<p class="ld-who">' + esc(c.who) + '</p>' +
-      '<div class="ld-meta">' + (p.county ? '<span>' + esc(p.county) + ' County</span>' : '') + phone +
+      '<div class="ld-meta">' + (c.came ? '<span class="ld-came">' + esc(c.came) + '</span>' : '') + (p.county ? '<span>' + esc(p.county) + ' County</span>' : '') + phone +
         (p.fromWebsite ? '<span class="ld-web">From website</span>' : '') + '</div>' +
       '<div class="ld-next"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span>' +
         '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span></div>' +
-      '<div class="ld-btns"><button type="button" class="ld-open" onclick="openLeadProfile(\'' + id + '\')">Open</button>' + main + '</div>' +
+      '<div class="ld-btns"><button type="button" class="ld-open" onclick="openLeadProfile(\'' + id + '\')">Open</button>' + main + shut + '</div>' +
     '</article>';
   }).join('');
 }

@@ -13,7 +13,10 @@
 (function (root) {
   'use strict';
   const DAY = 864e5;
-  const CLOSED = ['closed_ni', 'closed_other'];
+  // closed_inactive and closed_spam added 2026-10-22 (her ask: a way to make a lead inactive or mark it spam).
+  const CLOSED = ['closed_ni', 'closed_other', 'closed_inactive', 'closed_spam'];
+  const CLOSED_LABELS = { closed_ni: 'Not interested', closed_other: 'Went with another agency',
+                          closed_inactive: 'Inactive, stopped answering', closed_spam: 'Spam, not a real lead' };
   // One rule for "active" (2026-10-22): the hub saves "inactive" lowercase and old
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
   const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
@@ -308,6 +311,22 @@
     return parts.join(' ');
   }
 
+  // The day a lead came in, for the card (2026-10-22). A website lead has the exact time
+  // (addedAt, shown as the Central day); someone the office added uses the first contact date they typed.
+  function cameIn(p, todayIso) {
+    if (!p) return '';
+    const typed = /^\d{4}-\d{2}-\d{2}$/.test(String(p.firstContact || '')) ? p.firstContact : '';
+    const at = Date.parse(p.addedAt || '');
+    let iso = '';
+    if (p.fromWebsite && !isNaN(at)) iso = isoLocal(new Date(at));
+    else if (typed) iso = typed;
+    else if (!isNaN(at)) iso = isoLocal(new Date(at));
+    if (!iso) return '';
+    const sameYear = String(todayIso || '').slice(0, 4) === iso.slice(0, 4);
+    return 'Came in ' + new Date(iso + 'T12:00:00').toLocaleDateString('en-US', sameYear
+      ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
   // p = a pipeline record, calls = cds_lead_calls rows, todayIso = yyyy-mm-dd,
   // moved = true when this person is already on the Consumers list.
   // tone: late (red), today (honey), later, none, ready.
@@ -365,12 +384,12 @@
       due = 'Approved'; tone = 'ready'; sort = 1;
       next = 'Move them to Consumers to start the first shift checklist.';
     } else {
-      due = done ? 'On the Consumers list' : 'Closed'; tone = 'none'; sort = 5;
-      next = done ? 'Nothing to do here.' : 'Closed. Open the profile to see why.';
+      due = done ? 'On the Consumers list' : 'Closed: ' + (CLOSED_LABELS[p.status] || 'closed'); tone = 'none'; sort = 5;
+      next = done ? 'Nothing to do here.' : 'Nothing to do. Press Reopen if they come back.';
     }
     // needsToday: a call that should happen today (the Leads summary line).
     const needsToday = (step === 'call' && (tone === 'late' || tone === 'today')) || (step === 'state' && tone === 'late');
-    return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '' };
+    return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '', came: cameIn(p, todayIso) };
   }
 
   // State reports with a due date (2026-10-22, her yes): shown on Today's Coming up from 30 days
@@ -483,6 +502,6 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -104,7 +104,7 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(/if \(id === 'statesubmissions'\) \{ _ldStep = 'state'; id = 'pipeline'; \}/.test(html), 'the old #statesubmissions link opens Sent to state');
   const add = html.slice(html.indexOf('id="addSomeoneModal"'), html.indexOf('id="addPipelineModal"'));
   ['lead', 'referral', 'pccp'].forEach(t => ok(add.includes("openAddPipeline('" + t + "')"), 'Add someone offers ' + t));
-  ok(/cds-rules\.js\?v=(9|10|11|12)\b/.test(html), 'the page loads the new rules file (v=11 since the live Dashboard)');
+  ok(/cds-rules\.js\?v=(1[3-9])\b/.test(html), 'the page loads the new rules file (v=13 since close reasons)');
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(!/Packet Sent|Send Welcome/.test(r), 'Welcome and Packet are off the cards');
   ok(/Text the welcome/.test(html) && /Tell them the packet is on its way/.test(html), 'and on the profile');
@@ -120,6 +120,33 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(/'pl_hours','pl_notes'\]\.forEach/.test(html), 'the notes box starts empty each time');
   ok((html.match(/New to CDS - Referral/g) || []).length >= 5 && (html.match(/Moving from Another Agency - PCCP/g) || []).length >= 5, 'her two names everywhere');
   ok(/'leavingAgency','whySwitching','readiness','medicaidStatus'/.test(html), 'a lead turned PCCP keeps its transfer answers');
+}
+
+// ── close a lead: inactive or spam, and the day they came in (2026-10-22, her ask) ──
+{
+  ['closed_inactive', 'closed_spam', 'closed_ni', 'closed_other'].forEach(st => {
+    const c = R.leadCard({ type: 'lead', status: st, fromWebsite: true, siteLeadId: 's1', addedAt: '2026-10-19T14:00:00Z' }, [], T);
+    ok(c.step === 'closed' && c.due === 'Closed: ' + R.CLOSED_LABELS[st], st + ' leaves the steps and says why');
+    ok(!c.needsToday, st + ' never needs a call today');
+  });
+  const spam = { type: 'lead', status: 'closed_spam', fromWebsite: true, siteLeadId: 's9', notes: [form('Who needs care: Yes')] };
+  ok(!R.leadWaiting(spam, []), 'a spam website lead is not waiting (no alert, no reminder)');
+  ok(!R.siteLeadWaiting({ id: 's9' }, [spam], []), 'and its website row is not waiting either');
+  ok(R.cameIn({ fromWebsite: true, addedAt: '2026-10-20T15:00:00Z', firstContact: '2026-10-20' }, T) === 'Came in Oct 20', 'website lead: came in day');
+  ok(R.cameIn({ firstContact: '2026-09-02', addedAt: '2026-10-01T15:00:00Z' }, T) === 'Came in Sep 2', 'office lead: the first contact date they typed');
+  ok(R.cameIn({ firstContact: '2025-12-30' }, T) === 'Came in Dec 30, 2025', 'last year shows the year');
+  ok(R.cameIn({}, T) === '', 'no date, no line');
+  ok(R.leadCard({ type: 'lead', status: 'new', firstContact: '2026-10-18' }, [], T).came === 'Came in Oct 18', 'the card carries it');
+  const html = readFileSync(ROOT + '/index.html', 'utf8');
+  const m = html.slice(html.indexOf('id="closeLeadModal"'), html.indexOf('id="addPipelineModal"'));
+  ['closed_inactive', 'closed_ni', 'closed_other', 'closed_spam'].forEach(st => ok(m.includes("closeLeadAs('" + st + "')"), 'Close offers ' + st));
+  ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam'\]/.test(html), 'the hub knows all four');
+  const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
+  ok(r.includes('openCloseLead(') && r.includes('reopenLead(') && r.includes('ld-came'), 'cards have Close, Reopen and the came-in date');
+  const f = html.slice(html.indexOf('function closeLeadAs('), html.indexOf('function reopenLead('));
+  ok(f.includes("p.followup = ''"), 'closing clears the call back date');
+  ok(!/fetch|ghl|sendMessage/i.test(f), 'closing sends nothing');
+  ok(!/—/.test(m), 'no em dashes in the Close box');
 }
 
 console.log(pass + ' passed, ' + fail + ' failed');
