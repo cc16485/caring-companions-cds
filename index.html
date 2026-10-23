@@ -5424,6 +5424,8 @@ function consumerToFinish(c) {
 // Paused for a hospital stay) and the profile walks the office through the steps
 // in CDSRules.ENDING_REASONS. The record and its history always stay.
 let _endCid = null;
+// Today in Missouri, not UTC (after 7pm UTC is already tomorrow).
+function _endToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function _endWho() { const e = (document.getElementById('header_user') || {}).textContent || ''; return e.includes('@') ? e.split('@')[0] : 'office'; }
 function markConsumerInactive(cid) { openEnding(cid); }
 function openEnding(cid) {
@@ -5446,7 +5448,7 @@ function startEnding() {
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === _endCid);
   if (!c) return;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = _endToday();
   c.ending = { kind: r.id, startedAt: today, startedBy: _endWho(), eventDate: '', steps: {}, notes: '',
                dsdsNotice: '', lastDay: '', log: [{ at: new Date().toISOString(), by: _endWho(), t: 'Started: ' + r.t }] };
   c.status = r.pause ? 'paused' : 'closing';
@@ -5487,7 +5489,7 @@ function endClose(cid) {
   const r = CDSRules.endingReason(c.ending.kind);
   if (!confirm('DSDS closed ' + c.name + '\'s case. Mark them inactive? Everything stays on file.')) return;
   _endSave(cid, (c, e) => {
-    e.closedAt = new Date().toISOString().slice(0, 10);
+    e.closedAt = _endToday();
     e.log.push({ at: new Date().toISOString(), by: _endWho(), t: 'DSDS closed the case. Marked inactive.' });
     c.status = 'inactive';
     c.inactiveAt = e.lastDay;
@@ -5505,7 +5507,7 @@ function endCancel(cid) {
   const msg = r && r.pause ? 'Mark ' + c.name + ' back home and active?' : 'Stop this and keep ' + c.name + ' active? (DSDS kept services, or it was started by mistake.)';
   if (!confirm(msg)) return;
   _endSave(cid, (c, e) => {
-    e.endedAt = new Date().toISOString().slice(0, 10);
+    e.endedAt = _endToday();
     e.log.push({ at: new Date().toISOString(), by: _endWho(), t: r && r.pause ? 'Back home. Active again.' : 'Stopped. Kept active.' });
     c.status = 'active';
     c.pastEndings = (c.pastEndings || []).concat([e]);
