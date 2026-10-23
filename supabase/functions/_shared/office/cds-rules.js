@@ -311,6 +311,7 @@
       if (r.group === 'tell' && !(d.dsds && d.dsds.date)) return it('tell DSDS right away (' + r.t.toLowerCase() + ')', true);
       const miss = endingMissing(e);
       if (miss.length) return it('next, ' + miss[0].charAt(0).toLowerCase() + miss[0].slice(1), true);
+      if (r.noDsds) return it('ready to mark inactive (no open authorization with us)', true);
       if (!e.dsdsNotice) return it('waiting on DSDS to decide. Keep serving them.', false);
       const appeal = appealEnds(e.dsdsNotice);
       if (appeal >= todayIso) return it('the appeal window ends ' + day(appeal) + '. Keep serving them until then.', false);
@@ -410,6 +411,13 @@
       cite: 'HCBS Manual 4.20',
       tip: 'Keep serving until DSDS approves the new agency. The new agency may not start before that.',
       steps: [S.learned, { k: 'newAgency', t: 'DSDS approved the new agency (write its name in the notes)', need: true }, S.file] },
+    // Her ask 2026-10-22 (roster cleanup): consumers on the hub roster with no open
+    // authorization with us. DSDS has no case of ours to close, so there is no DSDS
+    // notice; we record what Fusion showed and keep the proof (19 CSR 15-8.400(10)).
+    { id: 'authEnded', group: 'other', t: 'Authorization already ended, or never started with us', noDsds: true,
+      cite: 'No open DSDS case with us, so nothing for DSDS to close. Records: 19 CSR 15-8.400(10)',
+      tip: 'Only use this after Fusion shows no open authorization with Caring Companions. If one is open, pick another reason.',
+      steps: [{ k: 'fusion', t: 'Checked Fusion: no open authorization with us (write what Fusion showed in the notes)', need: true }, S.file] },
     { id: 'hospital', group: 'hospital', t: 'In the hospital or rehab for a short stay', cite: 'HCBS Manual 3.00', pause: true,
       tip: 'Not a closure. No CDS hours or billing for days in the hospital. Tell DSDS.',
       eventLabel: 'Went in on',

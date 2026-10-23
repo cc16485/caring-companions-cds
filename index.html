@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=19"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=20"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=8"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -5006,7 +5006,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=9');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=10');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5566,17 +5566,20 @@ function endClose(cid) {
   const c = getData('consumers').find(x => x.id === cid);
   if (!c || !c.ending) return;
   const miss = CDSRules.endingMissing(c.ending);
-  if (miss.length || !c.ending.dsdsNotice || !c.ending.lastDay) {
-    alert('Not yet. Still needed:\n- ' + miss.concat(!c.ending.dsdsNotice ? ['Date of DSDS\'s closing notice'] : [], !c.ending.lastDay ? ['Last day of services from DSDS'] : []).join('\n- '));
+  const r = CDSRules.endingReason(c.ending.kind);
+  // No open authorization with us (authEnded): no DSDS notice or last day is needed.
+  const noDsds = !!(r && r.noDsds);
+  if (miss.length || (!noDsds && (!c.ending.dsdsNotice || !c.ending.lastDay))) {
+    alert('Not yet. Still needed:\n- ' + miss.concat(!noDsds && !c.ending.dsdsNotice ? ['Date of DSDS\'s closing notice'] : [], !noDsds && !c.ending.lastDay ? ['Last day of services from DSDS'] : []).join('\n- '));
     return;
   }
-  const r = CDSRules.endingReason(c.ending.kind);
-  if (!confirm('DSDS closed ' + c.name + '\'s case. Mark them inactive? Everything stays on file.')) return;
+  if (!confirm(noDsds ? 'Fusion shows no open authorization with us. Mark ' + c.name + ' inactive? Everything stays on file.'
+                      : 'DSDS closed ' + c.name + '\'s case. Mark them inactive? Everything stays on file.')) return;
   _endSave(cid, (c, e) => {
     e.closedAt = _endToday();
-    e.log.push({ at: new Date().toISOString(), by: _endWho(), t: 'DSDS closed the case. Marked inactive.' });
+    e.log.push({ at: new Date().toISOString(), by: _endWho(), t: noDsds ? 'No open authorization with us. Marked inactive.' : 'DSDS closed the case. Marked inactive.' });
     c.status = 'inactive';
-    c.inactiveAt = e.lastDay;
+    c.inactiveAt = e.lastDay || e.closedAt;
     c.inactiveReason = r ? r.t : '';
     c.pastEndings = (c.pastEndings || []).concat([e]);
     c.ending = null;
@@ -5833,14 +5836,14 @@ function closingRecords(c) {
     const r = CDSRules.endingReason(e.kind) || { t: e.kind, cite: '', steps: [] };
     const d = e.steps || {};
     const outcome = open ? '<span class="badge badge-warn">' + (r.pause ? 'Paused now' : 'Closing now') + '</span>'
-      : e.closedAt ? '<span class="badge" style="background:#fdecea;color:var(--danger)">DSDS closed the case</span>'
+      : e.closedAt ? '<span class="badge" style="background:#fdecea;color:var(--danger)">' + (r.noDsds ? 'Inactive, no open authorization' : 'DSDS closed the case') + '</span>'
       : '<span class="badge badge-green">' + (r.pause ? 'Back home' : 'Kept active') + '</span>';
     const appeal = CDSRules.appealEnds(e.dsdsNotice);
     const rows = [
       row('Started', day(e.startedAt) + (e.startedBy ? ' by ' + esc(e.startedBy) : '')),
       r.eventLabel && e.eventDate ? row(esc(r.eventLabel), day(e.eventDate)) : '',
       ...r.steps.map(s => row(esc(s.t), d[s.k] && d[s.k].date ? day(d[s.k].date) + (d[s.k].by ? ' by ' + esc(d[s.k].by) : '') : '<span style="color:var(--gray-600)">' + (s.need ? 'not dated' : 'not used') + '</span>')),
-      r.pause ? '' : row('DSDS closing notice', e.dsdsNotice ? day(e.dsdsNotice) + (appeal ? ' (appeal window ended ' + day(appeal) + ')' : '') : '<span style="color:var(--gray-600)">none</span>'),
+      r.pause || r.noDsds ? '' : row('DSDS closing notice', e.dsdsNotice ? day(e.dsdsNotice) + (appeal ? ' (appeal window ended ' + day(appeal) + ')' : '') : '<span style="color:var(--gray-600)">none</span>'),
       e.lastDay ? row('Last day of services', day(e.lastDay)) : '',
       e.closedAt ? row('Marked inactive', day(e.closedAt)) : '',
       e.endedAt ? row(r.pause ? 'Back home' : 'Stopped, kept active', day(e.endedAt)) : '',
@@ -5900,6 +5903,11 @@ function endingCard(c) {
     ? '<div class="end-step"><span class="t"><strong>' + esc(r.eventLabel) + '</strong></span>' + dateIn(e.eventDate, "endSetField('" + id + "','eventDate',this.value)") + '</div>' : '';
   const finish = r.pause
     ? '<div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="endCancel(\'' + id + '\')">Back home, active again</button></div>'
+    : r.noDsds
+    ? '<div class="end-step"><span class="t"><strong>Last day we gave services</strong> <span class="end-cite">(if they ever had any)</span></span>' + dateIn(e.lastDay, "endSetField('" + id + "','lastDay',this.value)") + '</div>' +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn btn-primary btn-sm" onclick="endClose(\'' + id + '\')"' + (miss.length ? ' style="opacity:.55"' : '') + '>Mark inactive</button>' +
+        '<button class="btn btn-outline btn-sm" onclick="endCancel(\'' + id + '\')">Fusion shows an open authorization, keep active</button></div>'
     : '<div class="end-step"><span class="t"><strong>DSDS sent its closing notice on</strong><br><span class="end-cite">The consumer has 10 days to appeal. If they appeal in time, keep serving until DSDS decides (19 CSR 15-8.500(3)).</span></span>' +
         dateIn(e.dsdsNotice, "endSetField('" + id + "','dsdsNotice',this.value)") + '</div>' +
       (appeal ? '<div style="font-size:13px;margin:4px 0 6px;color:#7A4E0B"><strong>Appeal window ends ' + esc(_niceDay(appeal)) + '.</strong></div>' : '') +
@@ -5912,7 +5920,7 @@ function endingCard(c) {
     '<div style="font-size:17px;font-weight:700;margin:4px 0 2px">' + esc(r.t) + '</div>' +
     '<div class="end-cite">' + esc(r.cite) + '</div>' +
     (r.tip ? '<div style="font-size:13px;margin-top:6px">' + esc(r.tip) + '</div>' : '') +
-    (r.pause ? '' : '<div style="font-size:13px;margin-top:6px">Keep serving them until DSDS closes the case.</div>') +
+    (r.pause || r.noDsds ? '' : '<div style="font-size:13px;margin-top:6px">Keep serving them until DSDS closes the case.</div>') +
     '<div style="margin-top:10px">' + ev + r.steps.map(step).join('') + '</div>' +
     (function () {
       const left = endTaxOpen(c);
