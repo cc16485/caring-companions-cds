@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=21"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=22"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=9"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -836,6 +836,7 @@ button.fu-tile.check span { color:#14606F; }
             <span id="contactPct" style="font-weight:700">—</span>
           </div>
           <div class="progress-bar"><div class="progress-fill green" id="contactBar" style="width:0%"></div></div>
+          <div id="missedMonths" style="font-size:12px;color:var(--gray-600);margin-top:5px;display:none"></div>
         </div>
         <div>
           <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px">
@@ -1448,7 +1449,7 @@ button.fu-tile.check span { color:#14606F; }
           <tr><td><strong>Federal 941</strong></td><td>Quarterly</td><td>Apr 30, Jul 31, Oct 31, Jan 31</td><td>Federal payroll taxes</td></tr>
           <tr><td><strong>Federal 944</strong></td><td>Annual alt.</td><td>January 31</td><td>Small employer alternative</td></tr>
           <tr><td><strong>MO 941</strong></td><td>Quarterly</td><td>Apr 30, Jul 31, Oct 31, Jan 31</td><td>Missouri state payroll taxes</td></tr>
-          <tr><td><strong>DES Wage Report (UInteract)</strong></td><td>Quarterly</td><td>Q1: Apr 30 | Q2: Jul 30 | Q3: Oct 31 | Q4: Jan 31</td><td>Filed per consumer under CONSUMER's EIN via <a href="https://uinteract.labor.mo.gov" target="_blank" style="color:var(--primary-light)">uinteract.labor.mo.gov</a>. Separate payment per consumer. Penalty: 10% or $100/month, max 20%/$200. Consumer must have paid $1,000+ in quarter to get account number.</td></tr>
+          <tr><td><strong>DES Wage Report (UInteract)</strong></td><td>Quarterly</td><td>Q1: Apr 30 | Q2: Jul 31 | Q3: Oct 31 | Q4: Jan 31</td><td>Filed per consumer under CONSUMER's EIN via <a href="https://uinteract.labor.mo.gov" target="_blank" style="color:var(--primary-light)">uinteract.labor.mo.gov</a>. Separate payment per consumer. Penalty: 10% or $100/month, max 20%/$200. Consumer must have paid $1,000+ in quarter to get account number.</td></tr>
           <tr><td><strong>KC/STL Local</strong></td><td>Quarterly</td><td>Varies</td><td>Kansas City & St. Louis only</td></tr>
           <tr><td><strong>W-2 / W-3</strong></td><td>Annual</td><td>January 31</td><td>Federal annual wage reporting</td></tr>
           <tr><td><strong>MO W-3</strong></td><td>Annual</td><td>February 28</td><td>Missouri annual reconciliation</td></tr>
@@ -1901,7 +1902,7 @@ button.fu-tile.check span { color:#14606F; }
             If you are not sure whether they were with another vendor, <strong>try registering them in UInteract
             first</strong>. If it errors, they are a transfer. Then email MODES-5083 (Transferred Consumer
             Registration form) to cdstax@labor.mo.gov after their first payroll with you. Need: consumer's EIN, SSN, first payroll date with you, name of previous vendor. Download form: labor.mo.gov/media/22536/download<br><br>
-            <strong>After registration:</strong> File quarterly wage reports per consumer (Q1 Apr 30 / Q2 Jul 30 / Q3 Oct 31 / Q4 Jan 31). Wages reported under consumer's account — NEVER under Caring Companions' account. Separate payment per consumer — do NOT combine.<br><br>
+            <strong>After registration:</strong> File quarterly wage reports per consumer (Q1 Apr 30 / Q2 Jul 31 / Q3 Oct 31 / Q4 Jan 31). Wages reported under consumer's account — NEVER under Caring Companions' account. Separate payment per consumer — do NOT combine.<br><br>
             <strong>Parent attendant exception:</strong> If attendant is a parent of the consumer, wages are NEVER reportable for UI purposes — do not report them.
           </div>
           <div class="step-regs">General questions: cdstax@labor.mo.gov | 573-751-1995 Opt. 1 | Delinquent/penalties: Christopher Matzke 573-751-1867 | Wage reporting/adjustments: Kristie Riedmann 573-751-1995 x4105</div>
@@ -2500,15 +2501,16 @@ button.fu-tile.check span { color:#14606F; }
 
   <!-- SCHEDULED -->
   <div class="card" style="margin-bottom:20px">
-    <div class="card-title">🕐 Scheduled Automations</div>
+    <!-- 2026-10-22: these never ran on their own; the card said "Runs every..." Now it says what is by hand. -->
+    <div class="card-title">🕐 Weekly reminders (done by hand, nothing runs on its own)</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
       <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
         <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:4px">📱 Friday EVV Reminder</div>
-        <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Runs every <strong>Friday at 9 AM</strong><br>Reminds you to send EVV deadline alert to all active attendants</div>
+        <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Every <strong>Friday</strong>, by hand<br>Send the EVV deadline reminder (forms due Saturday 11:59 PM) from the EVV forms tab</div>
       </div>
       <div style="background:#FAF9F6;border:1.5px solid #e0e0e0;border-radius:8px;padding:12px">
         <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:4px">📋 Care Plan Digest</div>
-        <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Runs every <strong>Monday at 8 AM</strong><br>Reminds you to review consumers with expiring care plans</div>
+        <div style="font-size:11px;color:var(--gray-600);line-height:1.5">Every <strong>Monday</strong>, by hand<br>Expiring authorizations are already on Today under Protect the money</div>
       </div>
     </div>
     <div style="margin-top:12px;padding:10px 14px;background:#f0faf9;border-left:4px solid var(--accent);border-radius:0 6px 6px 0;font-size:12px">
@@ -3452,7 +3454,7 @@ button.fu-tile.check span { color:#14606F; }
           <em>They may have no account at all if they never paid $1,000 in a quarter with the previous vendor.</em><br><br>
           <strong>After registration — quarterly wage reporting:</strong><br>
           <a href="https://uinteract.labor.mo.gov/benefits/#/benefits/login" target="_blank" rel="noopener">Login</a> → Contribution and Wage Report → File Contribution and Wage Report. File oldest quarter first. Select Method A. Enter attendant SSN, name, and gross wages per quarter. Separate payment per consumer — never combine. If parent is the attendant: do NOT report those wages (not subject to UI tax).<br><br>
-          <strong>Quarterly deadlines:</strong> Q1 (Jan–Mar): Apr 30 | Q2 (Apr–Jun): Jul 30 | Q3 (Jul–Sep): Oct 31 | Q4 (Oct–Dec): Jan 31<br>
+          <strong>Quarterly deadlines:</strong> Q1 (Jan–Mar): Apr 30 | Q2 (Apr–Jun): Jul 31 | Q3 (Jul–Sep): Oct 31 | Q4 (Oct–Dec): Jan 31<br>
           Late penalty: 10% of tax or $100/month, whichever is greater — max 20% or $200.<br><br>
           Questions: cdstax@labor.mo.gov | 573-751-1995 Opt. 1<br>
           Penalties/delinquent: Christopher Matzke — 573-751-1867<br>
@@ -4541,6 +4543,9 @@ const AGENCY_ID        = 'caring-companions-cds';
 let _db   = null;   // Supabase client
 let _store = {};    // In-memory cache
 
+// Today in Missouri as yyyy-mm-dd (2026-10-22). toISOString() is UTC, which is already
+// tomorrow after about 7pm Central, so notes, logs and "due today" checks used the wrong day.
+function _todayIso() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function getData(key) {
   return Array.isArray(_store[key]) ? _store[key] : [];
 }
@@ -5037,7 +5042,7 @@ async function renderHoursMonth() {
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
-      consumers: () => getData('consumers'), go: page => showPage(page),
+      consumers: () => getData('consumers'), go: page => showPage(page), markChecked: key => markShiftChecked(key),
       submissions: async () => {
         if (!_db) return [];
         const { data, error } = await _db.from('evv_submissions').select('consumer, attendant, visitdate, sig_attendant, sig_consumer, processed')
@@ -5380,7 +5385,7 @@ function openContactLog(cid, key) {
   document.getElementById('clm_dhss_alert').style.display = 'none';
 
   // Pre-fill or reset
-  document.getElementById('clm_date').value = existing ? existing.date : new Date().toISOString().split('T')[0];
+  document.getElementById('clm_date').value = existing ? existing.date : _todayIso();
   document.getElementById('clm_method').value = existing ? existing.method : '';
   document.getElementById('clm_person').value = existing ? existing.person : 'consumer';
   document.getElementById('clm_util_notes').value = existing ? (existing.utilNotes||'') : '';
@@ -5478,7 +5483,7 @@ function saveContactLog() {
 }
 
 function logHomeVisit(cid) {
-  const date = prompt('Enter date of home visit (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+  const date = prompt('Enter date of home visit (YYYY-MM-DD):', _todayIso());
   if (!date) return;
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === cid);
@@ -6352,7 +6357,7 @@ function updateScreenings(aid) {
   const attendants = getData('attendants');
   const a = attendants.find(x => x.id === aid);
   if (!a) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = _todayIso();
   const which = prompt(`Update screenings for ${a.name}.\n\nEnter what to update:\n1 = FCSR\n2 = EDL\n3 = LEIE (monthly)\n4 = All three\n\nEnter number:`, '3');
   if (!which) return;
   const date = prompt('Date of screening (YYYY-MM-DD):', today);
@@ -6549,7 +6554,7 @@ function addPipelineContact() {
     currentAgency: document.getElementById('pl_currentagency').value.trim(),
     dcn: document.getElementById('pl_dcn').value.trim(),
     hours: document.getElementById('pl_hours').value,
-    notes: [{ date: new Date().toISOString().split('T')[0], text: document.getElementById('pl_notes').value.trim() }].filter(n=>n.text),
+    notes: [{ date: _todayIso(), text: document.getElementById('pl_notes').value.trim() }].filter(n=>n.text),
     addedAt: new Date().toISOString(),
 
     /* A call from somebody new to the programme. These are the state's own
@@ -6627,7 +6632,7 @@ function addPipelineContact() {
       backgroundResult: null,
       wellskyReady: null,
     } : null,
-    transfer: type === 'pccp' ? { emomedChecked: v('pl_medicaid') ? new Date().toISOString().slice(0,10) : null } : null,
+    transfer: type === 'pccp' ? { emomedChecked: v('pl_medicaid') ? _todayIso() : null } : null,
   };
   if (v('pl_dcn2').trim()) newContact.dcn = v('pl_dcn2').trim();
 
@@ -6719,7 +6724,7 @@ function savePipelineUpdate() {
   const noteText = document.getElementById('ep_notes').value.trim();
   if (noteText) {
     if (!p.notes) p.notes = [];
-    p.notes.push({ date: new Date().toISOString().split('T')[0], text: noteText });
+    p.notes.push({ date: _todayIso(), text: noteText });
   }
   setData('pipeline', pipeline);
   closeModal('editPipelineModal');
@@ -6941,7 +6946,7 @@ function renderLeadProfile(){
     '</div>';
 
   // ---- what to do next, and the messages that used to crowd the Leads table ----
-  const card = window.CDSRules && window.CDSRules.leadCard ? window.CDSRules.leadCard(p, _leadCalls, new Date().toISOString().split('T')[0], !!p.movedToConsumers) : null;
+  const card = window.CDSRules && window.CDSRules.leadCard ? window.CDSRules.leadCard(p, _leadCalls, _todayIso(), !!p.movedToConsumers) : null;
   const pid = esc(p.id);
   html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
     (card ? '<div class="ld-next" style="margin-bottom:12px"><span class="ld-due t-' + card.tone + '">' + esc(card.due) + '</span>' +
@@ -7176,7 +7181,7 @@ async function importHubPacket() {
       const { error } = await _db.storage.from(PROOF_BUCKET).upload(path, new Blob([f.bytes], { type: 'application/pdf' }), { upsert: true });
       if (error) throw error;
       const lay = PACKET_LAYOUT.find(l => l.file === f.file);
-      saved.push({ path, name, file: f.file, title: f.title, dest: lay ? lay.dest : 'file', at: new Date().toISOString().slice(0, 10), from: 'hub' });
+      saved.push({ path, name, file: f.file, title: f.title, dest: lay ? lay.dest : 'file', at: _todayIso(), from: 'hub' });
     }
     c.packetForms = saved;
     if (!c.packetSigned) { c.packetSigned = String(k.signed_at).slice(0, 10); document.getElementById('tax_packet_signed').value = c.packetSigned; }
@@ -7475,7 +7480,7 @@ function ldPickStep(id) { _ldStep = id; renderPipeline(); }
 function renderPipeline() {
   const pipeline = getData('pipeline');
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
+  const today = _todayIso();
   const R = window.CDSRules;
 
   // Dashboard banner (unchanged).
@@ -7622,7 +7627,7 @@ async function ldSetWho(id, kind) {
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === id);
   if (!p || !CDSRules.WHO_CALLED[kind]) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = _todayIso();
   p.whoCalled = kind; p.whoCalledBy = _ldWhoBy(); p.whoCalledAt = new Date().toISOString();
   p.notes = (Array.isArray(p.notes) ? p.notes : []).concat({ date: today, text: 'Who called: ' + CDSRules.WHO_CALLED[kind] + ' (set by ' + p.whoCalledBy + ').', whoCalled: true });
   _ldWhoEdit = '';
@@ -7648,7 +7653,7 @@ async function ldToPool(id) {
   if (!_db) return fail('Not signed in. Nothing was moved.');
   if (!String(p.phone || '').replace(/\D/g, '')) return fail('Add their phone number first (Open). The Caregiver Pool needs one. Nothing was moved.');
   const parts = String(p.name || '').trim().split(/\s+/);
-  const today = new Date().toISOString().split('T')[0];
+  const today = _todayIso();
   const form = (p.notes || []).find(n => CDSRules.isFormNote(n));
   const row = { agency_id: AGENCY_ID, first_name: parts[0] || 'Unknown', last_name: parts.slice(1).join(' ') || '(not given)',
     phone: p.phone, email: p.email || null, counties: p.county ? [p.county] : null, source: 'staff', status: 'new',
@@ -7757,7 +7762,7 @@ async function renderFollowups(reload) {
   if (who.length && !_commPeople) { try { _commPeople = (await _commCall({ action: 'people' })).people || []; } catch (e) { _commPeople = []; } }
   if (!_fuMe) { try { const { data } = await _db.auth.getSession(); _fuMe = String(data && data.session && data.session.user && data.session.user.email || '').toLowerCase(); } catch (e) {} }
   // Step 2 (her approved mockup LBNkuRZyb7pJebrykd4Mxm): care or safety first, then today, then later this week.
-  const todayIso = d.today || new Date().toISOString().slice(0, 10);
+  const todayIso = d.today || _todayIso();
   // Until the Desktop step updates the server, cards show as before: all as today, no need or owner controls.
   const step2 = Array.isArray(d.needs) && d.needs.length > 0;
   const secOf = c => c.urgent ? 'urgent' : (c.later && c.later > todayIso ? 'later' : 'today');
@@ -7968,7 +7973,7 @@ function convertToConsumer(id) {
   const p = pipeline.find(x => x.id === id);
   if (!p || !confirm(`Move ${p.name} to the active Consumer roster?`)) return;
   p.status = p.type === 'pccp' ? 'transfer_complete' : 'authorized';
-  p.movedToConsumers = new Date().toISOString().split('T')[0];
+  p.movedToConsumers = _todayIso();
   setData('pipeline', pipeline);
   // Pre-fill add consumer modal
   document.getElementById('c_name').value = p.name;
@@ -8070,7 +8075,7 @@ async function sendWelcomeNow() {
 
   // Update sent status
   a.welcomeSent = true;
-  a.welcomeSentDate = new Date().toISOString().split('T')[0];
+  a.welcomeSentDate = _todayIso();
   setData('attendants', attendants);
   renderAttendants();
 
@@ -8091,7 +8096,7 @@ function markWelcomeSentManual() {
   const a = attendants.find(x => x.id === aid);
   if (!a) return;
   a.welcomeSent = true;
-  a.welcomeSentDate = new Date().toISOString().split('T')[0];
+  a.welcomeSentDate = _todayIso();
   setData('attendants', attendants);
   closeModal('welcomeOutreachModal');
   renderAttendants();
@@ -8526,7 +8531,7 @@ function esc(s) {
 }
 
 const DES_THRESHOLD = 1000;
-const QUARTER_DEADLINE = { 1: 'Apr 30', 2: 'Jul 30', 3: 'Oct 31', 4: 'Jan 31 (next year)' };
+const QUARTER_DEADLINE = { 1: 'Apr 30', 2: 'Jul 31', 3: 'Oct 31', 4: 'Jan 31 (next year)' };
 
 let _blParsed = null;
 
@@ -8760,7 +8765,7 @@ function logAnnualVisit(cid) {
   const c = consumers.find(x => x.id === cid);
   if (!c) return;
   if (visitFormLive()) return openVisitLog(c);
-  const date = prompt('Date of the face-to-face visit (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
+  const date = prompt('Date of the face-to-face visit (YYYY-MM-DD):', _todayIso());
   if (!date) return;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('Please use YYYY-MM-DD.'); return; }
   const by = prompt('Who made the visit? (their name goes in the case file)', '') || '';
@@ -8982,7 +8987,7 @@ async function mgrProof(what, ev) {
   try {
     const { error } = await _db.storage.from(PROOF_BUCKET).upload(path, file, { upsert: false });
     if (error) throw error;
-    const rec = { path, name: file.name, at: new Date().toISOString().slice(0, 10) };
+    const rec = { path, name: file.name, at: _todayIso() };
     _mgrSet(x => { if (what === 'test') x.testProof = rec; else { x.meetings = Object.assign({}, x.meetings); x.meetings[st.year] = Object.assign({}, x.meetings[st.year], { proof: rec }); } });
   } catch (e) { status.innerHTML = '<span style="color:var(--danger)">Upload failed: ' + esc(e.message || 'unknown error') + '</span>'; }
 }
@@ -9131,7 +9136,7 @@ function officeStaffEdit(id) {
   const list = getData('officeStaff').slice(), x = list.find(y => y.id === id) || {};
   const name = prompt('Full legal name:', x.name || '');
   if (name === null) return;
-  if (!name.trim()) { if (id && confirm('Take ' + x.name + ' off the list? Their past checks stay on file.')) { x.leftAt = new Date().toISOString().slice(0, 10); setData('officeStaff', list); renderOfficeCard(); } return; }
+  if (!name.trim()) { if (id && confirm('Take ' + x.name + ' off the list? Their past checks stay on file.')) { x.leftAt = _todayIso(); setData('officeStaff', list); renderOfficeCard(); } return; }
   if (name.trim().split(/\s+/).length < 2) { alert('Please give a first and last name.'); return; }
   const other = prompt('Any other names they have used, such as a maiden name (separate with commas, or leave empty):', x.otherNames || '');
   if (other === null) return;
@@ -9272,7 +9277,7 @@ function saveBulkContacts() {
   if (!confirm('Record ' + total + ' monthly contact' + (total !== 1 ? 's' : '') +
       ' as completed?\n\nThese become case-file records. Only continue if these contacts genuinely took place.')) return;
 
-  const enteredOn = new Date().toISOString().slice(0, 10);
+  const enteredOn = _todayIso();
   const consumers = getData('consumers');
   let written = 0;
   Object.entries(_bulkContacts).forEach(([cid, set]) => {
@@ -9319,7 +9324,7 @@ function openAuditBinder(cid) {
   const c = consumers.find(x => x.id === cid);
   if (!c) { alert('Consumer not found.'); return; }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = _todayIso();
   const defFrom = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
   const from = prompt('Binder covers FROM (YYYY-MM-DD):', defFrom);
   if (!from) return;
@@ -9481,7 +9486,7 @@ row('DES / unemployment', c.desRegistered ? 'Registered' + (c.desEan ? ' — EAN
       esc2((x.description || x.notes || '').slice(0, 160)) + '</td></tr>').join('') + '</tbody></table>'
   : '<p>None recorded in this period.</p>') +
 
-'<div class="foot">Compiled from the Caring Companions CDS hub on ' + esc2(new Date().toISOString().slice(0, 10)) +
+'<div class="foot">Compiled from the Caring Companions CDS hub on ' + esc2(_todayIso()) +
 '. This packet reflects what is recorded in the hub; it is not a substitute for the signed originals held in the consumer’s file. ' +
 'Sections are labelled against 19 CSR 15-8.400(5)(H) and the monitoring duties in (5)(F).</div>' +
 '</body></html>';
@@ -9632,7 +9637,7 @@ function renderProfile() {
   // The one next step, most urgent first.
   let next;
   if (prep.needsReason) next = { warn: true, t: 'Write down why the first shift was late', d: 'Started ' + _niceDay(fs) + ', start date was ' + _niceDay(prep.start) + '. Pick a reason below.', b: '' };
-  else if (prep.applies && !fs && !prep.ready) next = { warn: !!(prep.start && prep.start <= new Date().toISOString().slice(0, 10)),
+  else if (prep.applies && !fs && !prep.ready) next = { warn: !!(prep.start && prep.start <= _todayIso()),
     t: 'Get ready for the first shift: ' + prep.done + ' of ' + prep.total + ' done', d: prep.start ? 'Start date ' + _niceDay(prep.start) + '. The checklist is below.' : 'No start date yet. Add it in Tax setup.', b: '' };
   else if (req.annual.overdue) next = { warn: true, t: 'Face-to-face visit overdue', d: 'Was due ' + _niceDay(req.annual.due) + '. It has to be in person.', b: btn('Log the visit', "logAnnualVisit('" + c.id + "')") };
   else if (!req.monthly.doneThisMonth) next = { t: new Date(thisMonth + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long' }) + ' check-in call', d: 'One call every month to check in. ' + (req.monthly.missed ? req.monthly.missed + ' missed in the last year.' : ''), b: btn('Log the call', "openContactLog('" + c.id + "','" + thisMonth + "')") };
@@ -9888,7 +9893,7 @@ async function importCarePlan(event) {
     const up = await _db.storage.from(CP_BUCKET).upload(path, file, { upsert: true });
     const plans = getObj('carePlans');
     plans[cid] = { consumer: c ? c.name : '', file: file.name, path: up.error ? '' : path,
-                   uploadedAt: new Date().toISOString().slice(0, 10),
+                   uploadedAt: _todayIso(),
                    weeklyMinutes: parsed.weeklyMinutes, monthlyUnits: parsed.monthlyUnits, tasks: parsed.tasks };
     setObj('carePlans', plans);
     status.innerHTML = '<span style="color:var(--success)">✓ ' + esc(c ? c.name : 'Saved') + ': ' +
@@ -10055,7 +10060,7 @@ async function importAuthorizations(event) {
     store.records[(r.dcn || r.name).toUpperCase()] = r;
     ok++;
   }
-  setObj('authorizations', { loadedAt: new Date().toISOString().slice(0, 10),
+  setObj('authorizations', { loadedAt: _todayIso(),
                             unitMinutes: store.unitMinutes, records: store.records });
   status.innerHTML = '<span style="color:var(--success)">✓ ' + ok + ' authorization' + (ok === 1 ? '' : 's') +
     ' imported.</span>' +
@@ -10488,7 +10493,7 @@ async function importEmpeonPdfs(event) {
   }
   runs.sort((a, b) => a.checkDate.split('/').reverse().join().localeCompare(b.checkDate.split('/').reverse().join()));
 
-  setObj('payrollTotals', { source: 'Empeon Payroll Summary PDFs', loadedAt: new Date().toISOString().slice(0, 10), runs });
+  setObj('payrollTotals', { source: 'Empeon Payroll Summary PDFs', loadedAt: _todayIso(), runs });
   rebuildAttendantWages(regs, runs);
 
   status.innerHTML = '<span style="color:var(--success)">✓ ' + okReg + ' check register' +
@@ -10528,7 +10533,7 @@ function rebuildAttendantWages(regs, runs) {
   });
   setObj('attendantWages', {
     source: 'Empeon Check Register PDFs, joined to consumers by employee id',
-    loadedAt: new Date().toISOString().slice(0, 10),
+    loadedAt: _todayIso(),
     note: 'Gross is estimated from each run\'s gross/net ratio. Verify against Empeon before filing with DES.',
     registers: regs, entries, unmapped
   });
@@ -10609,7 +10614,7 @@ function importBilling() {
   const bl = getBilling();
   bl.entries = bl.entries.filter(e => e.period !== period).concat(entries);
   bl.uploads = bl.uploads.filter(u => u.period !== period).concat([{
-    period, at: new Date().toISOString().slice(0, 10), file: _blParsed.fileName, rows: entries.length
+    period, at: _todayIso(), file: _blParsed.fileName, rows: entries.length
   }]);
   setObj('billing', bl);
 
@@ -10978,7 +10983,7 @@ async function uploadProofFile(event) {
 
     // Save straight away rather than waiting for the modal's Save button — the
     // file is already in the bucket, so leaving the record unsaved would strand it.
-    c.proofFiles = existing.concat([{ path, name: file.name, at: new Date().toISOString().slice(0, 10) }]);
+    c.proofFiles = existing.concat([{ path, name: file.name, at: _todayIso() }]);
     setData('consumers', consumers);
     renderProofFiles(c);
     renderTaxCompliance();
@@ -11227,14 +11232,14 @@ async function splitEnrollmentPacket(event) {
         .upload(path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true });
       if (error) throw error;
       saved.push({ path, name, file: form.file, title: form.title, dest: form.dest,
-                   at: new Date().toISOString().slice(0, 10) });
+                   at: _todayIso() });
     }
 
     // Replaces rather than appends: splitting the same packet twice should leave
     // one set of forms, not two.
     c.packetForms = saved;
     if (!c.packetSigned) {
-      c.packetSigned = new Date().toISOString().slice(0, 10);
+      c.packetSigned = _todayIso();
       document.getElementById('tax_packet_signed').value = c.packetSigned;
     }
     setData('consumers', consumers);
@@ -11301,7 +11306,7 @@ function acceptChangedPacket() {
       'Security number to the wrong agency.')) return;
   const s = getObj('settings');
   s.packetFingerprints = p.fingerprints;
-  s.packetFingerprintsAt = new Date().toISOString().slice(0, 10);
+  s.packetFingerprintsAt = _todayIso();
   setObj('settings', s);
   _refusedPacket = null;
   document.getElementById('tax_packet_status').innerHTML =
@@ -11506,7 +11511,7 @@ async function uploadFilingDoc(key, event) {
     if (error) throw error;
     c.filings = c.filings || {};
     c.filings[key] = Object.assign({}, c.filings[key], {
-      docPath: path, docName: file.name, docAt: new Date().toISOString().slice(0, 10),
+      docPath: path, docName: file.name, docAt: _todayIso(),
     });
     setData('consumers', consumers);
     renderFilings(c);
@@ -12086,7 +12091,7 @@ function confirmImport() {
     attendant: d.attendant,
     consumer: d.consumer,
     visitdate: d.visitdate,
-    submitdate: d.submitdate || new Date().toISOString().split('T')[0],
+    submitdate: d.submitdate || _todayIso(),
     origIn: d.origIn,
     origOut: d.origOut,
     newIn: d.newIn,
@@ -12750,7 +12755,7 @@ async function acceptSubmission(sub) {
     attendant:    sub.attendant,
     consumer:     sub.consumer,
     visitdate:    sub.visitdate,
-    submitdate:   sub.submitdate || new Date().toISOString().split('T')[0],
+    submitdate:   sub.submitdate || _todayIso(),
     origIn:       sub.orig_in  || '',
     origOut:      sub.orig_out || '',
     newIn:        sub.new_in   || '',
@@ -12801,7 +12806,7 @@ function toggleWellskyDone(id, checked) {
   const c = corrections.find(x => x.id === id);
   if (!c) return;
   c.wellskyDone = checked ? 'yes' : 'no';
-  c.wellskyDate = checked ? new Date().toISOString().split('T')[0] : '';
+  c.wellskyDate = checked ? _todayIso() : '';
   c.admin = checked ? (_user ? _user.email.split('@')[0] : 'admin') : '';
   setData('evvCorrections', corrections);
   renderCorrections();
@@ -12815,7 +12820,7 @@ function markCorrectionComplete(id) {
   c.formReceived = 'yes';
   c.wellskyDone = 'yes';
   c.admin = _user ? _user.email.split('@')[0] : 'admin';
-  c.wellskyDate = new Date().toISOString().split('T')[0];
+  c.wellskyDate = _todayIso();
   setData('evvCorrections', corrections);
   renderCorrections();
   updateDashboard();
@@ -13333,6 +13338,13 @@ function updateDashboard() {
 
   setText('contactPct', D.checkIns.of ? frac(D.checkIns.done, D.checkIns.of) : 'No consumers');
   bar('contactBar', D.checkIns.done, D.checkIns.of);
+  const mm = document.getElementById('missedMonths');
+  if (mm) {
+    mm.style.display = D.missedMonths.length ? '' : 'none';
+    mm.innerHTML = D.missedMonths.length ? '<b>Missed 2 or more monthly calls in the last 12 months:</b> ' +
+      D.missedMonths.map(x => '<a href="#" onclick="openProfile(\'' + esc(x.id) + '\');return false" style="color:inherit">' + esc(x.name) + '</a> (' + x.missed + ')').join(', ') +
+      '. An auditor counts the months. If a call happened, log it on their profile.' : '';
+  }
   setText('leiePct', D.leie.of ? frac(D.leie.ok, D.leie.of) : 'No attendants');
   bar('leieBar', D.leie.ok, D.leie.of);
   setText('fcsrPct', D.fcsr.of ? frac(D.fcsr.ok, D.fcsr.of) : 'No attendants');
@@ -13736,7 +13748,7 @@ function openComplaintModal(editId) {
       document.getElementById('complaintModal').dataset.editId = editId;
     }
   } else {
-    document.getElementById('cmp_date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('cmp_date').value = _todayIso();
     document.getElementById('cmp_category').value = '';
     document.getElementById('cmp_reporter').value = '';
     document.getElementById('cmp_description').value = '';
