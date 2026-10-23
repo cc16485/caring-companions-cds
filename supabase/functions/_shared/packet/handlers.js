@@ -50,6 +50,7 @@ function tenAm(iso, n) {
 
 export function createPacket(h) {
   const { q, one, nowIso, audit, setting, crypto, links, ensureProfile, caregiverLink, loadCaregiver, R, fail, deps } = h;
+  const media = h.media, finishTask = h.finishTask || (async () => {});
   // Office to-dos close themselves when their step is done.
   const closeTasks = (poolId, kind, by) => q(`update cds_tasks set done_at=now(), done_by=$3 where pool_id=$1 and kind=$2 and done_at is null`, [poolId, kind, by || 'packet']);
 
@@ -58,10 +59,11 @@ export function createPacket(h) {
     const t = PACKET_TEMPLATES[template];
     if (!t || !t[channel] || !to) return null;
     const body = fill(t[channel], vars), subject = channel === 'email' ? fill(t.email_subject, vars) : null;
-    const sw = await setting(audience === 'office' ? 'packet_alerts' : 'packet_messages', { live: false });
+    const swKey = t.switch || (audience === 'office' ? 'packet_alerts' : 'packet_messages');
+    const sw = await setting(swKey, { live: false });
     let status, error = null;
     if (deps.mode === 'practice') status = 'practice';
-    else if (!sw.live) { status = 'held'; error = audience === 'office' ? 'Attendant application alerts are switched off (Switches card).' : 'Attendant application texts are switched off (Switches card).'; }
+    else if (!sw.live) { status = 'held'; error = { packet_alerts: 'Attendant application alerts are switched off (Switches card).', fcsr_notices: 'FCSR notices to attendants are switched off (Switches card).' }[swKey] || 'Attendant application texts are switched off (Switches card).'; }
     else { try { await deps.send({ channel, to, subject, body }); status = 'sent'; } catch (e) { status = 'failed'; error = String(e && e.message || e).slice(0, 300); } }
     return one(`insert into cds_outbox (audience, pool_id, channel, template, to_display, body, status, error, automatic, created_by)
       values ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) returning id, status`,
@@ -331,7 +333,7 @@ export function createPacket(h) {
       const out = [];
       for (const r of rows) { const x = await load(r.pool_id); out.push({ pool_id: r.pool_id, name: [r.first_name, r.last_name].join(' '), consumer: r.consumer_name,
         label: x.st.label, tone: x.st.tone, next: x.st.next, active: x.st.active, list_choice: x.p.list_choice,
-        consumer_waiting: !!r.consumer_name && !x.st.active, started_at: x.p.created_at, step1_at: x.p.step1_signed_at }); }
+        consumer_waiting: !!r.consumer_name && !x.st.active && !['gcw_needed', 'edl', 'not_moving'].includes(x.c.screening.review), started_at: x.p.created_at, step1_at: x.p.step1_signed_at }); }
       return { attendants: out };
     },
     // One signed form, as they signed it, for View and Print on the profile (2026-10-22). The
@@ -360,7 +362,11 @@ export function createPacket(h) {
       return { pool: { first: x.c.pool.first_name, last: x.c.pool.last_name, phone: x.c.pool.phone, email: x.c.pool.email },
         packet: { ...x.p, answers: undefined, reminders: x.p.reminders }, answers: { ...(x.p.answers || {}), other_ssn_sealed: undefined },
         forms: Object.fromEntries(Object.entries(x.forms).map(([k, f]) => [k, { title: FORMS[k].title, version: f.version, signed_name: f.signed_name, signed_at: f.signed_at, countersigned_at: f.countersigned_at, countersigned_name: f.countersigned_name }])),
-        screening: { missing: x.c.screening.missing, eligible: x.c.screening.eligible, findings: x.c.screening.findings, checks: x.c.screening.steps[6].checks },
+        screening: { missing: x.c.screening.missing, eligible: x.c.screening.eligible, findings: x.c.screening.findings, checks: x.c.screening.steps[6].checks,
+          review: x.c.screening.review, screened: x.c.screening.screened, requested_at: (x.c.screening.raw || {}).screen_requested_at || null,
+          result: (x.c.screening.raw || {}).screen_result || null, result_at: (x.c.screening.raw || {}).screen_result_at || null,
+          reviewed_at: (x.c.screening.raw || {}).finding_reviewed_at || null, reviewed_by: (x.c.screening.raw || {}).finding_reviewed_by || null,
+          notice: (x.c.screening.raw || {}).finding_notice || null, decided_at: (x.c.screening.raw || {}).gcw_decided_at || null, note: (x.c.screening.raw || {}).findings_note || null },
         status: x.st, listing: x.c.listing };
     },
     async packetMark({ staff, pool_id, what }) {
@@ -408,13 +414,102 @@ export function createPacket(h) {
       await audit('staff:' + staff, 'packet_copy_' + kind, 'pool:' + pool_id, {});
       return { fields: fields.map(([label, value]) => ({ label, value: value || '' })) };
     },
+    // The FCSR result, recorded right on the profile (2026-10-23, her yes to the mockup):
+    //   result 'clear'   : the result page proves registration and screening, so one proof records all three.
+    //   result 'pending' : asked the state, waiting; a follow-up to-do in 7 days.
+    //   result 'finding' : kind gcw_needed | edl | cleared_no_waiver. For the first two the attendant is told
+    //                      (notify 'send': text + email; 'phone': the office already told them) and the office
+    //                      gets "Call <consumer>". Her rule: the office tells the consumer, never the system.
+    async packetFcsr({ staff, pool_id, result, kind, notify, proof }) {
+      who(staff);
+      const x = await load(pool_id);
+      if (!x) fail('Not found', 404);
+      if (!x.st.step1) fail('Their Step 1 is not signed yet.');
+      const raw = x.c.screening.raw || {};
+      const now = await nowIso();
+      if (result === 'pending') {
+        await q(`update cds_screening set screen_requested_at=coalesce(screen_requested_at, now()), screen_requested_by=coalesce(screen_requested_by, $2),
+                 screen_requested_method=coalesce(screen_requested_method, 'online'), updated_at=now() where pool_id=$1`, [pool_id, staff]);
+        await h.task('fcsr_result', ('Follow up on ' + nameOf(x.c.pool) + '\'s FCSR result (FCSR 866-422-6872)').slice(0, 300), { pool_id }, 'fcsr_result:' + pool_id, addDays(now, 7));
+        await audit('staff:' + staff, 'packet_fcsr_pending', 'pool:' + pool_id, {});
+        return { ok: true };
+      }
+      if (result !== 'clear' && result !== 'finding') fail('Choose what came back.');
+      if (result === 'finding' && !P.FINDING_PICKS.includes(kind)) fail('Pick which one it is.');
+      if (raw.finding_review && raw.finding_review !== 'cleared_no_waiver') fail('This FCSR finding is already recorded. Use the waiver buttons below.');
+      const already = result === 'finding' && raw.screen_result === 'findings' && raw.screen_proof;
+      let proofId = null;
+      if (proof && proof.data) proofId = await media.put({ pool_id, kind: 'proof', mime: proof.mime, data: proof.data, by: 'staff:' + staff });
+      if (!proofId && !already) fail('Add the FCSR result page (a screenshot or PDF) first.');
+      if (result === 'finding' && (kind === 'gcw_needed' || kind === 'edl') && !['send', 'phone'].includes(notify)) fail('Choose how they hear about it: send the text and email, or you told them by phone.');
+      await q(`update cds_screening set reg_verified_at=coalesce(reg_verified_at, now()), reg_verified_by=coalesce(reg_verified_by, $2), reg_verified_proof=coalesce(reg_verified_proof, $3),
+               screen_requested_at=coalesce(screen_requested_at, now()), screen_requested_by=coalesce(screen_requested_by, $2), screen_requested_method=coalesce(screen_requested_method, 'online'),
+               screen_result_at=case when $4 and screen_result_at is not null then screen_result_at else now() end, screen_result=$5, screen_proof=coalesce($3, screen_proof), screen_recorded_by=$2,
+               finding_review=$6, finding_reviewed_at=$7, finding_reviewed_by=$8, finding_notice=$9, updated_at=now() where pool_id=$1`,
+        [pool_id, staff, proofId, !!already, result === 'clear' ? 'no_findings' : 'findings', result === 'clear' ? null : kind,
+         result === 'clear' ? null : now, result === 'clear' ? null : staff, result === 'finding' && (kind === 'gcw_needed' || kind === 'edl') ? (notify === 'send' ? 'sent' : 'phone') : null]);
+      // Same as Caregiver Match: the full SSN is not kept once the result is in.
+      await q('delete from cds_screening_secret where pool_id=$1', [pool_id]);
+      await finishTask('fcsr_result:' + pool_id, staff);
+      await finishTask('owner_review:' + pool_id, staff);
+      let sent = [];
+      if (result === 'finding' && (kind === 'gcw_needed' || kind === 'edl')) {
+        await closeTasks(pool_id, 'packet_checks', staff);
+        const consumer = x.p.consumer_name || (x.p.answers || {}).consumer_name || '';
+        const first = (x.p.answers || {}).first || x.c.pool.first_name;
+        if (notify === 'send') {
+          const tpl = kind === 'gcw_needed' ? 'att_fcsr_gcw' : 'att_fcsr_edl', v = { first, consumer: consumer || 'your consumer' };
+          for (const ch of ['sms', 'email']) { const m = await send({ template: tpl, channel: ch, audience: 'caregiver', pool_id, to: ch === 'sms' ? x.c.pool.phone : x.c.pool.email, vars: v, by: staff }); if (m) sent.push({ channel: ch, status: m.status }); }
+        }
+        if (consumer) await h.task('packet_consumer_call', ('Call ' + consumer + ': ' + nameOf(x.c.pool) + (kind === 'gcw_needed' ? ' can\'t start yet (needs a Good Cause Waiver).' : ' can\'t be approved for CDS (on the EDL).')).slice(0, 300),
+          { pool_id }, 'packet_consumer_call:' + pool_id + ':' + kind, urgentDue(now));
+        if (kind === 'gcw_needed') {
+          const rem = (Array.isArray(x.p.reminders) ? x.p.reminders : []).filter(r => r.kind !== 'gcw');
+          rem.push({ kind: 'gcw', due_at: tenAm(now, 21) });
+          await q('update cds_packets set reminders=$2::jsonb, updated_at=now() where pool_id=$1', [pool_id, JSON.stringify(rem)]);
+        }
+      }
+      await audit('staff:' + staff, 'packet_fcsr_' + result, 'pool:' + pool_id, { kind: kind || null, notify: notify || null, sent });
+      return { ok: true, sent };
+    },
+    // The state's letter came back: the office decides (an approved waiver never clears by itself, her CC rule
+    // 2026-10-11). 'clear' needs the approval letter; 'not_moving' needs a reason. Nothing is sent from here:
+    // a clear result opens Step 2, and the job sends "your checks are clear" like for everyone else.
+    async packetWaiver({ staff, pool_id, decision, proof, reason }) {
+      who(staff);
+      const x = await load(pool_id);
+      if (!x) fail('Not found', 404);
+      const raw = x.c.screening.raw || {};
+      if (!['gcw_needed', 'edl'].includes(raw.finding_review)) fail('There is no FCSR finding waiting on a decision.');
+      let proofId = null;
+      if (proof && proof.data) proofId = await media.put({ pool_id, kind: 'proof', mime: proof.mime, data: proof.data, by: 'staff:' + staff });
+      if (decision === 'clear') {
+        if (raw.finding_review !== 'gcw_needed') fail('Someone on the EDL cannot be cleared with a waiver.');
+        if (!proofId) fail('Add the approval letter (a photo or PDF) first.');
+        await q(`update cds_screening set finding_review='cleared_waiver', gcw_letter=$2, gcw_decided_at=now(), gcw_decided_by=$3, updated_at=now() where pool_id=$1`, [pool_id, proofId, staff]);
+      } else if (decision === 'not_moving') {
+        const why = String(reason || '').trim();
+        if (why.length < 3) fail('Write a short reason first.');
+        await q(`update cds_screening set finding_review='not_moving', findings_note=$2, gcw_letter=coalesce($3, gcw_letter), gcw_decided_at=now(), gcw_decided_by=$4, updated_at=now() where pool_id=$1`,
+          [pool_id, why.slice(0, 500), proofId, staff]);
+        await closeTasks(pool_id, 'packet_checks', staff);
+      } else fail('Choose clear to continue or not moving forward.');
+      await closeTasks(pool_id, 'packet_gcw_status', staff);
+      await audit('staff:' + staff, 'packet_waiver_' + decision, 'pool:' + pool_id, { letter: !!proofId });
+      const y = await load(pool_id);
+      // The waiver only clears the FCSR: anything else still open comes back as a to-do.
+      if (decision === 'clear' && !y.st.checksClear) await h.task('packet_checks', ('Waiver approved: finish the checks for ' + nameOf(x.c.pool) + (x.p.consumer_name ? ' (for ' + x.p.consumer_name + ')' : '') + '.').slice(0, 300),
+        { pool_id }, 'packet_checks:' + pool_id + ':waiver', (await one('select cds_next_business_4pm(now()) as d')).d);
+      return { ok: true, status: y.st };
+    },
   };
 
   // ================= JOB (every 15 minutes) =================
   async function packetJob() {
     const now = await nowIso();
     let sent = 0, opened = 0;
-    const rows = await q(`select pool_id from cds_packets where active_at is null and created_at > now() - interval '120 days'`);
+    const rows = await q(`select pool_id from cds_packets where active_at is null and (created_at > now() - interval '120 days'
+      or pool_id in (select pool_id from cds_screening where finding_review = 'gcw_needed'))`);
     for (const { pool_id } of rows) {
       const x = await load(pool_id);
       if (!x) continue;
@@ -432,19 +527,27 @@ export function createPacket(h) {
           (await one('select cds_next_business_4pm(now()) as d')).d);
         opened++;
       }
+      // Waiting on a Good Cause Waiver: a "check the waiver status" to-do every 2 weeks (her yes 2026-10-23).
+      const raw = x.c.screening.raw || {};
+      if (raw.finding_review === 'gcw_needed' && raw.finding_reviewed_at) {
+        const n = Math.floor((new Date(now) - new Date(raw.finding_reviewed_at)) / (14 * 86400000));
+        if (n >= 1) await h.task('packet_gcw_status', ('Check ' + nameOf(pool) + '\'s Good Cause Waiver status (FCSR site: Good Cause Waiver tab, Waiver Status).').slice(0, 300),
+          { pool_id }, 'packet_gcw_status:' + pool_id + ':' + n, (await one('select cds_next_business_4pm(now()) as d')).d);
+      }
       // Reminders: only daytime, only while still needed.
       const rem = Array.isArray(x.p.reminders) ? x.p.reminders : [];
       let changed = false;
       for (const r of rem) {
         if (r.sent_at || new Date(r.due_at) > new Date(now)) continue;
-        const still = r.kind === 'step1' ? !x.st.step1 : r.kind === 'orientation' ? (!x.p.orientation_done_at && !x.p.step2_opened_at) : false;
+        const still = r.kind === 'step1' ? !x.st.step1 : r.kind === 'orientation' ? (!x.p.orientation_done_at && !x.p.step2_opened_at) : r.kind === 'gcw' ? raw.finding_review === 'gcw_needed' : false;
         if (!still) { r.sent_at = 'not needed'; changed = true; continue; }
         { const hr = +chicago(now, { hour: 'numeric', hourCycle: 'h23' }); if (hr < 9 || hr >= 19) continue; }   // daytime only
         if (r.kind === 'step1') {
           const token = await crypto.token();
           await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)', [pool_id, await crypto.hash(token), 'packet-reminder', addDays(now, R.CAREGIVER_LINK_DAYS)]);
           await send({ template: 'att_step1_reminder', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first, link: packetLink(token) } });
-        } else await send({ template: 'att_orient_reminder', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first } });
+        } else if (r.kind === 'gcw') await send({ template: 'att_gcw_reminder', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first } });
+        else await send({ template: 'att_orient_reminder', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first } });
         r.sent_at = now; changed = true; sent++;
       }
       if (changed) await q('update cds_packets set reminders=$2::jsonb where pool_id=$1', [pool_id, JSON.stringify(rem)]);

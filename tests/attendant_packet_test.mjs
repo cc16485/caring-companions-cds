@@ -28,6 +28,9 @@ await pg.exec(strip(readFileSync(ROOT + '/oig_check.sql', 'utf8')));
 const SQL = strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
 ok(true, 'packet SQL runs twice');
+const GCW_SQL = strip(readFileSync(ROOT + '/fcsr_waiver.sql', 'utf8'));
+await pg.exec(GCW_SQL); await pg.exec(GCW_SQL);
+ok(true, 'FCSR waiver SQL runs twice');
 
 // ---------- lockdown ----------
 const can = async (role, sql) => { await pg.exec('set role ' + role); try { await pg.query(sql); return true; } catch { return false; } finally { await pg.exec('reset role'); } };
@@ -193,6 +196,95 @@ await pg.query(`update cds_packets set step1_signed_at=null, reminders = jsonb_b
 job = await H('job', 'packetJob', {});
 const rem2 = (await pg.query(`select reminders from cds_packets where pool_id=$1`, [bpool])).rows[0].reminders[0];
 ok(rem2.sent_at === 'not needed', 'orientation reminder skipped when the orientation is already done');
+
+// ---------- FCSR came back with something (2026-10-23) ----------
+const PDF = { mime: 'application/pdf', data: 'data:application/pdf;base64,JVBERg==' };
+const sign1 = async id => {
+  for (const k of ['application', 'background']) await pg.query(`insert into cds_packet_forms (pool_id, form_key, version, fingerprint, signed_name) values ($1,$2,'t','x','Test Person')`, [id, k]);
+  await pg.query(`update cds_packets set step1_signed_at=now(), reminders='[]'::jsonb where pool_id=$1`, [id]);
+  await pg.query(`update cds_screening set authorization_signed_at=now() where pool_id=$1`, [id]);
+  await pg.query(`insert into cds_screening_secret (pool_id, ssn_ciphertext) values ($1,'x') on conflict do nothing`, [id]);
+};
+await sign1(bpool);
+await refuses(() => S('packetFcsr', { pool_id: bpool, result: 'finding', kind: 'gcw_needed', notify: 'send' }), /result page/, 'a finding needs the FCSR result page');
+await refuses(() => S('packetFcsr', { pool_id: bpool, result: 'finding', kind: 'maybe', notify: 'send', proof: PDF }), /Pick which/, 'only the three picks');
+await refuses(() => S('packetFcsr', { pool_id: bpool, result: 'finding', kind: 'gcw_needed', proof: PDF }), /how they hear/, 'the office picks send or told by phone');
+await pg.query(`update cds_tasks set done_at=null where pool_id=$1`, [bpool]);
+await H('staff', 'packetFcsr', { staff: 'krystal@mo-care.com', pool_id: bpool, result: 'finding', kind: 'gcw_needed', notify: 'send', proof: PDF });
+const bs = (await pg.query(`select * from cds_screening where pool_id=$1`, [bpool])).rows[0];
+ok(bs.screen_result === 'findings' && bs.finding_review === 'gcw_needed' && bs.finding_notice === 'sent' && !!bs.reg_verified_at && !!bs.screen_proof, 'finding recorded: waiver needed, one proof covers registration and result');
+ok(!(await pg.query(`select 1 from cds_screening_secret where pool_id=$1`, [bpool])).rows.length, 'full SSN not kept once the result is in');
+const gob = (await outbox()).filter(o => o.template === 'packet_att_fcsr_gcw' && o.pool_id === bpool);
+ok(gob.length === 2 && gob.some(o => o.channel === 'sms' && /one more step before you can start working for Gene Porter/.test(o.body) && !/FCSR|waiver|EDL/i.test(o.body)), 'text says one more step, never what came up');
+ok(gob.some(o => o.channel === 'email' && /Good Cause Waiver/.test(o.body) && /health\.mo\.gov\/providers\/good-cause-waiver/.test(o.body) && /PO Box 570/.test(o.body) && /Gene Porter/.test(o.body)), 'email has the waiver steps, forms and address');
+ok(gob.every(o => o.status === 'practice') && !JSON.stringify(gob).includes('—'), 'practice mode, no em dashes');
+const call = (await pg.query(`select title, due_at from cds_tasks where pool_id=$1 and kind='packet_consumer_call' and done_at is null`, [bpool])).rows;
+ok(call.length === 1 && /^Call Gene Porter: Brenda Cole can't start yet/.test(call[0].title) && !!call[0].due_at, 'to-do: the office calls the consumer (nothing sent to the consumer)');
+ok(!(await outbox()).some(o => o.audience === 'consumer' || /Gene Porter/.test(o.to_display || '')), 'no message to the consumer');
+let bg = await S('packetGet', { pool_id: bpool });
+ok(!(await S('packetList', {})).attendants.find(a => a.pool_id === bpool).consumer_waiting, 'waiting on a waiver is not marked urgent');
+ok(bg.status.label === 'Waiting on Good Cause Waiver' && bg.status.tone === 'y' && !bg.status.step2Open && bg.screening.review === 'gcw_needed', 'status: waiting on the waiver, Step 2 stays locked');
+await refuses(() => H('caregiver', 'packetSign', { link: 'x', form: 'contract' }), /./, 'no Step 2 signing (no link)');
+await refuses(() => S('packetFcsr', { pool_id: bpool, result: 'clear', proof: PDF }), /already recorded/, 'a recorded finding cannot be overwritten with clear');
+const brem = (await pg.query(`select reminders from cds_packets where pool_id=$1`, [bpool])).rows[0].reminders;
+ok(brem.length === 1 && brem[0].kind === 'gcw' && new Date(brem[0].due_at) - Date.now() > 20 * 864e5, 'one waiver reminder text set for 3 weeks out');
+// two weeks later: a status check to-do; three weeks: the reminder text
+await pg.query(`update cds_screening set finding_reviewed_at = now() - interval '15 days' where pool_id=$1`, [bpool]);
+await pg.query(`update cds_packets set reminders = jsonb_build_array(jsonb_build_object('kind','gcw','due_at', now() - interval '1 minute')) where pool_id=$1`, [bpool]);
+job = await H('job', 'packetJob', {}); job = await H('job', 'packetJob', {});
+const gst = (await pg.query(`select title from cds_tasks where pool_id=$1 and kind='packet_gcw_status'`, [bpool])).rows;
+ok(gst.length === 1 && /Good Cause Waiver status/.test(gst[0].title), 'every 2 weeks: one "check the waiver status" to-do');
+const grem = (await outbox()).filter(o => o.template === 'packet_att_gcw_reminder' && o.pool_id === bpool);
+ok(daytime ? grem.length === 1 && /approval letter/.test(grem[0].body) : grem.length === 0, 'waiver reminder text once, daytime only');
+await pg.query(`update cds_screening set finding_reviewed_at = now() - interval '29 days' where pool_id=$1`, [bpool]);
+await H('job', 'packetJob', {});
+ok((await pg.query(`select count(*)::int n from cds_tasks where pool_id=$1 and kind='packet_gcw_status'`, [bpool])).rows[0].n === 2, 'a new status check after the next 2 weeks');
+// the letter comes: the office decides
+await refuses(() => S('packetWaiver', { pool_id: bpool, decision: 'clear' }), /approval letter/, 'clear needs the approval letter');
+await refuses(() => S('packetWaiver', { pool_id: bpool, decision: 'not_moving' }), /reason/, 'not moving forward needs a reason');
+const wv = await S('packetWaiver', { pool_id: bpool, decision: 'clear', proof: PDF });
+ok(wv.ok && !(await pg.query(`select 1 from cds_tasks where pool_id=$1 and kind='packet_gcw_status' and done_at is null`, [bpool])).rows.length, 'waiver approved and cleared: status to-dos close');
+const bs2 = (await pg.query(`select finding_review, gcw_letter from cds_screening where pool_id=$1`, [bpool])).rows[0];
+ok(bs2.finding_review === 'cleared_waiver' && !!bs2.gcw_letter, 'the letter is kept as proof');
+bg = await S('packetGet', { pool_id: bpool });
+ok(!bg.screening.findings && bg.screening.screened && bg.status.label === 'Run EDL and FCSR', 'after the waiver the FCSR counts as clear; the other checks still show (' + bg.status.next + ')');
+ok((await pg.query(`select 1 from cds_tasks where pool_id=$1 and kind='packet_checks' and done_at is null and title like 'Waiver approved%'`, [bpool])).rows.length === 1, 'other checks still open: a "finish the checks" to-do');
+ok((await S('packetList', {})).attendants.find(a => a.pool_id === bpool).consumer_waiting === true, 'after the waiver they are urgent again (consumer waiting)');
+
+// EDL: no waiver possible; told by phone; nothing sent
+const st3 = await H('public', 'applyStart', { consumer_name: 'Ada Long', first_name: 'Carl', last_name: 'Diaz', phone: '4175550188', email: 'c@x.test' });
+const cpool = (await pg.query(`select id from attendant_pool where first_name='Carl'`)).rows[0].id;
+await sign1(cpool);
+const before = (await outbox()).length;
+await S('packetFcsr', { pool_id: cpool, result: 'finding', kind: 'edl', notify: 'phone', proof: PDF });
+ok((await outbox()).length === before, 'told by phone: nothing sent');
+const cg = await S('packetGet', { pool_id: cpool });
+ok(cg.status.label === 'Cannot work in CDS (EDL)' && cg.screening.notice === 'phone', 'status: cannot work in CDS');
+ok((await pg.query(`select title from cds_tasks where pool_id=$1 and kind='packet_consumer_call'`, [cpool])).rows[0].title.includes("can't be approved for CDS (on the EDL)"), 'to-do: call the consumer');
+ok(!(await S('packetList', {})).attendants.find(a => a.pool_id === cpool).consumer_waiting, 'no longer marked consumer waiting');
+await refuses(() => S('packetWaiver', { pool_id: cpool, decision: 'clear', proof: PDF }), /EDL cannot be cleared/, 'EDL cannot be cleared with a waiver');
+await S('packetWaiver', { pool_id: cpool, decision: 'not_moving', reason: 'On the EDL' });
+ok((await S('packetGet', { pool_id: cpool })).status.label === 'Not moving forward', 'office closes it: not moving forward');
+
+// Not on the list: clear after review, nothing sent; pending: follow-up to-do
+const st4 = await H('public', 'applyStart', { consumer_name: 'Bo Tran', first_name: 'Dee', last_name: 'Fox', phone: '4175550177', email: 'd@x.test' });
+const dpool = (await pg.query(`select id from attendant_pool where first_name='Dee'`)).rows[0].id;
+await sign1(dpool);
+await S('packetFcsr', { pool_id: dpool, result: 'pending' });
+ok((await pg.query(`select 1 from cds_tasks where pool_id=$1 and kind='fcsr_result' and done_at is null`, [dpool])).rows.length === 1, 'still pending: follow-up to-do');
+const before2 = (await outbox()).length;
+await S('packetFcsr', { pool_id: dpool, result: 'finding', kind: 'cleared_no_waiver', proof: PDF });
+const dg = await S('packetGet', { pool_id: dpool });
+ok((await outbox()).length === before2 && !dg.screening.findings && dg.screening.review === 'cleared_no_waiver' && dg.screening.screened, 'not on the list: clear after review, nothing sent');
+ok(!(await pg.query(`select 1 from cds_tasks where pool_id=$1 and kind='fcsr_result' and done_at is null`, [dpool])).rows.length, 'follow-up to-do closed');
+// Clear
+const st5 = await H('public', 'applyStart', { consumer_name: 'Al Moe', first_name: 'Eve', last_name: 'Gray', phone: '4175550166', email: 'e@x.test' });
+const epool = (await pg.query(`select id from attendant_pool where first_name='Eve'`)).rows[0].id;
+await sign1(epool);
+await refuses(() => S('packetFcsr', { pool_id: epool, result: 'clear' }), /result page/, 'clear needs the result page');
+await S('packetFcsr', { pool_id: epool, result: 'clear', proof: PDF });
+ok((await S('packetGet', { pool_id: epool })).screening.screened, 'clear recorded right on the profile');
+ok(P.FINDING.gcw_needed && P.FINDING.edl && !JSON.stringify(P.FINDING).includes('—'), 'finding wording, no em dashes');
 
 // ---------- rules ----------
 ok(P.applicationMissing({}).length > 3, 'empty application lists what is missing');

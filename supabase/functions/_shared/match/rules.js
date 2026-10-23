@@ -71,7 +71,10 @@ export function screeningSummary(scr, checks, required = DEFAULT_REQUIRED_CHECKS
     // newest record per check wins
     if (!byKey[c.check_key] || String(c.recorded_at) > String(byKey[c.check_key].recorded_at)) byKey[c.check_key] = c;
   }
-  const findings = scr.screen_result === 'findings';
+  // A finding the office reviewed as clear (not on the list, or waiver approved) no longer blocks (2026-10-23).
+  const review = scr.finding_review || null;
+  const cleared = review === 'cleared_no_waiver' || review === 'cleared_waiver';
+  const findings = scr.screen_result === 'findings' && !cleared;
   const checkRows = required.map(r => {
     const c = byKey[r.key];
     return { key: r.key, label: r.label, result: c ? c.result : null, clear: !!c && c.result === 'clear',
@@ -79,7 +82,7 @@ export function screeningSummary(scr, checks, required = DEFAULT_REQUIRED_CHECKS
   });
   const checksClear = checkRows.every(c => c.clear);
   const registered = !!scr.reg_verified_at;
-  const screened = !!scr.screen_result_at && scr.screen_result === 'no_findings';
+  const screened = !!scr.screen_result_at && (scr.screen_result === 'no_findings' || cleared);
   const eligible = registered && screened && checksClear && !findings;
   const steps = [
     { ...SCREENING_STEPS[0], done: !!scr.reg_needed_at || registered, at: scr.reg_needed_at, by: scr.reg_needed_source,
@@ -99,9 +102,9 @@ export function screeningSummary(scr, checks, required = DEFAULT_REQUIRED_CHECKS
   const missing = [];
   if (!registered) missing.push('Registration verified');
   if (!scr.screen_result_at) missing.push('FCSR screening result');
-  else if (findings) missing.push('FCSR findings need owner review');
+  else if (findings) missing.push({ gcw_needed: 'Waiting on a Good Cause Waiver', edl: 'On the EDL: cannot work in CDS', not_moving: 'Not moving forward' }[review] || 'FCSR findings need owner review');
   for (const c of checkRows) if (!c.clear) missing.push(c.label);
-  return { steps, eligible, findings, registered, screened, missing,
+  return { steps, eligible, findings, review, registered, screened, missing,
     current: eligible ? 8 : (steps.slice(0, 7).filter(s => s.done).map(s => s.n).pop() || 0) };
 }
 

@@ -1805,6 +1805,45 @@ button.fu-tile.check span { color:#14606F; }
   </div>
 
 
+  <!-- CDS Attendant Onboarding, step by step (2026-10-23, her ask: step by step like the Caring Companions
+       Onboarding tab, the FCSR "cannot hire" list linked, and the Good Cause Waiver steps). Each attendant's
+       profile in Attendants shows the same steps one at a time with "How do I do this?". -->
+  <div class="card" id="guide-attendant-onboarding" style="margin-bottom:16px;border:2px solid #0f7a7c">
+    <div class="card-title"><span class="icon">🧭</span> CDS Attendant Onboarding, step by step</div>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px">The attendant works for the consumer. Our job is to make sure they are allowed to work in CDS and get paid. Goal: about 20 office minutes per attendant. Each attendant's profile (Attendants, then tap their name) shows their next step with "How do I do this?".</p>
+    <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">Application (attendant, on their own)</div>
+      <div class="step-desc">The consumer sends their caregiver to <strong>caringcds.com/apply</strong>. You get an alert the moment Step 1 is signed. A consumer waiting means it is due today.</div></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Checks (office, about 10 minutes)</div>
+      <div class="step-desc">OIG runs by itself. Run <strong>FCSR</strong> and <strong>EDL</strong> from their profile with the Copy buttons, on every name and every SSN they listed. Record each result with its screenshot. Nobody works before all checks are clear.</div></div></div>
+    <div class="step"><div class="step-num">!</div><div class="step-content"><div class="step-title">If the FCSR finds something</div>
+      <div class="step-desc">Check it against the <a href="https://mmac.mo.gov/wp-content/uploads/Disqaulifying-Factors-FCSR-2023.pdf" target="_blank" rel="noopener">FCSR "cannot hire" list (MMAC)</a>, then tap <strong>Something came up</strong> on their profile and pick one:
+        <ul style="margin:6px 0 0 18px">
+          <li><strong>On the list:</strong> they need a Good Cause Waiver. The hub texts and emails them the steps. No shifts and no Step 2 papers while it is pending. Every 2 weeks you get a to-do to check the waiver status on the FCSR site (Good Cause Waiver tab, Waiver Status). When the approval letter comes, add it and pick Clear to continue or Not moving forward.</li>
+          <li><strong>On the EDL:</strong> they cannot work in CDS. A waiver is not possible.</li>
+          <li><strong>Not on the list</strong> (for example a misdemeanor): clear after review, nothing is sent.</li>
+        </ul>
+        Either way you get a to-do to <strong>call the consumer</strong>. You tell the consumer, not the hub. Not sure? Call MMAC at 573-751-3399.</div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Orientation video and handbook (attendant)</div>
+      <div class="step-desc">The links are on their last Step 1 screen and sent by text and email. Reminders go out by themselves.</div></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Papers (attendant)</div>
+      <div class="step-desc">Opens when checks are clear: Attendant Care Contract, pay rate, unit agreement, handbook.</div></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Empeon (office, about 3 minutes)</div>
+      <div class="step-desc">Copy for Empeon, send the invite, tap <strong>Empeon invite sent</strong>. W-4, I-9, direct deposit and ID photos happen in Empeon.</div></div></div>
+    <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">ID call (office, 5 minutes)</div>
+      <div class="step-desc">Video call: they hold up the same ID they uploaded. Tap <strong>ID seen</strong>, finish I-9 Section 2 in Empeon (remote box), countersign the contract.</div></div></div>
+    <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">First shift</div>
+      <div class="step-desc">They clock in with the WellSky app or the consumer's home phone. The hub sees the first shift from the WellSky email and moves them to Working.</div></div></div>
+    <div class="step-desc" style="margin-top:10px"><strong>Links:</strong>
+      <a href="https://healthapps.dhss.mo.gov/BSEES/Main.aspx" target="_blank" rel="noopener">FCSR provider login</a> ·
+      <a href="https://mmac.mo.gov/wp-content/uploads/Disqaulifying-Factors-FCSR-2023.pdf" target="_blank" rel="noopener">FCSR "cannot hire" list</a> ·
+      <a href="https://health.mo.gov/providers/good-cause-waiver" target="_blank" rel="noopener">Good Cause Waiver: how to apply</a> ·
+      <a href="https://mmac.mo.gov/providers/provider-enrollment/home-and-community-based-services/fcsr-for-in-home-and-consumer-directed-services" target="_blank" rel="noopener">MMAC: FCSR for CDS providers</a> ·
+      <a href="https://health.mo.gov/business-professionals/employee-disqualification-list-edl" target="_blank" rel="noopener">EDL</a> ·
+      <a href="https://exclusions.oig.hhs.gov/" target="_blank" rel="noopener">OIG search</a> ·
+      <a href="https://revisor.mo.gov/main/OneSection.aspx?section=192.2495" target="_blank" rel="noopener">Section 192.2495 RSMo</a></div>
+    <div class="step-desc" style="margin-top:6px">Rechecks after they start: OIG every month (runs by itself), EDL every 3 months, FCSR every year. Keep FCSR and waiver papers 5 years.</div>
+  </div>
+
   <div class="grid-2">
     <div class="card">
       <div class="card-title"><span class="icon">👤</span> New Consumer Onboarding Checklist</div>
@@ -5037,7 +5076,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=17');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=18');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
