@@ -246,7 +246,17 @@ export function createOig(deps) {
     const pools = await q(`select p.id, p.first_name, p.last_name, s.legal_first, s.legal_middle, s.legal_last, s.dob::text dob, k.answers->>'state' state
       from cds_packets k join attendant_pool p on p.id = k.pool_id left join cds_screening s on s.pool_id = p.id
       where k.step1_signed_at is not null and not coalesce(p.archived, false) order by p.last_name, p.first_name`);
+    // Office staff (2026-10-22, MMAC CDS Program Requirements 5.2: employees and attendants monthly,
+    // every known other name too). The hub's Settings list 'officeStaff', only while her hub switch
+    // 'moStaffOig' is on. Each other name is checked as its own entry under the same person.
+    const sw = await one(`select data_value from agency_data where agency_id=$1 and data_key='moStaffOig'`, [AGENCY_ID]);
+    const staffOn = !!(sw && sw.data_value && sw.data_value.live === true);
+    const so = staffOn ? await one(`select data_value from agency_data where agency_id=$1 and data_key='officeStaff'`, [AGENCY_ID]) : null;
+    const office = (so && Array.isArray(so.data_value) ? so.data_value : []).filter(x => x && x.id && String(x.name || '').trim() && !x.leftAt);
+    const staffPeople = office.flatMap(x => [String(x.name).trim(), ...String(x.otherNames || '').split(/[,;\n]/).map(n => n.trim()).filter(n => n.split(/\s+/).length >= 2)]
+      .map((n, i) => ({ ref: 'staff:' + x.id + (i ? ':alias' + i : ''), name: n, ...splitName(n), dob: x.dob, state: 'MO' })));
     return check({ source: 'recheck', people: [
+      ...staffPeople,
       ...list.map(a => ({ ref: 'attendant:' + a.id, name: a.name, ...splitName(a.name), dob: a.dob, state: a.state })),
       ...pools.map(p => ({ ref: 'pool:' + p.id, first: p.legal_first || p.first_name, middle: p.legal_middle || '', last: p.legal_last || p.last_name,
         name: [p.legal_first || p.first_name, p.legal_last || p.last_name].join(' '), dob: p.dob, state: p.state || 'MO' }))] });
@@ -316,6 +326,15 @@ export function createOig(deps) {
     const action = String((body && body.action) || 'list');
     if (action === 'list') return officeList(email);
     if (action === 'review') return review(email, body);
+    // "Check everyone now" on the Office staff card: the same recheck the 11th runs, against the
+    // list already loaded. Switch owners only (it can make to-dos).
+    if (action === 'recheck') {
+      const ow = await one(`select value from cds_match_settings where key='switch_owners'`);
+      const owners = (ow && Array.isArray(ow.value) ? ow.value : []).map(e => String(e).toLowerCase());
+      if (!owners.includes(String(email || '').toLowerCase())) throw new OigError('Only Samantha can run the check by hand.', 403);
+      const r = await recheckAll();
+      return { ok: true, checked: r.checked, possible: r.possible, failed: r.failed };
+    }
     throw new OigError('Unknown request');
   }
 

@@ -21,7 +21,7 @@ export function cleanAnswers(a = {}) {
   const has = k => Object.prototype.hasOwnProperty.call(a, k);
   for (const k of ['first', 'last', 'mi', 'street', 'apt', 'city', 'state', 'zip', 'phone', 'email', 'aliases', 'consumer_name', 'gaps',
     'hs', 'hs_years', 'col', 'col_years']) if (has(k)) o[k] = s(a[k], k === 'gaps' ? 1000 : 120);
-  for (const k of ['has_consumer', 'related', 'qualified', 'on_call', 'not_working_ok', 'hs_grad', 'col_grad', 'convicted', 'gcw'])
+  for (const k of ['has_consumer', 'related', 'qualified', 'on_call', 'not_working_ok', 'hs_grad', 'col_grad', 'convicted', 'gcw', 'guardian', 'gets_cds', 'mfraud'])
     if (has(k)) o[k] = yn(a[k]);
   if (has('relation')) o.relation = pick(a.relation, Object.keys(RELATIONS));
   if (has('list')) o.list = pick(a.list, ['join', 'no']);
@@ -44,7 +44,14 @@ export function cleanAnswers(a = {}) {
 
 const digits = v => String(v ?? '').replace(/\D/g, '');
 // What is still missing before the application can be signed. [] = ready.
-export function applicationMissing(a = {}) {
+// mo: the three questions from Missouri's attendant rules (19 CSR 15-8.400(5)(A)3, her yes 2026-10-22),
+// asked only while the setting apply_questions is on. A Yes on any of them means a different caregiver.
+export const MO_QUESTIONS = {
+  guardian: { q: 'Are you the consumer\u2019s legal guardian or conservator?', stop: 'a different caregiver: Missouri does not allow a legal guardian or conservator to be paid as the CDS attendant' },
+  gets_cds: { q: 'Do you get CDS services yourself?', stop: 'a different caregiver: Missouri does not allow someone who gets CDS to be a paid CDS attendant' },
+  mfraud: { q: 'Have you ever been involved in Medicaid fraud?', stop: 'a different caregiver: Missouri does not allow someone involved in Medicaid fraud to be a paid CDS attendant' },
+};
+export function applicationMissing(a = {}, opts = {}) {
   const m = [];
   if (!(a.first && a.last && a.street && a.city && a.zip && digits(a.phone).length >= 10)) m.push('your name, address and phone');
   if (a.has_consumer !== 'no') {
@@ -63,6 +70,11 @@ export function applicationMissing(a = {}) {
   if (refs.length < 2) m.push('2 references');
   if (!a.convicted || !a.gcw || !a.fcsr || !a.mo_only) m.push('the background questions');
   if (a.convicted === 'yes' && !(a.offenses || []).some(o => o.what)) m.push('what the offense was');
+  if (opts.mo) {
+    const keys = Object.keys(MO_QUESTIONS).filter(k => k !== 'guardian' || a.has_consumer !== 'no');
+    if (keys.some(k => !a[k])) m.push('the Missouri questions');
+    keys.forEach(k => { if (a[k] === 'yes') m.push(MO_QUESTIONS[k].stop); });
+  }
   return m;
 }
 export function backgroundMissing(a = {}, identityDone) {

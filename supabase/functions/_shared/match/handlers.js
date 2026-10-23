@@ -16,6 +16,7 @@ import * as R from './rules.js';
 import { TEMPLATES, fill, CONSENT_WORDING, FCSR_EXPLAINER, PROVIDER_CHOICE, FCSR_EMPLOYER } from './messages.js';
 import { createPacket } from '../packet/handlers.js';
 import { createEnroll } from '../enroll/handlers.js';
+import { createSign } from '../enroll/sign.js';
 
 export class MatchError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -945,8 +946,13 @@ export function createMatch(deps) {
       const sec = await one('select ssn_ciphertext from cds_screening_secret where pool_id=$1', [id]);
       if (!sec) fail('The full number isn\'t on file. It\'s deleted once the FCSR result is recorded. Ask the caregiver to sign the authorization again if a new screening is needed.');
       const digits = await crypto.decrypt(sec.ssn_ciphertext);
-      await audit('staff:' + s, 'ssn_viewed_for_fcsr', 'pool:' + id, { reason: String(reason || 'FCSR screening request').slice(0, 80) });
-      return { ssn: digits.slice(0, 3) + '-' + digits.slice(3, 5) + '-' + digits.slice(5) };
+      // Any other number they said they used (sealed on the application): FCSR and EDL run on every
+      // number (MMAC CDS Program Requirements 4.2.3, 2026-10-22). Shown in the same recorded view.
+      const pk = await one(`select answers->>'other_ssn_sealed' o from cds_packets where pool_id=$1`, [id]);
+      let other = '';
+      if (pk && pk.o) { try { other = String(await crypto.decrypt(pk.o)).split(/[,; ]+/).map(d => d.replace(/\D/g, '')).filter(d => d.length === 9).map(d => d.slice(0, 3) + '-' + d.slice(3, 5) + '-' + d.slice(5)).join(', '); } catch { other = ''; } }
+      await audit('staff:' + s, 'ssn_viewed_for_fcsr', 'pool:' + id, { reason: String(reason || 'FCSR screening request').slice(0, 80), other: !!other });
+      return { ssn: digits.slice(0, 3) + '-' + digits.slice(3, 5) + '-' + digits.slice(5), other };
     },
     async recordCheck({ staff: s, id, check_key, result, checked_on, proof, note }) {
       who(s);
@@ -1385,6 +1391,9 @@ export function createMatch(deps) {
   // The consumer enrollment packet (2026-10-22): consumers on their own private link.
   const enroll = createEnroll({ q, one, nowIso, audit, setting, task, crypto, links, R, fail, deps, isTestRecipient });
   Object.assign(staff, enroll.office);
+  // Missouri forms for consumers on the roster (2026-10-22): rights, office details, pandemic policy.
+  const sign = createSign({ q, one, nowIso, audit, setting, crypto, links, R, fail, deps, isTestRecipient });
+  Object.assign(staff, sign.office);
   // 'job' is only reachable with the schedule's secret (checked in the edge function).
   // One 15-minute job runs both packets' reminders; one failing never stops the other.
   const job = { packetJob: async () => {
@@ -1392,7 +1401,7 @@ export function createMatch(deps) {
     let e; try { e = await enroll.enrollJob(); } catch (err) { e = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
     return { ...r, enroll: e };
   } };
-  const ROLES = { public: pub, family, caregiver, staff, job, consumer: enroll.consumer };
+  const ROLES = { public: pub, family, caregiver, staff, job, consumer: { ...enroll.consumer, ...sign.consumer } };
   return {
     async handle(role, action, input = {}) {
       const r = ROLES[role];
