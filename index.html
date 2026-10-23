@@ -2423,6 +2423,9 @@ button.fu-tile.check span { color:#14606F; }
     </div>
   </div>
 
+  <!-- CDS manager training (2026-10-22, 19 CSR 15-8.400(1)(D)(E)); drawn by renderManagerCard() while her switch is on -->
+  <div id="managerCard"></div>
+
   <!-- GHL CONTACT SYNC -->
   <div class="card" style="margin-bottom:20px">
     <div class="card-title"><span class="icon">🔄</span> GoHighLevel Contact Sync</div>
@@ -5832,9 +5835,9 @@ async function renderSwitches(reload) {
   }).join('');
   host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
     '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
-    '<div id="visitFormSwitch" style="padding:10px 0;border-top:1px solid var(--gray-200)"></div>' +
+    '<div id="hubSwitches"></div>' +
     rows + '</div>' + needOwnersHtml(d);
-  renderVisitFormSwitch();
+  renderHubSwitches();
 }
 // Who owns each need (Communication Center step 2, 2026-10-22). A new follow-up card goes to this
 // person. Same rule as the switches: everyone sees it, only Samantha changes it, every change recorded.
@@ -7969,6 +7972,7 @@ function clearOutreachLog() {
 // ============================================================
 function renderAutomations() {
   renderSwitches();
+  renderManagerCard();
   renderPendingOutreaches();
   renderQuickSendGrid();
   renderOutreachLog();
@@ -8400,7 +8404,7 @@ function logAnnualVisit(cid) {
 // the attendant for, unless they only fill in (3 days or fewer in 30). Services not given as
 // authorized have to be reported to DHSS.
 // Her switch: agency_data 'visitForm' {live}, on the Settings page. Off = the three questions above.
-const visitFormLive = () => getObj('visitForm').live === true;
+const visitFormLive = () => hubSwitchOn('visitForm');
 let _vlm_cid = '';
 function _vlmAttendants(c) {
   return getData('attendants').filter(a => String(a.consumer || '').trim().toUpperCase() === String(c.name || '').trim().toUpperCase())
@@ -8486,24 +8490,123 @@ function saveVisitLog() {
   renderOngoingRequirements();
   if (rec.dhss) setTimeout(() => alert('Tell DHSS: services for ' + c.name + ' are not being given as authorized in the plan of care. Missouri requires the vendor to report this.'), 200);
 }
-// The switch row on Settings. Everyone sees it; only Samantha changes it (same people as the Switches card).
-function renderVisitFormSwitch() {
-  const host = document.getElementById('visitFormSwitch');
+// The hub's own switches, at the top of the Switches card (agency_data, one key each). Everyone sees
+// them; only Samantha changes them (same people as the Switches card). Off = the hub as before.
+// 2026-10-22: the visit form, then the six Missouri rules she approved (canvas L4Sq459wGcwy7JBX5A5yGb).
+const HUB_SWITCHES = [
+  { key: 'visitForm', label: 'Face-to-face visit form',
+    does: 'On: Log the visit opens one form with every item Missouri requires (time, who was there, in person, service delivery, quality of care). Off: the three short questions as before.' },
+  { key: 'moManager', label: 'CDS manager training',
+    does: 'On: Settings tracks the MMAC manager test (6 months) and the yearly MMAC meeting, and Today reminds you. Off: hidden.' },
+];
+const hubSwitchOn = key => getObj(key).live === true;
+function renderHubSwitches() {
+  const host = document.getElementById('hubSwitches');
   if (!host) return;
-  const sw = getObj('visitForm'), on = sw.live === true, me = _acWho().trim().toLowerCase();
-  const pill = '<span class="badge ' + (on ? 'badge-green' : 'badge-gray') + '" style="min-width:34px;text-align:center">' + (on ? 'On' : 'Off') + '</span>';
-  const when = sw.at ? new Date(sw.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-  host.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">' +
-    '<div style="flex:1;min-width:240px"><div style="font-weight:700;font-size:13.5px">Face-to-face visit form</div>' +
-    '<div style="font-size:12.5px;color:var(--gray-800);margin-top:2px">On: Log the visit opens one form with every item Missouri requires (time, who was there, in person, service delivery, quality of care). Off: the three short questions as before.</div>' +
-    (sw.by ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:3px">Last changed by ' + esc(sw.by[0].toUpperCase() + sw.by.slice(1)) + (when ? ', ' + esc(when) : '') + '.</div>' : '') + '</div>' +
-    '<div style="white-space:nowrap">' + pill + (LD_WHO_OWNERS.includes(me) ? ' <button class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" style="font-size:11.5px;margin-left:6px" onclick="visitFormSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button>' : '') + '</div></div>';
+  const me = _acWho().trim().toLowerCase(), can = LD_WHO_OWNERS.includes(me);
+  host.innerHTML = HUB_SWITCHES.map(h => {
+    const sw = getObj(h.key), on = sw.live === true;
+    const pill = '<span class="badge ' + (on ? 'badge-green' : 'badge-gray') + '" style="min-width:34px;text-align:center">' + (on ? 'On' : 'Off') + '</span>';
+    const when = sw.at ? new Date(sw.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    return '<div id="hubSwitch_' + h.key + '" style="padding:10px 0;border-top:1px solid var(--gray-200)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">' +
+      '<div style="flex:1;min-width:240px"><div style="font-weight:700;font-size:13.5px">' + esc(h.label) + '</div>' +
+      '<div style="font-size:12.5px;color:var(--gray-800);margin-top:2px">' + esc(h.does) + '</div>' +
+      (sw.by ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:3px">Last changed by ' + esc(sw.by[0].toUpperCase() + sw.by.slice(1)) + (when ? ', ' + esc(when) : '') + '.</div>' : '') + '</div>' +
+      '<div style="white-space:nowrap">' + pill + (can ? ' <button class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" style="font-size:11.5px;margin-left:6px" onclick="hubSwitch(\'' + h.key + '\',' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button>' : '') + '</div></div></div>';
+  }).join('');
 }
-function visitFormSwitch(on) {
+function hubSwitch(key, on) {
   const me = _acWho().trim().toLowerCase();
-  if (!LD_WHO_OWNERS.includes(me)) return;
-  setObj('visitForm', { live: !!on, by: me.split('@')[0], at: new Date().toISOString() });
-  renderVisitFormSwitch();
+  if (!LD_WHO_OWNERS.includes(me) || !HUB_SWITCHES.some(h => h.key === key)) return;
+  setObj(key, { live: !!on, by: me.split('@')[0], at: new Date().toISOString() });
+  renderHubSwitches();
+  if (key === 'moManager') renderManagerCard();
+}
+
+// The CDS manager named to MMAC (2026-10-22, her approved mockup). 19 CSR 15-8.400(1)(E): the manager
+// passes MMAC's certified manager orientation and test within 6 months of hire, attends MMAC's CDS
+// update meeting every year, and attendance is documented. agency_data 'cdsManager'. Proof files go in
+// the private ein-proof bucket under manager/. Her switch 'moManager'; off = nothing shows.
+function managerStatus(m, today) {
+  today = today || new Date().toLocaleDateString('en-CA');
+  const out = { testDue: '', testLate: false, testSoon: false, year: today.slice(0, 4) };
+  if (m.startedAt && !m.testPassedAt) {
+    const d = new Date(m.startedAt + 'T12:00:00'); d.setMonth(d.getMonth() + 6);
+    out.testDue = d.toLocaleDateString('en-CA');
+    const days = Math.round((new Date(out.testDue + 'T12:00:00') - new Date(today + 'T12:00:00')) / 86400000);
+    out.testLate = days < 0; out.testSoon = days >= 0 && days <= 60; out.testDays = days;
+  }
+  out.meeting = (m.meetings || {})[out.year] || null;
+  return out;
+}
+function renderManagerCard() {
+  const host = document.getElementById('managerCard');
+  if (!host) return;
+  if (!hubSwitchOn('moManager')) { host.innerHTML = ''; return; }
+  const m = getObj('cdsManager'), st = managerStatus(m);
+  const proof = p => p ? ' <a href="#" onclick="mgrOpenProof(\'' + esc(p.path) + '\');return false">' + esc(p.name) + '</a>' : '';
+  const row = (title, sub, right) => '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--gray-200)">' +
+    '<div style="flex:1;min-width:240px"><div style="font-weight:700;font-size:13.5px">' + title + '</div><div style="font-size:12.5px;color:var(--gray-800);margin-top:2px">' + sub + '</div></div><div>' + right + '</div></div>';
+  const dateBtn = (what, label) => '<button class="btn btn-sm btn-primary" onclick="mgrDate(\'' + what + '\')">' + label + '</button>';
+  const fileBtn = what => '<label class="btn btn-sm btn-outline" style="cursor:pointer;margin-left:6px">Add proof<input type="file" accept=".pdf,.png,.jpg,.jpeg,.heic" style="display:none" onchange="mgrProof(\'' + what + '\',event)"></label>';
+  host.innerHTML = '<div class="card" style="margin-bottom:20px"><div class="card-title"><span class="icon">🎓</span> CDS manager named to MMAC</div>' +
+    '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px">Missouri: the manager passes MMAC’s test within 6 months of starting and goes to MMAC’s CDS update meeting every year. Keep the proof here. A new manager also needs a written notice to MMAC.</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-bottom:6px">' +
+      '<div><label class="form-label" for="mgr_name">Manager</label><input id="mgr_name" class="form-input" value="' + esc(m.name || '') + '" placeholder="Full name"></div>' +
+      '<div><label class="form-label" for="mgr_start">Started as manager</label><input id="mgr_start" type="date" class="form-input" value="' + esc(m.startedAt || '') + '"></div>' +
+      '<button class="btn btn-sm btn-outline" onclick="mgrSave()">Save</button></div>' +
+    row('MMAC certified manager orientation and test',
+      m.testPassedAt ? 'Passed ' + esc(_niceDay(m.testPassedAt)) + '.' + proof(m.testProof)
+        : st.testDue ? (st.testLate ? '<span style="color:var(--danger);font-weight:600">Overdue: was due ' + esc(_niceDay(st.testDue)) + '.</span>' : 'Due by ' + esc(_niceDay(st.testDue)) + '.') : 'Add the start date to see when it is due.',
+      m.testPassedAt ? (m.testProof ? '<span class="badge badge-green">Done</span>' : fileBtn('test')) : dateBtn('test', 'Mark passed')) +
+    row('MMAC yearly CDS update meeting, ' + st.year,
+      st.meeting ? 'Attended ' + esc(_niceDay(st.meeting.at)) + '.' + proof(st.meeting.proof) : 'No ' + st.year + ' meeting on file yet.',
+      st.meeting ? (st.meeting.proof ? '<span class="badge badge-green">Done</span>' : fileBtn('meeting')) : dateBtn('meeting', 'Mark attended')) +
+    (Object.keys(m.meetings || {}).filter(y => y !== st.year).length ? '<div style="font-size:12px;color:var(--gray-600);padding-top:8px">Earlier years: ' +
+      Object.keys(m.meetings).filter(y => y !== st.year).sort().reverse().map(y => y + ' (' + esc(_niceDay(m.meetings[y].at)) + ')').join(', ') + '</div>' : '') +
+    '<div id="mgr_status" style="font-size:12.5px;margin-top:8px"></div></div>';
+}
+function _mgrSet(fn) {
+  const m = Object.assign({}, getObj('cdsManager'));
+  fn(m); m.by = _acWho(); m.at = new Date().toISOString();
+  setObj('cdsManager', m); renderManagerCard(); renderTodayTop();
+}
+function mgrSave() {
+  const name = document.getElementById('mgr_name').value.trim(), start = document.getElementById('mgr_start').value;
+  const was = getObj('cdsManager');
+  if (was.name && name && was.name !== name && !confirm('Change the manager to ' + name + '? Their test and meetings start fresh, and MMAC needs a written notice.')) return;
+  _mgrSet(m => {
+    if (m.name && name !== m.name) { m.past = (m.past || []).concat([{ name: m.name, startedAt: m.startedAt, testPassedAt: m.testPassedAt, testProof: m.testProof, meetings: m.meetings }]); delete m.testPassedAt; delete m.testProof; m.meetings = {}; }
+    m.name = name; m.startedAt = start;
+  });
+}
+function mgrDate(what) {
+  const today = new Date().toLocaleDateString('en-CA');
+  const d = prompt(what === 'test' ? 'Date the MMAC test was passed (YYYY-MM-DD):' : 'Date of the MMAC update meeting (YYYY-MM-DD):', today);
+  if (!d) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > today) { alert('Please use YYYY-MM-DD, not in the future.'); return; }
+  _mgrSet(m => { if (what === 'test') m.testPassedAt = d; else { m.meetings = Object.assign({}, m.meetings); m.meetings[d.slice(0, 4)] = { at: d }; } });
+}
+async function mgrProof(what, ev) {
+  const file = ev.target.files[0], status = document.getElementById('mgr_status');
+  if (!file) return;
+  const m = getObj('cdsManager'), st = managerStatus(m);
+  const ext = (file.name.split('.').pop() || 'pdf').toLowerCase();
+  const path = 'manager/' + consumerStem(m.name || 'manager') + '_' + (what === 'test' ? 'MMAC-test' : 'MMAC-meeting-' + st.year) + '_' + Date.now() + '.' + ext;
+  status.textContent = 'Uploading ' + file.name + '…';
+  try {
+    const { error } = await _db.storage.from(PROOF_BUCKET).upload(path, file, { upsert: false });
+    if (error) throw error;
+    const rec = { path, name: file.name, at: new Date().toISOString().slice(0, 10) };
+    _mgrSet(x => { if (what === 'test') x.testProof = rec; else { x.meetings = Object.assign({}, x.meetings); x.meetings[st.year] = Object.assign({}, x.meetings[st.year], { proof: rec }); } });
+  } catch (e) { status.innerHTML = '<span style="color:var(--danger)">Upload failed: ' + esc(e.message || 'unknown error') + '</span>'; }
+}
+async function mgrOpenProof(path) {
+  try {
+    const { data, error } = await _db.storage.from(PROOF_BUCKET).createSignedUrl(path, 120);
+    if (error) throw error;
+    window.open(data.signedUrl, '_blank');
+  } catch (e) { alert('Could not open the file: ' + (e.message || e)); }
 }
 
 // ── BULK CONTACT BACKFILL ──────────────────────────────────────────────────
@@ -12445,6 +12548,15 @@ function renderTodayTop() {
   soon.forEach(x => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill warn">' +
     (x.r.days > 31 ? '2 months left' : x.r.days + ' days left') + '</span> Face-to-face visit for <b>' + esc(x.c.name) +
     '</b>, due by ' + esc(_niceDay(x.r.due)) + '</span><a href="#" onclick="openProfile(\'' + x.c.id + '\');return false">Book it</a></div>'));
+  // The CDS manager's MMAC test and yearly meeting (her switch 'moManager').
+  if (hubSwitchOn('moManager')) {
+    const m = getObj('cdsManager'), st = managerStatus(m);
+    if (st.testLate || st.testSoon) rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill ' + (st.testLate ? 'bad' : 'warn') + '">' +
+      (st.testLate ? 'Overdue' : st.testDays + ' days left') + '</span> MMAC manager test for <b>' + esc(m.name || 'the CDS manager') + '</b>, due ' + esc(_niceDay(st.testDue)) + '</span>' +
+      '<a href="#settings" onclick="showPage(\'settings\');return false">Open</a></div>');
+    if (m.name && !st.meeting && new Date().getMonth() >= 6) rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill warn">This year</span> MMAC CDS update meeting: no ' + st.year +
+      ' meeting on file yet</span><a href="#settings" onclick="showPage(\'settings\');return false">Open</a></div>');
+  }
   // The monthly check-in count is step 3 of the morning list, so it is not repeated here.
   consumers.forEach(c => {
     const p = CDSRules.firstShiftPrep(c, firstShiftOf(c));
