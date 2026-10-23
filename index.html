@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=16"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=17"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=6"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -12950,7 +12950,7 @@ function renderDailyRoutine() {
     consumers: getData('consumers'), pipeline: getData('pipeline'),
     authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages'), calls: _leadCalls,
     wellskyItems: CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date()),
-    firstShiftOf, followups: commForToday()
+    firstShiftOf, followups: commForToday(), noShift: noShiftList()
   });
 
   // A new-lead alert that did not reach the office is shown in red until
@@ -12986,7 +12986,7 @@ function renderDailyRoutine() {
             (st.items.length
               ? st.items.map(i =>
                   '<div style="font-size:12.5px;margin-bottom:3px;color:' + (i.bad ? 'var(--danger)' : 'var(--gray-800)') + '">' +
-                  '• ' + esc(i.t) + ' <a href="#" onclick="showPage(\'' + i.go + '\');return false" ' +
+                  '• ' + esc(i.t) + ' <a href="#" onclick="' + (i.id ? 'openProfile(\'' + esc(i.id) + '\')' : 'showPage(\'' + i.go + '\')') + ';return false" ' +
                   'style="color:var(--primary);font-weight:600">open →</a></div>').join('')
               : '<div style="font-size:12px;color:var(--success)">✓ ' + esc(st.clear) + '</div>') +
           '</div>' +

@@ -44,5 +44,37 @@ ok(/15-8\.400\(7\)\(B\)/.test(L.cite), 'names the rule');
 ok(R.endingLetter({ name: 'X' }, { kind: 'death' }, '2026-10-22') === null, 'no letter for a death');
 ok(!Object.values(L).join(' ').includes('\u2014'), 'no em dashes in the letter');
 
+// ── the morning list (step 5) ──
+{
+  const now = new Date('2026-10-22T12:00:00');
+  const st = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { date: v }]));
+  const cs = [
+    { id: '1', name: 'Amy Active', status: 'active' },
+    { id: '2', name: 'Ben Died', status: 'closing', ending: { kind: 'death', steps: {} } },
+    { id: '3', name: 'Cal Hospital', status: 'paused', ending: { kind: 'hospital', steps: {} } },
+    { id: '4', name: 'Dee NoAtt', status: 'closing', ending: { kind: 'noAttendant', steps: st({ learned: '2026-10-01' }) } },
+    { id: '5', name: 'Eve Asked', status: 'closing', ending: { kind: 'asked', steps: st({ learned: '2026-10-01', dsds: '2026-10-02', confirm: '2026-10-03', file: '2026-10-03' }), dsdsNotice: '2026-10-18' } },
+    { id: '6', name: 'Fay Medicaid', status: 'closing', ending: { kind: 'medicaid', steps: st({ learned: '2026-10-01', dsds: '2026-10-02', file: '2026-10-03' }), dsdsNotice: '2026-10-05', lastDay: '2026-10-15' } },
+    { id: '7', name: 'Gus Waiting', status: 'closing', ending: { kind: 'medicaid', steps: st({ learned: '2026-10-01', dsds: '2026-10-02', file: '2026-10-03' }) } },
+    { id: '8', name: 'Hal Gone', status: 'inactive', ending: null },
+    { id: '9', name: 'Ivy Quiet', status: 'active' }, { id: '10', name: 'Jo Told', status: 'active', noShiftReport: { date: '2026-10-20' } }
+  ];
+  const items = R.closureItems(cs, now, { days: 30, people: [{ id: '9', name: 'Ivy Quiet', last: '' }, { id: '10', name: 'Jo Told', last: '' }] });
+  const line = n => items.find(i => i.t.startsWith(n));
+  ok(/tell DSDS right away/.test(line('Ben Died').t) && line('Ben Died').bad && line('Ben Died').id === '2', 'death: tell DSDS right away, red, opens the profile');
+  ok(/Tell DSDS about the stay/.test(line('Cal Hospital').t) && line('Cal Hospital').bad, 'hospital: tell DSDS about the stay');
+  ok(/next, offers of help/.test(line('Dee NoAtt').t), 'no attendant: next missing step');
+  ok(/appeal window ends Oct 28/.test(line('Eve Asked').t) && !line('Eve Asked').bad, 'appeal window shown, not red');
+  ok(/Mark them inactive/.test(line('Fay Medicaid').t) && line('Fay Medicaid').bad, 'ready to mark inactive');
+  ok(/waiting on DSDS/.test(line('Gus Waiting').t) && !line('Gus Waiting').bad, 'waiting on DSDS, not red');
+  ok(!line('Amy Active') && !line('Hal Gone'), 'active and inactive consumers have no closing line');
+  const ns = items.find(i => /no worked shift/.test(i.t));
+  ok(ns && /Ivy Quiet/.test(ns.t) && !/Jo Told/.test(ns.t) && ns.bad, 'no-shift line names only those DSDS was not told about');
+  ok(R.closureItems([{ id: '1', name: 'A', status: 'active' }], now, null).length === 0, 'nothing to do, no lines');
+  const steps = R.dailyRoutine({ consumers: cs, pipeline: [] }, now);
+  ok(steps[steps.length - 1].title === 'Closings, pauses and missing shifts', 'the morning list gets the closings step');
+  ok(R.dailyRoutine({ consumers: [{ id: '1', name: 'A' }], pipeline: [] }, now).length === 4, 'no closings: the email keeps its four steps');
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

@@ -256,7 +256,45 @@
         clear: 'New consumers are ready.'
       });
     }
+    // Closings, pauses and missing shifts (closure plan step 5, her yes 2026-10-22). Only shown
+    // when there is something to do, so a morning with none keeps the old steps.
+    const closing = closureItems(data.consumers || [], now, data.noShift);
+    if (closing.length) steps.push({ n: steps.length + 1, title: 'Closings, pauses and missing shifts', items: closing,
+                                     clear: 'No closings or missing shifts.' });
     return steps;
+  }
+
+  // One line per consumer who is Closing or Paused: the next thing the rules need. Plus the
+  // consumers with no worked shift in 30+ days whom nobody has told DSDS about yet
+  // (noShift = CDSWellSky.noShifts(...); the hub hands it in, the email does not yet).
+  // Items with id open that consumer's profile in the hub.
+  function closureItems(consumers, now, noShift) {
+    const todayIso = isoLocal(now || new Date());
+    const day = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const items = [];
+    (consumers || []).filter(c => c && c.ending && isActive(c)).sort((a, b) => String(a.name).localeCompare(String(b.name))).forEach(c => {
+      const e = c.ending, r = endingReason(e.kind);
+      if (!r) return;
+      const d = e.steps || {};
+      const it = (t, bad) => items.push({ t: c.name + ': ' + t, go: 'consumers', id: c.id, bad: !!bad });
+      if (r.pause) return it('paused (' + r.t.toLowerCase() + ')' + (d.dsdsTold && d.dsdsTold.date ? '. Mark them back home when they are.' : '. Tell DSDS about the stay.'), !(d.dsdsTold && d.dsdsTold.date));
+      if (r.group === 'tell' && !(d.dsds && d.dsds.date)) return it('tell DSDS right away (' + r.t.toLowerCase() + ')', true);
+      const miss = endingMissing(e);
+      if (miss.length) return it('next, ' + miss[0].charAt(0).toLowerCase() + miss[0].slice(1), true);
+      if (!e.dsdsNotice) return it('waiting on DSDS to decide. Keep serving them.', false);
+      const appeal = appealEnds(e.dsdsNotice);
+      if (appeal >= todayIso) return it('the appeal window ends ' + day(appeal) + '. Keep serving them until then.', false);
+      if (!e.lastDay) return it('enter the last day of services from DSDS', true);
+      return it('DSDS closed the case. Mark them inactive.', true);
+    });
+    const notTold = ((noShift && noShift.people) || []).filter(p => {
+      const c = (consumers || []).find(x => x.id === p.id);
+      return !(c && c.noShiftReport && c.noShiftReport.date);
+    });
+    if (notTold.length) items.push({ t: plural(notTold.length, 'consumer', 'consumers') + ' with no worked shift in ' + noShift.days + '+ days, DSDS not told: ' +
+                                       notTold.map(p => p.name).join(', '), go: 'consumers', bad: true,
+                                     people: notTold.map(p => ({ name: p.name, county: '', at: p.last || '' })) });
+    return items;
   }
 
   // Her checklist (2026-10-21) for a new consumer between approval and the first
@@ -656,5 +694,5 @@
                     dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
-                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter };
+                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
