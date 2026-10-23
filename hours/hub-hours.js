@@ -6,7 +6,8 @@
 // Everything here is read from what the hub already has: agency_data 'wellskyCheck' (the
 // WellSky reports), 'wellskyReviewed', 'evvCorrections' and the evv_submissions table. It never
 // writes. Calls about care go to the consumer (her rule 2026-10-21), so no attendant phone here.
-// mountHours(el, { W, check, reviewed, corrections, submissions, consumers, go })
+// mountHours(el, { W, check, reviewed, corrections, submissions, consumers, go, markChecked })
+// markChecked(key): the hub saves who checked a shift (wellskyReviewed), so it drops off here and on Today.
 // No em dashes in anything a person reads.
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -178,7 +179,8 @@ const CSS = `
 export function mountHours(el, opts) {
   if (!document.getElementById('hx_css')) { const s = document.createElement('style'); s.id = 'hx_css'; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add('hx');
-  el.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b && opts.go) opts.go(b.dataset.go); if (e.target.closest('[data-act=reload]')) draw(); });
+  el.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b && opts.go) opts.go(b.dataset.go); if (e.target.closest('[data-act=reload]')) draw();
+    const c = e.target.closest('[data-check]'); if (c && opts.markChecked) { opts.markChecked(c.dataset.check); draw(); } });
   draw();
   async function draw() {
     let subs = [], subsErr = '';
@@ -196,7 +198,8 @@ export function mountHours(el, opts) {
         <div class="bar${tone === 'r' ? ' over' : h.status === 'low' ? ' low' : ''}"><span style="width:${pct.toFixed(1)}%"></span><em style="left:${(v.expectedShare * 100).toFixed(1)}%"></em></div>
         <span class="meta">${esc(hrs(h.completed))} of ${esc(hrs(h.authorized))}${h.scheduled ? ' (+' + esc(hrs(h.scheduled)) + ' booked)' : ''}${h.note ? ' · ' + esc(h.note) : ''}${h.status !== 'ok' ? ' · Check in with ' + esc(name) + (ph ? ' at ' + esc(ph) : '') : ''}</span></div>`;
     };
-    const checkRow = (title, meta, tone) => `<div class="row${tone === 'r' ? ' hot' : ''}"><b>${esc(title)}</b><span class="pill ${tone}">${tone === 'r' ? 'Needs a correction form' : 'Check with the consumer'}</span><span class="meta">${esc(meta)}</span></div>`;
+    // A Checked button on every row (2026-10-22): two attendants at once had no way to be cleared.
+    const checkRow = (title, meta, tone, key) => `<div class="row${tone === 'r' ? ' hot' : ''}"><b>${esc(title)}</b><span class="pill ${tone}">${tone === 'r' ? 'Needs a correction form' : 'Check with the consumer'}</span><span class="meta">${esc(meta)}${key && opts.markChecked ? ` <button class="link" data-check="${esc(key)}">Checked</button>` : ''}</span></div>`;
     const endPill = { ended: ['r', 'Ended'], soon: ['y', 'Ends soon'], unknown: ['b', 'End date not in WellSky name'], ok: ['g', 'Current'] };
     const e = v.evv;
     el.innerHTML = `<div class="ghead"><h2>This month</h2><span>${v.have ? 'From WellSky, ' + esc(asOf) : ''} <button class="link" data-act="reload">Refresh</button></span></div>
@@ -206,10 +209,10 @@ export function mountHours(el, opts) {
       <section class="grp"><div class="ghead"><h3>Hours against the authorization</h3><span>Bar = hours used. Line = where they would be at an even pace today.</span></div>
       ${v.hours.length ? v.hours.map(hourRow).join('') : '<p class="small">No personal care authorizations in the WellSky report this month.</p>'}</section>
 
-      <section class="grp"><div class="ghead"><h3>Shifts to check</h3><span>Mark them checked on the <button class="link" data-go="authorizations">Authorizations</button> tab</span></div>
-      ${v.open.map(s => checkRow(firstLast(s.consumer) + ': never clocked out', firstLast(s.attendant) + ', ' + s.why + '. The consumer and attendant both sign a correction form.', 'r')).join('')}
-      ${v.overlaps.map(o => checkRow(o.consumer + ': two shifts at the same time, ' + shortDay(o.date), o.why, 'r')).join('')}
-      ${v.long.map(s => checkRow(firstLast(s.consumer) + ': long shift ' + shortDay(s.date), firstLast(s.attendant) + ', ' + s.why + '.', 'y')).join('')}
+      <section class="grp"><div class="ghead"><h3>Shifts to check</h3><span>Tap Checked once it is sorted out (it saves who and when)</span></div>
+      ${v.open.map(s => checkRow(firstLast(s.consumer) + ': never clocked out', firstLast(s.attendant) + ', ' + s.why + '. The consumer and attendant both sign a correction form.', 'r', s.key)).join('')}
+      ${v.overlaps.map(o => checkRow(o.consumer + ': two shifts at the same time, ' + shortDay(o.date), o.why, 'r', o.key)).join('')}
+      ${v.long.map(s => checkRow(firstLast(s.consumer) + ': long shift ' + shortDay(s.date), firstLast(s.attendant) + ', ' + s.why + '.', 'y', s.key)).join('')}
       ${v.tiles.checks ? '' : '<p class="small">Nothing to check. No long shifts, none left clocked in, no two attendants at once.</p>'}</section>
 
       <section class="grp"><div class="ghead"><h3>EVV corrections</h3><button class="link" data-go="evvcorrections">Open EVV forms</button></div>

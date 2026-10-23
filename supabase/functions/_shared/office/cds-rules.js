@@ -769,6 +769,10 @@
     const count = live ? o.wsPeople.length : consumers.length;
     const ym = isoLocal(now).slice(0, 7);
     const checkedIn = consumers.filter(c => c.contacts && c.contacts[ym]).length;
+    // Missed monthly calls in the last 12 months (an auditor counts the months, not the last call).
+    // A health number, not a to-do: past months cannot be made up (2026-10-22, was on the old roster).
+    const missedMonths = consumers.map(c => ({ name: c.name, id: c.id, missed: ongoingRequirements(c, now).monthly.missed }))
+      .filter(x => x.missed >= 2).sort((a, b) => b.missed - a.missed || String(a.name).localeCompare(String(b.name)));
     const atts = (o.attendants || []).filter(a => a.status !== 'inactive');
     const oig = o.oigPeople || {};
     const autoClear = a => { const p = oig['attendant:' + a.id];
@@ -790,7 +794,7 @@
     const pr = o.payRange;
     const range = pr && revenue > 0 ? { low: revenue - hoursMonth * pr[1], high: revenue - hoursMonth * pr[0] } : null;
     return { live, consumers: count, notInWellSky, wellSkyOnly,
-             checkIns: { done: checkedIn, of: count, left: Math.max(0, count - checkedIn) },
+             checkIns: { done: checkedIn, of: count, left: Math.max(0, count - checkedIn) }, missedMonths,
              attendants: atts.length, screeningsSoon: soon,
              leie: { ok: leieOk, of: atts.length, auto: atts.filter(a => autoClear(a)).length }, fcsr: { ok: fcsrOk, of: atts.length },
              checklist: { done, of: total },
