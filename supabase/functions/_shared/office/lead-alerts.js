@@ -117,7 +117,12 @@ export function leadEmail(r, link) {
   return { subject, text, html };
 }
 
-// steps from CDSRules.dailyRoutine; extra = { evv, signups, heldFailed, alertFailures: [{name, why}] }
+const monthDay = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+// steps from CDSRules.dailyRoutine; extra = { evv, signups, heldFailed, alertFailures: [{name, why}],
+//   systemItems?, staleNote? }. systemItems = problems with the WellSky check itself (wellsky.js
+//   system: true); only the owner's copy carries them (her ask 2026-10-22: Zach cannot fix them).
+//   staleNote = the one grey line everyone else gets instead, like Today in the hub.
 export function morningEmail(steps, extra, nowMs) {
   const also = [
     extra.alertFailures?.length && { t: extra.alertFailures.length + ' new lead alert' + (extra.alertFailures.length !== 1 ? 's' : '') + ' did not send', go: 'pipeline', bad: true,
@@ -129,14 +134,16 @@ export function morningEmail(steps, extra, nowMs) {
     extra.signups    && { t: extra.signups + ' caregiver sign-up' + (extra.signups !== 1 ? 's' : '') + ' to call', go: 'caregivermatch' },
     extra.heldFailed && { t: extra.heldFailed + ' message' + (extra.heldFailed !== 1 ? 's' : '') + ' held or failed', go: 'caregivermatch', bad: true },
   ].filter(Boolean);
-  const all = steps.map(s => ({ n: s.n + '.', title: s.title, items: s.items, clear: 'Nothing waiting here.' }))
+  const sys = extra.systemItems || [];
+  const all = (sys.length ? [{ n: '', title: 'For you, Samantha (the team does not see this)', items: sys, clear: '' }] : [])
+    .concat(steps.map(s => ({ n: s.n + '.', title: s.title, items: s.items, clear: 'Nothing waiting here.' })))
     .concat([{ n: '', title: 'Also waiting', items: also, clear: 'Nothing waiting here.' }]);
   const count = all.reduce((t, s) => t + s.items.length, 0);
   const subject = 'CDS morning, ' + dayLong(nowMs) + ': ' + (count ? count + ' thing' + (count !== 1 ? 's' : '') + ' waiting' : 'nothing waiting');
   const intro = count ? 'Good morning. Here is what is waiting in the CDS hub today.' : 'Good morning. Nothing is waiting in the CDS hub today.';
   const foot = 'Sent to Samantha and Krystal every weekday at 8am. Nothing here goes to families.';
   const who = p => p.name + (p.why ? ' (' + p.why + ')' : (p.county ? ', ' + countyOf(p.county) : '') + (p.at && !isNaN(Date.parse(p.at)) ? ', came in ' + whenShort(Date.parse(p.at), nowMs) : ''));
-  const textLines = [intro, ''];
+  const textLines = [intro, ''].concat(extra.staleNote ? [extra.staleNote, ''] : []);
   all.forEach(s => {
     textLines.push((s.n ? s.n + ' ' : '') + s.title);
     if (!s.items.length) textLines.push('   ' + s.clear);
@@ -148,7 +155,7 @@ export function morningEmail(steps, extra, nowMs) {
   });
   textLines.push(foot);
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.55;color:#1f2a36">` +
-    `<p>${esc(intro)}</p>` +
+    `<p>${esc(intro)}</p>` + (extra.staleNote ? `<p style="color:#57606a;font-size:13px">${esc(extra.staleNote)}</p>` : '') +
     all.map(s => `<p style="margin:16px 0 4px"><b>${esc((s.n ? s.n + ' ' : '') + s.title)}</b></p>` +
       (s.items.length
         ? `<ul style="margin:0;padding-left:20px">` + s.items.map(i =>
@@ -298,12 +305,24 @@ export function createLeadAlerts(deps) {
     const noon = new Date(Date.UTC(c.y, c.m - 1, c.d, 12));
     // The daily WellSky check joins the email only once it is live (setting wellsky_check.live).
     const wcfg = await setting('wellsky_check', null);
-    const ws = wcfg && wcfg.live === true ? await store(['wellskyCheck', 'wellskyReviewed']) : {};
-    const wellskyItems = wcfg && wcfg.live === true
-      ? globalThis.CDSWellSky.items(Object.assign({}, ws.wellskyCheck || { lastRun: { ok: false, why: 'never ran' } }, { live: true }), ws.wellskyReviewed || {}, noon)
+    const W = globalThis.CDSWellSky;
+    const ws = wcfg && wcfg.live === true ? await store(['wellskyCheck', 'wellskyReviewed', 'firstShifts', 'cdsGoal']) : {};
+    const wsAll = wcfg && wcfg.live === true
+      ? W.items(Object.assign({}, ws.wellskyCheck || { lastRun: { ok: false, why: 'never ran' } }, { live: true }), ws.wellskyReviewed || {}, noon)
       : [];
+    // 2026-10-22 (her ask, for Zach): problems with the WellSky check itself go to the owners only,
+    // and the email counts active consumers the same way as Today (CDSRules.activeNow).
+    const systemItems = wsAll.filter(i => i.system), wellskyItems = wsAll.filter(i => !i.system);
+    const staleSince = (systemItems.find(i => i.since) || {}).since;
+    const staleNote = systemItems.length ? (staleSince ? 'WellSky numbers in this email are from ' + monthDay(staleSince) + '.' : 'WellSky numbers in this email may be out of date.') +
+      ' Samantha has been told and is fixing the WellSky check.' : '';
+    const sh = (ws.wellskyCheck || {}).shifts;
+    const pulledOn = sh && sh.at ? W.isoLocal(new Date(sh.at)) : '';
+    const cn = sh ? W.consumersNow(sh, pulledOn, ws.firstShifts || {}, s.consumers || [], ws.cdsGoal || {}) : null;
+    const wsPeople = cn ? cn.people.concat(cn.leftOut) : null;
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
-                                   attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems, followups }, noon);
+                                   attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems, followups,
+                                   wsPeople, nameKey: W.nameKey }, noon);
     const pipeline = s.pipeline || [];
     // The attendant check against WellSky joins the email only once setting attendant_check.live is true.
     const acfg = await setting('attendant_check', null);
@@ -322,9 +341,15 @@ export function createLeadAlerts(deps) {
       // website leads that could not be added to GoHighLevel (lead-ghl.js), once it is trying
       ghlFailures: siteLeads.filter(r => String(r.ghl_status || '').startsWith('failed')).map(r => ({ name: R.siteLeadName(r), why: String(r.ghl_status).replace(/^failed: /, '') })),
     };
-    const m = morningEmail(steps, extra, t);
+    const ownersRow = await setting('switch_owners', []);
+    const owners = (Array.isArray(ownersRow) ? ownersRow : []).map(e => String(e).toLowerCase());
+    const m = morningEmail(steps, Object.assign({}, extra, { staleNote }), t);
+    const mOwner = systemItems.length ? morningEmail(steps, Object.assign({}, extra, { systemItems }), t) : m;
     const results = [];
-    for (const to of cfg.emails || []) results.push(await deliver({ live: !!cfg.live, lead: null, channel: 'email', to, toName: to, template: 'morning_email', ...m }));
+    for (const to of cfg.emails || []) {
+      const mine = owners.includes(String(to).toLowerCase()) ? mOwner : m;
+      results.push(await deliver({ live: !!cfg.live, lead: null, channel: 'email', to, toName: to, template: 'morning_email', ...mine }));
+    }
     return { ok: true, live: !!cfg.live, things: m.count, emails: results.map(r => r.status) };
   }
 

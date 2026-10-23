@@ -240,6 +240,25 @@ eq((await jobs.morning()).skipped, 'already sent today', 'only one a day');
 at('2026-10-27T14:00:00Z'); eq((await jobs.morning()).skipped, 'not 8am on a weekday in Central time', '9am: nothing (the winter schedule)');
 at('2026-11-01T14:00:00Z'); eq((await jobs.morning()).skipped, 'not 8am on a weekday in Central time', 'Sunday: nothing');
 at('2026-11-02T14:00:00Z'); ok((await jobs.morning()).ok && (await pg.query(`select count(*)::int n from cds_outbox where template='morning_email'`)).rows[0].n === 4, 'winter time: 14:00 UTC is 8am CST and sends');
+// 2026-10-22 (her ask, for Zach): WellSky check problems go in the owner's copy only; the rest get one line.
+await pg.query(`insert into cds_match_settings (key, value) values ('wellsky_check', '{"live": true}'), ('switch_owners', '["samantha@mo-care.com"]')
+                on conflict (key) do update set value = excluded.value`);
+await setCfg('morning_email', { emails: ['samantha@mo-care.com', 'zach@mo-care.com'] });
+await pg.query(`insert into agency_data (agency_id, data_key, data_value) values ('caring-companions-cds','wellskyCheck',$1::jsonb)`, [JSON.stringify({
+  lastRun: { ok: false, at: '2026-11-03T13:00:00Z', why: 'Chrome was closed' },
+  shifts: { at: '2026-10-20T13:00:00Z', from: '2026-09-01', consumers: [{ name: 'Q, Pat', shifts: [{ date: '2026-10-15', attendant: 'A B' }] }] },
+  auths: { at: '2026-10-20T13:00:00Z', consumers: [] } })]);
+at('2026-11-03T14:00:00Z');
+r = await jobs.morning();
+const ws = (await pg.query(`select * from cds_outbox where template='morning_email' order by created_at desc limit 2`)).rows;
+const toOf = row => String(row.to_display || row.to_address || row.recipient || '');
+const sam = ws.find(x => /^s/.test(toOf(x))), zach = ws.find(x => /^z/.test(toOf(x)));
+ok(sam && zach, 'one email each to Samantha and Zach ' + JSON.stringify(ws.map(toOf)));
+ok(sam && sam.body.includes('For you, Samantha (the team does not see this)') && sam.body.includes('The WellSky check has not run since Oct 20'), 'Samantha gets the WellSky check problem');
+ok(zach && !zach.body.includes('has not run since') && !zach.body.includes('For you, Samantha'), 'Zach does not get the WellSky check problem');
+ok(zach && zach.body.includes('WellSky numbers in this email are from Oct 20. Samantha has been told and is fixing the WellSky check.'), 'Zach gets the one line instead');
+ok(zach && zach.body.includes('   1 monthly check-in call not yet logged this month') && !zach.body.includes('2 monthly check-in'), 'only Pat (worked a WellSky shift) counts as active, like Today');
+
 const clear = LA.morningEmail([{ n: 1, title: 'Clear anything the state is waiting on', items: [] }], {}, Date.parse('2026-10-27T13:00:00Z'));
 ok(clear.subject === 'CDS morning, Tue, Oct 27: nothing waiting' && clear.text.includes('   Nothing waiting here.'), 'a clear morning says so');
 
