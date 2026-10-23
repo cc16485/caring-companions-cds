@@ -63,7 +63,10 @@ export function cardWords(d, now = new Date()) {
   return out;
 }
 
-export function mountOigCard(el, { call }) {
+// quiet(words): optional. When given and there is nothing to decide (no possible match, no
+// problem with the list), the card draws nothing and hands its words to quiet() instead, so the
+// Attendants page can show one small line (her ask 2026-10-22: no boxes above the list on a normal day).
+export function mountOigCard(el, { call, quiet }) {
   if (!document.getElementById('oc_css')) { const s = document.createElement('style'); s.id = 'oc_css'; s.textContent = CSS; document.head.appendChild(s); }
   let data = null, ask = null, note = null;
   async function load() {
@@ -73,6 +76,8 @@ export function mountOigCard(el, { call }) {
   }
   function draw() {
     const w = cardWords(data);
+    if (quiet && !w.people.length && !w.bad && !note) { el.innerHTML = ''; quiet(w); return; }
+    if (quiet) quiet(null);
     const side = (label, rows) => `<div class="side"><b>${esc(label)}</b>${rows.map(([k, v]) => `<div><span class="small">${esc(k)}:</span> ${esc(v)}</div>`).join('')}</div>`;
     el.innerHTML = `<div class="oc">
       <h3>${esc(w.title)} ${w.practice ? '<span class="pill y">Practice</span>' : '<span class="pill g">On</span>'}${w.people.length ? `<span class="pill r">${w.people.length} to look at</span>` : ''}</h3>

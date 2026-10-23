@@ -2610,6 +2610,8 @@ button.fu-tile.check span { color:#14606F; }
   <!-- OIG exclusion check (2026-10-21): drawn by caregiver-match/hub-oig.js from the cds-oig server function -->
   <div id="oigCard"></div>
   <div id="hp_root"></div>
+  <!-- On a normal day the WellSky and OIG boxes above stay empty and say so here (her ask 2026-10-22). -->
+  <p class="quiet-links" id="att_status" style="color:var(--gray-600);display:block"></p>
   <p class="quiet-links"><a href="#roster" onclick="showPage('roster');return false">Old roster and monthly LEIE log</a></p>
 </div>
 
@@ -4750,7 +4752,8 @@ function renderSectionNav(activeSection, activePage) {
   if (!nav) return;
   const sec = SECTIONS.find(x => x.id === activeSection);
   nav.classList.toggle('chips', !!(sec && sec.chips));
-  if (!sec || !sec.tabs.length) { nav.innerHTML = ''; return; }
+  // A section with one tab (Attendants since 2026-10-22) shows no tab bar: a lone button says nothing.
+  if (!sec || sec.tabs.length < 2) { nav.innerHTML = ''; return; }
   nav.innerHTML = (sec.chips ? '<span class="nav-lead">Show</span>' : '') + sec.tabs.map(t =>
     '<button class="' + (t.page === activePage ? 'on' : '') +
     '" onclick="showPage(\'' + t.page + '\')">' + esc(t.label) + (t.count && t.count() ? ' (' + t.count() + ')' : '') + '</button>').join('');
@@ -4867,7 +4870,7 @@ async function renderOigCard() {
   const host = document.getElementById('oigCard');
   if (!host || !_db) return null;
   try {
-    const { mountOigCard } = await import('./caregiver-match/hub-oig.js?v=2');
+    const { mountOigCard } = await import('./caregiver-match/hub-oig.js?v=3');
     const call = async body => {
       const { data } = await _db.auth.getSession();
       const jwt = data && data.session ? data.session.access_token : '';
@@ -4880,7 +4883,10 @@ async function renderOigCard() {
       if (!r.ok) throw new Error(j.error || 'The OIG check could not be reached.');
       return j;
     };
-    const card = mountOigCard(host, { call });
+    const card = mountOigCard(host, { call, quiet: w => {
+      _attStatus.oig = w ? 'OIG check: no possible matches' + (w.practice ? ' (practice)' : '') + '. ' + w.lines.filter(l => !/^Runs by itself/.test(l)).join(' ') : '';
+      renderAttStatus();
+    } });
     await card.ready;
     return card;
   } catch (e) {
@@ -5500,6 +5506,12 @@ function _acReview(key, rec) {
   r[key] = Object.assign({ by: _acWho(), at: new Date().toISOString() }, rec);
   setObj('attendantCheckReviewed', r);
 }
+// The quiet line at the bottom of Active Attendants: what the WellSky and OIG checks found when there is nothing to do.
+const _attStatus = { ws: '', oig: '' };
+function renderAttStatus() {
+  const el = document.getElementById('att_status');
+  if (el) el.textContent = [_attStatus.ws, _attStatus.oig].filter(Boolean).join('   ');
+}
 function renderAttendantCheck(note) {
   const host = document.getElementById('attendantCheck');
   if (!host || typeof CDSAttendantCheck !== 'object') return;
@@ -5516,12 +5528,14 @@ function renderAttendantCheck(note) {
     host.innerHTML = h + '<div style="font-size:13px;color:var(--gray-600)">The WellSky check has not sent a schedule yet, so there is nothing to compare with.</div></div>';
     return;
   }
-  // Everything matches: one quiet line, so the attendants list is the first thing on the page (2026-10-22).
+  // Everything matches: no box at all, one quiet line at the bottom of the page instead (her ask 2026-10-22).
   if (!r.missing.length && !r.quiet.length && !r.different.length && !note) {
-    host.innerHTML = '<div class="card" style="padding:10px 14px;font-size:13px;color:var(--gray-600)"><span style="color:var(--success);font-weight:700">✓ Everyone on the Roster matches WellSky</span>' +
-      ' (WellSky schedule ' + esc(new Date(r.at || 0).toLocaleString('en-US', { month: 'short', day: 'numeric' })) + (r.stale ? ', not updated since' : '') + ').</div>';
+    host.innerHTML = '';
+    _attStatus.ws = '✓ Everyone on the Roster matches WellSky (WellSky schedule ' + new Date(r.at || 0).toLocaleString('en-US', { month: 'short', day: 'numeric' }) + (r.stale ? ', not updated since' : '') + ').';
+    renderAttStatus();
     return;
   }
+  _attStatus.ws = ''; renderAttStatus();
   h += '<div style="font-size:12.5px;color:var(--gray-600)">From this morning\'s WellSky schedule (' + esc(A.short(r.from)) + ' to ' + esc(A.short(r.to)) + '). ' +
        'WellSky says who is working; this list keeps the checks. Nothing changes until you click.</div>';
   if (r.stale) h += '<div class="alert alert-danger" style="font-size:12.5px;margin-top:8px"><div>The WellSky check last ran ' +
