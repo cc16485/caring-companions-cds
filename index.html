@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=14"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=15"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=5"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -270,6 +270,20 @@
     #addPipelineModal .modal { width: 100vw; max-height: 100vh; border-radius: 0; }
   }
   .chipset{display:flex;flex-wrap:wrap;gap:6px;}
+  /* Ending or pausing services (her yes 2026-10-22) */
+  .end-group{margin-top:14px;}
+  .end-group h4{margin:0 0 6px;font-size:13px;color:var(--primary);}
+  .end-group h4 small{font-weight:400;color:var(--gray-600);}
+  .end-pick{display:flex;gap:10px;align-items:flex-start;border:1.5px solid var(--gray-300);border-radius:8px;padding:9px 12px;margin-bottom:6px;cursor:pointer;font-size:13.5px;}
+  .end-pick:has(input:checked){border-color:var(--primary-light);background:#E4F4F3;}
+  .end-pick small{display:block;color:var(--gray-600);font-size:12px;margin-top:2px;}
+  .end-card{border:2px solid #E7B35A;background:#FFFAF0;border-radius:10px;padding:16px 18px;margin:14px 0;}
+  .end-card.paused{border-color:var(--primary-light);background:#F2FAF9;}
+  .end-step{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid #F0E3C8;font-size:13.5px;}
+  .end-step .t{flex:1 1 260px;}
+  .end-step .who{font-size:12px;color:var(--gray-600);}
+  .end-step input[type=date]{font:inherit;font-size:13px;padding:4px 6px;border:1px solid var(--gray-300);border-radius:6px;}
+  .end-cite{font-size:12px;color:var(--gray-600);}
   /* Roster Active / Inactive switch (her ask 2026-10-22) */
   .roster-seg{display:inline-flex;gap:4px;background:var(--gray-100,#f3f4f6);border-radius:999px;padding:3px;}
   .roster-seg button{border:0;background:transparent;border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;font-weight:600;color:var(--gray-600);cursor:pointer;}
@@ -1203,6 +1217,17 @@ button.fu-tile.check span { color:#14606F; }
     </div>
   </div>
 
+  <!-- Two tabs (her ask 2026-10-22): getting numbers set up, and the tax steps
+       for consumers who are leaving. -->
+  <style>
+    .tax-tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--gray-200); margin: 0 0 16px; }
+    .tax-tabs button { font: inherit; font-size: 14px; font-weight: 600; color: var(--gray-600); background: none; border: 0;
+      border-bottom: 3px solid transparent; padding: 8px 2px; margin-bottom: -1px; cursor: pointer; }
+    .tax-tabs button.on { color: var(--primary); border-bottom-color: var(--primary); }
+  </style>
+  <div class="tax-tabs" id="taxTabs" role="tablist"></div>
+
+  <div id="taxPaneSetup">
   <!-- 2026-10-22 simplified: one status line, the to-do cards, one table. The
        Empeon cross-check is gone because Empeon has been corrected. -->
   <div id="taxDeadlineBanner"></div>
@@ -1211,9 +1236,6 @@ button.fu-tile.check span { color:#14606F; }
   <div id="complianceClocks"></div>
 
   <div id="taxBatches" style="margin-bottom:18px"></div>
-
-  <!-- Consumers who have left, until every ending tax step is ticked. -->
-  <div id="taxEnding"></div>
 
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="icon">📋</span> Every consumer</div>
@@ -1245,6 +1267,12 @@ button.fu-tile.check span { color:#14606F; }
       <span style="color:var(--gray-600)">Two free passes: a single document showing <strong>both</strong> numbers covers both, and
       no upload is needed at all where a <strong>previous CDS vendor</strong> already uploaded proof to that case record.</span>
     </div>
+  </div>
+  </div>
+
+  <!-- Consumers who are leaving, until every tax step is ticked. -->
+  <div id="taxPaneEnding" style="display:none">
+    <div id="taxEnding"></div>
   </div>
 </div>
 
@@ -2772,6 +2800,19 @@ button.fu-tile.check span { color:#14606F; }
   #contactLogModal .clm-note, #visitLogModal .clm-note { margin-top: 8px; font-size: 13px; }
   @media (max-width: 760px) { #contactLogModal .clm-body, #visitLogModal .clm-body { grid-template-columns: 1fr; } }
 </style>
+<div class="modal-overlay" id="endingModal">
+  <div class="modal" style="width:640px">
+    <div class="modal-header"><div class="modal-title">Ending or pausing services: <span id="end_name"></span></div>
+      <button class="modal-close" onclick="closeModal('endingModal')" aria-label="Close">×</button></div>
+    <p style="font-size:13px;color:var(--gray-600);margin:4px 0 0">Only DSDS can close a CDS consumer. Pick what happened. The hub then lists the steps the rules require, and the consumer stays on the roster as Closing until DSDS closes the case.</p>
+    <div id="end_list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('endingModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="startEnding()">Start</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="contactLogModal">
   <div class="modal">
     <div class="clm-head">
@@ -2839,17 +2880,11 @@ button.fu-tile.check span { color:#14606F; }
 
 <!-- FACE-TO-FACE VISIT MODAL (2026-10-22, her ask: the visit form holds every item Missouri requires,
      19 CSR 15-8.400(5)(F)). Only used while her switch 'visitForm' is on; off = the old three questions. -->
-<!-- ENDING A CONSUMER: TAX CHECKLIST (2026-10-22 her ask)
-     Opens from "Mark inactive" and stays on the Tax & EIN page until every
-     step is ticked. The steps depend on why they left. -->
+<!-- ENDING A CONSUMER: TAX STEPS (2026-10-22 her ask)
+     Opened from the ending card or the Tax & EIN page; stays on that page until
+     every step is ticked. The steps depend on the ending reason. -->
 <style>
   #endTaxModal .modal { width: 640px; max-width: 96vw; }
-  #endTaxModal .et-seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 14px; }
-  #endTaxModal .et-seg label { margin: 0; cursor: pointer; }
-  #endTaxModal .et-seg input { position: absolute; opacity: 0; pointer-events: none; }
-  #endTaxModal .et-seg span { display: block; padding: 7px 14px; font-size: 13px; color: var(--gray-600); border: 1px solid var(--gray-200); border-radius: 999px; }
-  #endTaxModal .et-seg input:checked + span { background: var(--primary); border-color: var(--primary); color: white; }
-  #endTaxModal .et-seg input:focus-visible + span { outline: 2px solid var(--accent); }
   #endTaxModal .et-step { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--gray-200); margin: 0; cursor: pointer; }
   #endTaxModal .et-step:last-child { border-bottom: 0; }
   #endTaxModal .et-step input { margin-top: 3px; }
@@ -2862,17 +2897,10 @@ button.fu-tile.check span { color:#14606F; }
       <div class="modal-title" style="margin:0">Ending <span id="et_name"></span></div>
       <button class="modal-close" onclick="closeModal('endTaxModal')" aria-label="Close">×</button>
     </div>
-    <div style="font-size:12.5px;font-weight:600;color:var(--gray-600)">Why are they leaving?</div>
-    <div class="et-seg" role="radiogroup">
-      <label><input type="radio" name="et_reason" value="transfer" onchange="endTaxReason(this.value)"><span>Moving to another agency</span></label>
-      <label><input type="radio" name="et_reason" value="death" onchange="endTaxReason(this.value)"><span>Passed away</span></label>
-      <label><input type="radio" name="et_reason" value="stopped" onchange="endTaxReason(this.value)"><span>Stopped CDS altogether</span></label>
-    </div>
+    <div style="font-size:13px;color:var(--gray-600);margin-bottom:8px"><span id="et_reason"></span>. Each tick saves with today's date.</div>
     <div id="et_steps"></div>
-    <div id="et_err" role="alert" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-top:10px"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-      <button class="btn btn-outline" onclick="closeModal('endTaxModal')" id="et_cancel">Cancel</button>
-      <button class="btn btn-primary" onclick="endTaxConfirm()" id="et_confirm">Mark inactive</button>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-outline" onclick="closeModal('endTaxModal')">Close</button>
     </div>
   </div>
 </div>
@@ -5235,7 +5263,7 @@ function renderConsumers() {
     const names = allAttendants.filter(a => (a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name))).map(a => a.name);
     return `<tr>
       <td>${link(c, '<span style="font-weight:700;color:var(--primary-light)">' + esc(c.name) + '</span>')}
-        <div style="font-size:12px;color:var(--gray-600)">Attendant: ${names.length ? names.map(esc).join(', ') : 'none on file'}${c.status === 'pending' ? ' · <span class="badge badge-warn">Pending</span>' : ''}</div></td>
+        <div style="font-size:12px;color:var(--gray-600)">Attendant: ${names.length ? names.map(esc).join(', ') : 'none on file'}${c.status === 'pending' ? ' · <span class="badge badge-warn">Pending</span>' : ''}${c.ending ? ' · <span class="badge badge-warn">' + (c.status === 'paused' ? 'Paused' : 'Closing') + ': ' + esc((CDSRules.endingReason(c.ending.kind) || {}).t || '') + '</span>' : ''}</div></td>
       <td>${c.hours ? esc(c.hours) : '—'}</td>
       <td>${callCell}</td>
       <td style="font-size:13px">${visitCell}</td>
@@ -5433,16 +5461,124 @@ function consumerToFinish(c) {
   ].filter(Boolean);
 }
 
-// Replaces the roster's one-click Remove: the record and its history stay.
-// Marking inactive now goes through the ending tax checklist, which asks why
-// they are leaving, because the tax steps differ for a transfer and a death.
-function markConsumerInactive(cid) { openEndTax(cid); }
+// Ending or pausing services (her yes 2026-10-22). Replaces the one-click Mark
+// inactive: only DSDS closes a CDS case, so the consumer goes to Closing (or
+// Paused for a hospital stay) and the profile walks the office through the steps
+// in CDSRules.ENDING_REASONS. The record and its history always stay.
+let _endCid = null;
+// Today in Missouri, not UTC (after 7pm UTC is already tomorrow).
+function _endToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function _endWho() { const e = (document.getElementById('header_user') || {}).textContent || ''; return e.includes('@') ? e.split('@')[0] : 'office'; }
+function markConsumerInactive(cid) { openEnding(cid); }
+function openEnding(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c) return;
+  _endCid = cid;
+  document.getElementById('end_name').textContent = c.name;
+  document.getElementById('end_list').innerHTML = CDSRules.ENDING_GROUPS.map(g =>
+    '<div class="end-group"><h4>' + esc(g.t) + (g.cite ? ' <small>' + esc(g.cite) + '</small>' : '') + '</h4>' +
+    CDSRules.ENDING_REASONS.filter(r => r.group === g.id).map(r =>
+      '<label class="end-pick"><input type="radio" name="end_kind" value="' + r.id + '">' +
+      '<span>' + esc(r.t) + (r.tip ? '<small>' + esc(r.tip) + '</small>' : '') + '</span></label>').join('') +
+    '</div>').join('');
+  openModal('endingModal');
+}
+function startEnding() {
+  const pick = document.querySelector('input[name=end_kind]:checked');
+  if (!pick) { alert('Pick what happened first.'); return; }
+  const r = CDSRules.endingReason(pick.value);
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === _endCid);
+  if (!c) return;
+  const today = _endToday();
+  c.ending = { kind: r.id, startedAt: today, startedBy: _endWho(), eventDate: '', steps: {}, notes: '',
+               dsdsNotice: '', lastDay: '', log: [{ at: new Date().toISOString(), by: _endWho(), t: 'Started: ' + r.t }] };
+  c.status = r.pause ? 'paused' : 'closing';
+  delete c.endTax;
+  setData('consumers', consumers);
+  closeModal('endingModal');
+  renderConsumers();
+  openProfile(c.id);
+}
+function _endSave(cid, fn) {
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c || !c.ending) return;
+  fn(c, c.ending);
+  setData('consumers', consumers);
+  renderProfile();
+  renderConsumers();
+}
+function endSetStep(cid, k, date) {
+  _endSave(cid, (c, e) => {
+    e.steps = e.steps || {};
+    if (date) e.steps[k] = { date, by: _endWho(), at: new Date().toISOString() };
+    else delete e.steps[k];
+    e.log.push({ at: new Date().toISOString(), by: _endWho(), t: (date ? 'Dated ' + date + ': ' : 'Cleared: ') + k });
+  });
+}
+function endSetField(cid, f, v) {
+  _endSave(cid, (c, e) => { e[f] = v; e.log.push({ at: new Date().toISOString(), by: _endWho(), t: f + ' set' + (v && f !== 'notes' ? ' to ' + v : '') }); });
+}
+// DSDS closed the case: the consumer becomes inactive. Blocked until every required step has a date.
+function endClose(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c || !c.ending) return;
+  const miss = CDSRules.endingMissing(c.ending);
+  if (miss.length || !c.ending.dsdsNotice || !c.ending.lastDay) {
+    alert('Not yet. Still needed:\n- ' + miss.concat(!c.ending.dsdsNotice ? ['Date of DSDS\'s closing notice'] : [], !c.ending.lastDay ? ['Last day of services from DSDS'] : []).join('\n- '));
+    return;
+  }
+  const r = CDSRules.endingReason(c.ending.kind);
+  if (!confirm('DSDS closed ' + c.name + '\'s case. Mark them inactive? Everything stays on file.')) return;
+  _endSave(cid, (c, e) => {
+    e.closedAt = _endToday();
+    e.log.push({ at: new Date().toISOString(), by: _endWho(), t: 'DSDS closed the case. Marked inactive.' });
+    c.status = 'inactive';
+    c.inactiveAt = e.lastDay;
+    c.inactiveReason = r ? r.t : '';
+    c.pastEndings = (c.pastEndings || []).concat([e]);
+    c.ending = null;
+  });
+  updateDashboard();
+}
+// DSDS kept services, the consumer is back home, or it was started by mistake.
+function endCancel(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c || !c.ending) return;
+  const r = CDSRules.endingReason(c.ending.kind);
+  const msg = r && r.pause ? 'Mark ' + c.name + ' back home and active?' : 'Stop this and keep ' + c.name + ' active? (DSDS kept services, or it was started by mistake.)';
+  if (!confirm(msg)) return;
+  _endSave(cid, (c, e) => {
+    e.endedAt = _endToday();
+    e.log.push({ at: new Date().toISOString(), by: _endWho(), t: r && r.pause ? 'Back home. Active again.' : 'Stopped. Kept active.' });
+    c.status = 'active';
+    c.pastEndings = (c.pastEndings || []).concat([e]);
+    c.ending = null;
+    delete c.endTax;
+  });
+  updateDashboard();
+}
+// ============================================================
+// ENDING: TAX STEPS (2026-10-22 her ask)
+// The tax side of a consumer leaving, alongside the DSDS steps above. The
+// reason comes from the ending she picked; a short hospital stay has none.
+// Ticks live on c.endTax so they survive DSDS closing the case, and the Tax &
+// EIN page lists the consumer until every step is ticked.
+// ============================================================
+const END_TAX_LABEL = { transfer: 'Moving to another agency', death: 'Passed away', stopped: 'Leaving CDS' };
 
-const END_REASONS = { transfer: 'Moving to another agency', death: 'Passed away', stopped: 'Stopped CDS altogether' };
+// Which tax path an ending takes. Their EIN and Missouri Tax ID belong to them:
+// a transfer keeps both going with the new agency, anything else ends them.
+function endTaxKind(c) {
+  if (!c) return '';
+  let e = c.ending;
+  if (!e && !CDSRules.isActive(c)) e = (c.pastEndings || []).slice(-1)[0];
+  const r = e && CDSRules.endingReason(e.kind);
+  if (!r || r.pause) return '';
+  return r.id === 'transfer' ? 'transfer' : r.id === 'death' ? 'death' : 'stopped';
+}
 
-// The tax steps when a consumer leaves. Their EIN and Missouri Tax ID belong to
-// them, so a transfer keeps both going with the new agency; a death or leaving
-// CDS ends them.
 function endTaxSteps(reason) {
   const final = reason === 'death' || reason === 'stopped';
   return [
@@ -5469,112 +5605,106 @@ function endTaxSteps(reason) {
   ].filter(Boolean);
 }
 
-// Steps still open for an ended consumer, or null if they never went through
-// the checklist (consumers made inactive before 2026-10-22).
+// Steps still open, or null when no tax steps apply (active, or a hospital stay).
 function endTaxOpen(c) {
-  // Made active again: they did not leave after all.
-  if (!c || !c.endReason || CDSRules.isActive(c)) return null;
+  const kind = endTaxKind(c);
+  if (!kind) return null;
   const done = c.endTax || {};
-  return endTaxSteps(c.endReason).filter(st => !done[st.k]);
+  return endTaxSteps(kind).filter(st => !done[st.k]);
 }
 
-let _endTaxId = null, _endTaxDraft = null;
+let _endTaxId = null;
 
 function openEndTax(cid) {
   const c = getData('consumers').find(x => x.id === cid);
-  if (!c) return;
+  if (!c || !endTaxKind(c)) return;
   _endTaxId = cid;
-  // Before they are marked inactive nothing is saved, so Cancel leaves them as they were.
-  _endTaxDraft = CDSRules.isActive(c) ? { reason: c.endReason || '', done: {} } : null;
   document.getElementById('et_name').textContent = c.name;
-  const reason = _endTaxDraft ? _endTaxDraft.reason : (c.endReason || '');
-  document.querySelectorAll('input[name="et_reason"]').forEach(r => { r.checked = r.value === reason; });
-  document.getElementById('et_err').style.display = 'none';
-  document.getElementById('et_confirm').style.display = _endTaxDraft ? '' : 'none';
-  document.getElementById('et_cancel').textContent = _endTaxDraft ? 'Cancel' : 'Close';
   renderEndTax();
   openModal('endTaxModal');
-}
-
-function endTaxReason(v) {
-  if (_endTaxDraft) { _endTaxDraft.reason = v; renderEndTax(); return; }
-  const consumers = getData('consumers');
-  const c = consumers.find(x => x.id === _endTaxId);
-  if (!c) return;
-  c.endReason = v;
-  setData('consumers', consumers);
-  renderEndTax();
-  renderTaxCompliance();
 }
 
 function renderEndTax() {
   const host = document.getElementById('et_steps');
   const c = getData('consumers').find(x => x.id === _endTaxId);
   if (!host || !c) return;
-  const reason = _endTaxDraft ? _endTaxDraft.reason : c.endReason;
-  const done = _endTaxDraft ? _endTaxDraft.done : (c.endTax || {});
-  if (!reason) {
-    host.innerHTML = '<div style="font-size:13px;color:var(--gray-600)">Pick one and the tax steps for it show here.</div>';
-    return;
-  }
-  const steps = endTaxSteps(reason);
+  const kind = endTaxKind(c);
+  const done = c.endTax || {};
+  const steps = endTaxSteps(kind);
   const left = steps.filter(st => !done[st.k]).length;
+  document.getElementById('et_reason').textContent = END_TAX_LABEL[kind] || '';
   host.innerHTML =
-    '<div style="font-size:12.5px;font-weight:600;color:var(--gray-600);margin-bottom:2px">Tax steps · ' +
-      (left ? (steps.length - left) + ' of ' + steps.length + ' done' : 'all done') + '</div>' +
+    '<div style="font-size:12.5px;font-weight:600;color:var(--gray-600);margin-bottom:2px">' +
+      (left ? (steps.length - left) + ' of ' + steps.length + ' done' : 'All done') + '</div>' +
     steps.map(st => '<label class="et-step' + (done[st.k] ? ' done' : '') + '">' +
       '<input type="checkbox"' + (done[st.k] ? ' checked' : '') + ' onchange="endTaxTick(\'' + st.k + '\',this.checked)">' +
       '<div><strong>' + esc(st.t) + '</strong>' +
         (done[st.k] ? ' <span style="font-size:11.5px;color:var(--success)">done ' + esc(done[st.k]) + '</span>' : '') +
         '<div class="et-d">' + esc(st.d) + '</div></div></label>').join('') +
-    (reason === 'transfer'
+    (kind === 'transfer'
       ? '<div style="font-size:12px;color:var(--gray-600);margin-top:8px">Nothing changes in Fusion: their numbers and proof stay on their case record and go with them.</div>'
       : '');
 }
 
 function endTaxTick(k, on) {
-  const today = new Date().toLocaleDateString('en-CA');
-  if (_endTaxDraft) {
-    if (on) _endTaxDraft.done[k] = today; else delete _endTaxDraft.done[k];
-    renderEndTax();
-    return;
-  }
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === _endTaxId);
   if (!c) return;
   c.endTax = c.endTax || {};
-  if (on) c.endTax[k] = today; else delete c.endTax[k];
+  if (on) c.endTax[k] = _endToday(); else delete c.endTax[k];
   setData('consumers', consumers);
   renderEndTax();
   renderTaxCompliance();
+  if (_profileId === c.id) renderProfile();
 }
 
-function endTaxConfirm() {
-  const err = document.getElementById('et_err');
-  if (!_endTaxDraft || !_endTaxDraft.reason) {
-    err.textContent = 'Pick why they are leaving first.';
-    err.style.display = '';
-    return;
-  }
-  const consumers = getData('consumers');
-  const c = consumers.find(x => x.id === _endTaxId);
-  if (!c) return;
-  c.status = 'inactive';
-  c.inactiveAt = new Date().toLocaleDateString('en-CA');
-  c.endReason = _endTaxDraft.reason;
-  c.endTax = Object.assign({}, c.endTax || {}, _endTaxDraft.done);
-  setData('consumers', consumers);
-  _endTaxDraft = null;
-  // Stay open on the checklist, now saving as each step is ticked.
-  document.getElementById('et_confirm').style.display = 'none';
-  document.getElementById('et_cancel').textContent = 'Close';
-  err.style.display = 'none';
-  renderEndTax();
-  _profileId = null;
-  showPage('consumers');
-  renderConsumers();
-  renderTaxCompliance();
-  updateDashboard();
+// The card at the top of the profile while a consumer is Closing or Paused.
+function endingCard(c) {
+  const e = c.ending;
+  const r = e && CDSRules.endingReason(e.kind);
+  if (!r) return '';
+  const id = c.id;
+  const d = e.steps || {};
+  const dateIn = (val, on) => '<input type="date" value="' + esc(val || '') + '" onchange="' + on + '">';
+  const step = s => {
+    const v = d[s.k];
+    return '<div class="end-step"><span class="t">' + (v && v.date ? '✓ ' : '') + esc(s.t) + (s.need ? '' : ' <span class="end-cite">(if it applies)</span>') +
+      (s.cite ? '<br><span class="end-cite">' + esc(s.cite) + '</span>' : '') +
+      (s.form ? '<br><a href="' + CDSRules.DSDS_FORM + '" target="_blank" rel="noopener">Open the DSDS form</a> <span class="end-cite">then check it in Fusion, PCCP Request tab</span>' : '') +
+      '</span>' + dateIn(v && v.date, "endSetStep('" + id + "','" + s.k + "',this.value)") +
+      (v && v.date ? '<span class="who">by ' + esc(v.by || '') + '</span>' : '') + '</div>';
+  };
+  const miss = CDSRules.endingMissing(e);
+  const appeal = CDSRules.appealEnds(e.dsdsNotice);
+  const ev = r.eventLabel
+    ? '<div class="end-step"><span class="t"><strong>' + esc(r.eventLabel) + '</strong></span>' + dateIn(e.eventDate, "endSetField('" + id + "','eventDate',this.value)") + '</div>' : '';
+  const finish = r.pause
+    ? '<div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="endCancel(\'' + id + '\')">Back home, active again</button></div>'
+    : '<div class="end-step"><span class="t"><strong>DSDS sent its closing notice on</strong><br><span class="end-cite">The consumer has 10 days to appeal. If they appeal in time, keep serving until DSDS decides (19 CSR 15-8.500(3)).</span></span>' +
+        dateIn(e.dsdsNotice, "endSetField('" + id + "','dsdsNotice',this.value)") + '</div>' +
+      (appeal ? '<div style="font-size:13px;margin:4px 0 6px;color:#7A4E0B"><strong>Appeal window ends ' + esc(_niceDay(appeal)) + '.</strong></div>' : '') +
+      '<div class="end-step"><span class="t"><strong>Last day of services (from DSDS)</strong></span>' + dateIn(e.lastDay, "endSetField('" + id + "','lastDay',this.value)") + '</div>' +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn btn-primary btn-sm" onclick="endClose(\'' + id + '\')"' + (miss.length || !e.dsdsNotice || !e.lastDay ? ' style="opacity:.55"' : '') + '>DSDS closed the case: mark inactive</button>' +
+        '<button class="btn btn-outline btn-sm" onclick="endCancel(\'' + id + '\')">DSDS kept services, keep active</button></div>';
+  return '<div class="end-card' + (r.pause ? ' paused' : '') + '">' +
+    '<div style="font-size:12px;font-weight:700;letter-spacing:.04em;color:#7A4E0B">' + (r.pause ? 'PAUSED' : 'CLOSING') + ' since ' + esc(_niceDay(e.startedAt)) + ', started by ' + esc(e.startedBy || '') + '</div>' +
+    '<div style="font-size:17px;font-weight:700;margin:4px 0 2px">' + esc(r.t) + '</div>' +
+    '<div class="end-cite">' + esc(r.cite) + '</div>' +
+    (r.tip ? '<div style="font-size:13px;margin-top:6px">' + esc(r.tip) + '</div>' : '') +
+    (r.pause ? '' : '<div style="font-size:13px;margin-top:6px">Keep serving them until DSDS closes the case.</div>') +
+    '<div style="margin-top:10px">' + ev + r.steps.map(step).join('') + '</div>' +
+    (function () {
+      const left = endTaxOpen(c);
+      if (!left) return '';
+      return '<div style="margin-top:10px;font-size:13px"><strong>Tax steps:</strong> ' +
+        (left.length ? left.length + ' still open. Next: ' + esc(left[0].t) + '. ' : 'all done. ') +
+        '<a href="#" onclick="openEndTax(\'' + id + '\');return false">Open tax steps</a></div>';
+    })() +
+    '<div style="margin-top:10px"><label style="font-size:13px;font-weight:600">Notes (what happened, who said what, what we tried)</label>' +
+      '<textarea rows="3" style="width:100%;margin-top:4px;font:inherit;font-size:13px;padding:8px;border:1px solid var(--gray-300);border-radius:6px" onchange="endSetField(\'' + id + '\',\'notes\',this.value)">' + esc(e.notes || '') + '</textarea></div>' +
+    (miss.length && !r.pause ? '<div style="font-size:12.5px;color:var(--danger);margin-top:8px">Still needed before closing: ' + miss.map(esc).join('; ') + '</div>' : '') +
+    finish + '</div>';
 }
 
 function setConsumerTrained(cid, v) {
@@ -8868,11 +8998,48 @@ row('DES / unemployment', c.desRegistered ? 'Registered' + (c.desEan ? ' — EAN
   w.document.close();
 }
 
+// Restored 2026-10-22: the profile's Empeon chip still uses this (removing it broke every profile).
+// What still has to change in Empeon for this consumer. Deliberately separate
+// from the audit lanes: Empeon is payroll, Fusion is what DHSS checks.
+function empeonStatus(c) {
+  const ours   = (c.ein || '').trim();
+  const theirs = (c.empeonFein || '').trim();
+  const theirMo= (c.empeonStateEin || '').trim();
+  const ourMo  = (c.moTaxId || '').trim();
+  const needs = [];
+
+  // Once it has been uploaded, stop nagging. The stored Empeon values came from
+  // an export taken before the upload, so comparing against them would keep
+  // reporting differences that have already been fixed.
+  if ((c.empeonUpdated || '').trim()) {
+    return { needs: [], clean: true, placeholder: false, uploadedOn: c.empeonUpdated };
+  }
+
+  if (theirs === EMPEON_PLACEHOLDER) {
+    needs.push({ level: 'bad', text: 'Replace the placeholder FEIN' });
+  } else if (theirs && ours && theirs !== ours) {
+    needs.push({ level: 'bad', text: 'FEIN disagrees with our record' });
+  } else if (!theirs) {
+    needs.push({ level: 'warn', text: 'No FEIN in Empeon' });
+  }
+
+  if (!theirMo) {
+    needs.push(ourMo
+      ? { level: 'warn', text: 'Add the MO Tax ID we hold' }
+      : { level: 'info', text: 'MO Tax ID once Missouri issues it' });
+  } else if (ourMo && theirMo !== ourMo) {
+    needs.push({ level: 'bad', text: 'MO Tax ID disagrees with our record' });
+  }
+
+  return { needs, clean: !needs.length, placeholder: theirs === EMPEON_PLACEHOLDER };
+}
+
 function renderProfile() {
   const host = document.getElementById('prof_body');
   const pick = document.getElementById('prof_pick');
   if (!host || !pick) return;
-  const consumers = getData('consumers').filter(CDSRules.isActive)
+  // Active consumers, plus the one asked for even if inactive (the Inactive list opens profiles too).
+  const consumers = getData('consumers').filter(c => CDSRules.isActive(c) || c.id === _profileId)
     .sort((a, b) => a.name.localeCompare(b.name));
   if (!consumers.length) { host.innerHTML = '<div class="card"><p>No active consumers.</p></div>'; return; }
   if (!_profileId || !consumers.some(c => c.id === _profileId)) _profileId = consumers[0].id;
@@ -8885,6 +9052,7 @@ function renderProfile() {
 
   const c = consumers.find(x => x.id === _profileId);
   const s = taxStatus(c);
+  const e = empeonStatus(c);
   const auths = getAuths();
   const auth = Object.values(auths.records).find(a => prNorm(a.consumer || '') === prNorm(c.name));
   const plan = getObj('carePlans')[c.id];
@@ -8925,8 +9093,6 @@ function renderProfile() {
       return profChip('DES registered', 'warn',
         'not yet — $' + d.latestAmount.toFixed(2) + ' in ' + d.latestQuarter + ', $' + d.shortfall.toFixed(2) + ' to go');
     })(),
-    profChip('Empeon correct', e.clean ? 'ok' : 'bad',
-      e.clean ? (c.empeonUpdated ? 'updated ' + esc(c.empeonUpdated) : 'matches our record') : e.needs.map(n => n.text).join('; ')),
     (function () {
       const m = ongoingRequirements(c).monthly;
       if (m.doneThisMonth) return profChip('Monthly contact', 'ok',
@@ -8957,7 +9123,6 @@ function renderProfile() {
     !s.hasEin && 'a federal EIN', !s.hasMoId && 'a Missouri Tax ID',
     !s.inFusion && 'entering both numbers in Fusion', !(s.uploaded || s.exempt) && 'proof uploaded to Fusion',
     !auth && 'an authorization', auth && daysLeft < 0 && 'a renewed authorization',
-    !e.clean && 'Empeon corrected',
     (function () { const d = desThreshold(c.name);
       return (!c.desRegistered && d.known && d.crossed) ? 'DES registration (passed $1,000 in ' + d.crossed + ')' : ''; })()
   ].filter(Boolean);
@@ -9088,13 +9253,14 @@ function renderProfile() {
         (next.d ? '<div style="font-size:13px;color:#55677a">' + esc(next.d) + '</div>' : '') + '</div>' + next.b + '</div>' +
       prepCard + lateCard +
       '<div class="cp-pair">' + callBox + visitBox + '</div>' +
+      endingCard(c) +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
         '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
         '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a>' +
         (CDSRules.isActive(c)
-          ? '<a href="#" onclick="markConsumerInactive(\'' + c.id + '\');return false" style="color:var(--danger)">Mark inactive</a></div>'
-          : (c.endReason ? '<a href="#" onclick="openEndTax(\'' + c.id + '\');return false">Ending tax steps</a>' : '') +
+          ? (c.ending ? '</div>' : '<a href="#" onclick="openEnding(\'' + c.id + '\');return false" style="color:var(--danger)">Ending or pausing services</a></div>')
+          : (endTaxOpen(c) ? '<a href="#" onclick="openEndTax(\'' + c.id + '\');return false">Tax steps for ending</a>' : '') +
             '<a href="#" onclick="makeConsumerActive(\'' + c.id + '\');if(_profileId)renderProfile();return false">Make active again</a></div>') +
     '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
 }
@@ -11071,26 +11237,44 @@ function renderTaxBatches(rows) {
     'numbers and proof uploaded to Fusion.</div>';
 }
 
+let _taxTab = 'setup';
+function setTaxTab(t) { _taxTab = t; renderTaxCompliance(); }
+function renderTaxTabs(openSetup, leaving) {
+  const el = document.getElementById('taxTabs');
+  if (!el) return;
+  el.innerHTML =
+    '<button role="tab" class="' + (_taxTab === 'setup' ? 'on' : '') + '" onclick="setTaxTab(\'setup\')">Getting set up' +
+      (openSetup ? ' (' + openSetup + ')' : '') + '</button>' +
+    '<button role="tab" class="' + (_taxTab === 'ending' ? 'on' : '') + '" onclick="setTaxTab(\'ending\')">Leaving' +
+      (leaving ? ' (' + leaving + ')' : '') + '</button>';
+  document.getElementById('taxPaneSetup').style.display = _taxTab === 'setup' ? '' : 'none';
+  document.getElementById('taxPaneEnding').style.display = _taxTab === 'ending' ? '' : 'none';
+}
+
 function renderTaxEnding() {
   const el = document.getElementById('taxEnding');
   if (!el) return;
   const ending = getData('consumers')
     .map(c => ({ c, left: endTaxOpen(c) }))
     .filter(x => x.left && x.left.length);
-  el.innerHTML = !ending.length ? '' :
-    '<div class="card" style="margin-bottom:18px;border-left:4px solid var(--gray-600)">' +
-      '<div style="font-weight:700;font-size:14px;margin-bottom:4px">Consumers who left: tax steps still open</div>' +
-      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px">Each one stays here until every step is ticked.</div>' +
+  el.innerHTML = !ending.length
+    ? '<div class="alert alert-success"><div>Nobody is leaving with tax steps still open. When you start ' +
+      '<strong>Ending or pausing services</strong> on a consumer\'s profile, their tax steps show here.</div></div>' :
+    '<div class="card" style="margin-bottom:18px">' +
+      '<div style="font-weight:700;font-size:14px;margin-bottom:4px">Tax steps still open</div>' +
+      '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px">Each consumer stays here until every step is ticked.</div>' +
       ending.map(({ c, left }) => {
-        const total = endTaxSteps(c.endReason).length;
+        const kind = endTaxKind(c);
+        const total = endTaxSteps(kind).length;
         return '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--gray-200)">' +
           '<div style="flex:1 1 260px"><strong>' + esc(c.name) + '</strong> ' +
-            '<span style="font-size:12px;color:var(--gray-600)">' + esc(END_REASONS[c.endReason] || '') +
-            (c.inactiveAt ? ', ' + esc(c.inactiveAt) : '') + ' · ' + (total - left.length) + ' of ' + total + ' done</span>' +
+            '<span style="font-size:12px;color:var(--gray-600)">' + esc(END_TAX_LABEL[kind] || '') +
+            (c.ending ? ', closing' : (c.inactiveAt ? ', ' + esc(c.inactiveAt) : '')) + ' · ' + (total - left.length) + ' of ' + total + ' done</span>' +
             '<div style="font-size:12.5px">Next: ' + esc(left[0].t) + '</div></div>' +
           '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openEndTax(\'' + c.id + '\')">Open</button></div>';
       }).join('') +
     '</div>';
+  return ending.length;
 }
 
 const TAX_STEP = { D: 'Apply for the EIN', C: 'Get the 147C letter', B: 'Upload proof to Fusion', A: 'Type both numbers into Fusion' };
@@ -11117,7 +11301,7 @@ function renderTaxCompliance() {
   }
 
   renderTaxBatches(rows);
-  renderTaxEnding();
+  renderTaxTabs(open, renderTaxEnding());
 
   const body = document.getElementById('taxComplianceBody');
   if (!body) return;

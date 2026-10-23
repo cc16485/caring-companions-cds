@@ -269,6 +269,90 @@
     { k: 'tasksWellSky', t: 'Put the tasks in WellSky', beforeStart: true },
     { k: 'toldClockIn',  t: 'Tell them they can call us for help with the first clock-in' }
   ];
+  // Ending or pausing services (her yes 2026-10-22). Only DSDS closes a CDS case
+  // (19 CSR 15-8.400(6)(B) and (7)(B)); we tell DSDS, may pause for listed
+  // reasons, and ask for closure in writing. Each reason lists the steps the
+  // rules require. A step with need: true must have a date before the hub lets
+  // anyone mark the consumer closed. DSDS form: the online Care Plan Change
+  // Request, Closure section.
+  const DSDS_FORM = 'https://modhss.entellitrak.com/etk-modhss-prod/page.request.do?page=portal.pccpRequest';
+  const DSDS_PHONE = '866-835-3505';
+  const ENDING_GROUPS = [
+    { id: 'tell',     t: 'Tell DSDS right away', cite: '19 CSR 15-8.400(6)' },
+    { id: 'pause',    t: 'We may pause services, after telling DSDS', cite: '19 CSR 15-8.400(7)(A)' },
+    { id: 'other',    t: 'Other reasons', cite: '' },
+    { id: 'hospital', t: 'Short stay away, not an ending', cite: '' }
+  ];
+  const S = {
+    learned:  { k: 'learned',  t: 'Date we found out', need: true },
+    dsds:     { k: 'dsds',     t: 'Told DSDS on the online Care Plan Change Request form (Closure section)', need: true, form: true },
+    letter:   { k: 'letter',   t: 'Written notice with the specific reasons sent to the consumer AND DSDS', need: true, cite: '19 CSR 15-8.400(7)(B)', print: true },
+    paused:   { k: 'paused',   t: 'Services paused (only after DSDS was told)', cite: '19 CSR 15-8.400(7)(A)' },
+    fixTried: { k: 'fixTried', t: 'We tried to fix it first (write what we did in the notes)', need: true },
+    file:     { k: 'file',     t: 'Proof saved in the consumer file (kept 6 years)', need: true, cite: '19 CSR 15-8.400(10)' }
+  };
+  const ENDING_REASONS = [
+    { id: 'death', group: 'tell', t: 'The consumer died', cite: '19 CSR 15-8.400(6)(A)1', eventLabel: 'Date of death',
+      steps: [S.learned, S.dsds, S.file] },
+    { id: 'facility', group: 'tell', t: 'Moved into a nursing home or other long-term care facility', cite: '19 CSR 15-8.400(6)(A)2', eventLabel: 'Date they moved in',
+      steps: [S.learned, S.dsds, S.file] },
+    { id: 'noNeed', group: 'tell', t: 'No longer needs services', cite: '19 CSR 15-8.400(6)(A)3',
+      steps: [S.learned, S.dsds, S.file] },
+    { id: 'selfDirect', group: 'tell', t: 'Can no longer direct their own care, or a big change needs a new care plan', cite: '19 CSR 15-8.400(6)(A)4 and (7)(A)1',
+      tip: 'Ask first if a representative can direct care for them. DSDS decides.',
+      steps: [S.learned, S.dsds, S.paused, S.file] },
+    { id: 'moreHours', group: 'tell', t: 'Needs more hours than the plan allows to be safe', cite: '19 CSR 15-8.400(6)(A)5',
+      steps: [S.learned, S.dsds, S.file] },
+    { id: 'fraud', group: 'pause', t: 'Fraud or false records, including false EVV', cite: '19 CSR 15-8.400(7)(A)2 and (5)(B)5',
+      tip: 'False EVV counts as fraud and is also reported to MMAC.',
+      steps: [S.learned, S.dsds, S.letter, S.paused, { k: 'mmac', t: 'Reported to MMAC', need: true }, S.file] },
+    { id: 'noncompliance', group: 'pause', t: 'Keeps not following the care plan', cite: '19 CSR 15-8.400(7)(A)3 and 15-8.200(8)(C)',
+      tip: 'Persistent actions that undo the services. Missed monthly calls, a refused visit or unsigned EVV count here when they keep happening.',
+      steps: [S.learned, S.fixTried, S.dsds, S.letter, S.paused, S.file] },
+    { id: 'threats', group: 'pause', t: 'The consumer or someone in the home threatened or abused the attendant or our staff', cite: '19 CSR 15-8.400(7)(A)4 and RSMo 208.924.1(4)',
+      tip: 'Corrective action must have failed first.',
+      steps: [S.learned, S.fixTried, S.dsds, S.letter, S.paused, S.file] },
+    { id: 'attendant', group: 'pause', t: 'The attendant is not following the care plan', cite: '19 CSR 15-8.400(7)(A)5',
+      tip: 'Attempts to fix it must have failed first.',
+      steps: [S.learned, S.fixTried, S.dsds, S.letter, S.paused, S.file] },
+    { id: 'asked', group: 'other', t: 'The consumer asked to stop services', cite: 'HCBS Manual 4.40, voluntary withdrawal',
+      steps: [S.learned, S.dsds, { k: 'confirm', t: 'Consumer called DSDS to confirm (' + DSDS_PHONE + ')', need: true }, S.file] },
+    { id: 'noAttendant', group: 'other', t: 'No attendant, and they do not want our help finding one', cite: '19 CSR 15-8.400(5)(A), (B), (F)1; HCBS Manual 4.40',
+      tip: 'No rule sets a number of days. Log every offer of help and their answer first.',
+      steps: [S.learned, { k: 'offers', t: 'Offers of help to find an attendant logged (date, what we offered, their answer)', need: true },
+              { k: 'notServed', t: 'Told DSDS services are not being given as authorized', need: true, cite: '19 CSR 15-8.400(5)(F)1' },
+              S.dsds, S.letter, S.file] },
+    { id: 'medicaid', group: 'other', t: 'Lost Medicaid', cite: '19 CSR 15-8.200(1)(A)7; HCBS Manual 4.40',
+      steps: [S.learned, S.dsds, S.file] },
+    { id: 'moved', group: 'other', t: 'Moved out of our area or out of state', cite: 'HCBS Manual 4.20 and 5.00',
+      steps: [S.learned, S.dsds, S.file] },
+    { id: 'transfer', group: 'other', t: 'Moving to another CDS agency', cite: 'HCBS Manual 4.20',
+      tip: 'Keep serving until DSDS approves the new agency. The new agency may not start before that.',
+      steps: [S.learned, { k: 'newAgency', t: 'DSDS approved the new agency (write its name in the notes)', need: true }, S.file] },
+    { id: 'hospital', group: 'hospital', t: 'In the hospital or rehab for a short stay', cite: 'HCBS Manual 3.00', pause: true,
+      tip: 'Not a closure. No CDS hours or billing for days in the hospital. Tell DSDS.',
+      eventLabel: 'Went in on',
+      steps: [S.learned, { k: 'dsdsTold', t: 'Told DSDS about the stay', need: true }, { k: 'noBill', t: 'Checked no hours were entered for hospital days' }] }
+  ];
+  const endingReason = id => ENDING_REASONS.find(r => r.id === id) || null;
+  // The required steps still missing a date, and whether DSDS's closing date is in.
+  function endingMissing(ending) {
+    const r = ending && endingReason(ending.kind);
+    if (!r) return [];
+    const d = ending.steps || {};
+    const miss = r.steps.filter(s => s.need && !(d[s.k] && d[s.k].date)).map(s => s.t);
+    if (r.eventLabel && !r.pause && !ending.eventDate) miss.unshift(r.eventLabel);
+    return miss;
+  }
+  // DSDS's notice gives the consumer 10 days to appeal; a timely appeal keeps services going
+  // (19 CSR 15-8.500(3), HCBS Manual 5.00).
+  function appealEnds(noticeDate) {
+    if (!noticeDate) return '';
+    const d = new Date(String(noticeDate).slice(0, 10) + 'T12:00:00');
+    d.setDate(d.getDate() + 10);
+    return d.toISOString().slice(0, 10);
+  }
+
   const LATE_REASONS = ['Waiting on FCSR', 'Waiting on EDL', 'Attendant paperwork', 'Authorization not in yet', 'Consumer not ready', 'Other'];
   const PREP_FROM = Date.parse('2026-10-21T00:00:00-05:00');
 
@@ -539,5 +623,6 @@
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
-                    whoCalled, WHO_CALLED, WHO_NEXT };
+                    whoCalled, WHO_CALLED, WHO_NEXT,
+                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
