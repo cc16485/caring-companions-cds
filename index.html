@@ -8697,6 +8697,42 @@ row('DES / unemployment', c.desRegistered ? 'Registered' + (c.desEan ? ' — EAN
   w.document.close();
 }
 
+// Restored 2026-10-22: the profile's Empeon chip still uses this (removing it broke every profile).
+// What still has to change in Empeon for this consumer. Deliberately separate
+// from the audit lanes: Empeon is payroll, Fusion is what DHSS checks.
+function empeonStatus(c) {
+  const ours   = (c.ein || '').trim();
+  const theirs = (c.empeonFein || '').trim();
+  const theirMo= (c.empeonStateEin || '').trim();
+  const ourMo  = (c.moTaxId || '').trim();
+  const needs = [];
+
+  // Once it has been uploaded, stop nagging. The stored Empeon values came from
+  // an export taken before the upload, so comparing against them would keep
+  // reporting differences that have already been fixed.
+  if ((c.empeonUpdated || '').trim()) {
+    return { needs: [], clean: true, placeholder: false, uploadedOn: c.empeonUpdated };
+  }
+
+  if (theirs === EMPEON_PLACEHOLDER) {
+    needs.push({ level: 'bad', text: 'Replace the placeholder FEIN' });
+  } else if (theirs && ours && theirs !== ours) {
+    needs.push({ level: 'bad', text: 'FEIN disagrees with our record' });
+  } else if (!theirs) {
+    needs.push({ level: 'warn', text: 'No FEIN in Empeon' });
+  }
+
+  if (!theirMo) {
+    needs.push(ourMo
+      ? { level: 'warn', text: 'Add the MO Tax ID we hold' }
+      : { level: 'info', text: 'MO Tax ID once Missouri issues it' });
+  } else if (ourMo && theirMo !== ourMo) {
+    needs.push({ level: 'bad', text: 'MO Tax ID disagrees with our record' });
+  }
+
+  return { needs, clean: !needs.length, placeholder: theirs === EMPEON_PLACEHOLDER };
+}
+
 function renderProfile() {
   const host = document.getElementById('prof_body');
   const pick = document.getElementById('prof_pick');
@@ -8714,6 +8750,7 @@ function renderProfile() {
 
   const c = consumers.find(x => x.id === _profileId);
   const s = taxStatus(c);
+  const e = empeonStatus(c);
   const auths = getAuths();
   const auth = Object.values(auths.records).find(a => prNorm(a.consumer || '') === prNorm(c.name));
   const plan = getObj('carePlans')[c.id];
