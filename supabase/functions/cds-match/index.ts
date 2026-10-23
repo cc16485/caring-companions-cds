@@ -149,6 +149,13 @@ const match = createMatch({
       const body = await ghlFetch('/contacts/' + encodeURIComponent(id));
       return body.contact || null;
     },
+    // The contact's Documents panel (2026-10-22): the application, onboarding papers, later rechecks.
+    async documents({ contactId, documentType, folderId, skip = 0, limit = 100 }: { contactId: string; documentType: string; folderId?: string | null; skip?: number; limit?: number }) {
+      const qs = new URLSearchParams({ locationId: GHL_LOC, contactId, skip: String(skip), limit: String(limit), documentType });
+      if (folderId) qs.set('folderId', folderId);
+      const body = await ghlFetch('/documents/search?' + qs);
+      return body.documents || [];
+    },
     async fields() {
       const body = await ghlFetch('/locations/' + encodeURIComponent(GHL_LOC) + '/customFields?model=contact');
       return body.customFields || [];

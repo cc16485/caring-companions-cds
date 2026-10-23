@@ -14,6 +14,12 @@
 //   rosterProofConfirm the office's dates after review; each row keeps who confirmed it and when.
 //   rosterProofAdd     a recheck the office ran today: the PDF or screenshot plus its date.
 //
+// 2026-10-22 (her yes): also each contact's GHL Documents panel, because the application, the
+// onboarding papers and later rechecks (for example "EDL Anita Smith CDS DEC 25.pdf") were
+// uploaded there, not into the Upload boxes. Kept: the application, onboarding papers and every
+// FCSR, EDL and OIG. Never copied (her rule): ID photos, Social Security cards, E-Verify, other
+// images. A signed GHL e-sign record has no file to copy, so the hub links to it in GHL.
+//
 // The Roster's own dates (edlDate, fcsrDate, leieDate) are saved by the hub page, like the date
 // boxes on the card, so the recheck schedule keeps working the same way.
 // Runs inside createMatch (staff only, on the office staff list). No em dashes in anything a person reads.
@@ -21,6 +27,8 @@
 const AGENCY_ID = 'caring-companions-cds';
 export const CHECKS = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG' };
 export const CHECK_KEYS = Object.keys(CHECKS);
+export const PAPERS = { application: 'Application', onboarding: 'Onboarding papers' };
+const GHL_CONTACT = id => 'https://app.hirecara.com/v2/location/4EFPkajwe0hHrqxvYkZ9/contacts/detail/' + encodeURIComponent(id) + '?view=documents';
 const EARLIEST = '2015-01-01';
 const MAX_BYTES = 20 * 1024 * 1024;
 
@@ -29,6 +37,20 @@ export function checkOf(text) {
   const s = String(text || '').toUpperCase();
   const hits = CHECK_KEYS.filter(k => new RegExp('(^|[^A-Z])' + k.toUpperCase() + '([^A-Z]|$)').test(s));
   return hits.length === 1 ? hits[0] : null;
+}
+
+// A file in the GHL Documents panel -> 'fcsr' | 'edl' | 'oig' | 'application' | 'onboarding' | null.
+// null = not copied: anything that may be an ID, a Social Security card, E-Verify, a photo, a
+// signature stamp, or that is not a PDF (an e-sign record has no extension and is allowed).
+export function kindOf(name, extension = 'pdf') {
+  const n = String(name || ''), ext = String(extension || '').toLowerCase().replace(/^\./, '');
+  if (/e-?\s?verify|\bi-?9\b|social\s*security|\bssn\b|licen[cs]e|\bid\b|insurance|passport|birth\s*cert|w-?4|direct\s*deposit|void(ed)?\s*check|image|img|photo|sign-timestamp/i.test(n)) return null;
+  if (ext && ext !== 'pdf') return null;
+  const c = checkOf(n);
+  if (c) return c;
+  if (/applica/i.test(n)) return 'application';
+  if (/onboarding|orientation/i.test(n)) return 'onboarding';
+  return null;
 }
 
 const digits = s => String(s || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
@@ -101,6 +123,17 @@ export function pdfDate(bytes, today) {
   return found.sort()[0] || '';
 }
 
+// One GHL Documents panel listing -> the files worth keeping. Folders are walked by the caller;
+// GHL's own "Custom Fields" folder repeats the Upload boxes, which come in through the fields.
+export function docsKept(list) {
+  return (list || []).filter(d => d && d.type === 'file' && d.id && d.status !== 'deleted').map(d => {
+    const esign = d.source === 'PROPOSAL_AND_CONTRACTS' || (!d.extension && !Number(d.size));
+    const name = String(d.name || '') + (d.extension && !String(d.name || '').toLowerCase().endsWith('.' + d.extension) ? '.' + d.extension : '');
+    return { id: d.id, name: name.slice(0, 200), kind: kindOf(d.name, esign ? '' : d.extension || 'pdf'), esign, size: Number(d.size) || 0,
+      on: String(d.updatedAt && esign ? d.updatedAt : d.createdAt || '').slice(0, 10), by: d.createdBy && d.createdBy.sourceName || '' };
+  }).filter(d => d.kind);
+}
+
 const validDay = (d, today) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || '')) && d >= EARLIEST && d <= today;
 
 export function createRosterProof({ q, one, nowIso, audit, fail, crypto, deps }) {
@@ -110,7 +143,8 @@ export function createRosterProof({ q, one, nowIso, audit, fail, crypto, deps })
     const r = await one(`select data_value from agency_data where agency_id=$1 and data_key='attendants'`, [AGENCY_ID]);
     return (r && Array.isArray(r.data_value) ? r.data_value : []).filter(a => a && a.id && a.status !== 'inactive' && String(a.name || '').trim());
   }
-  const view = async r => ({ id: r.id, attendant_id: r.attendant_id, name: r.attendant_name, check: r.check_key, file_name: r.file_name,
+  const view = async r => ({ id: r.id, attendant_id: r.attendant_id, name: r.attendant_name, check: r.check_key, kind: r.check_key, file_name: r.file_name,
+    ghl_link: r.ghl_link || '',
     ghl_result: r.ghl_result || '', date_found: r.date_found ? String(r.date_found).slice(0, 10) : '',
     checked_on: r.checked_on ? String(r.checked_on).slice(0, 10) : '', confirmed_by: r.confirmed_by || '', source: r.source,
     created_at: r.created_at, url: r.media_id && deps.media && deps.media.url ? await deps.media.url(r.media_id) : null });
@@ -122,6 +156,25 @@ export function createRosterProof({ q, one, nowIso, audit, fail, crypto, deps })
       if (c) return c;
     }
     return null;
+  }
+
+  // Every file on the contact's GHL Documents panel (internal, sent, received, and the folders in
+  // them except GHL's own Custom Fields folder). Throws when GHL refuses, so the office is told.
+  async function docsOf(contactId) {
+    const out = [], seen = new Set();
+    const walk = async (documentType, folderId, depth) => {
+      for (let skip = 0; skip < 500; skip += 100) {
+        const list = await deps.ghl.documents({ contactId, documentType, folderId, skip, limit: 100 });
+        for (const d of list || []) {
+          if (d && d.type === 'folder') {
+            if (depth < 3 && !(d.isStandardFolder && /custom fields/i.test(d.name || '')) && d.id && !seen.has('f' + d.id)) { seen.add('f' + d.id); await walk(documentType, d.id, depth + 1); }
+          } else if (d && d.id && !seen.has(d.id)) { seen.add(d.id); out.push(d); }
+        }
+        if (!list || list.length < 100) break;
+      }
+    };
+    for (const t of ['internal', 'sent', 'received']) await walk(t, null, 0);
+    return docsKept(out);
   }
 
   const office = {
@@ -141,7 +194,49 @@ export function createRosterProof({ q, one, nowIso, audit, fail, crypto, deps })
         let full;
         try { full = await deps.ghl.contact(c.id); } catch (e) { skipped.push({ attendant_id: att.id, name: att.name, why: 'GHL contact could not be read' }); continue; }
         const files = filesOf(full, fieldNames).filter(f => f.check);
-        if (!files.length) { skipped.push({ attendant_id: att.id, name: att.name, why: 'No FCSR, EDL or OIG file on their GHL contact' }); continue; }
+        let docs = [];
+        if (deps.ghl.documents) {
+          try {
+            // The same PDF is often both in an Upload box and on the panel: keep one.
+            const base = n => String(n || '').toLowerCase().replace(/\.pdf$/, '').replace(/_\d{1,2}-\d{1,2}-\d{4}_[\d:]+$/, '').trim();
+            const inBoxes = new Set(files.map(f => base(f.name)));
+            const once = new Set();
+            docs = (await docsOf(c.id)).filter(d => { const k = base(d.name) + '|' + d.size; if (inBoxes.has(base(d.name)) || once.has(k)) return false; once.add(k); return true; });
+          }
+          catch (e) { skipped.push({ attendant_id: att.id, name: att.name, why: 'GHL would not show the hub their Documents panel (the application, onboarding papers and later rechecks): ' + String(e.message || e).slice(0, 120) }); }
+        }
+        if (!files.length && !docs.length) { skipped.push({ attendant_id: att.id, name: att.name, why: 'No application, onboarding papers, FCSR, EDL or OIG on their GHL contact' }); continue; }
+        // Signed GHL e-sign records: no file, a link to the contact's Documents panel in GHL.
+        for (const d of docs.filter(d => d.esign)) {
+          const hash = await crypto.hash('ghl-doc:' + d.id);
+          let row = have.find(r => r.attendant_id === att.id && r.source_hash === hash);
+          if (!row) {
+            row = await one(`insert into cds_roster_proof (attendant_id, attendant_name, check_key, file_name, source, source_hash, ghl_contact_id, ghl_link, date_found, created_by)
+              values ($1,$2,$3,$4,'ghl',$5,$6,$7,$8,$9) on conflict (attendant_id, source_hash) do update set ghl_link = excluded.ghl_link returning *`,
+              [att.id, att.name, d.kind, d.name + ' (signed in GHL)', hash, c.id, GHL_CONTACT(c.id), d.on || null, s]);
+            added++;
+          }
+          items.push(await view(row));
+        }
+        // Uploaded PDFs on the panel: copied like the Upload boxes. A check's date comes from the PDF,
+        // else the day it was uploaded to GHL (the office reviews it).
+        for (const d of docs.filter(d => !d.esign)) {
+          const hash = await crypto.hash('ghl-doc:' + d.id);
+          let row = have.find(r => r.attendant_id === att.id && r.source_hash === hash);
+          if (!row) {
+            let got;
+            try { got = await deps.files.fetch('https://services.leadconnectorhq.com/documents/download/' + encodeURIComponent(d.id)); }
+            catch (e) { skipped.push({ attendant_id: att.id, name: att.name, why: d.name + ' could not be copied: ' + String(e.message || e).slice(0, 120) }); continue; }
+            if (!got || !got.bytes || !got.bytes.length || got.bytes.length > MAX_BYTES) { skipped.push({ attendant_id: att.id, name: att.name, why: d.name + ' is empty or too big' }); continue; }
+            const media_id = await deps.media.putFile({ folder: 'roster/' + att.id, name: d.kind, mime: got.mime || 'application/pdf', bytes: got.bytes, by: 'staff:' + s });
+            const found = CHECK_KEYS.includes(d.kind) ? (pdfDate(got.bytes, day) || (validDay(d.on, day) ? d.on : '')) : (validDay(d.on, day) ? d.on : '');
+            row = await one(`insert into cds_roster_proof (attendant_id, attendant_name, check_key, media_id, file_name, source, source_hash, ghl_contact_id, ghl_link, date_found, created_by)
+              values ($1,$2,$3,$4,$5,'ghl',$6,$7,$8,$9,$10) on conflict (attendant_id, source_hash) do update set ghl_link = excluded.ghl_link returning *`,
+              [att.id, att.name, d.kind, media_id, d.name, hash, c.id, GHL_CONTACT(c.id), found || null, s]);
+            added++;
+          }
+          items.push(await view(row));
+        }
         for (const f of files) {
           const hash = await crypto.hash('ghl-file:' + f.url);
           let row = have.find(r => r.attendant_id === att.id && r.source_hash === hash);
@@ -167,7 +262,8 @@ export function createRosterProof({ q, one, nowIso, audit, fail, crypto, deps })
 
     async rosterProofList({ staff: s, attendant_id }) {
       who(s);
-      const rows = await q('select * from cds_roster_proof where attendant_id = $1 order by check_key, coalesce(checked_on, date_found) desc nulls last, created_at desc', [String(attendant_id || '')]);
+      const rows = await q(`select * from cds_roster_proof where attendant_id = $1
+        order by array_position(array['application','onboarding','fcsr','edl','oig'], check_key), coalesce(checked_on, date_found) desc nulls last, created_at desc`, [String(attendant_id || '')]);
       return { items: await Promise.all(rows.map(view)) };
     },
 
@@ -178,7 +274,7 @@ export function createRosterProof({ q, one, nowIso, audit, fail, crypto, deps })
       for (const it of list) if (!validDay(it.checked_on, day)) fail('Each date must be a real day between 2015 and today.');
       let saved = 0;
       for (const it of list) {
-        const r = await one(`update cds_roster_proof set checked_on=$2, confirmed_by=$3, confirmed_at=now() where id=$1 returning id`, [String(it.id || ''), it.checked_on, s]);
+        const r = await one(`update cds_roster_proof set checked_on=$2, confirmed_by=$3, confirmed_at=now() where id=$1 and check_key in ('fcsr','edl','oig') returning id`, [String(it.id || ''), it.checked_on, s]);
         if (r) saved++;
       }
       await audit('staff:' + s, 'roster_proof_confirm', 'roster', { saved });

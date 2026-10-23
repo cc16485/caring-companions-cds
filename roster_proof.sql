@@ -6,6 +6,8 @@
 --                    'hub' = a recheck the office added on the attendant's card. The file itself is
 --                    in the private bucket cds-screening-proof (cds_media row, kind 'proof').
 --                    Missouri wants proof kept 5 years, so rows are never deleted by the hub.
+--                    2026-10-22 (her yes): also the application and onboarding papers from the GHL
+--                    Documents panel. A signed GHL e-sign record has no file: ghl_link opens it in GHL.
 -- Nobody outside reads or writes this table: the cds-match server function does. Safe to run twice.
 
 create table if not exists public.cds_roster_proof (
@@ -27,6 +29,12 @@ create table if not exists public.cds_roster_proof (
   created_at timestamptz not null default now(),
   unique (attendant_id, source_hash)
 );
+-- Added 2026-10-22 (papers): safe on a table made by the first version.
+alter table public.cds_roster_proof add column if not exists ghl_link text;
+alter table public.cds_roster_proof drop constraint if exists cds_roster_proof_check_key_check;
+alter table public.cds_roster_proof add constraint cds_roster_proof_check_key_check
+  check (check_key in ('fcsr','edl','oig','application','onboarding'));
+
 create index if not exists cds_roster_proof_att on public.cds_roster_proof (attendant_id, check_key);
 
 alter table public.cds_roster_proof enable row level security;
