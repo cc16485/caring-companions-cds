@@ -2464,7 +2464,6 @@ button.fu-tile.check span { color:#14606F; }
       <div><div style="font-weight:700;font-size:13.5px">EVV form</div><div style="font-size:12.5px;color:var(--gray-800)">Who is emailed when an attendant sends an EVV form, and the form link.</div></div>
       <button class="btn btn-sm btn-outline" onclick="openModal('evvSettingsModal')">EVV form settings</button>
     </div>
-    <div id="visitFormSwitch" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--gray-200)"></div>
   </div>
 
   <!-- GHL CONTACT SYNC -->
@@ -5715,7 +5714,9 @@ async function renderSwitches(reload) {
   }).join('');
   host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
     '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
+    '<div id="visitFormSwitch" style="padding:10px 0;border-top:1px solid var(--gray-200)"></div>' +
     rows + '</div>' + needOwnersHtml(d);
+  renderVisitFormSwitch();
 }
 // Who owns each need (Communication Center step 2, 2026-10-22). A new follow-up card goes to this
 // person. Same rule as the switches: everyone sees it, only Samantha changes it, every change recorded.
@@ -7850,7 +7851,6 @@ function clearOutreachLog() {
 // ============================================================
 function renderAutomations() {
   renderSwitches();
-  renderVisitFormSwitch();
   renderPendingOutreaches();
   renderQuickSendGrid();
   renderOutreachLog();
@@ -8377,10 +8377,13 @@ function renderVisitFormSwitch() {
   const host = document.getElementById('visitFormSwitch');
   if (!host) return;
   const sw = getObj('visitForm'), on = sw.live === true, me = _acWho().trim().toLowerCase();
-  host.innerHTML = '<div><div style="font-weight:700;font-size:13.5px">Face-to-face visit form: ' + (on ? 'On' : 'Off') + '</div>' +
-    '<div style="font-size:12.5px;color:var(--gray-800)">On: Log the visit opens one form with every item Missouri requires (time, who was there, in person, service delivery, quality of care). Off: the three short questions as before.' +
-    (sw.by ? ' Changed by ' + esc(sw.by) + '.' : '') + '</div></div>' +
-    (LD_WHO_OWNERS.includes(me) ? '<button class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" onclick="visitFormSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button>' : '');
+  const pill = '<span class="badge ' + (on ? 'badge-green' : 'badge-gray') + '" style="min-width:34px;text-align:center">' + (on ? 'On' : 'Off') + '</span>';
+  const when = sw.at ? new Date(sw.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  host.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">' +
+    '<div style="flex:1;min-width:240px"><div style="font-weight:700;font-size:13.5px">Face-to-face visit form</div>' +
+    '<div style="font-size:12.5px;color:var(--gray-800);margin-top:2px">On: Log the visit opens one form with every item Missouri requires (time, who was there, in person, service delivery, quality of care). Off: the three short questions as before.</div>' +
+    (sw.by ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:3px">Last changed by ' + esc(sw.by[0].toUpperCase() + sw.by.slice(1)) + (when ? ', ' + esc(when) : '') + '.</div>' : '') + '</div>' +
+    '<div style="white-space:nowrap">' + pill + (LD_WHO_OWNERS.includes(me) ? ' <button class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" style="font-size:11.5px;margin-left:6px" onclick="visitFormSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button>' : '') + '</div></div>';
 }
 function visitFormSwitch(on) {
   const me = _acWho().trim().toLowerCase();
