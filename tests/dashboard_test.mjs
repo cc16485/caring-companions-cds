@@ -56,5 +56,40 @@ const G = R.dashboardNumbers({ consumers, attendants, now, wsPeople: ws, nameKey
   hours: [{ authorized: 100 }], rates: { billing: 20, pay: 15 }, payRange: [15, 16] });
 ok(G.money.range && G.money.range.low === 400 && G.money.range.high === 500, 'margin range at $16 (low) and $15 (high)');
 
+// One meaning of active (her ask 2026-10-22, for Zach): Today counts the same people as the Dashboard.
+const A = R.activeNow(consumers, ws, W.nameKey);
+ok(A.live && A.list.map(c => c.name).join() === 'Ruth Caldwell,Dale Pruitt', 'active now = in the hub, not inactive, and a WellSky shift in 31 days');
+ok(R.activeNow(consumers, null, W.nameKey).list.length === 3, 'no WellSky report yet: everyone not marked inactive');
+const auths = { records: {
+  r: { consumer: 'Ruth Caldwell', planEnd: '2026-09-01' },     // expired, working now: counted
+  o: { consumer: 'Old Hubonly', planEnd: '2026-09-01' } } };   // expired, not working: not counted
+const steps = R.dailyRoutine({ consumers, pipeline: [], authorizations: auths, wsPeople: ws, nameKey: W.nameKey }, now);
+const s2 = steps.find(s => s.n === 2).items.map(i => i.t), s3 = steps.find(s => s.n === 3).items.map(i => i.t);
+ok(s2.includes('1 authorization expired'), 'expired authorizations: only consumers working now, got ' + s2);
+ok(s2.includes('1 active consumer has no authorization on file'), 'no authorization: only consumers working now (Dale), got ' + s2);
+ok(s3.some(t => t === '1 monthly check-in call not yet logged this month'), 'check-ins left match the Dashboard (Dale), got ' + s3);
+ok(D.checkIns.left === 2 && D.consumers === 3, 'Dashboard still counts the WellSky-only person (Ann) in its total');
+const old = R.dailyRoutine({ consumers, pipeline: [], authorizations: auths }, now);
+ok(old.find(s => s.n === 2).items.some(i => i.t === '2 authorizations expired'), 'with no WellSky list handed in, the old count');
+
+// WellSky check problems are system items (the hub shows them to the owner only).
+const stale = { lastRun: { ok: false, why: 'Chrome was closed' }, shifts: { at: '2026-10-20T08:00:00' }, auths: { at: '2026-10-20T08:00:00' } };
+const it = W.items(stale, {}, now)[0];
+ok(it.system === true && it.since === '2026-10-20', 'a stopped check is a system item with the day it last ran');
+
+// Names on every Today line (her ask 2026-10-22, for Zach): who, why, due date and the button that records it.
+const calls = steps.find(s => s.n === 3).items.find(i => /check-in/.test(i.t)).people;
+ok(calls.length === 1 && calls[0].name === 'Dale Pruitt' && calls[0].id === '2' && calls[0].act === 'call' && calls[0].due === '2026-10-31', 'check-in line names Dale, Log call, due Oct 31 ' + JSON.stringify(calls));
+const exp = steps.find(s => s.n === 2).items.find(i => /expired/.test(i.t)).people;
+ok(exp[0].name === 'Ruth Caldwell' && exp[0].id === '1' && exp[0].act === 'profile' && /ended Sep 1/.test(exp[0].why) && !exp[0].due, 'expired line names Ruth, opens her profile ' + JSON.stringify(exp));
+const noA = steps.find(s => s.n === 2).items.find(i => /no authorization/.test(i.t)).people;
+ok(noA[0].name === 'Dale Pruitt' && noA[0].act === 'profile', 'no authorization line names Dale');
+const ein = R.dailyRoutine({ consumers: [{ id: '9', name: 'Eve Late', status: 'active', cdsStartDate: '2026-06-01' }], pipeline: [] }, now)
+  .find(s => s.n === 1).items[0].people[0];
+ok(ein.act === 'tax' && ein.due === '2026-08-30' && ein.id === '9', 'EIN line: tax setup button and the 90-day date ' + JSON.stringify(ein));
+const emailText = (await import(ROOT + '/supabase/functions/_shared/office/lead-alerts.js')).morningEmail(steps, {}, now.getTime()).text;
+ok(emailText.includes('      Dale Pruitt (monthly check-in call, due Oct 31)'), 'the 8am email names the same people with the due date');
+ok(emailText.includes('      Ruth Caldwell (authorization ended Sep 1)'), 'and the expired authorization');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

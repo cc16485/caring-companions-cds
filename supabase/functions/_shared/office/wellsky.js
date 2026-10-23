@@ -271,10 +271,10 @@
     }
     const long = longShifts(check.shifts, reviewed, today);
     if (long.length) out.push({ t: tag + plural(long.length, 'long shift', 'long shifts') + ' to check before payroll', go: 'authorizations', bad: true,
-                                people: long.map(s => ({ name: s.consumer, why: short(s.date) + ', ' + s.attendant + ', ' + s.why })) });
+                                people: long.map(s => ({ name: s.consumer, why: short(s.date) + ', ' + s.attendant + ', ' + s.why, key: s.key, act: 'shift' })) });
     const open = openShifts(check.open, reviewed);
     if (open.length) out.push({ t: tag + plural(open.length, 'shift', 'shifts') + ' never clocked out (still In Progress in WellSky)', go: 'authorizations', bad: true,
-                                people: open.map(s => ({ name: s.consumer, why: s.attendant + ', ' + s.why })) });
+                                people: open.map(s => ({ name: s.consumer, why: s.attendant + ', ' + s.why, key: s.key, act: 'shift' })) });
     const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
     const h = hoursThisMonth(check.auths, check.shifts, pulledOn);
     const over = h.filter(x => x.status === 'over' || x.status === 'booked-over');

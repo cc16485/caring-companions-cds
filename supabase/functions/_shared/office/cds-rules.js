@@ -22,6 +22,7 @@
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
   const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+  const monDay = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '';
   // One meaning of "active" on Today and the Dashboard (her ask 2026-10-22, for Zach): a hub
   // consumer not marked inactive whose attendant worked a WellSky shift in the last 31 days.
   // people = the WellSky list (CDSWellSky.consumersNow people + leftOut); with no WellSky
@@ -168,58 +169,70 @@
     const nowNames = new Set(now31.map(c => String(c.name).toUpperCase()));
     const wages = (data.attendantWages && data.attendantWages.entries) || [];
     const steps = [];
+    // Names on every line (her ask 2026-10-22, for Zach). Each person carries why (the email
+    // prints it), due (yyyy-mm-dd, when there is one), id (the consumer or lead) and act, the
+    // button that records the work: call, visit, tax, shift (Checked), lead or profile (Open).
+    const byName = new Map((data.consumers || []).map(c => [String(c.name).toUpperCase(), c]));
+    const who = (c, why, due, act) => ({ name: c.name, id: c.id, why, due: due || '', act: act || 'profile' });
+    const byDue = list => list.sort((a, b) => (a.due || '9').localeCompare(b.due || '9') || String(a.name).localeCompare(String(b.name)));
 
-    let einLate = 0, einSoon = 0, desDue = 0;
+    const einLate = [], einSoon = [], desDue = [];
     consumers.forEach(c => {
       if (!taxDone(c)) {
         const k = einClock(c, now);
-        if (k.known && k.days < 0) einLate++; else if (k.known && k.days <= 21) einSoon++;
+        if (k.known && k.days < 0) einLate.push(who(c, 'EIN, MO Tax ID and proof in Fusion', k.due, 'tax'));
+        else if (k.known && k.days <= 21) einSoon.push(who(c, 'EIN, MO Tax ID and proof in Fusion', k.due, 'tax'));
       }
-      if (!c.desRegistered) { const d = desThreshold(wages, c.name); if (d.known && d.crossed) desDue++; }
+      if (!c.desRegistered) { const d = desThreshold(wages, c.name); if (d.known && d.crossed)
+        desDue.push(who(c, '$' + Math.round(d.crossedAmount).toLocaleString('en-US') + ' in ' + d.crossed + ', register now', '', 'tax')); }
     });
     steps.push({
       n: 1, title: 'Clear anything the state is waiting on',
       items: [
-        einLate && { t: plural(einLate, 'consumer', 'consumers') + ' past the 90-day EIN deadline', go: 'taxcompliance', bad: true },
-        einSoon && { t: einSoon + ' inside three weeks of it', go: 'taxcompliance' },
-        desDue  && { t: desDue + ' past $1,000 in a quarter and not registered with DES', go: 'taxcompliance', bad: true }
+        einLate.length && { t: plural(einLate.length, 'consumer', 'consumers') + ' past the 90-day EIN deadline', go: 'taxcompliance', bad: true, people: byDue(einLate) },
+        einSoon.length && { t: einSoon.length + ' inside three weeks of it', go: 'taxcompliance', people: byDue(einSoon) },
+        desDue.length  && { t: desDue.length + ' past $1,000 in a quarter and not registered with DES', go: 'taxcompliance', bad: true, people: byDue(desDue) }
       ].filter(Boolean),
       clear: 'Nothing outstanding with the state.'
     });
 
     const records = (data.authorizations && data.authorizations.records) || {};
     const auths = Object.values(records).filter(a => !data.wsPeople || nowNames.has(String(a.consumer || a.name || '').toUpperCase()));
-    const expired = auths.filter(a => a.planEnd && new Date(a.planEnd + 'T12:00:00') < now).length;
+    const authWho = (a, why) => { const n = String(a.consumer || a.name || ''), c = byName.get(n.toUpperCase());
+      const due = /ended/.test(why) ? '' : (a.planEnd || '');
+      return c ? who(c, why, due, 'profile') : { name: n, why, due, act: '' }; };
+    const expired = auths.filter(a => a.planEnd && new Date(a.planEnd + 'T12:00:00') < now).map(a => authWho(a, 'authorization ended ' + monDay(a.planEnd)));
     const expiring = auths.filter(a => {
       if (!a.planEnd) return false;
       const d = Math.round((new Date(a.planEnd + 'T12:00:00') - now) / DAY);
       return d >= 0 && d <= 60;
-    }).length;
+    }).map(a => authWho(a, 'renew the authorization'));
     const noAuth = now31.filter(c => !auths.some(a =>
-      String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase())).length;
+      String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase())).map(c => who(c, 'no authorization on file', '', 'profile'));
     steps.push({
       n: 2, title: 'Protect the money',
       items: [
-        noAuth   && { t: noAuth + ' active consumer' + (noAuth !== 1 ? 's have' : ' has') + ' no authorization on file', go: 'authorizations', bad: true },
-        expired  && { t: plural(expired, 'authorization', 'authorizations') + ' expired', go: 'authorizations', bad: true },
-        expiring && { t: expiring + ' expiring within 60 days', go: 'authorizations' }
+        noAuth.length   && { t: noAuth.length + ' active consumer' + (noAuth.length !== 1 ? 's have' : ' has') + ' no authorization on file', go: 'authorizations', bad: true, people: byDue(noAuth) },
+        expired.length  && { t: plural(expired.length, 'authorization', 'authorizations') + ' expired', go: 'authorizations', bad: true, people: byDue(expired) },
+        expiring.length && { t: expiring.length + ' expiring within 60 days', go: 'authorizations', people: byDue(expiring) }
       ].filter(Boolean).concat(data.wellskyItems || []),   // the daily WellSky check (wellsky.js items)
       clear: 'Every consumer has a current authorization.'
     });
 
-    let visitsOverdue = 0, visitsSoon = 0, monthDue = 0;
+    const visitsOverdue = [], visitsSoon = [], monthDue = [];
+    const monthEnd = isoLocal(new Date(now.getFullYear(), now.getMonth() + 1, 0, 12));
     now31.forEach(c => {
       const r = ongoingRequirements(c, now);
-      if (r.annual.overdue) visitsOverdue++;
-      else if (r.annual.soon) visitsSoon++;
-      if (!r.monthly.doneThisMonth) monthDue++;
+      if (r.annual.overdue) visitsOverdue.push(who(c, 'annual face-to-face visit', r.annual.due, 'visit'));
+      else if (r.annual.soon) visitsSoon.push(who(c, 'book the face-to-face visit', r.annual.due, 'visit'));
+      if (!r.monthly.doneThisMonth) monthDue.push(who(c, 'monthly check-in call', monthEnd, 'call'));
     });
     steps.push({
       n: 3, title: 'Keep the case files clean',
       items: [
-        visitsOverdue && { t: plural(visitsOverdue, 'annual face-to-face visit', 'annual face-to-face visits') + ' overdue', go: 'consumers', bad: true },
-        visitsSoon    && { t: plural(visitsSoon, 'face-to-face visit', 'face-to-face visits') + ' in the last 2 months, book ' + (visitsSoon === 1 ? 'it' : 'them') + ' now', go: 'consumers' },
-        monthDue      && { t: plural(monthDue, 'monthly check-in call', 'monthly check-in calls') + ' not yet logged this month', go: 'consumers' }
+        visitsOverdue.length && { t: plural(visitsOverdue.length, 'annual face-to-face visit', 'annual face-to-face visits') + ' overdue', go: 'consumers', bad: true, people: byDue(visitsOverdue) },
+        visitsSoon.length    && { t: plural(visitsSoon.length, 'face-to-face visit', 'face-to-face visits') + ' in the last 2 months, book ' + (visitsSoon.length === 1 ? 'it' : 'them') + ' now', go: 'consumers', people: byDue(visitsSoon) },
+        monthDue.length      && { t: plural(monthDue.length, 'monthly check-in call', 'monthly check-in calls') + ' not yet logged this month', go: 'consumers', people: byDue(monthDue) }
       ].filter(Boolean),
       clear: 'Contacts and visits are up to date.'
     });
@@ -229,7 +242,7 @@
     // (nobody has opened the hub since they came in). They are waiting too.
     const calls = data.calls || [];
     const notPulled = (data.siteLeads || []).filter(r => r && !r.archived && !pipeline.some(p => p && p.siteLeadId === r.id) && !calledFor(calls, r.id));
-    const waiting = pipeline.filter(p => leadWaiting(p, calls)).map(p => ({ name: p.name, county: p.county || '', at: p.addedAt || p.firstContact || '' }))
+    const waiting = pipeline.filter(p => leadWaiting(p, calls)).map(p => ({ name: p.name, county: p.county || '', at: p.addedAt || p.firstContact || '', id: p.id, act: 'lead' }))
       .concat(notPulled.map(r => ({ name: siteLeadName(r), county: r.county || '', at: r.submitted_at || '' })));
     const follow = pipeline.filter(p => followDue(p, todayIso));
     const fuNow = (Array.isArray(data.followups) ? data.followups : []).filter(f => !f.later || f.later <= todayIso);
@@ -242,7 +255,7 @@
                             people: waiting },
         // "Follow-ups" is the calls-and-texts tab, so a lead's call-back date says "call back" (10-22).
         follow.length  && { t: plural(follow.length, 'lead', 'leads') + ' to call back today or overdue', go: 'pipeline',
-                            people: follow.map(p => ({ name: p.name, county: p.county || '', at: '' })) },
+                            people: follow.map(p => ({ name: p.name, county: p.county || '', at: '', id: p.id, act: 'lead', due: p.followup || '' })) },
         // Communication Center (2026-10-22): missed calls and unanswered texts. Only handed in once
         // setting comm_center.live is true, by the hub and the 8am email alike. Step 2: care or safety
         // cards first, with whose they are; cards moved to a later day are left out until that day.
@@ -266,9 +279,9 @@
         items: [
           notReady.length && { t: plural(notReady.length, 'new consumer', 'new consumers') + ' not ready for the first shift yet', go: 'consumers',
                                bad: notReady.some(x => x.p.start && x.p.start <= todayIso),
-                               people: notReady.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.start })) },
+                               people: notReady.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.start, id: x.c.id, act: 'profile', due: x.p.start || '' })) },
           why.length && { t: plural(why.length, 'late start needs', 'late starts need') + ' a reason written down', go: 'consumers', bad: true,
-                          people: why.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.firstShift })) }
+                          people: why.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.firstShift, id: x.c.id, act: 'profile' })) }
         ].filter(Boolean),
         clear: 'New consumers are ready.'
       });
@@ -310,7 +323,7 @@
     });
     if (notTold.length) items.push({ t: plural(notTold.length, 'consumer', 'consumers') + ' with no worked shift in ' + noShift.days + '+ days, DSDS not told: ' +
                                        notTold.map(p => p.name).join(', '), go: 'consumers', bad: true,
-                                     people: notTold.map(p => ({ name: p.name, county: '', at: p.last || '' })) });
+                                     people: notTold.map(p => ({ name: p.name, county: '', at: p.last || '', id: p.id, act: 'profile' })) });
     return items;
   }
 

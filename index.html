@@ -25,8 +25,8 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=18"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=7"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=19"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=8"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -439,6 +439,17 @@ html.embedded .header, html.embedded #mainTabs { display:none !important; }
 .card, .stat-card { border-radius:20px !important; box-shadow:var(--cute-shadow) !important; border-top:0; }
 .btn { border-radius:999px !important; padding-left:18px; padding-right:18px; }
 .btn-sm { padding-left:12px; padding-right:12px; }
+/* Names on Today lines (2026-10-22) */
+.td-toggle { background:none; border:0; padding:0 0 0 6px; color:var(--primary); font-weight:600; font-size:12px; cursor:pointer; text-decoration:underline; }
+.td-people { margin:6px 0 8px 12px; border-left:2px solid var(--gray-200); padding-left:10px; color:var(--gray-800); }
+.td-row { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:5px 0; border-bottom:1px dashed var(--gray-200); }
+.td-row:last-child { border-bottom:0; }
+.td-name { font-weight:600; }
+.td-why { color:var(--gray-600); font-size:12px; }
+.td-due { font-size:11px; font-weight:700; border-radius:999px; padding:1px 8px; background:var(--gray-100, #f1f3f5); color:var(--gray-700, #495057); }
+.td-due.soon { background:#FDF1DC; color:#7A4E0B; }
+.td-due.late { background:#fbebeb; color:var(--danger); }
+.td-btn { margin-left:auto; font-size:11.5px; padding:3px 10px; }
 .section-title, .cute-title { font-family:'Fraunces', Georgia, serif !important; font-weight:600 !important; color:#0D365F; letter-spacing:-.2px; }
 .section-title { font-size:24px !important; }
 .alert { border-radius:14px !important; }
@@ -8753,6 +8764,7 @@ function logAnnualVisit(cid) {
   if (typeof renderProfile === 'function' && document.getElementById('page-profile').classList.contains('active')) renderProfile();
   renderConsumers();
   renderOngoingRequirements();
+  try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
 }
 
 // The full visit form (2026-10-22, her ask). 19 CSR 15-8.400(5)(F): in person only, and each visit's
@@ -8845,6 +8857,7 @@ function saveVisitLog() {
   if (typeof renderProfile === 'function' && document.getElementById('page-profile').classList.contains('active')) renderProfile();
   renderConsumers();
   renderOngoingRequirements();
+  try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   if (rec.dhss) setTimeout(() => alert('Tell DHSS: services for ' + c.name + ' are not being given as authorized in the plan of care. Missouri requires the vendor to report this.'), 200);
 }
 // The hub's own switches, at the top of the Switches card (agency_data, one key each). Everyone sees
@@ -13020,6 +13033,47 @@ function cdsGoalLeaveOut(key, leave) {
   renderCdsGoal();
 }
 
+// Names on every Today line (her ask 2026-10-22, for Zach): each line opens to the people in it,
+// with the next step, the due date and the button that records the work. A person drops off only
+// when the work is saved (call or visit logged, shift checked, tax set up), never by hiding them.
+// Five or fewer show open; more show behind "Show N". Which lines are open survives a refresh.
+const _todayOpen = {};
+const _TODAY_ACT = {
+  call:    ['Log call',       'toggleContact(this.dataset.id)'],
+  visit:   ['Log visit',      'logAnnualVisit(this.dataset.id)'],
+  tax:     ['Open tax setup', 'openTaxSetup(this.dataset.id)'],
+  shift:   ['Checked',        'markShiftChecked(this.dataset.k)'],
+  lead:    ['Open lead',      'openLeadProfile(this.dataset.id)'],
+  profile: ['Open',           'openProfile(this.dataset.id)']
+};
+function _todayPeople(n, i) {
+  const ppl = i.people || [];
+  if (!ppl.length) return '';
+  const key = n + '|' + String(i.t).replace(/^[^a-z]*\d+\s*/i, '');
+  const open = key in _todayOpen ? _todayOpen[key] : ppl.length <= 5;
+  const today = CDSWellSky.isoLocal(new Date());
+  const soon = CDSWellSky.isoLocal(new Date(Date.now() + 7 * 864e5));
+  const consumers = getData('consumers');
+  const rows = ppl.map(p => {
+    // WellSky lines know a name, not the hub id: match it ("Able, Ann" is "Ann Able").
+    const id = p.id || (p.act === 'lead' ? '' : (consumers.find(c => CDSWellSky.nameKey(c.name) === CDSWellSky.nameKey(p.name)) || {}).id || '');
+    const act = p.act === undefined ? 'profile' : p.act;
+    const a = _TODAY_ACT[act];
+    const can = a && (act === 'shift' ? p.key : id);
+    const due = p.due ? '<span class="td-due ' + (p.due < today ? 'late' : p.due <= soon ? 'soon' : '') + '">' +
+      (p.due < today ? 'Late, was due ' : 'Due ') + esc(_niceDay(p.due)) + '</span>' : '';
+    const why = p.why || [p.county, p.at && !isNaN(Date.parse(p.at)) ? 'since ' + _niceDay(/T/.test(p.at) ? CDSWellSky.isoLocal(new Date(p.at)) : String(p.at).slice(0, 10)) : ''].filter(Boolean).join(', ');
+    return '<div class="td-row"><span class="td-name">' + esc(CDSWellSky.firstLast(p.name)) + '</span>' +
+      (why ? '<span class="td-why">' + esc(why) + '</span>' : '') + due +
+      (can ? '<button class="btn btn-sm btn-outline td-btn" data-id="' + esc(id) + '" data-k="' + esc(p.key || '') + '" onclick="' + a[1] + '">' + a[0] + '</button>' : '') +
+      '</div>';
+  }).join('');
+  return ' <button class="td-toggle" data-k="' + esc(key) + '" onclick="_todayToggle(this.dataset.k,' + (open ? 'false' : 'true') + ')">' +
+    (open ? 'Hide names' : 'Show ' + ppl.length + (ppl.length === 1 ? ' name' : ' names')) + '</button>' +
+    (open ? '<div class="td-people">' + rows + '</div>' : '');
+}
+function _todayToggle(key, open) { _todayOpen[key] = open; renderDailyRoutine(); }
+
 function renderDailyRoutine() {
   const host = document.getElementById('dailyRoutine');
   if (!host) return;
@@ -13082,7 +13136,7 @@ function renderDailyRoutine() {
               ? st.items.map(i =>
                   '<div style="font-size:12.5px;margin-bottom:3px;color:' + (i.bad ? 'var(--danger)' : 'var(--gray-800)') + '">' +
                   '• ' + esc(i.t) + ' <a href="#" onclick="' + (i.id ? 'openProfile(\'' + esc(i.id) + '\')' : 'showPage(\'' + i.go + '\')') + ';return false" ' +
-                  'style="color:var(--primary);font-weight:600">open →</a></div>').join('')
+                  'style="color:var(--primary);font-weight:600">open →</a>' + _todayPeople(st.n, i) + '</div>').join('')
               : '<div style="font-size:12px;color:var(--success)">✓ ' + esc(st.clear) + '</div>') +
             (st.note ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:4px">' + esc(st.note) + '</div>' : '') +
           '</div>' +
