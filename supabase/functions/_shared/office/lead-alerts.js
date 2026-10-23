@@ -135,8 +135,10 @@ export function morningEmail(steps, extra, nowMs) {
     extra.heldFailed && { t: extra.heldFailed + ' message' + (extra.heldFailed !== 1 ? 's' : '') + ' held or failed', go: 'caregivermatch', bad: true },
   ].filter(Boolean);
   const sys = extra.systemItems || [];
+  // The owner of each part (build step 5, 2026-10-23), by first name, as on Today.
+  const ownerName = e => { const p = (extra.people || []).find(x => String(x.email || '').toLowerCase() === e); return p && p.name ? p.name : e ? e.split('@')[0].replace(/^./, c => c.toUpperCase()) : ''; };
   const all = (sys.length ? [{ n: '', title: 'For you, Samantha (the team does not see this)', items: sys, clear: '' }] : [])
-    .concat(steps.map(s => ({ n: s.n + '.', title: s.title, items: s.items, clear: 'Nothing waiting here.' })))
+    .concat(steps.map(s => ({ n: s.n + '.', title: s.title + (s.owner ? ' (' + ownerName(s.owner) + ')' : ''), items: s.items, clear: 'Nothing waiting here.' })))
     .concat([{ n: '', title: 'Also waiting', items: also, clear: 'Nothing waiting here.' }]);
   const count = all.reduce((t, s) => t + s.items.length, 0);
   const subject = 'CDS morning, ' + dayLong(nowMs) + ': ' + (count ? count + ' thing' + (count !== 1 ? 's' : '') + ' waiting' : 'nothing waiting');
@@ -351,7 +353,9 @@ export function createLeadAlerts(deps) {
                                    wsPeople, nameKey: W.nameKey, attendantWork,
                                    quarterStatus: due.quarterStatus || {},
                                    evv: { corrections: Array.isArray(due.evvCorrections) ? due.evvCorrections : [], submissions: evvSubs },
-                                   payroll: { runs: (due.payrollTotals || {}).runs || [], registers: (s.attendantWages || {}).registers || [] } }, noon);
+                                   payroll: { runs: (due.payrollTotals || {}).runs || [], registers: (s.attendantWages || {}).registers || [] },
+                                   ...(await (async () => { const o = await store(['todayOwners', 'complianceChecks', 'agencyDates']);
+                                     return { owners: (o.todayOwners || {}).owners || {}, checks: o.complianceChecks || {}, agencyDates: o.agencyDates || {} }; })()) }, noon);
     const pipeline = s.pipeline || [];
     // The attendant check against WellSky joins the email only once setting attendant_check.live is true.
     const acfg = await setting('attendant_check', null);
@@ -362,6 +366,7 @@ export function createLeadAlerts(deps) {
         shifts: (ac.wellskyCheck || {}).shifts, reviewed: ac.attendantCheckReviewed || {}, now: noon }));
     }
     const extra = {
+      people: comm && Array.isArray(comm.people) ? comm.people : [],
       attendantItems,
       evv: (await one(`select count(*)::int n from evv_submissions where agency_id=$1 and not coalesce(processed,false)`, [AGENCY_ID])).n,
       signups: (await one(`select count(*)::int n from cds_tasks where kind='cg_signup' and done_at is null`)).n,

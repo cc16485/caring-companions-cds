@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=24"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=25"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -450,6 +450,7 @@ html.embedded .header, html.embedded #mainTabs { display:none !important; }
 .td-due.soon { background:#FDF1DC; color:#7A4E0B; }
 .td-due.late { background:#fbebeb; color:var(--danger); }
 .td-btn { margin-left:auto; font-size:11.5px; padding:3px 10px; }
+.td-owner { font-size:11px; font-weight:700; color:var(--primary); background:var(--gray-100, #f1f3f5); border-radius:999px; padding:1px 8px; margin-left:4px; }
 .section-title, .cute-title { font-family:'Fraunces', Georgia, serif !important; font-weight:600 !important; color:#0D365F; letter-spacing:-.2px; }
 .section-title { font-size:24px !important; }
 .alert { border-radius:14px !important; }
@@ -1445,6 +1446,7 @@ button.fu-tile.check span { color:#14606F; }
       <div style="font-size:12px;color:var(--gray-600);margin-top:10px">Submit to: <strong>MMAC.CDS@DSS.MO.GOV</strong> | Fax: 573-526-4375</div>
     </div>
 
+    <div class="card" id="agencyDatesCard"></div>
     <div class="card">
       <div class="card-title"><span class="icon">💰</span> Tax Filing Calendar (Per Consumer EIN)</div>
       <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;font-style:italic">⚠️ All taxes filed under CONSUMER's EIN, not agency EIN. Vendor liable for IRS penalties per Senate Bill 710.</div>
@@ -6252,7 +6254,7 @@ async function renderSwitches(reload) {
   host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
     '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
     '<div id="hubSwitches"></div>' +
-    rows + '</div>' + needOwnersHtml(d);
+    rows + '</div>' + needOwnersHtml(d) + todayOwnersHtml();
   renderHubSwitches();
 }
 // Who owns each need (Communication Center step 2, 2026-10-22). A new follow-up card goes to this
@@ -12927,21 +12929,30 @@ function renderLeieLog() {
 // ============================================================
 // COMPLIANCE CHECKS
 // ============================================================
+// A tick saves who and when (2026-10-23), so a recurring box (CDSRules.CHECK_CYCLES) counts only
+// for its current week, month, quarter or year, and comes back unticked when the next one starts.
 function saveCheck(key, val) {
   const checks = getObj('complianceChecks');
-  checks[key] = val;
+  checks[key] = val ? { at: _todayIso(), by: _acWho() } : false;
   setObj('complianceChecks', checks);
+  loadChecks();
   updateDashboard();
 }
 
 function loadChecks() {
   const checks = getObj('complianceChecks');
-  Object.entries(checks).forEach(([k, v]) => {
+  const keys = new Set(Object.keys(checks).concat(Object.keys(CDSRules.CHECK_CYCLES)));
+  keys.forEach(k => {
     const el = document.getElementById(k);
-    if (el) {
-      el.checked = v;
-      if (v) el.closest('li').classList.add('done');
-    }
+    if (!el) return;
+    const v = checks[k], on = CDSRules.checkCurrent(k, v), c = CDSRules.CHECK_CYCLES[k];
+    el.checked = on;
+    el.closest('li').classList.toggle('done', on);
+    if (!c) return;
+    let hint = el.closest('li').querySelector('.ck-cycle');
+    if (!hint) { hint = document.createElement('span'); hint.className = 'ck-cycle'; hint.style.cssText = 'display:block;font-size:11px;color:var(--gray-600);margin-top:2px'; el.closest('li').appendChild(hint); }
+    const at = v && typeof v === 'object' && v.at ? v.at : '';
+    hint.textContent = 'Every ' + c.every + (at ? '. Last done ' + _niceDay(at) + (v.by ? ' by ' + v.by.split('@')[0] : '') : v ? '. Ticked before dates were kept: tick again to record when' : '') + '.';
   });
 }
 
@@ -13119,7 +13130,9 @@ const _TODAY_ACT = {
   report:  ['Mark it sent',   '_todayReportSent(this)'],
   evv:     ['Open EVV forms', "showPage('evvcorrections')"],
   payroll: ['Open Payroll',   "showPage('payroll')"],
-  dhss:    ['Reported',       '_todayDhssReported(this)']
+  dhss:    ['Reported',       '_todayDhssReported(this)'],
+  checklist: ['Open checklist', "showPage('compliance')"],
+  agencydate: ['Done',        '_agencyDateDone(this.dataset.k)']
 };
 // Approved due dates (2026-10-23): a report or tax filing marked sent for its current due date,
 // and a DHSS change report recorded on the check-in call that found the change.
@@ -13129,6 +13142,38 @@ function _todayReportSent(btn) {
   saveQuarterStatus(btn.dataset.k, 'submitted');
   try { loadQuarterStatus(); } catch (e) {}
   renderDailyRoutine();
+}
+// Yearly agency dates (her picks 2026-10-23): she types each due date on the Deadlines page; Done
+// records today and asks for the next due date (a year later unless she changes it).
+function _agencyDateDone(key) {
+  const all = Object.assign({}, getObj('agencyDates')), r = Object.assign({}, all[key]);
+  const label = (CDSRules.AGENCY_DATES.find(x => x[0] === key) || [, key])[1];
+  const next = r.due ? (+r.due.slice(0, 4) + 1) + r.due.slice(4) : '';
+  const due = prompt(label + ' done. Next due date (YYYY-MM-DD):', next);
+  if (due === null) return;
+  if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) { alert('Please use YYYY-MM-DD.'); return; }
+  all[key] = { due: due || r.due, done: _todayIso(), by: _acWho(), last: r.due || '' };
+  setObj('agencyDates', all);
+  renderAgencyDates();
+  renderDailyRoutine();
+}
+function saveAgencyDate(key, due) {
+  const all = Object.assign({}, getObj('agencyDates'));
+  all[key] = Object.assign({}, all[key], { due, setBy: _acWho(), setAt: new Date().toISOString() });
+  setObj('agencyDates', all);
+  renderAgencyDates();
+  try { renderDailyRoutine(); } catch (e) {}
+}
+function renderAgencyDates() {
+  const host = document.getElementById('agencyDatesCard');
+  if (!host) return;
+  const all = getObj('agencyDates');
+  host.innerHTML = '<div class="card-title"><span class="icon">📅</span> Yearly agency dates</div>' +
+    '<div style="font-size:12px;color:var(--gray-600);margin-bottom:8px">Type the next due date for each. It shows on Today 30 days before, until you press Done there.</div>' +
+    CDSRules.AGENCY_DATES.map(([k, label]) => { const r = all[k] || {};
+      return '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--gray-200)">' +
+        '<span style="font-weight:700;font-size:13px">' + esc(label) + (r.done ? '<span style="display:block;font-weight:400;font-size:11px;color:var(--gray-600)">Last done ' + esc(_niceDay(r.done)) + (r.by ? ' by ' + esc(r.by.split('@')[0]) : '') + '</span>' : '') + '</span>' +
+        '<input type="date" value="' + esc(r.due || '') + '" onchange="saveAgencyDate(\'' + k + '\',this.value)" aria-label="Next due date for ' + esc(label) + '" style="font:inherit;font-size:13px;padding:5px 8px;border:1.5px solid var(--gray-200);border-radius:8px"></div>'; }).join('');
 }
 function _todayDhssReported(btn) {
   const consumers = getData('consumers'), c = consumers.find(x => x.id === btn.dataset.id);
@@ -13202,12 +13247,12 @@ function _todayPeople(n, i) {
     const id = p.id || (p.act === 'lead' ? '' : (consumers.find(c => CDSWellSky.nameKey(c.name) === CDSWellSky.nameKey(p.name)) || {}).id || '');
     const act = p.act === undefined ? 'profile' : p.act;
     const a = _TODAY_ACT[act];
-    const can = a && (act === 'shift' || act === 'report' ? p.key : ['oig', 'attendant', 'evv', 'payroll'].includes(act) ? true : id);
+    const can = a && (act === 'shift' || act === 'report' || act === 'agencydate' ? p.key : ['oig', 'attendant', 'evv', 'payroll', 'checklist'].includes(act) ? true : id);
     const due = p.due ? '<span class="td-due ' + (p.due < today ? 'late' : p.due <= soon ? 'soon' : '') + '">' +
       (p.due < today ? 'Late, was due ' : 'Due ') + esc(_niceDay(p.due)) + '</span>' : '';
     const why = p.why || [p.county, p.at && !isNaN(Date.parse(p.at)) ? 'since ' + _niceDay(/T/.test(p.at) ? CDSWellSky.isoLocal(new Date(p.at)) : String(p.at).slice(0, 10)) : ''].filter(Boolean).join(', ');
     // "Last, First" from WellSky reads "First Last"; a report title keeps its comma.
-    const shown = act === 'report' || act === 'payroll' ? p.name : CDSWellSky.firstLast(p.name);
+    const shown = ['report', 'payroll', 'checklist', 'agencydate'].includes(act) ? p.name : CDSWellSky.firstLast(p.name);
     return '<div class="td-row"><span class="td-name">' + esc(shown) + '</span>' +
       (why ? '<span class="td-why">' + esc(why) + '</span>' : '') + due +
       (can ? '<button class="btn btn-sm btn-outline td-btn" data-id="' + esc(id) + '" data-k="' + esc(p.key || p.month || '') + '" onclick="' + a[1] + '">' + a[0] + '</button>' : '') +
@@ -13218,6 +13263,40 @@ function _todayPeople(n, i) {
     (open ? '<div class="td-people">' + rows + '</div>' : '');
 }
 function _todayToggle(key, open) { _todayOpen[key] = open; renderDailyRoutine(); }
+function _todayMineSet(on) { try { localStorage.setItem('cdsTodayMine', on ? '1' : '0'); } catch (e) {} renderDailyRoutine(); }
+// A first name for an owner's email: the Follow-ups team list when Settings has loaded it, else the part before the @.
+function _ownerName(email) {
+  const people = (typeof _swData !== 'undefined' && _swData && _swData.needOwners && _swData.needOwners.people) || [];
+  const p = people.find(x => x.email === email);
+  return p && p.name ? p.name : String(email || '').split('@')[0].replace(/^./, c => c.toUpperCase());
+}
+// Settings: who owns each part of Today. Only the Switches owners (Samantha) can change it; every
+// change is kept in agency_data 'todayOwners'.log with who and when.
+function todayOwnersHtml() {
+  const can = ldWhoOwner();
+  const saved = getObj('todayOwners'), owners = Object.assign({}, CDSRules.TODAY_OWNERS, saved.owners || {});
+  const people = ((typeof _swData !== 'undefined' && _swData && _swData.needOwners && _swData.needOwners.people) || []).slice();
+  Object.values(owners).forEach(e => { if (e && !people.some(p => p.email === e)) people.push({ email: e, name: _ownerName(e) }); });
+  const rows = CDSRules.TODAY_PARTS.map(([k, label]) => '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--gray-200)">' +
+    '<span style="font-weight:700;font-size:13.5px">' + esc(label) + '</span>' +
+    (can ? '<select aria-label="Owner for ' + esc(label) + '" onchange="saveTodayOwner(\'' + k + '\',this.value)" style="min-height:36px;border-radius:8px;border:1.5px solid var(--gray-200);padding:0 8px;font:inherit;font-size:13px">' +
+        people.map(p => '<option value="' + esc(p.email) + '"' + (owners[k] === p.email ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '</select>'
+      : '<b style="font-size:13px">' + esc(_ownerName(owners[k])) + '</b>') + '</div>').join('');
+  const last = (saved.log || []).slice(-1)[0];
+  return '<div class="card" style="margin-top:14px"><div class="card-title"><span class="icon">🗂️</span> Who owns each part of Today</div>' +
+    '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">Their name shows on that part of Today and in the 8am email. "Mine" on Today shows only their parts. Everyone still sees everything.</div>' +
+    rows + (last ? '<div style="font-size:11.5px;color:var(--gray-600);margin-top:6px">Last changed by ' + esc(last.by || 'someone') + ', ' + esc(new Date(last.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })) + '.</div>' : '') + '</div>';
+}
+function saveTodayOwner(k, email) {
+  if (!ldWhoOwner()) { alert('Only Samantha can change who owns each part of Today.'); return; }
+  const saved = Object.assign({ owners: {}, log: [] }, getObj('todayOwners'));
+  const from = Object.assign({}, CDSRules.TODAY_OWNERS, saved.owners)[k];
+  saved.owners = Object.assign({}, saved.owners, { [k]: email });
+  saved.log = (saved.log || []).concat([{ at: new Date().toISOString(), by: _acWho(), part: k, from, to: email }]).slice(-200);
+  setObj('todayOwners', saved);
+  try { renderSwitches(false); } catch (e) {}
+  renderDailyRoutine();
+}
 
 function renderDailyRoutine() {
   const host = document.getElementById('dailyRoutine');
@@ -13239,7 +13318,9 @@ function renderDailyRoutine() {
     // Approved due dates (2026-10-23): reports and tax filings, EVV forms, payroll uploads.
     quarterStatus: getObj('quarterStatus'),
     evv: { corrections: getData('evvCorrections'), submissions: (_todayAtt.data && _todayAtt.data.evvSubs) || [] },
-    payroll: { runs: getObj('payrollTotals').runs || [], registers: getObj('attendantWages').registers || [] }
+    payroll: { runs: getObj('payrollTotals').runs || [], registers: getObj('attendantWages').registers || [] },
+    owners: getObj('todayOwners').owners || {},
+    checks: getObj('complianceChecks'), agencyDates: getObj('agencyDates')
   });
   _todayAttLoad(false);
   const owner = ldWhoOwner();
@@ -13268,6 +13349,15 @@ function renderDailyRoutine() {
     '<div style="font-size:11.5px;margin-top:4px">' + esc(r.alert_failed || '') + '</div></div></div>').join('');
 
   const totalOpen = steps.reduce((t, s) => t + s.items.length, 0);
+  // Everyone / Mine (build step 5, 2026-10-23): Mine shows the parts of Today this person owns.
+  const me = (_acWho() || '').trim().toLowerCase();
+  let mine = false; try { mine = localStorage.getItem('cdsTodayMine') === '1'; } catch (e) {}
+  const shown = mine && me ? steps.filter(st => st.owner === me) : steps;
+  const others = steps.length - shown.length;
+  const mineBar = me ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:-4px 0 10px">' +
+      ['Everyone', 'Mine'].map(l => '<button class="btn btn-sm ' + ((l === 'Mine') === mine ? 'btn-primary' : 'btn-outline') + '" style="font-size:11.5px" onclick="_todayMineSet(' + (l === 'Mine') + ')">' +
+        l + (l === 'Mine' ? ' (' + steps.filter(st => st.owner === me).reduce((t, s) => t + s.items.length, 0) + ')' : '') + '</button>').join('') +
+      (mine && others ? '<span style="font-size:12px;color:var(--gray-600)">' + others + (others === 1 ? ' part belongs' : ' parts belong') + ' to someone else.</span>' : '') + '</div>' : '';
 
   host.innerHTML =
     '<div class="card" style="border-left:4px solid var(--accent, #54bdb8)">' +
@@ -13280,14 +13370,15 @@ function renderDailyRoutine() {
           ? 'Work down the list. Everything else can wait until it is clear.'
           : 'Nothing outstanding. This is what a clear morning looks like.') +
       '</div>' +
-      systemHtml + attErr + failedHtml +
-      steps.map(st =>
+      mineBar + systemHtml + attErr + failedHtml +
+      shown.map(st =>
         '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--gray-200)">' +
           '<span style="flex:none;width:26px;height:26px;border-radius:50%;background:' +
             (st.items.length ? 'var(--primary)' : 'var(--gray-300)') + ';color:#fff;display:flex;' +
             'align-items:center;justify-content:center;font-weight:700;font-size:12px">' + st.n + '</span>' +
           '<div style="flex:1;min-width:0">' +
-            '<div style="font-weight:600;font-size:13.5px;margin-bottom:' + (st.items.length ? '6px' : '0') + '">' + st.title + '</div>' +
+            '<div style="font-weight:600;font-size:13.5px;margin-bottom:' + (st.items.length ? '6px' : '0') + '">' + st.title +
+              (st.owner ? ' <span class="td-owner">' + esc(_ownerName(st.owner)) + '</span>' : '') + '</div>' +
             (st.items.length
               ? st.items.map(i =>
                   '<div style="font-size:12.5px;margin-bottom:3px;color:' + (i.bad ? 'var(--danger)' : 'var(--gray-800)') + '">' +
@@ -14652,6 +14743,7 @@ function initApp() {
   initQuarterlyYearSelect();
   loadChecks();
   loadQuarterStatus();
+  renderAgencyDates();
   renderConsumers();
   renderAttendants();
   renderLeieLog();
