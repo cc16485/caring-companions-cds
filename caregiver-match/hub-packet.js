@@ -124,6 +124,23 @@ export function rosterDue(a, autoOig, now = new Date()) {
   return { rows, label, tone: over ? 'r' : soonR || miss.length ? 'y' : 'g', due: !!(over || soonR), missing: miss.length > 0 };
 }
 
+// Check proof from GHL (2026-10-22): after the office reviews the dates, each attendant's Roster
+// date moves forward to the newest confirmed check, never back.
+const PROOF_FIELD = { edl: 'edlDate', fcsr: 'fcsrDate', oig: 'leieDate' };
+export function proofPatches(items, roster) {
+  const out = [];
+  for (const a of roster || []) {
+    const patch = {};
+    for (const [k, f] of Object.entries(PROOF_FIELD)) {
+      const newest = (items || []).filter(x => x.attendant_id === a.id && x.check === k && /^\d{4}-\d{2}-\d{2}$/.test(x.checked_on || '')).map(x => x.checked_on).sort().pop();
+      if (newest && (!a[f] || newest > a[f])) patch[f] = newest;
+    }
+    if (Object.keys(patch).length) out.push({ id: a.id, patch });
+  }
+  return out;
+}
+const CHECK_LABEL = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG' };
+
 // Ending an attendant (her rule 2026-10-22): the consumer's decision, on record.
 export const END_WHY = [['consumer', 'The consumer ended it'], ['attendant', 'The attendant quit (consumer told)'], ['other', 'Other (say what in the note)']];
 export const END_HOW = [['call', 'Phone call'], ['person', 'In person'], ['text', 'Text message'], ['email', 'Email'], ['letter', 'Signed letter or form']];
@@ -282,7 +299,36 @@ export function mountHubPacket(el, opts) {
       <div class="tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       ${body}
-      <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>`;
+      <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>
+      ${tab === 'working' ? '<div class="btns"><button class="btn o" data-act="ghl-import">Bring in check PDFs from GHL</button></div>' : ''}`;
+  }
+
+  // Check PDFs from GHL: copied into the hub, dates read from each PDF, the office reviews and saves.
+  async function openImport(note) {
+    open = { kind: 'import' };
+    el.innerHTML = '<button class="pill-btn" data-act="back">← All attendants</button><div class="card"><h2>Check PDFs from GHL</h2><p class="small">Copying the FCSR, EDL and OIG files from each attendant\'s GHL contact. This can take a minute.</p></div>';
+    let r;
+    try { r = await api('rosterProofScan'); } catch (e) { open = { kind: 'import' }; el.querySelector('.card').insertAdjacentHTML('beforeend', `<div class="err">${esc(e.message)}</div>`); return; }
+    open = { kind: 'import', r };
+    const byAtt = {};
+    for (const x of r.items) (byAtt[x.attendant_id] = byAtt[x.attendant_id] || []).push(x);
+    const cur = Object.fromEntries((r.roster || []).map(a => [a.id, a]));
+    const blank = r.items.filter(x => !(x.checked_on || x.date_found)).length;
+    const rows = Object.entries(byAtt).sort((x, y) => x[1][0].name.localeCompare(y[1][0].name)).map(([id, xs]) => xs
+      .sort((a, b) => ['fcsr', 'edl', 'oig'].indexOf(a.check) - ['fcsr', 'edl', 'oig'].indexOf(b.check))
+      .map((x, i) => `<tr>${i ? '<td></td>' : `<td><b>${esc(x.name)}</b></td>`}<td><b>${CHECK_LABEL[x.check]}</b></td>
+        <td>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.file_name || 'View')}</a>` : esc(x.file_name)}${x.ghl_result ? `<div class="small">GHL: ${esc(x.ghl_result.replace(/^[^A-Za-z]+/, ''))}</div>` : ''}</td>
+        <td><input type="date" data-proof="${esc(x.id)}" value="${esc(x.checked_on || x.date_found || '')}" max="${isoLocal(new Date())}" aria-label="${CHECK_LABEL[x.check]} date for ${esc(x.name)}">
+        ${x.checked_on ? '<div class="small">Saved</div>' : x.date_found ? '<div class="small">From the PDF</div>' : '<div><span class="pill y">Open the PDF, type the date</span></div>'}
+        ${cur[id] && cur[id][PROOF_FIELD[x.check]] ? `<div class="small">On the Roster: ${esc(fmtD(cur[id][PROOF_FIELD[x.check]]))}</div>` : ''}</td></tr>`).join('')).join('');
+    el.innerHTML = `<button class="pill-btn" data-act="back">← All attendants</button>
+      <div class="card"><h2>Check PDFs from GHL</h2>
+      <p class="small">Copied from each attendant's GHL contact (Upload FCSR, Upload EDL, Upload OIG) and kept in the hub. The date is the day the PDF was saved, which is the day the search was run. Open any that look wrong, fix the date, then save. Nothing in GHL changes.</p>
+      ${r.items.length ? `<table><thead><tr><th>Attendant</th><th>Check</th><th>File</th><th>Date of the check</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No check files found in GHL.</p>'}
+      ${r.skipped.length ? `<h3>Not brought in</h3><ul>${r.skipped.map(x => `<li><b>${esc(x.name)}</b>: ${esc(x.why)}</li>`).join('')}</ul>` : ''}
+      ${r.items.length ? `<div class="btns"><button class="btn" data-act="ghl-save">Save dates</button></div>
+      <p class="small">${blank ? blank + (blank === 1 ? ' file has' : ' files have') + ' no date in the PDF. Those are skipped until you type the date. ' : ''}Each attendant's Roster date moves to the newest check, never back, so their recheck dates show on their card.</p>` : ''}
+      <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}</div>`;
   }
 
   async function openPacket(id) {
@@ -350,11 +396,30 @@ export function mountHubPacket(el, opts) {
       <div class="btns"><button class="btn" data-act="dates">Save dates</button></div>
       <p class="small">OIG every month (runs by itself), EDL every 3 months, FCSR every year. Use the date on the search result you have on file.</p>
       <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}
+      <h3>Proof on file</h3>
+      <div id="hp_proofs" class="small">Loading…</div>
+      <div class="copy"><b>Add a recheck</b>
+        <div><select id="hp_pk" aria-label="Which check"><option value="edl">EDL</option><option value="fcsr">FCSR</option><option value="oig">OIG</option></select>
+        <input type="date" id="hp_pd" value="${isoLocal(new Date())}" max="${isoLocal(new Date())}" aria-label="Day the check was run">
+        <button class="btn" data-act="proof-add">Clear: add the PDF or screenshot</button></div>
+        <p class="small">Only for a clear result. If a search finds something, call Samantha before anything else.</p></div>
+      <input type="file" id="hp_proof" accept="image/*,application/pdf" hidden>
       <h3>Not working anymore?</h3>
       <div id="hp_leave"><div class="btns"><button class="btn o" data-act="leave">No longer working</button></div>
       <p class="small">Moves them off this list and stops their rechecks. You can make them active again on the old Roster.</p></div>
       <div class="cds-comm-history" data-refs="attendant:${esc(a.id)}" data-phones="${esc(a.phone || '')}"></div></div>`;
     if (window.cdsCommHistory) window.cdsCommHistory(el);
+    loadProofs(a.id);
+  }
+  async function loadProofs(id) {
+    const box = el.querySelector('#hp_proofs'); if (!box) return;
+    try {
+      const { items } = await api('rosterProofList', { attendant_id: id });
+      if (!open || open.id !== id) return;
+      box.innerHTML = items.length ? `<table><tbody>${items.map(x => `<tr><td><b>${CHECK_LABEL[x.check]}</b></td><td>${esc(fmtD(x.checked_on || x.date_found) || 'No date yet')}</td>
+        <td>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.file_name || 'View')}</a>` : esc(x.file_name)}</td><td>${x.source === 'ghl' ? 'From GHL' : 'Added in the hub'}</td></tr>`).join('')}</tbody></table>`
+        : 'No proof in the hub yet. Use "Bring in check PDFs from GHL" on the Working tab, or add a recheck below.';
+    } catch (e) { box.textContent = 'Proof could not load: ' + e.message; }
   }
 
   async function onClick(e) {
@@ -400,6 +465,37 @@ export function mountHubPacket(el, opts) {
         const rec = endRecord({ why: v('hp_why'), how: v('hp_how'), on: v('hp_on'), said: v('hp_said'), by: opts.who ? opts.who() : '' });
         if (rec.error) { el.querySelector('#hp_leave_err').textContent = rec.error; return; }
         await opts.saveRoster(open.id, { status: 'inactive', ended: rec.record }); open = null; tab = 'inactive'; return draw();
+      }
+      if (act === 'ghl-import') return openImport();
+      if (act === 'ghl-save') {
+        const items = [...el.querySelectorAll('input[data-proof]')].filter(i => i.value).map(i => ({ id: i.dataset.proof, checked_on: i.value }));
+        if (!items.length) return fail('Type at least one date.');
+        if (items.some(x => x.checked_on > isoLocal(new Date()))) return fail('A check date cannot be in the future.');
+        b.disabled = true; b.textContent = 'Saving…';
+        await api('rosterProofConfirm', { items });
+        const byId = Object.fromEntries(open.r.items.map(x => [x.id, x]));
+        const confirmed = items.map(x => ({ ...byId[x.id], checked_on: x.checked_on }));
+        const patches = proofPatches(confirmed, opts.roster ? opts.roster() : []);
+        for (const p of patches) await opts.saveRoster(p.id, p.patch);
+        return openImport('Saved ' + items.length + (items.length === 1 ? ' date' : ' dates') + '. ' + (patches.length ? patches.length + (patches.length === 1 ? ' attendant\'s' : ' attendants\'') + ' Roster dates moved forward.' : 'The Roster already had these dates or newer ones.'));
+      }
+      if (act === 'proof-add') {
+        const inp = el.querySelector('#hp_proof'), key = el.querySelector('#hp_pk').value, day = el.querySelector('#hp_pd').value, id = open.id;
+        if (!day || day > isoLocal(new Date())) return fail('Pick the day the check was run (not in the future).');
+        inp.value = '';
+        inp.onchange = async () => {
+          const f = inp.files[0]; if (!f) return;
+          if (f.size > 15 * 1024 * 1024) return fail('That file is too big (15 MB limit).');
+          const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+          try {
+            await api('rosterProofAdd', { attendant_id: id, check_key: key, checked_on: day, result: 'clear', proof: { mime: f.type || 'application/pdf', name: f.name, data } });
+            const p = proofPatches([{ attendant_id: id, check: key, checked_on: day }], (opts.roster ? opts.roster() : []).filter(a => a.id === id))[0];
+            if (p) await opts.saveRoster(id, p.patch);
+            openRosterCard(id, CHECK_LABEL[key] + ' recheck saved with its proof.');
+          } catch (x) { fail(x.message); }
+        };
+        inp.click();
+        return;
       }
       if (act === 'match') return opts.openMatch && opts.openMatch();
       if (b.dataset.copy) {
