@@ -111,6 +111,17 @@ const match = createMatch({
       await sql`update cds_media set bytes=${size} where id=${id}`;
       return true;
     },
+    // Roster attendants' check proof (2026-10-22): no pool row, so a folder of its own.
+    async putFile({ folder, name, mime, bytes, data, by }: { folder: string; name: string; mime: string; bytes?: Uint8Array; data?: string; by: string }) {
+      const b = bytes || dataUrlBytes(data || '');
+      if (b.length > 20 * 1024 * 1024) throw new MatchError('That file is too big (20 MB limit).');
+      const path = `${String(folder).replace(/[^A-Za-z0-9_\-\/]/g, '')}/${String(name).replace(/[^a-z]/g, '')}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+      const up = await admin.storage.from(PROOF_BUCKET).upload(path, b, { contentType: mime, upsert: false });
+      if (up.error) throw new Error('Upload failed: ' + up.error.message);
+      const rows = await sql`insert into cds_media (pool_id, kind, storage_path, mime, bytes, created_by)
+                             values (${null}, 'proof', ${PROOF_BUCKET + '/' + path}, ${mime}, ${b.length}, ${by}) returning id`;
+      return rows[0].id;
+    },
     // Short-lived links only: 10 minutes.
     async url(id: string) {
       const rows = await sql`select storage_path from cds_media where id=${id}`;
@@ -129,11 +140,37 @@ const match = createMatch({
     async update(id: string, fields: Record<string, unknown>) {
       await ghlFetch('/contacts/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ email: fields.email }) });
     },
+    // Read only (2026-10-22, check proof for Roster attendants).
+    async find(query: string) {
+      const body = await ghlFetch('/contacts/?' + new URLSearchParams({ locationId: GHL_LOC, query, limit: '20' }));
+      return body.contacts || [];
+    },
+    async contact(id: string) {
+      const body = await ghlFetch('/contacts/' + encodeURIComponent(id));
+      return body.contact || null;
+    },
+    async fields() {
+      const body = await ghlFetch('/locations/' + encodeURIComponent(GHL_LOC) + '/customFields?model=contact');
+      return body.customFields || [];
+    },
     async get(id: string) {
       if (!id) return null;
       const body = await ghlFetch('/contacts/' + encodeURIComponent(id));
       const c = body.contact || {};
       return { first_name: c.firstName, phone: c.phone, email: c.email };
+    },
+  },
+  // Copies a file stored on a GHL contact. Only GHL's own file hosts; the GHL key is sent only to GHL.
+  files: {
+    async fetch(url: string) {
+      const u = new URL(url);
+      const ghlHost = /(^|\.)leadconnectorhq\.com$|(^|\.)msgsndr\.com$/.test(u.hostname);
+      const gcs = u.hostname === 'storage.googleapis.com' || u.hostname === 'firebasestorage.googleapis.com';
+      if (u.protocol !== 'https:' || !(ghlHost || gcs)) throw new Error('not a GHL file address');
+      const r = await fetch(u.toString(), { redirect: 'follow', headers: ghlHost ? { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-07-28' } : {} });
+      if (!r.ok) throw new Error('GHL file ' + r.status);
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      return { bytes, mime: (r.headers.get('content-type') || '').split(';')[0] };
     },
   },
   // Only reached when the messages_live setting is true (it starts false).

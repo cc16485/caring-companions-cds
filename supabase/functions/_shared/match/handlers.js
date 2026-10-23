@@ -8,6 +8,8 @@
 //   crypto: { token(), hash(s), code(), encrypt(s) }          (all async)
 //   media:  { put({ pool_id, kind, mime, data, by }) -> id, url(id) -> string|null }
 //   ghl:    { upsert({ first_name, last_name, phone, email, tags }) -> id, get(id) -> contact|null }
+//           live also find(query), contact(id), fields() for Roster check proof (read only)
+//   files:  { fetch(url) -> { bytes, mime } }  (live: GHL file hosts only)
 //   send:   async ({ channel, to, subject, body }) -> void   (only called when messages are live)
 //   links:  { family(token), caregiver(token) } -> full URL
 // }
@@ -17,6 +19,7 @@ import { TEMPLATES, fill, CONSENT_WORDING, FCSR_EXPLAINER, PROVIDER_CHOICE, FCSR
 import { createPacket } from '../packet/handlers.js';
 import { createEnroll } from '../enroll/handlers.js';
 import { createSign } from '../enroll/sign.js';
+import { createRosterProof } from '../office/roster-proof.js';
 
 export class MatchError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -1394,6 +1397,8 @@ export function createMatch(deps) {
   // Missouri forms for consumers on the roster (2026-10-22): rights, office details, pandemic policy.
   const sign = createSign({ q, one, nowIso, audit, setting, crypto, links, R, fail, deps, isTestRecipient });
   Object.assign(staff, sign.office);
+  // Background check proof for Roster attendants, brought in from GHL (2026-10-22).
+  Object.assign(staff, createRosterProof({ q, one, nowIso, audit, fail, crypto, deps }).office);
   // 'job' is only reachable with the schedule's secret (checked in the edge function).
   // One 15-minute job runs both packets' reminders; one failing never stops the other.
   const job = { packetJob: async () => {
