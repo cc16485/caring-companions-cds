@@ -322,9 +322,26 @@ export function createLeadAlerts(deps) {
     const pulledOn = sh && sh.at ? W.isoLocal(new Date(sh.at)) : '';
     const cn = sh ? W.consumersNow(sh, pulledOn, ws.firstShifts || {}, s.consumers || [], ws.cdsGoal || {}) : null;
     const wsPeople = cn ? cn.people.concat(cn.leftOut) : null;
+    // Attendants (2026-10-22, same rule as Today): office to-dos for new attendants and OIG matches
+    // from cds_tasks, rechecks from the Roster, the automatic OIG clears once the OIG check is live.
+    // The hub also lists applications waiting on the office with no to-do yet; the email cannot.
+    const attendantWork = { tasks: [], roster: [], autoOig: {} };
+    try {
+      attendantWork.tasks = await q(`select t.id, t.kind, t.title, t.due_at, t.pool_id, p.first_name as caregiver from cds_tasks t
+        left join attendant_pool p on p.id = t.pool_id where t.done_at is null and coalesce(t.area, 'match') = 'match'
+        and (t.kind like 'packet\\_%' or t.kind = 'oig_check')`);
+      attendantWork.roster = ((await store(['attendants'])).attendants || []).filter(a => a && a.status !== 'inactive');
+      const ocfg = await setting('oig_check', null);
+      if (ocfg && ocfg.live === true) {
+        for (const r of await q(`select distinct on (person_ref) person_ref, result, review, checked_at from cds_oig_results
+                                  where person_ref like 'attendant:%' order by person_ref, checked_at desc`))
+          if (r.result === 'clear' || r.review === 'not_them')
+            attendantWork.autoOig[r.person_ref.slice(10)] = new Date(r.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+      }
+    } catch (e) { attendantWork.error = String((e && e.message) || e).slice(0, 200); }
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
                                    attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems, followups,
-                                   wsPeople, nameKey: W.nameKey }, noon);
+                                   wsPeople, nameKey: W.nameKey, attendantWork }, noon);
     const pipeline = s.pipeline || [];
     // The attendant check against WellSky joins the email only once setting attendant_check.live is true.
     const acfg = await setting('attendant_check', null);

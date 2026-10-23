@@ -286,12 +286,78 @@
         clear: 'New consumers are ready.'
       });
     }
+    // Attendants (her ask 2026-10-22, build step 3 of the hub audit): only when the caller hands
+    // the attendant work in (the hub after it loads, the 8am email from the database).
+    if (data.attendantWork) {
+      const items = attendantWork(data.attendantWork, now);
+      steps.push({ n: steps.length + 1, title: 'Attendants', items, clear: 'Nothing is waiting on the office for attendants.' });
+    }
     // Closings, pauses and missing shifts (closure plan step 5, her yes 2026-10-22). Only shown
     // when there is something to do, so a morning with none keeps the old steps.
     const closing = closureItems(data.consumers || [], now, data.noShift);
     if (closing.length) steps.push({ n: steps.length + 1, title: 'Closings, pauses and missing shifts', items: closing,
                                      clear: 'No closings or missing shifts.' });
     return steps;
+  }
+
+
+  // ---------- Attendants on Today and in the 8am email (2026-10-22) ----------
+  // w = { tasks, applications?, roster, autoOig? }
+  //   tasks: open office to-dos from cds_tasks (area 'match') { id, kind, title, due_at, pool_id, caregiver }.
+  //          packet_* are the new-attendant steps (run checks, Empeon invite, ID call); oig_check is an
+  //          OIG possible match (or the OIG check failing), which is same-day work.
+  //   applications: the hub's packetList rows (the email has none): anyone waiting on the office
+  //          with no open to-do yet (FCSR findings, Finish in Empeon: I-9 Section 2 and countersign).
+  //   roster: Roster attendants not marked inactive { id, name, leieDate, edlDate, fcsrDate }.
+  //   autoOig: { [id]: 'yyyy-mm-dd' } the day the automatic OIG check last found them clear.
+  // Recheck rule as on the Active Attendants page (hub-packet.js rosterDue): OIG monthly, EDL every
+  // 3 months, FCSR yearly; "due soon" is within 7 days; a date never typed in is a records gap.
+  const RECHECKS = [['OIG', 'leieDate', 1], ['EDL', 'edlDate', 3], ['FCSR', 'fcsrDate', 12]];
+  const OUR_LABELS = ['FCSR findings', 'Run EDL and FCSR', 'Send Empeon invite', 'Finish in Empeon', 'ID check booked'];
+  function attendantChecks(a, autoOig, now) {
+    const today = isoLocal(now), soon = isoLocal(new Date(now.getTime() + 7 * DAY));
+    const addM = (iso, m) => { const d = new Date(iso + 'T12:00:00'); d.setMonth(d.getMonth() + m); return isoLocal(d); };
+    return RECHECKS.map(([k, f, m]) => {
+      let d = a[f] || '';
+      if (k === 'OIG' && autoOig && (!d || autoOig > d)) d = autoOig;
+      const due = d ? addM(d, m) : '';
+      return { k, done: d, due, late: !!d && due < today, soon: !!d && due >= today && due <= soon, missing: !d };
+    });
+  }
+  function attendantWork(w, now) {
+    now = now || new Date();
+    const today = isoLocal(now);
+    const day = iso => iso ? isoLocal(new Date(iso)) : '';
+    const tasks = (w.tasks || []).filter(t => t && !t.done_at);
+    const oig = tasks.filter(t => t.kind === 'oig_check');
+    const steps = tasks.filter(t => /^packet_/.test(t.kind));
+    const withTask = new Set(steps.map(t => t.pool_id).filter(Boolean));
+    const taskWho = t => ({ name: t.caregiver || 'New attendant', why: t.title, due: day(t.due_at), id: t.id, pool: t.pool_id || '', act: 'task' });
+    const ours = (w.applications || []).filter(a => a && !a.active && OUR_LABELS.includes(a.label) && !withTask.has(a.pool_id));
+    const late = [], soon = [], missing = [];
+    (w.roster || []).forEach(a => {
+      const c = attendantChecks(a, (w.autoOig || {})[a.id], now);
+      const L = c.filter(x => x.late), S = c.filter(x => x.soon), M = c.filter(x => x.missing);
+      const who = (why, due) => ({ name: a.name, id: a.id, why, due: due || '', act: 'attendant' });
+      if (L.length) late.push(who(L.map(x => x.k).join(' and ') + ' overdue', L.map(x => x.due).sort()[0]));
+      else if (S.length) soon.push(who(S.map(x => x.k).join(' and ') + ' recheck', S.map(x => x.due).sort()[0]));
+      if (M.length) missing.push(who('add the ' + M.map(x => x.k).join(' and ') + ' date' + (M.length > 1 ? 's' : '') + ' from the last check'));
+    });
+    const byDue = l => l.sort((a, b) => (a.due || '9').localeCompare(b.due || '9') || String(a.name).localeCompare(String(b.name)));
+    return [
+      w.error && { t: 'The attendant to-dos could not be read: ' + w.error, go: 'activeattendants', bad: true },
+      oig.length && { t: plural(oig.length, 'OIG possible match', 'OIG possible matches') + ' to decide today', go: 'activeattendants', bad: true,
+                      people: byDue(oig.map(t => Object.assign(taskWho(t), { name: t.caregiver || 'OIG check', act: 'oig' }))) },
+      steps.length && { t: plural(steps.length, 'office step', 'office steps') + ' for new attendants', go: 'activeattendants',
+                        bad: steps.some(t => /^Consumer waiting/.test(t.title) || (t.due_at && day(t.due_at) <= today)),
+                        people: byDue(steps.map(taskWho)) },
+      ours.length && { t: plural(ours.length, 'new attendant', 'new attendants') + ' waiting on the office', go: 'activeattendants',
+                       bad: ours.some(a => a.consumer_waiting),
+                       people: ours.map(a => ({ name: a.name, why: (a.consumer_waiting ? 'consumer waiting. ' : '') + (a.next || a.label), act: 'attendant', pool: a.pool_id })) },
+      late.length && { t: plural(late.length, 'attendant', 'attendants') + ' with a background recheck overdue', go: 'activeattendants', bad: true, people: byDue(late) },
+      soon.length && { t: plural(soon.length, 'background recheck', 'background rechecks') + ' due in the next 7 days', go: 'activeattendants', people: byDue(soon) },
+      missing.length && { t: plural(missing.length, 'attendant', 'attendants') + ' with a check date not on file', go: 'activeattendants', people: missing }
+    ].filter(Boolean);
   }
 
   // One line per consumer who is Closing or Paused: the next thing the rules need. Plus the
@@ -725,7 +791,7 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isActive, activeNow, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    dailyRoutine, isActive, activeNow, attendantWork, attendantChecks, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
