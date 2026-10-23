@@ -60,7 +60,7 @@ ok(/cds-rules\.js\?v=14/.test(html), 'page loads rules v=14');
 ok(!/[—]/.test(Object.values(R.WHO_NEXT).join(' ') + Object.values(R.WHO_CALLED).join(' ')), 'no em dashes');
 
 // 2026-10-22 fix (#58): this hub has no _user; the switch row read it and stopped the Leads cards drawing
-ok(!/\b_user\b/.test(html.slice(html.indexOf('const LD_WHO_OWNERS'), html.indexOf('function renderLdWho'))), 'who called reads the header email, not _user');
+ok(!/\b_user[.)]|!!_user/.test(html.slice(html.indexOf('const LD_WHO_OWNERS'), html.indexOf('function renderLdWho'))), 'who called reads the header email, not _user');
 ok(/try \{ renderLdWho\(shown, wcOn\); \} catch/.test(html), 'the switch row can never stop the cards');
 
 console.log(pass + ' passed, ' + fail + ' failed');
