@@ -21,6 +21,7 @@ const CSS = `
 .hp .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
 .hp .tabs button,.hp .pill-btn{border:2px solid #dfe6ec;background:#fff;color:#0D365F;border-radius:999px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:14px}
 .hp .tabs button.on{background:#0D365F;color:#fff;border-color:#0D365F}
+.hp .tabs{margin:10px 0 12px}
 .hp .row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;width:100%;text-align:left;background:#fff;border:1px solid #dfe6ec;border-radius:12px;padding:12px 14px;margin-top:8px;cursor:pointer;font:inherit;color:inherit}
 .hp .row b{color:#0D365F;font-size:16px}.hp .row .meta{grid-column:1/-1;font-size:13.5px;color:#5b6977}
 .hp .pill{font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
@@ -158,7 +159,8 @@ const lastWords = (iso, now) => { const d = daysSince(iso + 'T12:00:00', now); r
 
 // packets: packetList rows, plus steps and updated_at from packetGet for anyone not yet active.
 // roster: the Roster attendants not marked inactive. -> { starting, working, quiet, tiles, wellsky }
-export function buildGroups({ packets = [], roster = [], autoOig = () => null, wellsky, now = new Date() }) {
+// ended: Roster attendants marked "No longer working" (shown on the Inactive tab, 2026-10-22).
+export function buildGroups({ packets = [], roster = [], ended = [], autoOig = () => null, wellsky, now = new Date() }) {
   const ws = wellskyByAttendant(wellsky, now);
   const cutoff = isoLocal(new Date(now.getTime() - WORKING_DAYS * DAY));
   const find = name => ws.by[nameKey(name)] || null;
@@ -197,7 +199,11 @@ export function buildGroups({ packets = [], roster = [], autoOig = () => null, w
   starting.sort((x, y) => (y.waiting - x.waiting) || (x.ready - y.ready) || String(x.since).localeCompare(String(y.since)));
   working.sort((x, y) => rank(x) - rank(y) || x.name.localeCompare(y.name));
   quiet.sort((x, y) => String(y.last).localeCompare(String(x.last)) || x.name.localeCompare(y.name));
-  return { starting, working, quiet, wellsky: ws,
+  const gone = ended.map(a => { const w = find(a.wellskyName || a.name);
+    return { kind: 'ended', id: a.id, name: a.name, label: 'No longer working', tone: 'b', last: w ? w.last : '',
+      meta: [a.consumer ? 'Was with ' + a.consumer : '', w && w.last ? 'last shift ' + shortDay(w.last) : ''].filter(Boolean).join(' · ') }; })
+    .sort((x, y) => x.name.localeCompare(y.name));
+  return { starting, working, quiet, ended: gone, wellsky: ws,
     tiles: { starting: starting.length, working: working.length, due: [...working, ...quiet].filter(r => r.due).length,
       dates: [...working, ...quiet].filter(r => r.missing).length, quiet: quiet.length } };
 }
@@ -208,7 +214,9 @@ export function mountHubPacket(el, opts) {
   const autoOig = id => { const p = opts.oigPeople && (opts.oigPeople() || {})['attendant:' + id];
     return p && (p.result === 'clear' || p.review === 'not_them') && p.checked_at
       ? new Date(p.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) : null; };   // the Central day, not the UTC one
-  let list = [], open = null, err = '';
+  const ended = () => (opts.roster ? opts.roster() : []).filter(a => a.status === 'inactive');
+  // Tabs (her ask 2026-10-22): Onboarding / Working / Inactive. Opens on Onboarding when someone is in it.
+  let list = [], open = null, err = '', tab = null;
   if (!document.getElementById('hp_css')) { const s = document.createElement('style'); s.id = 'hp_css'; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add('hp');
   el.addEventListener('click', onClick);
@@ -225,7 +233,7 @@ export function mountHubPacket(el, opts) {
     } catch (e) { list = []; err = e.message; }
     draw();
   }
-  const groups = () => buildGroups({ packets: list, roster: roster(), autoOig, wellsky: opts.wellsky ? opts.wellsky() : null });
+  const groups = () => buildGroups({ packets: list, roster: roster(), ended: ended(), autoOig, wellsky: opts.wellsky ? opts.wellsky() : null });
   function rowHtml(x) {
     const edge = x.flag && x.flag.tone === 'r' || x.waiting ? ' style="border-left:5px solid #b42318"' : '';
     const track = x.track ? `<div class="track" aria-label="Step ${Math.min(x.track.at + 1, 7)} of 7">${x.track.steps.map((s, i) => `<i class="${s.done ? 'd' : i === x.track.at ? 'n' : ''}" title="${esc(s.label)}"></i>`).join('')}</div>
@@ -235,18 +243,26 @@ export function mountHubPacket(el, opts) {
   function draw() {
     if (open) return;
     const g = groups(), t = g.tiles, ws = g.wellsky;
-    const tile = (n, label, tone) => `<div class="tile${n && tone ? ' ' + tone : ''}"><div class="n">${n}</div><div class="t">${esc(label)}</div></div>`;
+    if (!tab) tab = g.starting.length ? 'onboarding' : 'working';
     const asOf = ws.asOf ? new Date(ws.asOf).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) : '';
     const hoursNote = ws.hoursAsOf && ws.asOf && ws.hoursAsOf.slice(0, 10) !== ws.asOf.slice(0, 10)
       ? '; hours this month as of ' + shortDay(new Date(ws.hoursAsOf).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : '';
+    const tabBtn = (k, label, n) => `<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${label} (${n})</button>`;
+    const endedRow = x => `<div class="row" style="cursor:default"><b>${esc(x.name)}</b><button class="btn o" data-reactivate="${esc(x.id)}">Make active again</button><span class="meta">${esc(x.meta || 'Marked no longer working')}</span></div>`;
+    let body;
+    if (tab === 'onboarding') body = `<div class="ghead"><span>Consumer waiting goes first</span></div>
+      ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is onboarding. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}`;
+    else if (tab === 'working') body = `<div class="ghead"><span>${ws.have ? 'Shift in WellSky in the last ' + WORKING_DAYS + ' days. WellSky ' + esc(asOf) + esc(hoursNote) : 'WellSky has not sent anything yet, so everyone shows here'}</span>
+        <span>${t.due ? `<span class="pill r">${t.due} check due or overdue</span> ` : ''}${t.dates ? `<span class="pill y">${t.dates} with check dates to add</span>` : ''}</span></div>
+      ${g.working.length ? g.working.map(rowHtml).join('') : '<p class="small">Nobody yet.</p>'}`;
+    else body = `<section class="grp" style="margin-top:4px"><div class="ghead"><h3>Not working lately</h3><span>No WellSky shift in ${WORKING_DAYS} days. Rechecks continue until you mark them no longer working.</span></div>
+      ${g.quiet.length ? g.quiet.map(rowHtml).join('') : '<p class="small">Nobody.</p>'}</section>
+      <section class="grp"><div class="ghead"><h3>No longer working</h3><span>Marked no longer working. No rechecks.</span></div>
+      ${g.ended.length ? g.ended.map(endedRow).join('') : '<p class="small">Nobody.</p>'}</section>`;
     el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><button data-act="reload" class="pill-btn">Refresh</button></div>
-      <div class="tiles">${tile(t.starting, 'Getting started')}${tile(t.working, 'Working')}${tile(t.due, 'Check due or overdue', 'r')}${t.dates ? tile(t.dates, 'Check dates to add', 'y') : ''}${tile(t.quiet, 'Not working lately')}</div>
+      <div class="tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
-      <section class="grp"><div class="ghead"><h3>Getting started</h3><span>Consumer waiting goes first</span></div>
-      ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is getting started. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}</section>
-      <section class="grp"><div class="ghead"><h3>Working</h3><span>${ws.have ? 'Shift in WellSky in the last ' + WORKING_DAYS + ' days. WellSky ' + esc(asOf) + esc(hoursNote) : 'WellSky has not sent anything yet, so everyone shows here'}</span></div>
-      ${g.working.length ? g.working.map(rowHtml).join('') : '<p class="small">Nobody yet.</p>'}</section>
-      ${g.quiet.length ? `<section class="grp"><div class="ghead"><h3>Not working lately</h3><span>No WellSky shift in ${WORKING_DAYS} days</span></div>${g.quiet.map(rowHtml).join('')}</section>` : ''}
+      ${body}
       <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>`;
   }
 
@@ -327,6 +343,8 @@ export function mountHubPacket(el, opts) {
     const errEl = () => el.querySelector('#hp_err');
     const fail = m => { const x = errEl(); if (x) x.textContent = m; else alert(m); };
     try {
+      if (b.dataset.tab) { tab = b.dataset.tab; draw(); return; }
+      if (b.dataset.reactivate) { await opts.saveRoster(b.dataset.reactivate, { status: 'active' }); draw(); return; }
       if (b.dataset.open) { const [k, id] = b.dataset.open.split(':'); return k === 'packet' ? openPacket(id) : openRosterCard(id); }
       const act = b.dataset.act;
       if (act === 'reload') return load();
@@ -346,7 +364,7 @@ export function mountHubPacket(el, opts) {
         return;
       }
       if (act === 'leave-no') return openRosterCard(open.id);
-      if (act === 'leave-yes') { await opts.saveRoster(open.id, { status: 'inactive' }); open = null; return draw(); }
+      if (act === 'leave-yes') { await opts.saveRoster(open.id, { status: 'inactive' }); open = null; tab = 'inactive'; return draw(); }
       if (act === 'match') return opts.openMatch && opts.openMatch();
       if (b.dataset.copy) {
         const r = await api('packetCopy', { pool_id: open.id, kind: b.dataset.copy });

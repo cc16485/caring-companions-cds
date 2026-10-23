@@ -82,6 +82,8 @@ eq(G.working[0].meta, 'Works for Susan Barnwell · 14.75 hrs this month · last 
 eq(G.working[1].kind, 'packet', 'a packet attendant with a shift counts as Working');
 eq(G.quiet.map(r => [r.name, r.label]), [['Andrew Wiggins', 'Last shift Sep 5'], ['Kiersten Ackerman', 'No WellSky shifts']], 'Not working lately: newest last shift first');
 eq(G.tiles, { starting: 3, working: 2, due: 1, dates: 2, quiet: 2 }, 'the tiles (a missing date counts even when another check is overdue)');
+const E = H.buildGroups({ packets: [], roster: [], ended: [{ id: 'x1', name: 'Faith Long', consumer: 'Michael Gasper', status: 'inactive' }, { id: 'x2', name: 'Anita Smith', wellskyName: 'Smith, Anita', status: 'inactive' }], wellsky, now: NOW });
+eq(E.ended.map(r => [r.name, r.meta]), [['Anita Smith', 'last shift Oct 21'], ['Faith Long', 'Was with Michael Gasper']], 'No longer working: listed for the Inactive tab, with last shift when WellSky has one');
 const none = H.buildGroups({ packets: [], roster, autoOig: () => null, wellsky: null, now: NOW });
 eq([none.working.length, none.quiet.length], [3, 0], 'no WellSky data: nobody is called not working');
 
@@ -89,6 +91,7 @@ eq([none.working.length, none.quiet.length], [3, 0], 'no WellSky data: nobody is
 const src = readFileSync(ROOT + '/caregiver-match/hub-packet.js', 'utf8');
 ok(!/—/.test(src), 'no em dashes in the page');
 ok(!/Applying \(/.test(src), 'the old Active / Applying tabs are gone');
+ok(/data-tab="\$\{k\}"/.test(src) && /'Onboarding'/.test(src) && /'Inactive'/.test(src), 'Onboarding / Working / Inactive tabs');
 
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);
