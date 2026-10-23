@@ -26,13 +26,17 @@ const wellsky = {
   analytics: { firstLast: { at: '2026-10-22T12:23:52Z', consumers: [
     { name: 'Barnwell, Susan', attendant: 'Smith, Anita', first: '2025-06-24', last: '2026-10-21' },
     { name: 'Reed, Shasta', attendant: 'Wise, Jeana', first: '2025-01-02', last: '2026-10-19' },
-    { name: 'Goddard, Tracy', attendant: null, last: '2026-10-17' } ] } } };
+    { name: 'Goddard, Tracy', attendant: null, last: '2026-10-17' } ],
+    attendants: [{ name: 'Smith, Anita', first: '2025-06-24', consumers: ['Barnwell, Susan'] }, { name: 'Future, Fay', first: '2027-01-01', consumers: [] }] } } };
 const W = H.wellskyByAttendant(wellsky, NOW);
 const anita = W.by[H.nameKey('Anita Smith')];
 eq(anita.last, '2026-10-21', 'the daily email is newer than the schedule, so its last date counts');
 eq(anita.hours, 14.75, 'hours this month: October shifts only, never a future one');
 eq(anita.consumers, ['Susan Barnwell'], 'works for, shown "First Last"');
 eq(W.by[H.nameKey('Jeana Wise')].last, '2026-10-19', 'someone only in the daily email still counts');
+eq(anita.first, '2025-06-24', 'first day of work: their first care log in WellSky');
+eq(W.by[H.nameKey('Jeana Wise')].first, '', 'no first day when the email does not list them');
+eq(W.by[H.nameKey('Fay Future')] ? W.by[H.nameKey('Fay Future')].first : '', '', 'a date in the future is never a first day');
 eq(W.have, true, 'WellSky data is there');
 eq(W.asOf, '2026-10-22T12:23:52Z', 'as of the newest report');
 eq(H.wellskyByAttendant(null, NOW).have, false, 'no WellSky data at all');

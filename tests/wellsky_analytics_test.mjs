@@ -33,6 +33,11 @@ const flFiles = [
 let fl = A.readReport({ report: 'First and Last Carelog', files: flFiles });
 eq(fl.consumers, [{ name: 'Able, Ann', first: '2025-06-24', last: '2026-10-20', attendant: 'Baker, Bea' }, { name: 'Carr, Cal', first: '2026-10-20', last: '2026-10-20', attendant: 'Hill, Hal' }],
    'each consumer\'s first and last care log, and the attendant who worked the first one');
+eq(fl.attendants, [{ name: 'Baker, Bea', first: '2025-06-24', consumers: ['Able, Ann'] }, { name: 'Gray, Gus', first: '2025-09-01', consumers: ['Able, Ann'] }, { name: 'Hill, Hal', first: '2026-10-20', consumers: ['Carr, Cal'] }],
+   'each attendant\'s first day of work: their first care log');
+const older = flFiles.map(f => /caregiver\.csv$/.test(f.name) && !/then/.test(f.name) ? { ...f, text: f.text + 'Inactive,"Gray, Gus",2024-03-02\nActive,"New, Nia",2026-10-01\n' } : f);
+const fl2 = A.readReport({ report: 'First and Last Carelog', files: older });
+eq([fl2.attendants.find(a => a.name === 'Gray, Gus').first, fl2.attendants.find(a => a.name === 'New, Nia').first], ['2024-03-02', '2026-10-01'], 'the caregiver file wins (a first shift with a consumer no longer active counts)');
 eq(fl.unread, ['Dunn, Dee'], 'a consumer with no first date is counted as unread, not skipped quietly');
 const prefixed = [{ name: D + 'client.csv', text: 'Clients Current Status,Clients Client Name,Carelogs First Carelog Date\nActive,"Able, Ann",2025-06-24\n' }];
 eq(A.readReport({ report: 'First and Last Carelog', files: prefixed }).consumers[0].first, '2025-06-24', 'column names with a prefix still read');

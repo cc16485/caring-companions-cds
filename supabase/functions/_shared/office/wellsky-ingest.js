@@ -91,7 +91,7 @@ async function analytics(q, save, at, body) {
   const received = /^\d{4}-\d{2}-\d{2}T/.test(String(body.received || '')) ? String(body.received).slice(0, 24) : at;
   const cur = (await q(`select data_value v from agency_data where agency_id = $1 and data_key = 'wellskyCheck'`, [AGENCY_ID]))[0];
   const prevA = (cur && cur.v && cur.v.analytics) || {};
-  const part = r.which === 'firstLast' ? { at, received, consumers: r.consumers, unread: r.unread } : { at, received, shifts: r.shifts, unread: r.unread };
+  const part = r.which === 'firstLast' ? { at, received, consumers: r.consumers, unread: r.unread, attendants: r.attendants || [] } : { at, received, shifts: r.shifts, unread: r.unread };
   await save({ analytics: Object.assign({}, prevA, { [r.which]: part }), analyticsRun: { at, report, ok: true, why: '' } });
   if (r.which === 'firstLast') {
     const prev = (await q(`select data_value from agency_data where agency_id = $1 and data_key = 'firstShifts'`, [AGENCY_ID]))[0];
