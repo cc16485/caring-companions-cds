@@ -270,6 +270,10 @@
     #addPipelineModal .modal { width: 100vw; max-height: 100vh; border-radius: 0; }
   }
   .chipset{display:flex;flex-wrap:wrap;gap:6px;}
+  /* Roster Active / Inactive switch (her ask 2026-10-22) */
+  .roster-seg{display:inline-flex;gap:4px;background:var(--gray-100,#f3f4f6);border-radius:999px;padding:3px;}
+  .roster-seg button{border:0;background:transparent;border-radius:999px;padding:6px 14px;font:inherit;font-size:13px;font-weight:600;color:var(--gray-600);cursor:pointer;}
+  .roster-seg button.on{background:#fff;color:var(--primary);box-shadow:0 1px 3px rgba(0,0,0,.12);}
   .chipbox{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:400;
     background:#fff;border:1.5px solid var(--gray-300);border-radius:7px;padding:6px 10px;cursor:pointer;}
   .chipbox:has(input:checked){background:#E4F4F3;border-color:var(--primary-light);font-weight:600;}
@@ -910,7 +914,11 @@ button.fu-tile.check span { color:#14606F; }
          come in through Leads, so there is no Add Consumer button. -->
     <div class="section-header">
       <div class="section-title">Consumer Roster</div>
-      <button class="btn btn-outline btn-sm" onclick="openBulkContacts()" style="font-size:12px">&#128197; Record completed monthly contacts</button>
+      <div class="roster-seg" role="tablist" aria-label="Which consumers">
+        <button type="button" id="rosterSegActive" class="on" onclick="setRosterView('active')">Active</button>
+        <button type="button" id="rosterSegInactive" onclick="setRosterView('inactive')">Inactive</button>
+      </div>
+      <button class="btn btn-outline btn-sm" id="openBulkContactsBtn" onclick="openBulkContacts()" style="font-size:12px">&#128197; Record completed monthly contacts</button>
     </div>
 
     <div class="card">
@@ -922,6 +930,9 @@ button.fu-tile.check span { color:#14606F; }
               <th>Consumer</th><th>Hrs/wk</th><th id="rosterCallHead">This month's call</th>
               <th>Face-to-face visit</th><th>Still to finish</th>
             </tr>
+            <tr id="rosterInactiveHead" hidden>
+              <th>Consumer</th><th>Inactive since</th><th colspan="2">Why</th><th></th>
+            </tr>
           </thead>
           <tbody id="consumerTableBody">
             <tr id="emptyConsumerRow">
@@ -929,13 +940,6 @@ button.fu-tile.check span { color:#14606F; }
             </tr>
           </tbody>
         </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">🗓️</span> Monthly Contact History (by Consumer)</div>
-      <div id="monthlyContactHistory">
-        <p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>
       </div>
     </div>
   </div><!-- end csub-active -->
@@ -5145,7 +5149,6 @@ function renderConsumers() {
 
   if (consumers.length === 0) {
     tbody.innerHTML = '<tr id="emptyConsumerRow"><td colspan="5"><div class="empty"><div class="empty-icon">👥</div><p>No consumers yet.<br>New consumers come in through Leads.</p></div></td></tr>';
-    document.getElementById('monthlyContactHistory').innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Add consumers above to track monthly contact history.</p>';
     return;
   }
 
@@ -5153,14 +5156,24 @@ function renderConsumers() {
   // call (the one thing the office does for everyone), the visit, and how much
   // is left. Everything else lives on the profile; the name opens it.
   const active = consumers.filter(CDSRules.isActive).sort((a, b) => a.name.localeCompare(b.name));
+  const inactive = consumers.filter(c => !CDSRules.isActive(c)).sort((a, b) => a.name.localeCompare(b.name));
+  document.getElementById('rosterSegActive').textContent = 'Active (' + active.length + ')';
+  document.getElementById('rosterSegInactive').textContent = 'Inactive (' + inactive.length + ')';
+  const showInactive = _rosterView === 'inactive';
+  document.getElementById('rosterSegActive').classList.toggle('on', !showInactive);
+  document.getElementById('rosterSegInactive').classList.toggle('on', showInactive);
+  document.getElementById('rosterInactiveHead').hidden = !showInactive;
+  document.getElementById('rosterCallHead').parentElement.hidden = showInactive;
+  document.getElementById('openBulkContactsBtn').style.display = showInactive ? 'none' : '';
+  if (showInactive) renderInactiveRoster(inactive, tbody);
   const callsLeft = active.filter(c => !(c.contacts && c.contacts[currentMonth])).length;
   document.getElementById('rosterCallHead').textContent = MONTHS[now.getMonth()] + ' call';
-  document.getElementById('rosterSummary').textContent = active.length + ' active · ' +
+  if (!showInactive) document.getElementById('rosterSummary').textContent = active.length + ' active · ' +
     (callsLeft ? callsLeft + ' call' + (callsLeft === 1 ? '' : 's') + ' left this month' : 'every call done this month');
   const allAttendants = getData('attendants');
   const link = (c, html) => '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="color:inherit;text-decoration:none">' + html + '</a>';
 
-  tbody.innerHTML = active.map(c => {
+  if (!showInactive) tbody.innerHTML = active.map(c => {
     const contacted = c.contacts && c.contacts[currentMonth];
     const detail = contacted && typeof contacted === 'object' ? contacted : null;
     const callCell = contacted
@@ -5188,27 +5201,43 @@ function renderConsumers() {
       <td style="font-size:13px">${todoCell}</td>
     </tr>`;
   }).join('');
+}
 
-  // Render monthly history
-  const historyDiv = document.getElementById('monthlyContactHistory');
-  historyDiv.innerHTML = consumers.filter(CDSRules.isActive).map(c => {
-    const months = [];
-    const year = now.getFullYear();
-    for (let m = 0; m < 12; m++) {
-      const key = `${year}-${String(m+1).padStart(2,'0')}`;
-      const isPast = m <= now.getMonth();
-      const isDone = c.contacts && c.contacts[key];
-      const logDetail = isDone && typeof isDone === 'object' ? isDone : null;
-      const dhss = logDetail && logDetail.dhssFlag;
-      const tip = isDone ? `${MONTHS[m]} ${year}: ✓ Logged ${logDetail ? '(' + logDetail.method + ' on ' + logDetail.date + ')' : ''} — click to edit` : `${MONTHS[m]} ${year}: Not recorded — click to log`;
-      months.push(`<div class="month-cell ${isDone ? 'done' : (isPast ? 'overdue' : 'future')}" onclick="toggleContactMonth('${c.id}','${key}')" title="${tip}" style="${dhss ? 'outline:2px solid var(--danger)' : ''}">
-        <div class="mo">${MONTHS[m]}${dhss ? '<span style="color:var(--danger);font-size:9px">⚠</span>' : ''}</div><div class="dot"></div></div>`);
-    }
-    return `<div style="margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px">${c.name} <span style="font-weight:400;color:var(--gray-600);font-size:12px">${c.county ? '— ' + c.county : ''}</span></div>
-      <div class="month-grid">${months.join('')}</div>
-    </div>`;
+// Active / Inactive switch on the roster (her ask 2026-10-22). Inactive
+// consumers keep their record and history; this list is where they live.
+let _rosterView = 'active';
+function setRosterView(v) { _rosterView = v; renderConsumers(); }
+
+function renderInactiveRoster(list, tbody) {
+  document.getElementById('rosterSummary').textContent = list.length
+    ? list.length + ' inactive · their records and history are kept'
+    : '';
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><p>No inactive consumers.</p></div></td></tr>';
+    return;
+  }
+  const link = (c, html) => '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="color:inherit;text-decoration:none">' + html + '</a>';
+  tbody.innerHTML = list.map(c => {
+    const since = c.inactiveAt ? _niceDay(c.inactiveAt) : 'Date not recorded';
+    const why = c.inactiveReason ? esc(c.inactiveReason) : '<span style="color:var(--gray-600)">Not recorded</span>';
+    return `<tr>
+      <td>${link(c, '<span style="font-weight:700;color:var(--primary-light)">' + esc(c.name) + '</span>')}</td>
+      <td style="font-size:13px">${esc(since)}</td>
+      <td colspan="2" style="font-size:13px">${why}</td>
+      <td><button class="btn btn-sm btn-outline" onclick="makeConsumerActive('${c.id}')">Make active again</button></td>
+    </tr>`;
   }).join('');
+}
+
+function makeConsumerActive(cid) {
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === cid);
+  if (!c || !confirm('Make ' + c.name + ' active again? They go back on the roster.')) return;
+  c.status = 'active';
+  c.reactivatedAt = new Date().toISOString().slice(0, 10);
+  setData('consumers', consumers);
+  renderConsumers();
+  updateDashboard();
 }
 
 // Monthly contact log - open form
@@ -8892,7 +8921,9 @@ function renderProfile() {
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
         '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
         '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a>' +
-        '<a href="#" onclick="markConsumerInactive(\'' + c.id + '\');return false" style="color:var(--danger)">Mark inactive</a></div>' +
+        (CDSRules.isActive(c)
+          ? '<a href="#" onclick="markConsumerInactive(\'' + c.id + '\');return false" style="color:var(--danger)">Mark inactive</a></div>'
+          : '<a href="#" onclick="makeConsumerActive(\'' + c.id + '\');if(_profileId)renderProfile();return false">Make active again</a></div>') +
     '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
 }
 
