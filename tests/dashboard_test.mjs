@@ -91,5 +91,12 @@ const emailText = (await import(ROOT + '/supabase/functions/_shared/office/lead-
 ok(emailText.includes('      Dale Pruitt (monthly check-in call, due Oct 31)'), 'the 8am email names the same people with the due date');
 ok(emailText.includes('      Ruth Caldwell (authorization ended Sep 1)'), 'and the expired authorization');
 
+// Missed monthly calls in the last 12 months, on the Dashboard (2026-10-22): 2 or more, most first.
+const MM = R.dashboardNumbers({ consumers: [
+  { id: 'a', name: 'Ann Old', status: 'active', cdsStartDate: '2025-06-01', contacts: { '2026-09': {} } },
+  { id: 'b', name: 'Ben New', status: 'active', cdsStartDate: '2026-09-01', contacts: {} },
+  { id: 'c', name: 'Cal Good', status: 'active', cdsStartDate: '2026-07-01', contacts: { '2026-07': {}, '2026-08': {}, '2026-09': {} } }], now }).missedMonths;
+ok(MM.length === 1 && MM[0].name === 'Ann Old' && MM[0].missed === 10 && MM[0].id === 'a', 'missed calls: only Ann (10), not Ben (1, new) or Cal (none) ' + JSON.stringify(MM));
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
