@@ -2943,7 +2943,7 @@ button.fu-tile.check span { color:#14606F; }
 </div>
 
 <!-- FACE-TO-FACE VISIT MODAL (2026-10-22, her ask: the visit form holds every item Missouri requires,
-     19 CSR 15-8.400(5)(F)). Only used while her switch 'visitForm' is on; off = the old three questions. -->
+     19 CSR 15-8.400(5)(F)). Always used since 2026-10-23 (her yes to the audit file). -->
 <!-- ENDING A CONSUMER: TAX STEPS (2026-10-22 her ask)
      Opened from the ending card or the Tax & EIN page; stays on that page until
      every step is ticked. The steps depend on the ending reason. -->
@@ -5037,7 +5037,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=16');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=17');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5047,6 +5047,7 @@ async function renderActiveAttendants() {
         renderAttendants(); updateDashboard(); renderAttendantCheck();
       },
       wellsky: () => getObj('wellskyCheck'),
+      corrections: () => getData('evvCorrections'),   // for the attendant file's shifts fixed by hand
       who: () => ((document.getElementById('header_user') || {}).textContent || '').trim(),
       oigPeople: () => { const d = oig && oig.data(); return d && d.live ? d.people : {}; },
       openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch') });
@@ -6004,6 +6005,90 @@ function setConsumerTrained(cid, v) {
   if (c) { c.trained = v; setData('consumers', consumers); renderProfile(); renderConsumers(); }
 }
 
+// ---------- audit file pieces (her yes 2026-10-23) ----------
+const _plusYear = iso => iso ? (+iso.slice(0, 4) + 1) + iso.slice(4) : '';
+// (5)(H)5: training the consumer as an employer, with the date, who and how. The 8 topics in
+// (5)(B) are what the Training Acknowledgement in the enrollment packet covers.
+const TRAINING_TOPICS = ['Hiring and supervising an attendant', 'EVV rules', 'What counts as fraud', 'Allowed and not allowed tasks',
+  'Falsified visit records are fraud', 'Attendant rights and duties', 'Abuse, neglect and exploitation', 'Attendant must report a decline in health'];
+function recordConsumerTraining(cid) {
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const was = c.training || {};
+  const date = prompt('Date ' + c.name + ' was trained as an employer (YYYY-MM-DD):', was.date || _todayIso());
+  if (!date) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('Please use YYYY-MM-DD.'); return; }
+  const by = prompt('Who trained them?', was.by || (_acWho() || '').split('@')[0].replace(/^./, x => x.toUpperCase()));
+  if (by === null) return;
+  const how = prompt('How? (in person, phone or video)', was.how || 'in person');
+  if (how === null) return;
+  c.training = { date, by: by.trim(), how: how.trim(), topics: TRAINING_TOPICS, at: new Date().toISOString(), recordedBy: _acWho() };
+  c.trained = 'yes';   // the old dropdown, kept in step
+  setData('consumers', consumers);
+  renderProfile(); renderConsumers();
+}
+function markBackupReviewed(cid) {
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid);
+  if (!c || !confirm('Mark ' + c.name + '\'s backup plan as reviewed with them today?')) return;
+  c.backupReviewed = _todayIso(); c.backupReviewedBy = _acWho();
+  setData('consumers', consumers);
+  renderProfile();
+}
+// (5)(H)4 and (5)(H)8: letters, emails and other papers kept in the consumer's file. Files go in the
+// same private bucket as the EIN proof (signed links only). kind: letter | careplan | other.
+const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['other', 'Other document']];
+function consumerDocsHtml(c) {
+  const docs = (c.docs || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const open = d => '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' + esc(d.path).replace(/'/g, "\\'") + '\')">View</button>';
+  const group = (k, label) => { const list = docs.filter(d => d.kind === k);
+    return '<div style="margin-top:14px"><div style="font-weight:700;color:#0D365F;font-size:14px">' + esc(label) + '</div>' +
+      (list.length ? list.map(d => '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid #EEE9DF;font-size:13px">' +
+        '<span style="flex:1 1 240px"><b>' + esc(_niceDay(d.date)) + '</b>' + (d.with ? ' · ' + esc(d.with) : '') + (d.about ? ' · ' + esc(d.about) : '') +
+        '<span style="color:#55677a"> · ' + esc(d.name) + '</span></span>' + open(d) +
+        '<button class="btn btn-sm btn-outline" style="font-size:11px;color:var(--danger)" onclick="removeConsumerDoc(\'' + c.id + '\',\'' + esc(d.id) + '\')">Remove</button></div>').join('')
+        : '<div style="font-size:13px;color:#55677a;padding:4px 0">None yet.</div>') + '</div>'; };
+  const packet = (c.packetForms || []).length ? '<div style="margin-top:14px"><div style="font-weight:700;color:#0D365F;font-size:14px">Signed enrollment packet</div>' +
+    '<div style="font-size:13px;color:#55677a">' + (c.packetForms || []).map(f => esc(f.title || f.name)).join(', ') + ' (open them from Tax setup)</div></div>' : '';
+  return '<div class="cp-box" style="margin-top:12px"><h4>Add a document</h4>' +
+    '<div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:end;font-size:13px">' +
+      '<label>Kind<select id="doc_kind" style="display:block;width:100%;margin-top:3px">' + DOC_KINDS.map(([k, l]) => '<option value="' + k + '">' + esc(l) + '</option>').join('') + '</select></label>' +
+      '<label>Date on it<input type="date" id="doc_date" value="' + _todayIso() + '" style="display:block;width:100%;margin-top:3px"></label>' +
+      '<label>With (who sent or got it)<input type="text" id="doc_with" placeholder="DHSS case manager, Dr. ..." style="display:block;width:100%;margin-top:3px"></label>' +
+      '<label>About<input type="text" id="doc_about" placeholder="Care plan change, fall reported ..." style="display:block;width:100%;margin-top:3px"></label>' +
+      '<label>File (PDF or photo)<input type="file" id="doc_file" accept=".pdf,image/*" style="display:block;margin-top:3px"></label>' +
+      '<button class="btn btn-primary btn-sm" onclick="uploadConsumerDoc(\'' + c.id + '\')">Save to the file</button></div>' +
+    '<div id="doc_status" style="font-size:12.5px;margin-top:6px"></div></div>' +
+    DOC_KINDS.map(([k, l]) => group(k, k === 'letter' ? 'Letters and emails' : k === 'careplan' ? 'Care plans and authorizations' : 'Other documents')).join('') + packet;
+}
+async function uploadConsumerDoc(cid) {
+  const status = document.getElementById('doc_status'), f = (document.getElementById('doc_file').files || [])[0];
+  if (!f) { status.innerHTML = '<span style="color:var(--danger)">Pick the file first.</span>'; return; }
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid);
+  if (!c) return;
+  const kind = document.getElementById('doc_kind').value, date = document.getElementById('doc_date').value || _todayIso();
+  status.innerHTML = '<span style="color:var(--gray-600)">Saving ' + esc(f.name) + '…</span>';
+  try { c.docs = (c.docs || []).concat([await _saveConsumerDoc(c, f, { kind, date, with: document.getElementById('doc_with').value.trim(), about: document.getElementById('doc_about').value.trim() })]); }
+  catch (e) { status.innerHTML = '<span style="color:var(--danger)">Not saved: ' + esc(e.message || String(e)) + '</span>'; return; }
+  setData('consumers', consumers);
+  renderProfile();
+}
+async function _saveConsumerDoc(c, file, meta) {
+  const ext = (file.name.split('.').pop() || 'pdf').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const path = c.id + '/docs/' + meta.kind + '_' + id + '.' + ext;
+  const { error } = await _db.storage.from(PROOF_BUCKET).upload(path, file, { upsert: false });
+  if (error) throw error;
+  return Object.assign({ id, path, name: file.name, at: _todayIso(), by: _acWho() }, meta);
+}
+async function removeConsumerDoc(cid, id) {
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid), d = c && (c.docs || []).find(x => x.id === id);
+  if (!d || !confirm('Remove "' + d.name + '" from ' + c.name + '\'s file? Missouri wants case files kept 6 years.')) return;
+  const { error } = await _db.storage.from(PROOF_BUCKET).remove([d.path]);
+  if (error) { alert('Could not remove it: ' + error.message); return; }
+  c.docs = c.docs.filter(x => x.id !== id);
+  setData('consumers', consumers);
+  renderProfile();
+}
 function toggleBackup(cid) {
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === cid);
@@ -8843,8 +8928,10 @@ function logAnnualVisit(cid) {
 // date and time. 15-8.400 also bars a vendor employee from making the visit for a consumer they are
 // the attendant for, unless they only fill in (3 days or fewer in 30). Services not given as
 // authorized have to be reported to DHSS.
-// Her switch: agency_data 'visitForm' {live}, on the Settings page. Off = the three questions above.
-const visitFormLive = () => hubSwitchOn('visitForm');
+// Always on since 2026-10-23 (her yes to the audit file); the old visitForm switch is gone.
+// Always on (her yes to the audit file, 2026-10-23): every visit gets the full Missouri form
+// (time, who was there, both summaries, not their attendant). The old switch is gone.
+const visitFormLive = () => true;
 let _vlm_cid = '';
 function _vlmAttendants(c) {
   return getData('attendants').filter(a => String(a.consumer || '').trim().toUpperCase() === String(c.name || '').trim().toUpperCase())
@@ -8935,8 +9022,6 @@ function saveVisitLog() {
 // them; only Samantha changes them (same people as the Switches card). Off = the hub as before.
 // 2026-10-22: the visit form, then the six Missouri rules she approved (canvas L4Sq459wGcwy7JBX5A5yGb).
 const HUB_SWITCHES = [
-  { key: 'visitForm', label: 'Face-to-face visit form',
-    does: 'On: Log the visit opens one form with every item Missouri requires (time, who was there, in person, service delivery, quality of care). Off: the three short questions as before.' },
   { key: 'moForms', label: 'Missouri forms on the consumer profile',
     does: 'On: each profile shows Rights and responsibilities, Office details and the yearly Pandemic policy (3 steps), with Send buttons; Today counts who still needs them. Texts reach consumers only when Missouri forms texts is on too. Off: hidden.' },
   { key: 'moStaffOig', label: 'Monthly OIG check for office staff',
@@ -9393,167 +9478,170 @@ function openAuditBinder(cid) {
   buildAuditBinder(c, from, to);
 }
 
-function buildAuditBinder(c, from, to) {
+// The consumer's audit file (her yes to the mockup, 2026-10-23): the case file 19 CSR 15-8.400(5)(H)
+// lists, in its order, then monitoring ((5)(F)), reports to DHSS, attendants and complaints. Each
+// section says what is on file and the gaps box lists what an auditor would find missing.
+async function buildAuditBinder(c, from, to) {
+  const w = window.open('', '_blank');
+  if (!w) { alert('Your browser blocked the pop-up. Allow pop-ups for this site and try again.'); return; }
+  w.document.write('<p style="font-family:sans-serif;padding:24px">Putting the file together…</p>');
   const st  = taxStatus(c);
   const req = ongoingRequirements(c);
   const clk = einClock(c);
   const des = desThreshold(c.name);
   const { records } = getAuths();
   const inRange = d => d && d >= from && d <= to;
-
-  // ── authorizations overlapping the window ──
-  const auths = Object.values(records).filter(a =>
-    (a.consumer || a.name) &&
-    String(a.consumer || a.name).toUpperCase() === String(c.name).toUpperCase() &&
-    !(a.planEnd < from || a.planStart > to));
-
-  // ── monthly contacts in the window ──
-  const contacts = Object.entries(c.contacts || {})
-    .filter(([, l]) => l && inRange(l.date))
-    .sort((a, b) => (a[1].date || '').localeCompare(b[1].date || ''));
-
-  // ── annual visits in the window ──
-  const visits = (req.annual.visits || []).filter(v => inRange(v.date));
-
-  // ── attendants who served them ──
-  const attendants = getData('attendants').filter(a =>
-    (a.consumer || '').toUpperCase() === String(c.name).toUpperCase());
-
-  // ── complaints in the window ──
-  const complaints = getData('complaints').filter(x =>
-    inRange(x.date) && (!x.consumer || String(x.consumer).toUpperCase() === String(c.name).toUpperCase()));
-
-  // ── THE GAPS. Worded the way the regulation words them. ──
-  const gaps = [];
-  if (!st.hasEin)                       gaps.push('(H)1 — no Federal EIN recorded');
-  if (!st.hasMoId)                      gaps.push('(H)1 — no Missouri Tax ID recorded');
-  if (!st.inFusion && !st.exempt)       gaps.push('(H)1 — both numbers not entered in Fusion HCBS Eligibility');
-  if (!st.uploaded && !st.exempt)       gaps.push('(H)1 — acceptable proof not uploaded under EIN Tax Documents');
-  if (clk.known && clk.days < 0 && !(st.exempt || (st.inFusion && st.uploaded)))
-                                        gaps.push('(H)1 — 90-day upload deadline passed ' + Math.abs(clk.days) + ' days ago');
-  if (!auths.length)                    gaps.push('(H)2 — no service authorization on file covering this period');
-  if (!visits.length)                   gaps.push('(5)(F) — no annual FACE-TO-FACE visit recorded in this period');
-  // With her visit form on: a visit missing any item Missouri lists is a gap too.
-  if (visitFormLive()) visits.forEach(v => {
-    const miss = [!v.time && 'time', !v.by && 'who made it', !v.present && 'who was there', !v.service && 'service delivery summary', !v.quality && 'quality of care'].filter(Boolean);
-    if (miss.length) gaps.push('(5)(F) — visit on ' + v.date + ' is missing: ' + miss.join(', '));
-  });
-  if (req.monthly.missed)               gaps.push('(5)(F) — ' + req.monthly.missed + ' month(s) with no case-management contact in the last year');
-  if (!c.desRegistered && des.known && des.crossed)
-                                        gaps.push('DES — passed $1,000 in ' + des.crossed + ' and still not registered in UInteract');
-  const thin = contacts.filter(([, l]) => l.backfilled).length;
-  if (thin)                             gaps.push('(5)(F) — ' + thin + ' contact record(s) hold no detail of what was discussed');
-
-  const row = (k, v) => '<tr><th>' + k + '</th><td>' + (v || '<span class="none">not recorded</span>') + '</td></tr>';
+  const same = n => String(n || '').trim().toUpperCase() === String(c.name).trim().toUpperCase();
   const esc2 = x => esc(x == null ? '' : String(x));
+  const day = d => d ? esc2(_niceDayLong(String(d).slice(0, 10))) : '';
+  const nr = '<span class="none">not recorded</span>';
+
+  // what has to be fetched: EVV forms sent in online, and the Missouri forms
+  let subs = [], subsErr = '';
+  try {
+    const r = await _db.from('evv_submissions').select('consumer, attendant, visitdate, sig_attendant, sig_consumer, processed, reason, submitted_at').eq('agency_id', AGENCY_ID);
+    if (r.error) throw new Error(r.error.message);
+    subs = (r.data || []).filter(x => same(x.consumer) && inRange(String(x.visitdate || '').slice(0, 10)));
+  } catch (e) { subsErr = e.message || String(e); }
+  let mo = null;
+  if (hubSwitchOn('moForms')) { await moFormsLoad(); if (!_moForms.error) mo = moFormsOf(c); }
+
+  const auths = Object.values(records).filter(a => same(a.consumer || a.name) && !(a.planEnd < from || a.planStart > to));
+  const plan = getObj('carePlans')[c.id];
+  const docs = (c.docs || []).slice().sort((x, y) => String(x.date || '').localeCompare(String(y.date || '')));
+  const docsOf = k => docs.filter(d => d.kind === k);
+  const form = re => (c.packetForms || []).find(f => re.test(f.title || f.name || f.file || ''));
+  const corr = getData('evvCorrections').filter(x => same(x.consumer) && inRange(String(x.visitdate || '').slice(0, 10)));
+  const sh = getObj('wellskyCheck').shifts;
+  const shifts = ((sh && sh.consumers) || []).filter(x => CDSWellSky.nameKey(x.name) === CDSWellSky.nameKey(c.name))
+    .reduce((t, x) => t + (x.shifts || []).filter(s => inRange(s.date)).length, 0);
+  const contacts = Object.entries(c.contacts || {}).filter(([, l]) => l && inRange(l.date)).sort((x, y) => (x[1].date || '').localeCompare(y[1].date || ''));
+  const visits = (req.annual.visits || []).filter(v => inRange(v.date));
+  const reports = Object.entries(c.contacts || {}).filter(([, l]) => l && l.dhssFlag && inRange(l.date))
+    .map(([, l]) => ({ found: l.date, where: 'monthly call', what: l.healthNotes || l.circNotes || 'change in health or circumstances', rep: l.dhssReported }))
+    .concat((c.homeVisits || []).filter(v => v && v.dhss && inRange(v.date)).map(v => ({ found: v.date, where: 'face-to-face visit', what: 'services not given as authorized', rep: v.dhssReported })));
+  const attendants = getData('attendants').filter(a => same(a.consumer));
+  const complaints = getData('complaints').filter(x => inRange(x.date) && (!x.consumer || same(x.consumer)));
+
+  // the gaps, worded the way the rule words them
+  const gaps = [];
+  if (!st.hasEin) gaps.push('(H)1 no Federal EIN recorded');
+  if (!st.hasMoId) gaps.push('(H)1 no Missouri Tax ID recorded');
+  if (!st.inFusion && !st.exempt) gaps.push('(H)1 both numbers not entered in Fusion HCBS Eligibility');
+  if (!st.uploaded && !st.exempt) gaps.push('(H)1 acceptable proof not uploaded under EIN Tax Documents');
+  if (!auths.length) gaps.push('(H)2 no service authorization on file covering this period');
+  if (!docsOf('careplan').length) gaps.push('(H)2 no copy of the DSDS care plan or authorization kept in the file');
+  if (subsErr) gaps.push('(H)3 the EVV forms sent in online could not be read: ' + subsErr);
+  if (corr.some(x => x.formReceived !== 'yes')) gaps.push('(H)3 ' + corr.filter(x => x.formReceived !== 'yes').length + ' EVV correction(s) with no signed form received');
+  if (corr.some(x => x.wellskyDone !== 'yes')) gaps.push('(H)3 ' + corr.filter(x => x.wellskyDone !== 'yes').length + ' EVV correction(s) not yet fixed in WellSky');
+  if (!(c.training && c.training.date)) gaps.push('(H)5 no date recorded for training the consumer as an employer');
+  if (!c.backupPlan) gaps.push('(H)6 no emergency or backup plan');
+  if (!mo) gaps.push('(H)7 signed rights form not shown: turn on Settings > Missouri forms on the consumer profile');
+  else if (!(mo.rights && mo.rights.signed_at)) gaps.push('(H)7 no signed hearing rights and responsibilities form');
+  if (!visits.length) gaps.push('(5)(F) no annual face-to-face visit recorded in this period');
+  visits.forEach(v => {
+    const miss = [!v.time && 'time', !v.by && 'who made it', !v.present && 'who was there', !v.service && 'service delivery summary', !v.quality && 'quality of care'].filter(Boolean);
+    if (miss.length) gaps.push('(5)(F) visit on ' + v.date + ' is missing: ' + miss.join(', '));
+    if (v.attendantFillIn) gaps.push('(8)(C) visit on ' + v.date + ' was made by the consumer\'s own attendant');
+  });
+  if (req.monthly.missed) gaps.push('(5)(F) ' + req.monthly.missed + ' month(s) with no case management contact in the last year');
+  const thin = contacts.filter(([, l]) => l.backfilled || !(l.notes || l.healthNotes || l.circNotes || l.satNotes)).length;
+  if (thin) gaps.push('(5)(F) ' + thin + ' contact record(s) hold no notes on what was discussed');
+  reports.filter(r => !r.rep).forEach(r => gaps.push('(6) change found ' + r.found + ' (' + r.where + ') has no date it was reported to DHSS'));
+  if (!c.desRegistered && des.known && des.crossed) gaps.push('DES passed $1,000 in ' + des.crossed + ' and still not registered in UInteract');
+
+  const S = (n, title, cite, ok, inner) => '<section><h2><span class="n">' + n + '</span>' + esc2(title) + ' <span class="cite">' + esc2(cite) + '</span>' +
+    '<span class="chip ' + (ok ? 'ok">On file' : 'miss">Needs attention') + '</span></h2>' + inner + '</section>';
+  const dl = rows => '<table class="kv">' + rows.map(([k, v]) => '<tr><th>' + esc2(k) + '</th><td>' + (v || nr) + '</td></tr>').join('') + '</table>';
+  const files = list => list.length ? list.map(d => '<span class="file">' + esc2(d.name || d.title) + (d.date ? ' (' + day(d.date) + ')' : '') + '</span>').join(' ') : '';
+  const tbl = (head, rows, empty) => rows.length ? '<table><thead><tr>' + head.map(h => '<th>' + esc2(h) + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + r.map(x => '<td>' + (x == null || x === '' ? nr : x) + '</td>').join('') + '</tr>').join('') + '</tbody></table>' : '<p class="none">' + esc2(empty) + '</p>';
+  const signed = r => r && r.signed_at ? 'Signed ' + day(r.signed_at) : r && r.sent_at ? '<span class="none">sent ' + day(r.sent_at) + ', not signed</span>' : '';
+  const q = { good: 'Good', concerns: 'Some concerns', poor: 'Poor' };
+
+  const sec = [
+    S(1, 'EIN and Missouri Tax ID', '(5)(H)1', st.hasEin && st.hasMoId && (st.exempt || (st.inFusion && st.uploaded)), dl([
+      ['EIN', esc2(c.ein)], ['Missouri Tax ID', esc2(c.moTaxId)], ['Entered in Fusion', st.inFusion ? 'Yes, HCBS Eligibility' : ''],
+      ['Proof', (c.proofDocType ? esc2(c.proofDocType) + ' ' : '') + files(c.proofFiles || [])],
+      ['90-day deadline', clk.known ? day(clk.due) + (clk.days < 0 ? ' (passed)' : '') : ''],
+      ['DES', c.desRegistered ? 'Registered' + (c.desEan ? ', EAN ' + esc2(c.desEan) : '') : des.known && des.crossed ? '<span class="none">not registered, passed $1,000 in ' + esc2(des.crossed) + '</span>' : 'Not needed yet']])),
+    S(2, 'Plan of care and service authorization', '(5)(H)2', auths.length && docsOf('careplan').length,
+      tbl(['Period', 'Procedure', 'Units a month', 'Source'], auths.map(x => [day(x.planStart) + ' to ' + day(x.planEnd), esc2(x.procedureCode || x.proc || ''), (x.months && x.months.length ? String(Math.max(...x.months.map(m => m.units || 0))) : ''), esc2(x.source || 'DSDS PDF')]), 'No authorization on file covering this period.') +
+      dl([['Care plan worksheet', plan ? esc2(plan.file) + ', ' + esc2(plan.monthlyUnits) + ' units a month' : ''], ['Documents kept', files(docsOf('careplan'))]])),
+    S(3, 'EVV documentation', '(5)(H)3, 13 CSR 70-3.320', !subsErr && !corr.some(x => x.wellskyDone !== 'yes' || x.formReceived !== 'yes'),
+      dl([['Shifts in WellSky', shifts ? shifts + ' in this period (from the WellSky reports the hub holds)' : 'none in the reports the hub holds'],
+          ['Fixed by hand', (corr.length + subs.length) + (shifts ? ' (' + Math.round((corr.length + subs.length) / shifts * 1000) / 10 + '%, standard is 5% or less)' : '')]]) +
+      tbl(['Shift', 'Attendant', 'Why', 'Both signed', 'Fixed in WellSky'],
+        corr.map(x => [day(x.visitdate), esc2(x.attendant), esc2(x.reason || ''), x.formReceived === 'yes' ? 'Yes, signed form received' : '<span class="none">signed form not received</span>', x.wellskyDone === 'yes' ? (x.wellskyDate ? day(x.wellskyDate) : 'Yes') : '<span class="none">not yet</span>'])
+          .concat(subs.map(x => [day(x.visitdate), esc2(x.attendant), esc2(x.reason || ''), x.sig_attendant && x.sig_consumer ? 'Yes (sent online)' : '<span class="none">missing a signature</span>', x.processed ? 'Yes' : '<span class="none">not yet reviewed</span>'])),
+        'No EVV corrections in this period.')),
+    S(4, 'Correspondence', '(5)(H)4: DHSS, physician, other providers, agencies', true,
+      tbl(['Date', 'With', 'About', 'File'], docsOf('letter').map(d => [day(d.date), esc2(d.with), esc2(d.about), files([d])]), 'No letters or emails kept yet. Add them on the profile\'s Documents tab.')),
+    S(5, 'Training as an employer', '(5)(H)5, (5)(B)', c.training && c.training.date, dl([
+      ['Trained', c.training && c.training.date ? day(c.training.date) + (c.training.by ? ' by ' + esc2(c.training.by) : '') + (c.training.how ? ', ' + esc2(c.training.how) : '') : ''],
+      ['Topics', c.training && c.training.date ? esc2((c.training.topics || TRAINING_TOPICS).join(' · ')) : ''],
+      ['Signed', form(/training/i) ? files([form(/training/i)]) : '']])),
+    S(6, 'Emergency and backup plan', '(5)(H)6, (5)(G)', c.backupPlan, dl([
+      ['Backup plan', c.backupPlan ? 'Yes' + (form(/backup|emergency/i) ? ' ' + files([form(/backup|emergency/i)]) : '') : ''],
+      ['Last reviewed', c.backupReviewed ? day(c.backupReviewed) : ''], ['Next yearly review', c.backupReviewed ? day(_plusYear(c.backupReviewed)) : (c.cdsStartDate ? day(_plusYear(c.cdsStartDate)) : '')]])),
+    S(7, 'Signed rights, office details and pandemic policy', '(5)(H)7, (2)', mo && mo.rights && mo.rights.signed_at, mo ? dl([
+      ['Hearing rights and responsibilities', signed(mo.rights)], ['Office address, phone, hours', signed(mo.office)],
+      ['Pandemic policy ' + mo.year + ': given', signed(mo.given)], ['Consumer trained', mo.trained ? day(mo.trained.at) + (mo.trained.by ? ' by ' + esc2(mo.trained.by) : '') : ''],
+      ['Consumer trained the attendant', signed(mo.att)]]) : '<p class="none">The Missouri forms switch is off, so the signed forms are not shown. Turn on Settings > Missouri forms on the consumer profile.</p>'),
+    S(8, 'Monthly contacts', '(5)(F)2', !req.monthly.missed && !thin,
+      tbl(['Date', 'How', 'Talked with', 'Plan of care', 'Health or life change', 'Notes'],
+        contacts.map(([, l]) => [day(l.date), esc2(l.method), esc2(l.person || ''), esc2(l.poc || ''), l.dhssFlag ? '<b>Yes</b> ' + esc2(l.healthNotes || l.circNotes || '') : 'No', esc2((l.notes || '').slice(0, 160))]),
+        'No contacts recorded in this period.') +
+      '<div class="small">' + contacts.length + ' contact(s) in this period · ' + req.monthly.missed + ' month(s) missed in the last year.</div>'),
+    S(9, 'Face-to-face visits', '(5)(F)1, (8)(C)', visits.length && visits.every(v => v.time && v.by && v.present && v.service && v.quality && !v.attendantFillIn),
+      tbl(['Date and time', 'By', 'Present', 'Service delivery', 'Quality of care', 'Not their attendant'],
+        visits.map(v => [day(v.date) + (v.time ? ', ' + esc2(v.time) : ''), esc2(v.by), esc2(v.present), esc2(v.service || v.notes || ''),
+          q[v.quality] ? '<b>' + q[v.quality] + '.</b> ' + esc2(v.qualityNote || '') : '', v.time ? (v.attendantFillIn ? '<span class="none">made by their attendant</span>' : 'Confirmed') : '']),
+        'No face-to-face visit in this period. Phone and video do not count.') +
+      '<div class="small">Next visit due ' + (req.annual.due ? day(req.annual.due) : 'not known') + '.</div>'),
+    S(10, 'Reports to DHSS', '(5)(F)1, (6)', !reports.some(r => !r.rep),
+      tbl(['Found', 'Where', 'What', 'Reported', 'In 10 days'], reports.map(r => [day(r.found), esc2(r.where), esc2(String(r.what).slice(0, 120)),
+        r.rep ? day(r.rep.date) + (r.rep.by ? ' by ' + esc2(r.rep.by.split('@')[0]) : '') : '', r.rep ? (Math.round((Date.parse(r.rep.date) - Date.parse(r.found)) / 864e5) <= 10 ? 'Yes' : '<span class="none">late</span>') : '<span class="none">not reported</span>']),
+        'No changes needing a report in this period.')),
+    S(11, 'Other documents', '(5)(H)8', true, dl([['Enrollment packet', (c.packetForms || []).length ? 'Signed' + (c.packetSigned ? ' ' + day(c.packetSigned) : '') + ', ' + (c.packetForms || []).length + ' forms: ' + (c.packetForms || []).map(f => esc2(f.title || f.name)).join(', ') : ''],
+      ['Other', files(docsOf('other'))]])),
+    S(12, 'Attendants', 'background checks, details in each attendant\'s file', attendants.length,
+      tbl(['Name', 'FCSR', 'EDL', 'OIG / LEIE'], attendants.map(a => [esc2(a.name), day(a.fcsrDate), day(a.edlDate), day(a.leieDate)]), 'No attendant linked to this consumer.')),
+    S(13, 'Complaints and incidents', '', true,
+      tbl(['Date', 'Category', 'Reported by', 'Detail'], complaints.map(x => [day(x.date), esc2(COMPLAINT_CATEGORIES[x.category] || x.category), esc2(COMPLAINT_REPORTERS[x.reporter] || x.reporter), esc2((x.description || x.notes || '').slice(0, 160))]), 'None recorded in this period.'))
+  ];
+  const done = (sec.join('').match(/chip ok/g) || []).length;
 
   const html =
-'<!DOCTYPE html><html><head><meta charset="utf-8"><title>Audit Binder — ' + esc2(c.name) + '</title><style>' +
-'@page{margin:18mm}' +
-'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:12px;line-height:1.5;color:#3A342C;max-width:900px;margin:0 auto;padding:24px}' +
-'h1{font-size:21px;margin:0 0 4px;color:#0e3860}h2{font-size:14px;margin:26px 0 8px;color:#0e3860;border-bottom:2px solid #54bdb8;padding-bottom:5px;page-break-after:avoid}' +
-'.sub{color:#6E6559;margin-bottom:18px;font-size:12px}' +
-'table{border-collapse:collapse;width:100%;margin-bottom:8px;page-break-inside:avoid}' +
-'th,td{border:1px solid #dcdcdc;padding:6px 9px;text-align:left;vertical-align:top}' +
-'th{background:#FAF9F6;font-weight:600;width:210px}' +
-'thead th{width:auto;background:#F3EDE3}' +
-'.none{color:#a33;font-style:italic}' +
-'.gap{background:#fdf0ec;border:1.5px solid #d98060;border-radius:6px;padding:14px 16px;margin-bottom:14px}' +
-'.gap h2{border:0;margin-top:0;color:#a33}.gap li{margin-bottom:4px}' +
-'.ok{background:#eafaf1;border:1.5px solid #27ae60;border-radius:6px;padding:14px 16px;margin-bottom:14px;color:#1e6b42}' +
-'.foot{margin-top:26px;padding-top:10px;border-top:1px solid #ddd;color:#6E6559;font-size:10.5px}' +
-'@media print{.noprint{display:none}}' +
+'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Case file, ' + esc2(c.name) + '</title><style>' +
+'@page{margin:16mm}body{font-family:Poppins,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12px;line-height:1.5;color:#1d2a36;max-width:900px;margin:0 auto;padding:24px}' +
+'h1{font-family:Fraunces,Georgia,serif;font-size:28px;margin:2px 0;color:#0D365F}.kicker{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0f5f61}' +
+'.sub{color:#55606b;font-size:12px}section{border-top:1px solid #dfe6ec;padding:14px 0 6px;page-break-inside:avoid}' +
+'h2{font-size:14.5px;color:#0D365F;margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}' +
+'.n{width:22px;height:22px;border-radius:50%;background:#e3f1f0;display:inline-flex;align-items:center;justify-content:center;font-size:11px}' +
+'.cite{font-weight:400;font-size:11px;color:#55606b}.chip{margin-left:auto;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 9px}' +
+'.ok{background:#e7f5ee;color:#1f6b45}.miss{background:#fdecea;color:#a3201a}' +
+'table{border-collapse:collapse;width:100%;margin:4px 0 6px}th,td{border-bottom:1px solid #eef2f5;padding:5px 7px;text-align:left;vertical-align:top}' +
+'thead th{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#55606b;border-bottom:1.5px solid #dfe6ec}' +
+'.kv th{width:210px;color:#55606b;font-weight:400}.none{color:#a3201a;font-style:italic}.small{font-size:11px;color:#55606b}' +
+'.file{display:inline-block;border:1px solid #cfe3e2;border-radius:6px;padding:1px 7px;margin:1px 4px 1px 0;color:#0f5f61;font-weight:600;font-size:11px}' +
+'.gap{background:#fdecea;border-radius:8px;padding:12px 14px;margin:14px 0}.gap li{margin-bottom:3px}.allok{background:#e7f5ee;color:#1f6b45;border-radius:8px;padding:12px 14px;margin:14px 0}' +
+'.foot{margin-top:18px;padding-top:10px;border-top:1.5px solid #0D365F;color:#55606b;font-size:10.5px}@media print{.noprint{display:none}}' +
 '</style></head><body>' +
-
-'<div class="noprint" style="background:#0e3860;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
-  '<span>Use your browser’s Print dialog and choose <strong>Save as PDF</strong>.</span>' +
-  '<button onclick="window.print()" style="background:#54bdb8;color:#08343a;border:0;border-radius:6px;padding:9px 18px;font-weight:700;cursor:pointer">Print / Save as PDF</button>' +
-'</div>' +
-
-'<h1>Audit Binder — ' + esc2(c.name) + '</h1>' +
-'<div class="sub">Period ' + esc2(from) + ' to ' + esc2(to) + ' · compiled ' + esc2(new Date().toLocaleString('en-US')) +
-' · Caring Companions Consumer Directed Services, LLC</div>' +
-
-(gaps.length
-  ? '<div class="gap"><h2>Gaps in this file</h2><ul>' + gaps.map(g => '<li>' + esc2(g) + '</li>').join('') + '</ul>' +
-    '<div style="margin-top:8px;font-size:11px">Listed against 19 CSR 15-8.400 so each one can be closed before it is found.</div></div>'
-  : '<div class="ok"><strong>No gaps found against 19 CSR 15-8.400(5)(H) or the monitoring requirements for this period.</strong></div>') +
-
-'<h2>1. Consumer</h2><table>' +
-row('Name', esc2(c.name)) + row('DCN / Medicaid ID', esc2(c.dcn)) + row('County', esc2(c.county)) +
-row('Phone', esc2(c.phone)) + row('Email', esc2(c.email)) + row('CDS start date', esc2(c.cdsStartDate)) +
-row('Status', esc2(c.status)) + '</table>' +
-
-'<h2>2. Employer tax setup — (H)1</h2><table>' +
-row('Federal EIN', esc2(c.ein)) + row('Missouri Tax ID', esc2(c.moTaxId)) +
-row('Entered in Fusion', st.inFusion ? 'Yes — HCBS Eligibility' : '') +
-row('Proof document', esc2(c.proofDocType)) +
-row('Proof uploaded', esc2(c.proofUploaded)) +
-row('90-day deadline', clk.known ? esc2(clk.due) + (clk.days < 0 ? ' (passed ' + Math.abs(clk.days) + ' days ago)' : ' (' + clk.days + ' days remaining)') : '') +
-row('DES / unemployment', c.desRegistered ? 'Registered' + (c.desEan ? ' — EAN ' + esc2(c.desEan) : '')
-    : (des.known && des.crossed ? 'NOT registered — passed $1,000 in ' + esc2(des.crossed) : 'Not registered — threshold not yet met')) +
-'</table>' +
-
-'<h2>3. Service authorizations — (H)2</h2>' +
-(auths.length
-  ? '<table><thead><tr><th>Period</th><th>Procedure</th><th>Months</th><th>Source</th></tr></thead><tbody>' +
-    auths.map(a => '<tr><td>' + esc2(a.planStart) + ' to ' + esc2(a.planEnd) + '</td><td>' +
-      esc2(a.proc || a.procCode || '') + '</td><td>' + (a.months ? a.months.length : 0) + '</td><td>' +
-      esc2(a.source || '') + '</td></tr>').join('') + '</tbody></table>'
-  : '<p class="none">No authorization on file covering this period.</p>') +
-
-'<h2>4. Monthly case-management contacts — (5)(F)</h2>' +
-(contacts.length
-  ? '<table><thead><tr><th>Date</th><th>Method</th><th>Plan of care</th><th>Health change</th><th>Complaint</th><th>Notes</th></tr></thead><tbody>' +
-    contacts.map(([, l]) => '<tr><td>' + esc2(l.date) + '</td><td>' + esc2(l.method) + '</td><td>' +
-      (l.poc ? esc2(l.poc) : '<span class="none">—</span>') + '</td><td>' +
-      (l.health ? esc2(l.health) : '<span class="none">—</span>') + '</td><td>' +
-      (l.complaint ? esc2(l.complaint) : '<span class="none">—</span>') + '</td><td>' +
-      esc2((l.notes || '').slice(0, 120)) + '</td></tr>').join('') + '</tbody></table>' +
-    '<div style="font-size:11px;color:#6E6559">' + contacts.length + ' contact(s) in period.</div>'
-  : '<p class="none">No contacts recorded in this period.</p>') +
-
-'<h2>5. Annual face-to-face visits — (5)(F)</h2>' +
-(visits.length
-  ? '<table><thead><tr><th>Date and time</th><th>Made by</th><th>Who was there</th><th>Service delivery</th><th>Quality of care</th></tr></thead><tbody>' +
-    visits.map(v => {
-      const nr = '<span class="none">not recorded</span>';
-      const q = { good: 'Good', concerns: 'Some concerns', poor: 'Poor' }[v.quality];
-      const svc = v.service
-        ? esc2(v.service) + (v.tasks === 'no' ? '<br><b>Plan of care tasks not done:</b> ' + esc2(v.tasksNote || '') : '') +
-          (v.hours === 'no' ? '<br><b>Hours off:</b> ' + esc2(v.hoursNote || '') : '') + (v.inPerson ? '<br><i>In person.</i>' : '')
-        : (v.notes ? esc2(v.notes) : nr);
-      return '<tr><td>' + esc2(v.date) + (v.time ? ' ' + esc2(v.time) : '<br>' + nr.replace('not recorded', 'time not recorded')) + '</td><td>' + (v.by ? esc2(v.by) : nr) +
-        '</td><td>' + (v.present ? esc2(v.present) : nr) + '</td><td>' + svc +
-        '</td><td>' + (q ? '<b>' + q + '.</b> ' + esc2(v.qualityNote || '') : (v.service ? nr : '<span class="none">see notes</span>')) + '</td></tr>';
-    }).join('') + '</tbody></table>'
-  : '<p class="none">No face-to-face visit recorded in this period. Phone and video do not satisfy the requirement.</p>') +
-
-'<h2>6. Attendants</h2>' +
-(attendants.length
-  ? '<table><thead><tr><th>Name</th><th>FCSR</th><th>EDL</th><th>LEIE / OIG</th></tr></thead><tbody>' +
-    attendants.map(a => '<tr><td>' + esc2(a.name) + '</td><td>' + (a.fcsrDate ? esc2(a.fcsrDate) : '<span class="none">—</span>') +
-      '</td><td>' + (a.edlDate ? esc2(a.edlDate) : '<span class="none">—</span>') +
-      '</td><td>' + (a.leieDate ? esc2(a.leieDate) : '<span class="none">—</span>') + '</td></tr>').join('') + '</tbody></table>'
-  : '<p class="none">No attendant linked to this consumer.</p>') +
-
-'<h2>7. Complaints and incidents</h2>' +
-(complaints.length
-  ? '<table><thead><tr><th>Date</th><th>Category</th><th>Reported by</th><th>Detail</th></tr></thead><tbody>' +
-    complaints.map(x => '<tr><td>' + esc2(x.date) + '</td><td>' + esc2(COMPLAINT_CATEGORIES[x.category] || x.category) +
-      '</td><td>' + esc2(COMPLAINT_REPORTERS[x.reporter] || x.reporter) + '</td><td>' +
-      esc2((x.description || x.notes || '').slice(0, 160)) + '</td></tr>').join('') + '</tbody></table>'
-  : '<p>None recorded in this period.</p>') +
-
-'<div class="foot">Compiled from the Caring Companions CDS hub on ' + esc2(_todayIso()) +
-'. This packet reflects what is recorded in the hub; it is not a substitute for the signed originals held in the consumer’s file. ' +
-'Sections are labelled against 19 CSR 15-8.400(5)(H) and the monitoring duties in (5)(F).</div>' +
+'<div class="noprint" style="background:#0D365F;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
+  '<span>Print, or choose <strong>Save as PDF</strong> in the print window.</span>' +
+  '<button onclick="window.print()" style="background:#54bdb8;color:#08343a;border:0;border-radius:6px;padding:9px 18px;font-weight:700;cursor:pointer">Print or save as PDF</button></div>' +
+'<div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap"><div><div class="kicker">Consumer case file</div><h1>' + esc2(c.name) + '</h1>' +
+  '<div class="sub">' + [c.cdsStartDate ? 'CDS consumer since ' + day(c.cdsStartDate) : '', c.county ? esc2(c.county) + ' County' : '', c.dcn ? 'DCN ' + esc2(c.dcn) : ''].filter(Boolean).join(' · ') + '</div>' +
+  '<div class="sub">Covers ' + day(from) + ' to ' + day(to) + '</div></div>' +
+  '<div class="sub" style="text-align:right"><b style="color:#0D365F">Caring Companions CDS</b><br>Troutman Enterprises<br>Printed ' + day(_todayIso()) + (_acWho() ? ' by ' + esc2(_acWho().split('@')[0]) : '') + '</div></div>' +
+'<p class="sub" style="margin-top:10px"><b>' + done + ' of ' + sec.length + '</b> sections complete. Kept 6 years in one place, per 19 CSR 15-8.400(10). Sections 1 to 11 follow the rule\'s case file list.</p>' +
+(gaps.length ? '<div class="gap"><b style="color:#a3201a">Gaps in this file</b><ul>' + gaps.map(g => '<li>' + esc2(g) + '</li>').join('') + '</ul></div>'
+  : '<div class="allok"><b>No gaps found against 19 CSR 15-8.400 for this period.</b></div>') +
+sec.join('') +
+'<div class="foot">Compiled from the Caring Companions CDS hub. The signed originals and documents named here are kept in the hub and open from the consumer\'s profile.</div>' +
 '</body></html>';
-
-  const w = window.open('', '_blank');
-  if (!w) { alert('Your browser blocked the pop-up. Allow pop-ups for this site and try again.'); return; }
-  w.document.write(html);
-  w.document.close();
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 // Restored 2026-10-22: the profile's Empeon chip still uses this (removing it broke every profile).
@@ -9764,7 +9852,7 @@ function renderProfile() {
 
   // Tabs
   const tab = _profTab;
-  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['calls', 'Calls and texts'], ['closings', 'Closings and pauses'], ['notes', 'Notes']]
+  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['calls', 'Calls and texts'], ['closings', 'Closings and pauses'], ['docs', 'Documents'], ['notes', 'Notes']]
     .map(([k, l]) => '<button type="button" class="' + (tab === k ? 'on' : '') + '" onclick="_profTab=\'' + k + '\';renderProfile()">' + l + '</button>').join('');
   const line = (k, v) => '<div class="cp-line"><span>' + k + '</span><span>' + v + '</span></div>';
   let body = '';
@@ -9780,9 +9868,14 @@ function renderProfile() {
           : (auth ? 'hub care plan ended ' + esc(_niceDay(auth.planEnd)) : 'no care plan in the hub') + '; ' + esc(_wsLabelEnd(wsA)) + '. Upload the new DSDS care plan.') + '</span>'
       : !auth ? '<span style="color:var(--danger)">nothing on file</span>' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'ends ' + esc(_niceDay(auth.planEnd)) + ' (' + daysLeft + ' days)')) +
     line('Tax and EIN', outstanding.length ? '<span style="color:#9C6410">' + outstanding.length + ' thing' + (outstanding.length === 1 ? '' : 's') + ' still needed</span>' : 'all set') +
-    line('Backup plan', (c.backupPlan ? 'yes' : '<span style="color:var(--danger)">missing</span>') +
-      ' <a href="#" onclick="toggleBackup(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">' + (c.backupPlan ? 'undo' : 'mark done') + '</a>') +
-    line('Consumer training', '<select onchange="setConsumerTrained(\'' + c.id + '\',this.value)" style="font-size:13px">' +
+    line('Backup plan', (c.backupPlan ? 'yes' + (c.backupReviewed ? ', reviewed ' + esc(_niceDay(c.backupReviewed)) + ', next by ' + esc(_niceDay(_plusYear(c.backupReviewed))) : '') : '<span style="color:var(--danger)">missing</span>') +
+      ' <a href="#" onclick="toggleBackup(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">' + (c.backupPlan ? 'undo' : 'mark done') + '</a>' +
+      (c.backupPlan ? ' <a href="#" onclick="markBackupReviewed(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">mark reviewed today</a>' : '')) +
+    line('Consumer training', c.training && c.training.date
+      ? 'done ' + esc(_niceDay(c.training.date)) + (c.training.by ? ' by ' + esc(c.training.by) : '') + (c.training.how ? ', ' + esc(c.training.how) : '') +
+        ' <a href="#" onclick="recordConsumerTraining(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">change</a>'
+      : '<button class="btn btn-sm btn-outline" style="font-size:11.5px" onclick="recordConsumerTraining(\'' + c.id + '\')">Record training date</button> ' +
+        '<select onchange="setConsumerTrained(\'' + c.id + '\',this.value)" style="font-size:13px">' +
       [['no', 'Needed'], ['partial', 'Partly done'], ['yes', 'Done']].map(([v, l]) => '<option value="' + v + '"' + ((c.trained || 'no') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>') +
     (function () { const t = consumerToFinish(c);
       return t.length ? line('Still to finish', '<span style="color:#9C6410">' + t.map(esc).join(', ') + '</span>') : line('Still to finish', 'nothing'); })();
@@ -9806,6 +9899,7 @@ function renderProfile() {
     (wages && billed && (margin < 0 || margin / billed > 0.6)
       ? '<div class="alert alert-warn" style="margin-top:10px;font-size:13px">Treat this with care: invoices count on the day they were raised, so one consumer\'s figure swings. The Money page has the agency figure.</div>' : '');
   else if (tab === 'closings') body = closingRecords(c);
+  else if (tab === 'docs') body = consumerDocsHtml(c);
   else if (tab === 'calls') body =
     '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(c.phone || '') + '"></div>';
   else body = c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>';
@@ -10116,7 +10210,7 @@ async function importAuthorizations(event) {
 
   const store = getAuths();
   const consumers = getData('consumers');
-  let ok = 0; const bad = []; const unmatched = [];
+  let ok = 0, keptPdf = 0; const bad = []; const unmatched = [], notKept = [];
   for (let i = 0; i < files.length; i++) {
     status.innerHTML = '<span style="color:var(--gray-600)">Reading ' + (i + 1) + ' of ' + files.length + '…</span>';
     let r;
@@ -10127,16 +10221,25 @@ async function importAuthorizations(event) {
     const hit = consumers.find(c => (c.dcn || '').replace(/^0+/, '') === (r.dcn || '').replace(/^0+/, '')) ||
                 consumers.find(c => prNorm(c.name) === prNorm(r.name));
     if (hit) r.consumer = hit.name; else unmatched.push(r.name || r.dcn || files[i].name);
+    // Keep the PDF itself in the consumer's file ((5)(H)2, her yes 2026-10-23).
+    if (hit && _db) {
+      try { const doc = await _saveConsumerDoc(hit, files[i], { kind: 'careplan', date: r.planStart || _todayIso(), with: 'DHSS', about: 'Authorization ' + (r.planStart || '') + ' to ' + (r.planEnd || '') });
+            hit.docs = (hit.docs || []).concat([doc]); keptPdf++; }
+      catch (e) { notKept.push(files[i].name + ' (' + (e.message || e) + ')'); }
+    }
     store.records[(r.dcn || r.name).toUpperCase()] = r;
     ok++;
   }
   setObj('authorizations', { loadedAt: _todayIso(),
                             unitMinutes: store.unitMinutes, records: store.records });
+  if (keptPdf) setData('consumers', consumers);
   status.innerHTML = '<span style="color:var(--success)">✓ ' + ok + ' authorization' + (ok === 1 ? '' : 's') +
     ' imported.</span>' +
     (unmatched.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>' +
       unmatched.length + ' could not be matched to a consumer</strong> by DCN or name: ' +
       unmatched.map(esc).join(', ') + '. Check the DCN on the consumer record.</div>' : '') +
+    (notKept.length ? '<div class="alert alert-danger" style="margin-top:10px;font-size:12.5px"><strong>Read, but the PDF was not kept in the consumer\'s file:</strong> ' +
+      notKept.map(esc).join('; ') + '. Add it on their Documents tab.</div>' : '') +
     (bad.length ? '<div class="alert alert-warn" style="margin-top:10px;font-size:12.5px">⚠️ <strong>Skipped ' +
       bad.length + ':</strong> ' + bad.map(esc).join('; ') + '</div>' : '');
   event.target.value = '';
@@ -13314,7 +13417,8 @@ function renderAgencyDates() {
 }
 function _todayDhssReported(btn) {
   const consumers = getData('consumers'), c = consumers.find(x => x.id === btn.dataset.id);
-  const log = c && c.contacts && c.contacts[btn.dataset.k];
+  const vk = /^visit:(\d+)$/.exec(btn.dataset.k || '');
+  const log = c && (vk ? (c.homeVisits || [])[+vk[1]] : c.contacts && c.contacts[btn.dataset.k]);
   if (!log) return;
   const date = prompt('Date you reported the change to DHSS (YYYY-MM-DD):', _todayIso());
   if (!date) return;
