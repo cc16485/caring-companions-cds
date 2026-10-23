@@ -2464,6 +2464,7 @@ button.fu-tile.check span { color:#14606F; }
       <div><div style="font-weight:700;font-size:13.5px">EVV form</div><div style="font-size:12.5px;color:var(--gray-800)">Who is emailed when an attendant sends an EVV form, and the form link.</div></div>
       <button class="btn btn-sm btn-outline" onclick="openModal('evvSettingsModal')">EVV form settings</button>
     </div>
+    <div id="visitFormSwitch" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--gray-200)"></div>
   </div>
 
   <!-- GHL CONTACT SYNC -->
@@ -2805,26 +2806,26 @@ button.fu-tile.check span { color:#14606F; }
      Two columns, Yes/No buttons, and a notes box only shows when an answer
      needs explaining. Field ids and radio names are unchanged. -->
 <style>
-  #contactLogModal .modal { width: 1040px; max-width: 96vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-  #contactLogModal .clm-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 26px; border-bottom: 1px solid var(--gray-200); }
-  #contactLogModal .clm-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 28px; padding: 20px 26px; overflow-y: auto; }
-  #contactLogModal .clm-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 26px; border-top: 1px solid var(--gray-200); }
-  #contactLogModal .clm-lbl { font-size: 12.5px; font-weight: 600; color: var(--gray-600); display: block; margin: 0 0 4px; }
-  #contactLogModal .clm-field { margin-bottom: 14px; }
-  #contactLogModal .clm-q { padding: 11px 0; border-bottom: 1px solid var(--gray-200); }
-  #contactLogModal .clm-q:last-child { border-bottom: 0; }
-  #contactLogModal .clm-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-  #contactLogModal .clm-row > span:first-child { font-size: 14px; }
-  #contactLogModal .clm-seg { display: inline-flex; flex: none; border: 1px solid var(--gray-200); border-radius: 999px; overflow: hidden; }
-  #contactLogModal .clm-seg label { margin: 0; cursor: pointer; }
-  #contactLogModal .clm-seg input { position: absolute; opacity: 0; pointer-events: none; }
-  #contactLogModal .clm-seg span { display: block; padding: 6px 16px; font-size: 13px; color: var(--gray-600); }
-  #contactLogModal .clm-seg input:checked + span { background: var(--primary); color: white; }
-  #contactLogModal .clm-seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
-  #contactLogModal .form-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1.5px solid var(--gray-200); border-radius: 8px; font: inherit; font-size: 14px; background: white; }
-  #contactLogModal .form-input:focus { outline: none; border-color: var(--primary-light); }
-  #contactLogModal .clm-note { margin-top: 8px; font-size: 13px; }
-  @media (max-width: 760px) { #contactLogModal .clm-body { grid-template-columns: 1fr; } }
+  #contactLogModal .modal, #visitLogModal .modal { width: 1040px; max-width: 96vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  #contactLogModal .clm-head, #visitLogModal .clm-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 26px; border-bottom: 1px solid var(--gray-200); }
+  #contactLogModal .clm-body, #visitLogModal .clm-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 28px; padding: 20px 26px; overflow-y: auto; }
+  #contactLogModal .clm-foot, #visitLogModal .clm-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 26px; border-top: 1px solid var(--gray-200); }
+  #contactLogModal .clm-lbl, #visitLogModal .clm-lbl { font-size: 12.5px; font-weight: 600; color: var(--gray-600); display: block; margin: 0 0 4px; }
+  #contactLogModal .clm-field, #visitLogModal .clm-field { margin-bottom: 14px; }
+  #contactLogModal .clm-q, #visitLogModal .clm-q { padding: 11px 0; border-bottom: 1px solid var(--gray-200); }
+  #contactLogModal .clm-q:last-child, #visitLogModal .clm-q:last-child { border-bottom: 0; }
+  #contactLogModal .clm-row, #visitLogModal .clm-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  #contactLogModal .clm-row > span:first-child, #visitLogModal .clm-row > span:first-child { font-size: 14px; }
+  #contactLogModal .clm-seg, #visitLogModal .clm-seg { display: inline-flex; flex: none; border: 1px solid var(--gray-200); border-radius: 999px; overflow: hidden; }
+  #contactLogModal .clm-seg label, #visitLogModal .clm-seg label { margin: 0; cursor: pointer; }
+  #contactLogModal .clm-seg input, #visitLogModal .clm-seg input { position: absolute; opacity: 0; pointer-events: none; }
+  #contactLogModal .clm-seg span, #visitLogModal .clm-seg span { display: block; padding: 6px 16px; font-size: 13px; color: var(--gray-600); }
+  #contactLogModal .clm-seg input:checked + span, #visitLogModal .clm-seg input:checked + span { background: var(--primary); color: white; }
+  #contactLogModal .clm-seg input:focus-visible + span, #visitLogModal .clm-seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
+  #contactLogModal .form-input, #visitLogModal .form-input { width: 100%; box-sizing: border-box; padding: 9px 12px; border: 1.5px solid var(--gray-200); border-radius: 8px; font: inherit; font-size: 14px; background: white; }
+  #contactLogModal .form-input:focus, #visitLogModal .form-input:focus { outline: none; border-color: var(--primary-light); }
+  #contactLogModal .clm-note, #visitLogModal .clm-note { margin-top: 8px; font-size: 13px; }
+  @media (max-width: 760px) { #contactLogModal .clm-body, #visitLogModal .clm-body { grid-template-columns: 1fr; } }
 </style>
 <div class="modal-overlay" id="contactLogModal">
   <div class="modal">
@@ -2887,6 +2888,62 @@ button.fu-tile.check span { color:#14606F; }
     <div class="clm-foot">
       <button class="btn btn-outline" onclick="closeModal('contactLogModal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveContactLog()">Save call</button>
+    </div>
+  </div>
+</div>
+
+<!-- FACE-TO-FACE VISIT MODAL (2026-10-22, her ask: the visit form holds every item Missouri requires,
+     19 CSR 15-8.400(5)(F)). Only used while her switch 'visitForm' is on; off = the old three questions. -->
+<div class="modal-overlay" id="visitLogModal">
+  <div class="modal">
+    <div class="clm-head">
+      <div class="modal-title">Face-to-face visit: <span id="vlm_name"></span></div>
+      <button class="modal-close" onclick="closeModal('visitLogModal')" aria-label="Close">×</button>
+    </div>
+    <div class="clm-body">
+      <div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="clm-field"><label class="clm-lbl" for="vlm_date">Date *</label><input type="date" id="vlm_date" class="form-input"></div>
+          <div class="clm-field"><label class="clm-lbl" for="vlm_time">Time *</label><input type="time" id="vlm_time" class="form-input"></div>
+        </div>
+        <div class="clm-field"><label class="clm-lbl" for="vlm_by">Who made the visit *</label>
+          <input type="text" id="vlm_by" class="form-input" oninput="vlmRefresh()" placeholder="Full name"></div>
+        <div id="vlm_att_warn" style="display:none;background:#fdedec;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--danger);margin:-4px 0 14px">
+          <strong>This looks like their attendant.</strong> Missouri does not allow the consumer's own attendant to make this visit.
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;color:#3A342C;font-weight:400"><input type="checkbox" id="vlm_att_temp" style="margin-top:3px">
+            <span>They only filled in as the attendant, 3 days or fewer in the last 30 days.</span></label>
+        </div>
+        <div class="clm-field"><label class="clm-lbl" for="vlm_present">Everyone who was there *</label>
+          <input type="text" id="vlm_present" class="form-input" placeholder="Names, for example the consumer, a daughter, the attendant"></div>
+        <label style="display:flex;gap:10px;align-items:flex-start;background:var(--gray-100);border-radius:8px;padding:10px 12px;font-size:13.5px;margin:0">
+          <input type="checkbox" id="vlm_inperson" style="margin-top:3px">
+          <span><strong>This visit was in person. *</strong><br><span style="color:var(--gray-600)">A phone or video call does not count as a face-to-face visit.</span></span></label>
+      </div>
+
+      <div>
+        <div class="clm-lbl" style="margin-bottom:2px">How services are being delivered</div>
+        <div class="clm-q"><div class="clm-row"><span>Is the attendant doing the tasks in the plan of care?</span>
+          <span class="clm-seg"><label><input type="radio" name="vlm_tasks" value="yes" onchange="vlmRefresh()"><span>Yes</span></label><label><input type="radio" name="vlm_tasks" value="no" onchange="vlmRefresh()"><span>No</span></label></span></div>
+          <input type="text" id="vlm_tasks_notes" class="form-input clm-note" data-show="vlm_tasks=no" placeholder="What is not being done?"></div>
+        <div class="clm-q"><div class="clm-row"><span>Are hours on track with what's authorized?</span>
+          <span class="clm-seg"><label><input type="radio" name="vlm_hours" value="yes" onchange="vlmRefresh()"><span>Yes</span></label><label><input type="radio" name="vlm_hours" value="no" onchange="vlmRefresh()"><span>No</span></label></span></div>
+          <input type="text" id="vlm_hours_notes" class="form-input clm-note" data-show="vlm_hours=no" placeholder="What's off with the hours?"></div>
+        <div id="vlm_dhss_alert" style="display:none;background:#fdedec;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--danger);margin:8px 0 2px">
+          <strong>Tell DHSS.</strong> Missouri requires it when services are not being given as authorized in the plan of care.
+        </div>
+        <div class="clm-field" style="margin:12px 0 16px"><label class="clm-lbl" for="vlm_service">Summary of how services are going *</label>
+          <textarea id="vlm_service" class="form-input" rows="3" placeholder="What you saw and heard about the care being given" style="resize:vertical"></textarea></div>
+        <div class="clm-lbl" style="margin-bottom:2px">Quality of care</div>
+        <div class="clm-q" style="border-bottom:0"><div class="clm-row"><span>How is the quality of care?</span>
+          <span class="clm-seg"><label><input type="radio" name="vlm_quality" value="good"><span>Good</span></label><label><input type="radio" name="vlm_quality" value="concerns"><span>Some concerns</span></label><label><input type="radio" name="vlm_quality" value="poor"><span>Poor</span></label></span></div></div>
+        <div class="clm-field" style="margin-bottom:0"><label class="clm-lbl" for="vlm_quality_notes">What makes you say that? *</label>
+          <textarea id="vlm_quality_notes" class="form-input" rows="3" placeholder="The home, the consumer, how they get along with the attendant" style="resize:vertical"></textarea></div>
+        <div id="vlm_err" role="alert" style="display:none;color:var(--danger);font-size:13px;font-weight:600;margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="clm-foot">
+      <button class="btn btn-outline" onclick="closeModal('visitLogModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveVisitLog()">Save visit</button>
     </div>
   </div>
 </div>
@@ -7791,6 +7848,7 @@ function clearOutreachLog() {
 // ============================================================
 function renderAutomations() {
   renderSwitches();
+  renderVisitFormSwitch();
   renderPendingOutreaches();
   renderQuickSendGrid();
   renderOutreachLog();
@@ -8203,6 +8261,7 @@ function logAnnualVisit(cid) {
   const consumers = getData('consumers');
   const c = consumers.find(x => x.id === cid);
   if (!c) return;
+  if (visitFormLive()) return openVisitLog(c);
   const date = prompt('Date of the face-to-face visit (YYYY-MM-DD):', new Date().toISOString().slice(0, 10));
   if (!date) return;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('Please use YYYY-MM-DD.'); return; }
@@ -8217,6 +8276,115 @@ function logAnnualVisit(cid) {
   if (typeof renderProfile === 'function' && document.getElementById('page-profile').classList.contains('active')) renderProfile();
   renderConsumers();
   renderOngoingRequirements();
+}
+
+// The full visit form (2026-10-22, her ask). 19 CSR 15-8.400(5)(F): in person only, and each visit's
+// record holds who made it, who was there, a service delivery summary, the quality of care, and the
+// date and time. 15-8.400 also bars a vendor employee from making the visit for a consumer they are
+// the attendant for, unless they only fill in (3 days or fewer in 30). Services not given as
+// authorized have to be reported to DHSS.
+// Her switch: agency_data 'visitForm' {live}, on the Settings page. Off = the three questions above.
+const visitFormLive = () => getObj('visitForm').live === true;
+let _vlm_cid = '';
+function _vlmAttendants(c) {
+  return getData('attendants').filter(a => String(a.consumer || '').trim().toUpperCase() === String(c.name || '').trim().toUpperCase())
+    .map(a => String(a.name || '').trim()).filter(Boolean);
+}
+// Same person if every word of the shorter name is in the longer one ("Kiersten" vs "Kiersten Ackerman").
+function _vlmSameName(a, b) {
+  const w = x => String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(t => t.length > 1);
+  const A = w(a), B = w(b);
+  if (!A.length || !B.length) return false;
+  const [s, l] = A.length <= B.length ? [A, B] : [B, A];
+  return s.every(t => l.includes(t));
+}
+function openVisitLog(c) {
+  _vlm_cid = c.id;
+  const now = new Date();
+  document.getElementById('vlm_name').textContent = c.name;
+  document.getElementById('vlm_date').value = now.toLocaleDateString('en-CA');
+  document.getElementById('vlm_time').value = '';
+  const me = _acWho().trim().split('@')[0];
+  document.getElementById('vlm_by').value = me ? me[0].toUpperCase() + me.slice(1) : '';
+  document.getElementById('vlm_present').value = c.name;
+  ['vlm_service', 'vlm_quality_notes', 'vlm_tasks_notes', 'vlm_hours_notes'].forEach(id => { document.getElementById(id).value = ''; });
+  ['vlm_inperson', 'vlm_att_temp'].forEach(id => { document.getElementById(id).checked = false; });
+  document.querySelectorAll('#visitLogModal input[type=radio]').forEach(r => { r.checked = false; });
+  document.getElementById('vlm_err').style.display = 'none';
+  vlmRefresh();
+  openModal('visitLogModal');
+}
+function vlmRefresh() {
+  document.querySelectorAll('#visitLogModal [data-show]').forEach(el => {
+    const [name, val] = el.dataset.show.split('=');
+    const picked = document.querySelector('input[name="' + name + '"]:checked')?.value;
+    el.style.display = (picked === val || el.value.trim()) ? '' : 'none';
+  });
+  const no = n => document.querySelector('input[name="' + n + '"]:checked')?.value === 'no';
+  document.getElementById('vlm_dhss_alert').style.display = (no('vlm_tasks') || no('vlm_hours')) ? 'block' : 'none';
+  const c = getData('consumers').find(x => x.id === _vlm_cid);
+  const by = document.getElementById('vlm_by').value;
+  document.getElementById('vlm_att_warn').style.display = c && _vlmAttendants(c).some(a => _vlmSameName(a, by)) ? 'block' : 'none';
+}
+function saveVisitLog() {
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === _vlm_cid);
+  if (!c) return;
+  const v = id => document.getElementById(id).value.trim();
+  const pick = n => document.querySelector('input[name="' + n + '"]:checked')?.value || '';
+  const rec = {
+    date: v('vlm_date'), time: v('vlm_time'), by: v('vlm_by'), present: v('vlm_present'),
+    inPerson: document.getElementById('vlm_inperson').checked,
+    tasks: pick('vlm_tasks'), tasksNote: v('vlm_tasks_notes'), hours: pick('vlm_hours'), hoursNote: v('vlm_hours_notes'),
+    service: v('vlm_service'), quality: pick('vlm_quality'), qualityNote: v('vlm_quality_notes'),
+  };
+  const attWarn = document.getElementById('vlm_att_warn').style.display !== 'none';
+  const missing = [];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rec.date)) missing.push('the date');
+  if (!rec.time) missing.push('the time');
+  if (!rec.by) missing.push('who made the visit');
+  if (!rec.present) missing.push('everyone who was there');
+  if (!rec.tasks || !rec.hours) missing.push('the two Yes or No questions');
+  if (!rec.service) missing.push('the summary of how services are going');
+  if (!rec.quality || !rec.qualityNote) missing.push('the quality of care');
+  let err = '';
+  if (rec.date > new Date().toLocaleDateString('en-CA')) err = 'The visit date cannot be in the future.';
+  else if (missing.length) err = 'Still needed: ' + missing.join(', ') + '.';
+  else if (!rec.inPerson) err = 'Only an in-person visit counts. If it was by phone or video, log it as the monthly check-in call instead.';
+  else if (attWarn && !document.getElementById('vlm_att_temp').checked) err = 'Their own attendant cannot make this visit. Please have someone else from the office go.';
+  const errEl = document.getElementById('vlm_err');
+  if (err) { errEl.textContent = err; errEl.style.display = 'block'; return; }
+  rec.attendantFillIn = attWarn;
+  rec.dhss = rec.tasks === 'no' || rec.hours === 'no';
+  // The older fields still read by anything that shows a visit.
+  rec.notes = rec.service + ' Quality of care: ' + ({ good: 'good', concerns: 'some concerns', poor: 'poor' })[rec.quality] + '. ' + rec.qualityNote;
+  rec.loggedAt = new Date().toISOString();
+  rec.loggedBy = _acWho();
+  if (!Array.isArray(c.homeVisits)) c.homeVisits = c.homeVisitDate ? [{ date: c.homeVisitDate, by: '', notes: '' }] : [];
+  c.homeVisits.push(rec);
+  if (!c.homeVisitDate || rec.date >= c.homeVisitDate) c.homeVisitDate = rec.date;
+  setData('consumers', consumers);
+  closeModal('visitLogModal');
+  if (typeof renderProfile === 'function' && document.getElementById('page-profile').classList.contains('active')) renderProfile();
+  renderConsumers();
+  renderOngoingRequirements();
+  if (rec.dhss) setTimeout(() => alert('Tell DHSS: services for ' + c.name + ' are not being given as authorized in the plan of care. Missouri requires the vendor to report this.'), 200);
+}
+// The switch row on Settings. Everyone sees it; only Samantha changes it (same people as the Switches card).
+function renderVisitFormSwitch() {
+  const host = document.getElementById('visitFormSwitch');
+  if (!host) return;
+  const sw = getObj('visitForm'), on = sw.live === true, me = _acWho().trim().toLowerCase();
+  host.innerHTML = '<div><div style="font-weight:700;font-size:13.5px">Face-to-face visit form: ' + (on ? 'On' : 'Off') + '</div>' +
+    '<div style="font-size:12.5px;color:var(--gray-800)">On: Log the visit opens one form with every item Missouri requires (time, who was there, in person, service delivery, quality of care). Off: the three short questions as before.' +
+    (sw.by ? ' Changed by ' + esc(sw.by) + '.' : '') + '</div></div>' +
+    (LD_WHO_OWNERS.includes(me) ? '<button class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" onclick="visitFormSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button>' : '');
+}
+function visitFormSwitch(on) {
+  const me = _acWho().trim().toLowerCase();
+  if (!LD_WHO_OWNERS.includes(me)) return;
+  setObj('visitForm', { live: !!on, by: me.split('@')[0], at: new Date().toISOString() });
+  renderVisitFormSwitch();
 }
 
 // ── BULK CONTACT BACKFILL ──────────────────────────────────────────────────
@@ -8438,6 +8606,11 @@ function buildAuditBinder(c, from, to) {
                                         gaps.push('(H)1 — 90-day upload deadline passed ' + Math.abs(clk.days) + ' days ago');
   if (!auths.length)                    gaps.push('(H)2 — no service authorization on file covering this period');
   if (!visits.length)                   gaps.push('(5)(F) — no annual FACE-TO-FACE visit recorded in this period');
+  // With her visit form on: a visit missing any item Missouri lists is a gap too.
+  if (visitFormLive()) visits.forEach(v => {
+    const miss = [!v.time && 'time', !v.by && 'who made it', !v.present && 'who was there', !v.service && 'service delivery summary', !v.quality && 'quality of care'].filter(Boolean);
+    if (miss.length) gaps.push('(5)(F) — visit on ' + v.date + ' is missing: ' + miss.join(', '));
+  });
   if (req.monthly.missed)               gaps.push('(5)(F) — ' + req.monthly.missed + ' month(s) with no case-management contact in the last year');
   if (!c.desRegistered && des.known && des.crossed)
                                         gaps.push('DES — passed $1,000 in ' + des.crossed + ' and still not registered in UInteract');
@@ -8515,9 +8688,18 @@ row('DES / unemployment', c.desRegistered ? 'Registered' + (c.desEan ? ' — EAN
 
 '<h2>5. Annual face-to-face visits — (5)(F)</h2>' +
 (visits.length
-  ? '<table><thead><tr><th>Date</th><th>Made by</th><th>Findings</th></tr></thead><tbody>' +
-    visits.map(v => '<tr><td>' + esc2(v.date) + '</td><td>' + (v.by ? esc2(v.by) : '<span class="none">not recorded</span>') +
-      '</td><td>' + esc2(v.notes || '') + '</td></tr>').join('') + '</tbody></table>'
+  ? '<table><thead><tr><th>Date and time</th><th>Made by</th><th>Who was there</th><th>Service delivery</th><th>Quality of care</th></tr></thead><tbody>' +
+    visits.map(v => {
+      const nr = '<span class="none">not recorded</span>';
+      const q = { good: 'Good', concerns: 'Some concerns', poor: 'Poor' }[v.quality];
+      const svc = v.service
+        ? esc2(v.service) + (v.tasks === 'no' ? '<br><b>Plan of care tasks not done:</b> ' + esc2(v.tasksNote || '') : '') +
+          (v.hours === 'no' ? '<br><b>Hours off:</b> ' + esc2(v.hoursNote || '') : '') + (v.inPerson ? '<br><i>In person.</i>' : '')
+        : (v.notes ? esc2(v.notes) : nr);
+      return '<tr><td>' + esc2(v.date) + (v.time ? ' ' + esc2(v.time) : '<br>' + nr.replace('not recorded', 'time not recorded')) + '</td><td>' + (v.by ? esc2(v.by) : nr) +
+        '</td><td>' + (v.present ? esc2(v.present) : nr) + '</td><td>' + svc +
+        '</td><td>' + (q ? '<b>' + q + '.</b> ' + esc2(v.qualityNote || '') : (v.service ? nr : '<span class="none">see notes</span>')) + '</td></tr>';
+    }).join('') + '</tbody></table>'
   : '<p class="none">No face-to-face visit recorded in this period. Phone and video do not satisfy the requirement.</p>') +
 
 '<h2>6. Attendants</h2>' +
