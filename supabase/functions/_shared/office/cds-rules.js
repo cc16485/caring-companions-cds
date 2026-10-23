@@ -22,6 +22,18 @@
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
   const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+  // One meaning of "active" on Today and the Dashboard (her ask 2026-10-22, for Zach): a hub
+  // consumer not marked inactive whose attendant worked a WellSky shift in the last 31 days.
+  // people = the WellSky list (CDSWellSky.consumersNow people + leftOut); with no WellSky
+  // report yet it falls back to everyone not marked inactive, so nothing goes missing.
+  const defaultKey = n => String(n || '').toLowerCase().replace(/[^a-z]/g, '');
+  function activeNow(consumers, people, nameKey) {
+    const hub = (consumers || []).filter(isActive);
+    if (!people) return { live: false, list: hub };
+    const key = nameKey || defaultKey;
+    const seen = new Set(people.map(p => p.key));
+    return { live: true, list: hub.filter(c => seen.has(key(c.name))) };
+  }
 
   // The 90-day EIN clock, measured from the CDS start date.
   function einClock(c, now) {
@@ -149,6 +161,11 @@
     now = now || new Date();
     const todayIso = isoLocal(now);
     const consumers = (data.consumers || []).filter(isActive);
+    // Steps 2 and 3 (money, case files) count only consumers working now, the same people the
+    // Dashboard counts. Step 1 stays on everyone not marked inactive: a state deadline does not
+    // stop because the shifts did. Hub-only consumers with no shifts are the closings step's job.
+    const now31 = data.wsPeople ? activeNow(data.consumers, data.wsPeople, data.nameKey).list : consumers;
+    const nowNames = new Set(now31.map(c => String(c.name).toUpperCase()));
     const wages = (data.attendantWages && data.attendantWages.entries) || [];
     const steps = [];
 
@@ -171,14 +188,14 @@
     });
 
     const records = (data.authorizations && data.authorizations.records) || {};
-    const auths = Object.values(records);
+    const auths = Object.values(records).filter(a => !data.wsPeople || nowNames.has(String(a.consumer || a.name || '').toUpperCase()));
     const expired = auths.filter(a => a.planEnd && new Date(a.planEnd + 'T12:00:00') < now).length;
     const expiring = auths.filter(a => {
       if (!a.planEnd) return false;
       const d = Math.round((new Date(a.planEnd + 'T12:00:00') - now) / DAY);
       return d >= 0 && d <= 60;
     }).length;
-    const noAuth = consumers.filter(c => !auths.some(a =>
+    const noAuth = now31.filter(c => !auths.some(a =>
       String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase())).length;
     steps.push({
       n: 2, title: 'Protect the money',
@@ -191,7 +208,7 @@
     });
 
     let visitsOverdue = 0, visitsSoon = 0, monthDue = 0;
-    consumers.forEach(c => {
+    now31.forEach(c => {
       const r = ongoingRequirements(c, now);
       if (r.annual.overdue) visitsOverdue++;
       else if (r.annual.soon) visitsSoon++;
@@ -645,19 +662,15 @@
     const key = o.nameKey || (n => String(n || '').toLowerCase().replace(/[^a-z]/g, ''));
     const days = d => (now - new Date(d)) / DAY;
     const hub = (o.consumers || []);
-    let consumers, notInWellSky = [], wellSkyOnly = [], live = false;
-    if (o.wsPeople) {
-      live = true;
-      const byKey = new Map(hub.map(c => [key(c.name), c]));
-      const seen = new Set();
-      consumers = [];
-      o.wsPeople.forEach(p => {
-        const c = byKey.get(p.key);
-        seen.add(p.key);
-        if (c) consumers.push(c); else wellSkyOnly.push(p.name);
-      });
-      notInWellSky = hub.filter(isActive).filter(c => !seen.has(key(c.name))).map(c => c.name);
-    } else consumers = hub.filter(isActive);
+    const a = activeNow(hub, o.wsPeople, key);
+    const live = a.live, consumers = a.list;
+    let notInWellSky = [], wellSkyOnly = [];
+    if (live) {
+      const inHub = new Set(hub.map(c => key(c.name)));
+      wellSkyOnly = o.wsPeople.filter(p => !inHub.has(p.key)).map(p => p.name);
+      const working = new Set(consumers);
+      notInWellSky = hub.filter(isActive).filter(c => !working.has(c)).map(c => c.name);
+    }
     const count = live ? o.wsPeople.length : consumers.length;
     const ym = isoLocal(now).slice(0, 7);
     const checkedIn = consumers.filter(c => c.contacts && c.contacts[ym]).length;
@@ -691,7 +704,7 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isActive, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    dailyRoutine, isActive, activeNow, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };

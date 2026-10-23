@@ -242,6 +242,8 @@
   // 8am email. check = agency_data 'wellskyCheck'; reviewed = 'wellskyReviewed'.
   // Nothing at all until the first pull has happened, so the office is not told about
   // a check that was never switched on.
+  // Items with system: true are about the check itself (not run, report missing), not about a
+  // consumer. The hub shows them to the owner only (her ask 2026-10-22: Zach cannot fix them).
   function items(check, reviewed, now) {
     if (!check || (!check.lastRun && !check.analyticsRun)) return [];
     now = now || new Date();
@@ -253,9 +255,9 @@
     if (check.analyticsRun) {
       const a = check.analytics || {};
       const got = Math.min(Date.parse((a.firstLast && a.firstLast.at) || 0) || 0, Date.parse((a.authLogs && a.authLogs.at) || 0) || 0);
-      if (!check.analyticsRun.ok) out.push({ t: tag + 'WellSky email report problem: ' + check.analyticsRun.why, go: 'authorizations', bad: true });
+      if (!check.analyticsRun.ok) out.push({ t: tag + 'WellSky email report problem: ' + check.analyticsRun.why, go: 'authorizations', bad: true, system: true });
       else if (!got || now - got > STALE_HOURS * 36e5)
-        out.push({ t: tag + 'The WellSky email reports have not all arrived ' + (got ? 'since ' + short(isoLocal(new Date(got))) : 'yet') + '. Check Reports > Analytics > Schedules in WellSky.', go: 'authorizations', bad: true });
+        out.push({ t: tag + 'The WellSky email reports have not all arrived ' + (got ? 'since ' + short(isoLocal(new Date(got))) : 'yet') + '. Check Reports > Analytics > Schedules in WellSky.', go: 'authorizations', bad: true, system: true });
     }
     if (!check.lastRun) return out;
     const okAt = Math.min(Date.parse((check.shifts && check.shifts.at) || 0) || 0, Date.parse((check.auths && check.auths.at) || 0) || 0,
@@ -263,9 +265,9 @@
     if (!okAt || now - okAt > STALE_HOURS * 36e5) {
       out.push({ t: tag + 'The WellSky check has not run ' + (okAt ? 'since ' + short(isoLocal(new Date(okAt))) : 'yet') +
                     '. Log in to WellSky in Chrome and leave the Mac on.' + (check.lastRun.ok ? '' : ' Last try: ' + check.lastRun.why),
-                 go: 'authorizations', bad: true });
+                 go: 'authorizations', bad: true, system: true, since: okAt ? isoLocal(new Date(okAt)) : '' });
     } else if (!check.lastRun.ok) {
-      out.push({ t: tag + 'The last WellSky check did not finish: ' + check.lastRun.why, go: 'authorizations', bad: true });
+      out.push({ t: tag + 'The last WellSky check did not finish: ' + check.lastRun.why, go: 'authorizations', bad: true, system: true });
     }
     const long = longShifts(check.shifts, reviewed, today);
     if (long.length) out.push({ t: tag + plural(long.length, 'long shift', 'long shifts') + ' to check before payroll', go: 'authorizations', bad: true,
