@@ -403,7 +403,56 @@
     return { known: true, days, cutoff, asOf, people };
   }
 
+  // ---------- WellSky says the authorization is active (her yes 2026-10-22) ----------
+  // The hub's authorization dates come from the DSDS care plan PDFs and are the official
+  // record; many are simply old because the new care plan was never uploaded. WellSky's
+  // own list says which personal care authorizations are Active right now. We never copy
+  // WellSky's dates into the hub (they are typed by hand into the label: "4/40/2027"), but an
+  // Active WellSky authorization stops the hub calling a consumer expired or missing.
+  // Sources: the authorization report (wellskyCheck.auths, Chrome) and the emailed care logs
+  // (analytics.authLogs: shifts in the last 7 days with their authorization). Either one
+  // counts only if it is no older than WS_AUTH_FRESH_DAYS.
+  const WS_AUTH_FRESH_DAYS = 7;
+  // The last date written in a label, only when it is a real date ("4/40/2027" is not).
+  function labelEnd(label) {
+    const all = [...String(label || '').matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)];
+    if (!all.length) return '';
+    const m = all[all.length - 1], mo = +m[1], d = +m[2], y = +m[3];
+    const dt = new Date(y, mo - 1, d, 12);
+    if (mo < 1 || mo > 12 || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return '';
+    return isoLocal(dt);
+  }
+  function wsActiveAuths(check, now) {
+    now = now || new Date();
+    const fresh = at => at && (now - new Date(at)) <= WS_AUTH_FRESH_DAYS * 864e5;
+    const out = {};
+    const put = (name, label, perMonth, from, at) => {
+      const k = nameKey(name);
+      if (out[k] && out[k].from === 'report') return;   // the report has the hours per month
+      out[k] = { name: firstLast(name), label: String(label || '').trim(), end: labelEnd(label), perMonth: perMonth || null, from, at };
+    };
+    const rep = check && check.auths;
+    if (rep && rep.consumers && fresh(rep.at))
+      rep.consumers.forEach(c => (c.auths || []).filter(a => isPersonalCare(a) && /^active$/i.test(a.status || ''))
+        .forEach(a => put(c.name, a.label, a.perMonth, 'report', rep.at)));
+    const logs = check && check.analytics && check.analytics.authLogs;
+    if (logs && logs.shifts && fresh(logs.at))
+      logs.shifts.filter(x => x.auth && !/case management|financial management/i.test(x.auth))
+        .forEach(x => put(x.consumer, x.auth, null, 'carelogs', logs.at));
+    return out;
+  }
+  // One consumer: the hub's record against WellSky. state: 'ok' (hub current), 'wellsky'
+  // (hub old or missing, WellSky Active), 'expired', 'none'. differs: the WellSky label ends
+  // on a different day than the hub's record.
+  function authView(hubAuth, ws, now) {
+    const today = isoLocal(now || new Date());
+    const hubEnd = (hubAuth && hubAuth.planEnd) || '';
+    const hubOk = !!hubEnd && hubEnd >= today;
+    const state = hubOk ? 'ok' : ws ? 'wellsky' : hubAuth ? 'expired' : 'none';
+    return { state, hubEnd, ws: ws || null, differs: !!(ws && ws.end && hubEnd && ws.end !== hubEnd) };
+  }
+
   root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
-                      mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL, noShifts, NO_SHIFT_DAYS,
+                      mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL, noShifts, NO_SHIFT_DAYS, wsActiveAuths, authView, labelEnd, WS_AUTH_FRESH_DAYS,
                       LONG_HOURS, LONG_FACTOR, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
