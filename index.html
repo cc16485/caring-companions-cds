@@ -2613,7 +2613,7 @@ button.fu-tile.check span { color:#14606F; }
 <!-- ==================== BACKUP ATTENDANT POOL ==================== -->
 <div id="page-backuppool" class="page">
   <div class="section-header">
-    <div class="section-title">🤝 Caregiver Pool</div>
+    <div class="section-title">Sign-ups and county gaps</div>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn btn-outline" onclick="renderBackupPool()" style="font-size:12px">↻ Refresh</button>
       <button class="btn btn-primary" onclick="bpOpenAdd()" style="font-size:12px">+ Add a caregiver</button>
@@ -2626,8 +2626,8 @@ button.fu-tile.check span { color:#14606F; }
   <div class="card" style="margin-bottom:18px;border-left:4px solid var(--teal, #54bdb8)">
     <div class="card-title"><span class="icon">🔗</span> The sign-up link to share</div>
     <div style="font-size:12.5px;color:var(--gray-600);line-height:1.6;margin-bottom:10px">
-      Anyone who fills this in lands in the list below. Post it on Facebook, text it to an attendant who
-      knows someone, or hand it out. No login, works on a phone, and it never asks for a Social Security number.
+      The join page on findcdscaregivers.com. People who sign up show in the Directory's Caregivers tab.
+      Post it on Facebook, text it to an attendant who knows someone, or hand it out. Works on a phone.
       <br><br>The public page is called <strong>"Join our caregiver list"</strong>, not a backup list, because these
       people can be hired full time or part time as well as for fill-in cover. Calling it a backup list publicly
       would put people off applying.
@@ -4661,8 +4661,16 @@ const SECTIONS = [
       { page: 'careplans',      label: 'Care plans' } ] },
   { id: 'attendants', label: 'Attendants',  tabs: [
       { page: 'activeattendants', label: 'Active Attendants' },
-      { page: 'caregivermatch',   label: 'Caregiver List' },
       { page: 'evvcorrections',   label: 'EVV Forms' } ] },
+  // Caregiver Directory (her yes 2026-10-22): findcdscaregivers.com in its own section.
+  // Four tabs are views inside Caregiver Match (DIR_VIEWS); the last is the old Caregiver Pool page.
+  // Tasks and Messages open from the tiles at the top of the Directory (#dirtasks, #dirmessages also work).
+  { id: 'directory',  label: 'Caregiver Directory', tabs: [
+      { page: 'dirreview',   label: 'Approve profiles' },
+      { page: 'dirnetwork',  label: 'Caregivers' },
+      { page: 'dirintros',   label: 'Family requests' },
+      { page: 'dirfamilies', label: 'Families and eligibility' },
+      { page: 'backuppool',  label: 'Sign-ups and county gaps' } ] },
   { id: 'money',      label: 'Money',       tabs: [] },
   { id: 'help',       label: 'Help',        quiet: true, tabs: [
       { page: 'calendar',    label: 'Deadlines' },
@@ -4683,7 +4691,9 @@ const PAGE_TO_SECTION = (() => {
     dashboard: 'today', today: 'today', followups: 'today', numbers: 'today', goals: 'today',
     pipeline: 'leads', statesubmissions: 'leads', leadprofile: 'leads', leads: 'leads',
     profile: 'consumers',
-    attendants: 'attendants', roster: 'attendants', backuppool: 'attendants', caregiverpool: 'attendants',
+    attendants: 'attendants', roster: 'attendants',
+    caregivermatch: 'directory', backuppool: 'directory', caregiverpool: 'directory', directory: 'directory',
+    dirtasks: 'directory', dirmessages: 'directory',
     payroll: 'money', financials: 'money', quarterly: 'money', money: 'money',
     guides: 'help', help: 'help',
     automations: 'help', switches: 'help', settings: 'help'
@@ -4693,15 +4703,17 @@ const PAGE_TO_SECTION = (() => {
 
 // Landing page when a section is opened by name rather than a specific page.
 const SECTION_DEFAULT = { today: 'dashboard', dashboard: 'dashboard', leads: 'pipeline', consumers: 'consumers',
-                          attendants: 'activeattendants', money: 'payroll', help: 'calendar', guides: 'calendar',
+                          attendants: 'activeattendants', directory: 'dirreview', money: 'payroll', help: 'calendar', guides: 'calendar',
                           switches: 'automations', settings: 'automations' };
 
 // Spellings that are not themselves page ids, kept because they are live links.
 // #attendants is the GoHighLevel "Attendants" link: it now opens Active
 // Attendants. The old roster is still there as #roster (linked from a profile).
+// #caregivermatch (old Caregiver List link) opens the Directory; #caregiverpool the sign-ups page.
 const PAGE_ALIASES = {
-  caregiverpool: 'caregivermatch',
-  backuppool: 'caregivermatch',
+  caregiverpool: 'backuppool',
+  caregivermatch: 'dirreview',
+  findcdscaregivers: 'dirreview', caregiverdirectory: 'dirreview',
   guides: 'calendar', help: 'calendar',
   today: 'dashboard',
   switches: 'automations', settings: 'automations',
@@ -4710,9 +4722,11 @@ const PAGE_ALIASES = {
 
 // Pages shown together, one above the other, so a section is one screen.
 const STACKED = {
-  caregivermatch: ['backuppool'],
   payroll: ['financials']
 };
+// Caregiver Directory tabs that are views inside Caregiver Match.
+const DIR_VIEWS = { dirreview: 'review', dirnetwork: 'network', dirintros: 'intros', dirfamilies: 'families', dirtasks: 'tasks', dirmessages: 'messages' };
+const DIR_PAGE = Object.fromEntries(Object.entries(DIR_VIEWS).map(([k, v]) => [v, k]));
 const STACK_HOME = { statesubmissions: 'pipeline', financials: 'payroll' };
 
 function renderMainTabs(activeSection) {
@@ -4745,6 +4759,9 @@ function showPage(id) {
   // A stacked page opens its whole screen, scrolled to that part.
   const scrollTo = STACK_HOME[id] ? id : null;
   if (STACK_HOME[id]) id = STACK_HOME[id];
+  // A Caregiver Directory tab shows the Caregiver Match page on that view.
+  const dirView = DIR_VIEWS[id], navPage = id;
+  if (dirView) id = 'caregivermatch';
   // Hide all .page divs
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   // Unhighlight all tabs
@@ -4782,7 +4799,7 @@ function showPage(id) {
   // bar by array position, which silently broke the moment a tab was added.
   const section = PAGE_TO_SECTION[roster ? 'roster' : id] || 'today';
   renderMainTabs(section);
-  renderSectionNav(section, roster ? 'activeattendants' : id);
+  renderSectionNav(section, roster ? 'activeattendants' : navPage);
 
   if (id === 'dashboard' || id === 'numbers' || id === 'goals') updateDashboard();
   if (id === 'automations') {
@@ -4809,8 +4826,8 @@ function showPage(id) {
   if (id === 'taxcompliance') { renderTaxCompliance(); renderEmpeon(); renderComplianceClocks(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
-  if (id === 'backuppool' || id === 'caregivermatch') renderBackupPool();
-  if (id === 'caregivermatch') renderCaregiverMatch();
+  if (id === 'backuppool') renderBackupPool();
+  if (id === 'caregivermatch') renderCaregiverMatch(dirView);
   if (id === 'activeattendants') { renderActiveAttendants(); renderAttendantCheck(); }
   if (id === 'profile') renderProfile();
   if (id === 'followups') renderFollowups(true);
@@ -4886,17 +4903,18 @@ async function renderActiveAttendants() {
   }
 }
 
-async function renderCaregiverMatch() {
-  if (_cmMounted) return;
+let _cm = null;
+async function renderCaregiverMatch(view) {
+  if (_cmMounted) { if (_cm) _cm.setTab(view); return; }
   const root = document.getElementById('cm_root');
   if (!document.getElementById('cm_css')) {
     ['caregiver-match/match.css', 'caregiver-match/hub-match.css'].forEach((h, i) => {
       const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = h + '?v=1'; if (!i) l.id = 'cm_css'; document.head.appendChild(l);
     });
   }
-  root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading Caregiver Match…</div>';
+  root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading the Caregiver Directory…</div>';
   try {
-    const { mountHubMatch } = await import('./caregiver-match/hub-match.js?v=1');
+    const { mountHubMatch } = await import('./caregiver-match/hub-match.js?v=2');
     const api = async (action, input = {}) => {
       const { data } = await _db.auth.getSession();
       const jwt = data && data.session ? data.session.access_token : '';
@@ -4911,7 +4929,9 @@ async function renderCaregiverMatch() {
       return body;
     };
     root.innerHTML = '';
-    mountHubMatch(root, { api });
+    // The section tabs pick the view; a tile inside switches it, so the tabs follow.
+    _cm = mountHubMatch(root, { api, tab: view || 'review', hideTabs: true,
+      onTab: t => renderSectionNav('directory', DIR_PAGE[t] || 'dirreview') });
     _cmMounted = true;
   } catch (e) {
     root.innerHTML = '<div style="padding:24px;color:#a8342a">Caregiver Match could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
@@ -13488,7 +13508,8 @@ function initApp() {
 // caseload actually is, not alphabetically, so the common picks are at the top.
 // The one place the public sign-up address is written down. If you point
 // findcdscaregivers.com at the sign-up page, change this line and nothing else.
-const BP_SIGNUP_URL = 'https://hub.caringcds.com/caregiver-list';
+// The join page on findcdscaregivers.com (2026-10-22 Caregiver Directory); the old hub.caringcds.com/caregiver-list still works.
+const BP_SIGNUP_URL = 'https://findcdscaregivers.com/caregivers/';
 
 const CDS_COUNTIES = [
   'Greene','Christian','Jasper','Taney','Polk','Webster','Lawrence','Newton',

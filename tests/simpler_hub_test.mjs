@@ -79,8 +79,8 @@ const at = d => new Date(d + 'T12:00:00');
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   const a = html.indexOf('const SECTIONS = ['), b = html.indexOf('function renderMainTabs(');
   const ctx = {};
-  vm.runInNewContext(html.slice(a, b) + ';this.out={SECTIONS,PAGE_TO_SECTION,SECTION_DEFAULT,PAGE_ALIASES,STACKED,STACK_HOME};', ctx);
-  const { SECTIONS, PAGE_TO_SECTION, SECTION_DEFAULT, PAGE_ALIASES, STACKED, STACK_HOME } = ctx.out;
+  vm.runInNewContext(html.slice(a, b) + ';this.out={SECTIONS,PAGE_TO_SECTION,SECTION_DEFAULT,PAGE_ALIASES,STACKED,STACK_HOME,DIR_VIEWS};', ctx);
+  const { SECTIONS, PAGE_TO_SECTION, SECTION_DEFAULT, PAGE_ALIASES, STACKED, STACK_HOME, DIR_VIEWS } = ctx.out;
   const pages = new Set([...html.matchAll(/id="page-([a-z0-9]+)"/g)].map(m => m[1]));
   const guideSubs = ['calendar', 'compliance', 'onboarding', 'reference'];
   // the same steps showPage takes
@@ -89,6 +89,7 @@ const at = d => new Date(d + 'T12:00:00');
     if (id === 'roster') return { page: 'attendants', section: PAGE_TO_SECTION.roster };
     if (SECTION_DEFAULT[id] && !pages.has(id)) id = SECTION_DEFAULT[id];
     if (STACK_HOME[id]) id = STACK_HOME[id];
+    if (DIR_VIEWS[id]) id = 'caregivermatch';   // a Caregiver Directory tab is a view inside Caregiver Match
     const page = id === 'pipeline' ? 'consumers' : guideSubs.includes(id) ? 'guides' : id;
     return { page, section: PAGE_TO_SECTION[id] };
   };
@@ -96,11 +97,12 @@ const at = d => new Date(d + 'T12:00:00');
                'compliance', 'onboarding', 'reference', 'quarterly', 'financials', 'statesubmissions', 'payroll', 'taxcompliance',
                'authorizations', 'careplans', 'profile', 'caregivermatch', 'backuppool', 'caregiverpool', 'activeattendants',
                'leads', 'money'];
-  const NEW = ['today', 'help', 'switches', 'roster', 'leadprofile'];
+  const NEW = ['today', 'help', 'switches', 'roster', 'leadprofile', 'directory', 'dirreview', 'dirnetwork', 'dirintros', 'dirfamilies', 'dirtasks', 'dirmessages', 'findcdscaregivers'];
   const want = { dashboard: 'today', pipeline: 'leads', statesubmissions: 'leads', leads: 'leads', attendants: 'attendants',
                  evvcorrections: 'attendants', automations: 'help', guides: 'help', quarterly: 'money', financials: 'money',
                  payroll: 'money', money: 'money', consumers: 'consumers', taxcompliance: 'consumers', profile: 'consumers',
-                 caregiverpool: 'attendants', backuppool: 'attendants', today: 'today', help: 'help', switches: 'help', roster: 'attendants' };
+                 caregiverpool: 'directory', backuppool: 'directory', caregivermatch: 'directory', directory: 'directory',
+                 dirtasks: 'directory', dirmessages: 'directory', findcdscaregivers: 'directory', today: 'today', help: 'help', switches: 'help', roster: 'attendants' };
   OLD.concat(NEW).forEach(h => {
     const r = resolve(h);
     ok(pages.has(r.page), '#' + h + ' opens a real page (' + r.page + ')');
@@ -110,14 +112,18 @@ const at = d => new Date(d + 'T12:00:00');
   ok(resolve('attendants').page === 'activeattendants', 'the GoHighLevel Attendants link opens Active Attendants');
   ok(resolve('statesubmissions').page === 'consumers', 'State Submissions opens the Leads screen');
   ok(resolve('financials').page === 'payroll', 'Financials opens the Money screen');
-  ok(resolve('backuppool').page === 'caregivermatch', 'the old pool opens the Caregiver List');
+  // 2026-10-22 Caregiver Directory section (her yes): the pool is its own tab there, the old Caregiver List link opens the Directory.
+  ok(resolve('backuppool').page === 'backuppool' && resolve('caregiverpool').page === 'backuppool', 'the old pool links open Sign-ups and county gaps');
+  ok(resolve('caregivermatch').page === 'caregivermatch' && resolve('directory').page === 'caregivermatch', 'the old Caregiver List link and #directory open the Directory');
+  ok(!SECTIONS.find(s => s.id === 'attendants').tabs.some(t => t.page === 'caregivermatch'), 'Caregiver List is no longer under Attendants');
+  ok(Object.values(DIR_VIEWS).join() === 'review,network,intros,families,tasks,messages', 'each Directory view is a Caregiver Match view');
   Object.entries(STACKED).forEach(([k, v]) => v.forEach(x => ok(pages.has(x) && pages.has(k === 'pipeline' ? 'consumers' : k), 'stacked ' + k + ' + ' + x)));
-  SECTIONS.forEach(s => s.tabs.forEach(t => ok(pages.has(t.page) || guideSubs.includes(t.page), 'tab ' + t.label + ' has a page')));
-  // 2026-10-22 (her ask): Switches became the Settings tab at the right of Help, so six sections.
-  ok(SECTIONS.length === 6 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,money,help', 'the six sections, in order');
+  SECTIONS.forEach(s => s.tabs.forEach(t => ok(pages.has(t.page) || guideSubs.includes(t.page) || DIR_VIEWS[t.page], 'tab ' + t.label + ' has a page')));
+  // 2026-10-22 (her ask): Switches became the Settings tab at the right of Help; Caregiver Directory got its own section.
+  ok(SECTIONS.length === 7 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,directory,money,help', 'the seven sections, in order');
   ok(SECTIONS.find(s => s.id === 'help').tabs.map(t => t.label).join() === 'Deadlines,Compliance,Onboarding,Reference,Settings', 'Help ends with a Settings tab, the old Switches page');
   const tabCount = SECTIONS.reduce((t, s) => t + s.tabs.length, 0);
-  ok(tabCount <= 16, 'fewer tabs than before (' + tabCount + ', was 22; Settings is now a tab, Goals has its own tab)');
+  ok(tabCount <= 20, 'tabs (' + tabCount + '; Settings, Goals and the 5 Caregiver Directory tabs)');
   const today = SECTIONS.find(x => x.id === 'today');
   ok(today.tabs.map(t => t.page).join() === 'dashboard,followups,numbers,goals', 'Today has Today, Follow-ups, Dashboard and Goals tabs (her calls 10-22)');
   ok(resolve('numbers').page === 'numbers' && resolve('numbers').section === 'today', '#numbers opens the Dashboard tab inside Today');

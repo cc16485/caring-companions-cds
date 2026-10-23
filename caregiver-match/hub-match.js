@@ -1,5 +1,7 @@
 // CDS Hub · Attendants · Caregiver Match (office screens H1 to H6).
-// mountHubMatch(el, { api, onOpenLink, practice })
+// mountHubMatch(el, { api, onOpenLink, practice, tab, hideTabs, onTab }) -> { setTab }
+//   2026-10-22 Caregiver Directory section (her yes): the hub's section tabs pick the view
+//   (tab / setTab), so the inner tab bar is hidden (hideTabs) and onTab(view) tells the hub when a tile switches it.
 //   api(action, input) -> calls the cds-match server as staff (the Hub passes its sign-in).
 // Every button goes through the server, which checks the rules again.
 
@@ -51,7 +53,7 @@ function msgResult(r) {
 
 export function mountHubMatch(el, opts) {
   const api = opts.api;
-  const S = { tab: 'intros', cgFilter: 'all', cgId: null, famId: null, famFilter: 'review' };
+  const S = { tab: opts.tab || 'intros', cgFilter: 'all', cgId: null, famId: null, famFilter: 'review' };
   el.classList.add('cm');
   render();
 
@@ -60,7 +62,7 @@ export function mountHubMatch(el, opts) {
     try { ov = await api('overview'); } catch (e) { el.innerHTML = `<div class="cm-app wide"><div class="cm-card warn">${esc(e.message)}</div></div>`; return; }
     const t = ov.tiles;
     el.innerHTML = `<div class="cm-app wide">
-      <div class="cm-row between cm-wrap"><div><h1 style="font-size:1.6rem">Caregiver Match</h1><p class="cm-sub">CDS Hub · Attendants</p></div>
+      <div class="cm-row between cm-wrap"><div><h1 style="font-size:1.6rem">Caregiver Directory</h1><p class="cm-sub">findcdscaregivers.com · caregivers who chose to be listed, and families looking for one</p></div>
         ${ov.mode === 'practice' ? '<span class="cm-pill prog">Practice mode: fictional people, nothing is sent</span>' : ''}</div>
       <div class="hm-tiles">
         ${tile(t.requests_waiting, 'Requests waiting on a caregiver', t.requests_waiting > 0, 'intros')}
@@ -74,11 +76,11 @@ export function mountHubMatch(el, opts) {
         ${tile(t.open_tasks, 'Open tasks', t.open_tasks > 0, 'tasks')}
         ${tile(t.messages_not_sent, 'Messages held or failed', t.messages_not_sent > 0, 'messages')}
       </div>
-      <div class="cm-tabs" role="tablist">${[['intros', 'Introductions'], ['families', 'Families and eligibility'], ['network', 'Caregiver Network'], ['review', 'Review queue'], ['tasks', 'Tasks'], ['messages', 'Messages']]
+      <div class="cm-tabs" role="tablist"${opts.hideTabs ? ' hidden' : ''}>${[['intros', 'Introductions'], ['families', 'Families and eligibility'], ['network', 'Caregiver Network'], ['review', 'Review queue'], ['tasks', 'Tasks'], ['messages', 'Messages']]
         .map(([k, l]) => `<button role="tab" data-t="${k}" aria-selected="${S.tab === k && !S.cgId && !S.famId}">${l}</button>`).join('')}</div>
       <div id="hv"></div></div>`;
     $$('[data-t]', el).forEach(b => b.onclick = () => { S.tab = b.dataset.t; S.cgId = null; S.famId = null; render(); });
-    $$('[data-tile]', el).forEach(b => b.onclick = () => { S.tab = b.dataset.tile; S.cgId = null; S.famId = null; render(); });
+    $$('[data-tile]', el).forEach(b => b.onclick = () => { S.tab = b.dataset.tile; S.cgId = null; S.famId = null; if (opts.onTab) opts.onTab(S.tab); render(); });
     const hv = $('#hv', el);
     if (S.cgId) return caregiverDetail(hv, S.cgId);
     if (S.famId) return familyReview(hv, S.famId);
@@ -349,7 +351,7 @@ export function mountHubMatch(el, opts) {
       : '<div class="cm-card cm-empty">No open tasks.</div>'}</div>`;
     $$('[data-done]', v).forEach(b => b.onclick = async () => { await act(b, () => api('completeTask', { id: b.dataset.done }), 'Done.'); render(); });
     $$('[data-cg]', v).forEach(b => b.onclick = () => openCg(b.dataset.cg));
-    $$('[data-fam]', v).forEach(b => b.onclick = () => { S.tab = 'families'; S.famId = b.dataset.fam; render(); });
+    $$('[data-fam]', v).forEach(b => b.onclick = () => { S.tab = 'families'; S.famId = b.dataset.fam; if (opts.onTab) opts.onTab(S.tab); render(); });
   }
 
   // ---------- Messages (every message, sent or not) ----------
@@ -501,4 +503,5 @@ export function mountHubMatch(el, opts) {
       $('#pz', v).onclick = async e => { await act(e.currentTarget, () => api('setListingPaused', { id, paused: !p.paused }), p.paused ? 'Listing unpaused.' : 'Listing paused.'); re(); };
     }
   }
+  return { setTab(t) { if (t && (t !== S.tab || S.cgId || S.famId)) { S.tab = t; S.cgId = null; S.famId = null; render(); } } };
 }
