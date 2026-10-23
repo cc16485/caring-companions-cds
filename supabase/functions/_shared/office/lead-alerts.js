@@ -322,6 +322,15 @@ export function createLeadAlerts(deps) {
     const pulledOn = sh && sh.at ? W.isoLocal(new Date(sh.at)) : '';
     const cn = sh ? W.consumersNow(sh, pulledOn, ws.firstShifts || {}, s.consumers || [], ws.cdsGoal || {}) : null;
     const wsPeople = cn ? cn.people.concat(cn.leftOut) : null;
+    // 2026-10-23 (her rule: the email and Today never disagree): the same WellSky inputs Today uses.
+    // No worked shift in 30+ days (Chrome pull or the emailed First and Last Carelog, freshest wins),
+    // and an Active WellSky authorization is "upload the new care plan", not "expired". Both only read
+    // wellskyCheck, so they apply whether or not the daily check's own lines are live.
+    const wsc = ws.wellskyCheck || (await store(['wellskyCheck'])).wellskyCheck || {};
+    const wscOn = wsc.shifts && wsc.shifts.at ? W.isoLocal(new Date(wsc.shifts.at)) : '';
+    const noShift = W.noShifts(wsc.shifts, wscOn, s.consumers || [], 0, wsc.analytics && wsc.analytics.firstLast);
+    const wsAuths = W.wsActiveAuths(wsc, noon);
+    const wsAuth = name => wsAuths[W.nameKey(name)] || null;
     // Attendants (2026-10-22, same rule as Today): office to-dos for new attendants and OIG matches
     // from cds_tasks, rechecks from the Roster, the automatic OIG clears once the OIG check is live.
     // The hub also lists applications waiting on the office with no to-do yet; the email cannot.
@@ -348,7 +357,7 @@ export function createLeadAlerts(deps) {
     catch (e) { evvSubs = [{ consumer: 'EVV forms sent in online could not be read: ' + String((e && e.message) || e).slice(0, 120), sig_attendant: true, sig_consumer: true }]; }
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
                                    attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems, followups,
-                                   wsPeople, nameKey: W.nameKey, attendantWork,
+                                   wsPeople, nameKey: W.nameKey, attendantWork, noShift, wsAuth,
                                    quarterStatus: due.quarterStatus || {},
                                    evv: { corrections: Array.isArray(due.evvCorrections) ? due.evvCorrections : [], submissions: evvSubs },
                                    payroll: { runs: (due.payrollTotals || {}).runs || [], registers: (s.attendantWages || {}).registers || [] } }, noon);

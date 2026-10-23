@@ -281,6 +281,28 @@ ok(am.includes('1 attendant with a background recheck overdue') && am.includes('
 ok(!am.includes('Old Gone'), 'an attendant marked inactive is left out');
 ok(!am.includes('could not be read'), 'the attendant to-dos were read');
 
+// 2026-10-23: the email uses Today's WellSky rules: closings, no shifts in 30+ days, and an
+// Active WellSky authorization is "upload the new care plan", not "expired".
+await pg.query(`update agency_data set data_value=$1::jsonb where agency_id='caring-companions-cds' and data_key='consumers'`, [JSON.stringify([
+  { id: '1', name: 'Pat Q', status: 'Active', cdsStartDate: '2026-06-01', contacts: {} },
+  { id: '2', name: 'Lou R', status: 'Active', cdsStartDate: '2026-09-20', contacts: {} },
+  { id: '3', name: 'Ned Quiet', status: 'Active', contacts: {} },
+  { id: '4', name: 'Bea Gone', status: 'closing', ending: { kind: 'death', steps: {} } }])]);
+await pg.query(`update agency_data set data_value=$1::jsonb where agency_id='caring-companions-cds' and data_key='authorizations'`, [JSON.stringify({ records: {
+  a: { consumer: 'Pat Q', planEnd: '2026-03-31' }, b: { consumer: 'Lou R', planEnd: '2026-02-28' } } })]);
+await pg.query(`update agency_data set data_value=$1::jsonb where agency_id='caring-companions-cds' and data_key='wellskyCheck'`, [JSON.stringify({
+  lastRun: { ok: true, at: '2026-11-05T11:30:00Z' },
+  shifts: { at: '2026-11-05T11:30:00Z', from: '2026-10-01', consumers: [{ name: 'Q, Pat', shifts: [{ date: '2026-11-04', attendant: 'A B' }] }, { name: 'R, Lou', shifts: [{ date: '2026-11-03', attendant: 'C D' }] }] },
+  auths: { at: '2026-11-05T11:30:00Z', consumers: [{ name: 'Q, Pat', auths: [{ label: 'Pat Q PC - CDS 4/01/2026-2/28/2027', service: 'DSDS - CDS Personal Care', status: 'Active', perMonth: 100, months: [] }] }] },
+  analytics: { firstLast: { at: '2026-11-05T11:45:00Z', consumers: [{ name: 'Q, Pat', first: '2026-06-02', last: '2026-11-04' }, { name: 'R, Lou', first: '2026-09-21', last: '2026-11-03' }, { name: 'Quiet, Ned', first: '2025-01-02', last: '2026-08-01' }] } } })]);
+at('2026-11-05T14:00:00Z');
+await jobs.morning();
+const wm = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
+ok(wm.includes('1 care plan to upload (WellSky shows the authorization active, the hub has old or no dates)'), 'Pat: WellSky Active, so upload the care plan, not expired');
+ok(wm.includes('1 authorization expired') && !wm.includes('2 authorizations expired'), 'only Lou (nothing active in WellSky) is expired');
+ok(wm.includes('Closings, pauses and missing shifts') && wm.includes('Bea Gone: tell DSDS right away'), 'the closing line for Bea');
+ok(/1 consumer with no worked shift in 30\+ days, DSDS not told: Ned Quiet/.test(wm), 'Ned has no worked shift since Aug 1');
+
 const clear = LA.morningEmail([{ n: 1, title: 'Clear anything the state is waiting on', items: [] }], {}, Date.parse('2026-10-27T13:00:00Z'));
 ok(clear.subject === 'CDS morning, Tue, Oct 27: nothing waiting' && clear.text.includes('   Nothing waiting here.'), 'a clear morning says so');
 
