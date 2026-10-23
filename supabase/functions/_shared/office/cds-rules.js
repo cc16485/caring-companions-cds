@@ -447,6 +447,13 @@
       ppl.push({ name: c.name, id: c.id, month, why: 'change found on the ' + monDay(d) + ' call' + (log.healthNotes || log.circNotes ? ': ' + String(log.healthNotes || log.circNotes).slice(0, 80) : ''),
                  due: addDays(d, 10), act: 'dhss' });
     }));
+    // A face-to-face visit that found services not given as authorized (rec.dhss, 2026-10-23 audit file):
+    // reported the same way; month = 'visit:<index in homeVisits>' so Reported finds the visit.
+    (consumers || []).forEach(c => (Array.isArray(c.homeVisits) ? c.homeVisits : []).forEach((v, i) => {
+      if (!v || !v.dhss || v.dhssReported || !v.date) return;
+      ppl.push({ name: c.name, id: c.id, month: 'visit:' + i, why: 'visit ' + monDay(v.date) + ' found services not given as authorized',
+                 due: addDays(v.date, 10), act: 'dhss' });
+    }));
     return ppl.length ? [{ t: plural(ppl.length, 'change', 'changes') + ' to report to DHSS (10 days from the call)', go: 'consumers',
                            bad: ppl.some(p => p.due <= today), people: ppl.sort((a, b) => a.due.localeCompare(b.due)) }] : [];
   }

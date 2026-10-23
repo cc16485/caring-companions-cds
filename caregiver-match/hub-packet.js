@@ -260,6 +260,105 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
       dates: [...working, ...quiet].filter(r => r.missing).length, quiet: quiet.length } };
 }
 
+
+// ---------- the attendant's audit file (her yes to the mockup, 2026-10-23) ----------
+// One printable file from both views: the application (packetGet: answers, signed forms, I-9,
+// orientation) and the Roster (check dates, proof PDFs, WellSky). Either may be missing: someone
+// hired before the online application has only the Roster and the papers brought in from GHL.
+// No SSN or birth date prints; the age check result does. 19 CSR 15-8.400 (5)(A), (5)(B), (8)(B), (10).
+const ORIENT_TOPICS = ['EVV rules and clocking in and out in WellSky', 'What counts as fraud', 'Allowed and not allowed tasks',
+  'Falsified visit records are fraud and are reported to MMAC', 'Attendant rights and responsibilities',
+  'Spotting abuse, neglect and exploitation; duty to report', 'Must report a decline in the consumer’s health'];
+const addBiz = (iso, n) => { const d = new Date(iso + 'T12:00:00'); while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() % 6) n--; } return isoLocal(d); };
+export function attendantFileHtml({ name, roster, packet, proofs = [], wellsky, autoOig, corrections = [], company = 'Caring Companions CDS', printedBy = '', now = new Date() }) {
+  const a = roster || {}, g = packet || null, p = (g && g.packet) || {}, ans = (g && g.answers) || {}, forms = (g && g.forms) || {};
+  const ws = wellskyByAttendant(wellsky, now), w = ws.by[nameKey(a.wellskyName || name)] || null;
+  const day = d => d ? fmtD(String(d).slice(0, 10)) : '';
+  const nr = '<span class="none">not recorded</span>';
+  const ymdOf = d => d ? (String(d).length === 10 ? d : new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : '';
+  const first = w && w.first || '';
+  const appFile = proofs.find(x => x.check === 'application');
+  const gaps = [];
+  // 1. qualifications
+  const scrChecks = (g && g.screening && g.screening.checks) || [];
+  const age = scrChecks.find(c => c.key === 'age18');
+  const fromApp = (k, okWhen) => g ? (ans[k] === undefined ? '' : ans[k] === okWhen ? 'Confirmed' : '<span class="none">' + (ans[k] === 'yes' ? 'Yes: not allowed' : esc(ans[k])) + '</span>') : appFile ? 'Signed application on file (from GHL)' : '';
+  const q = [
+    ['At least 18', age ? (age.clear ? 'Yes, checked from the birth date' : '<span class="none">not clear</span>') : appFile ? 'Signed application on file (from GHL)' : ''],
+    ['Not the consumer’s spouse', g ? (ans.relation === 'spouse' ? '<span class="none">Spouse: not allowed</span>' : ans.has_consumer === 'no' || ans.related ? 'Confirmed' : '') : appFile ? 'Signed application on file (from GHL)' : ''],
+    ['Not the consumer’s guardian', fromApp('guardian', 'no')], ['Not a CDS consumer', fromApp('gets_cds', 'no')], ['No past Medicaid fraud', fromApp('mfraud', 'no')],
+    ['Agrees to confidentiality', forms.contract ? 'Signed contract, ' + day(forms.contract.signed_at) : appFile ? 'Application on file (from GHL)' : ''],
+    ['Able to do the tasks, dependable, handles emergencies', ans.qualified === 'yes' ? 'Says so on the application; the consumer hired them' : a.consumer || p.consumer_name ? 'The consumer’s hiring decision' : '']];
+  q.forEach(([k, v]) => { if (!v) gaps.push('(5)(A)3 ' + k.toLowerCase() + ': not on file'); });
+  // 2. background checks: first check, before the first shift, last check, next due, proof
+  const rd = rosterDue(a, autoOig || null, now);
+  const proofOf = k => proofs.filter(x => x.check === k).map(x => x.checked_on || x.date_found).filter(Boolean).sort();
+  const scrAt = k => { const c = scrChecks.find(x => x.key === k); return c && c.clear && c.at ? ymdOf(c.at) : ''; };
+  const checks = [['FCSR registration and screening', 'fcsr', 'FCSR', a.fcsrDate], ['EDL (Employee Disqualification List)', 'edl', 'EDL', a.edlDate], ['OIG / LEIE exclusion list', 'oig', 'OIG', a.leieDate]].map(([label, k, rk, rosterDate]) => {
+    const dates = [...proofOf(k), rosterDate, scrAt(k)].filter(Boolean).sort();
+    const r = rd.rows.find(x => x.k === rk) || {};
+    const firstCheck = dates[0] || '', before = firstCheck && first ? firstCheck <= first : null;
+    if (!firstCheck) gaps.push('(5)(A)1 no ' + rk + ' check on file');
+    else if (before === false) gaps.push('(5)(A)1 first ' + rk + ' check (' + firstCheck + ') was after the first shift (' + first + ')');
+    if (r.tone === 'r') gaps.push(rk + ' recheck overdue since ' + r.due);
+    const files = proofs.filter(x => x.check === k).length;
+    return [esc(label), day(firstCheck), before === null ? (first ? '' : '<span class="small">no shift yet</span>') : before ? 'Yes' : '<span class="none">No</span>',
+      day(r.done || dates[dates.length - 1]) + (r.auto ? ' (automatic)' : ''), r.due ? (r.tone === 'r' ? '<span class="none">' + day(r.due) + ', overdue</span>' : day(r.due)) : '',
+      files ? files + (files === 1 ? ' file' : ' files') : '<span class="none">none</span>'];
+  });
+  // 3. hiring papers
+  const signedForm = k => forms[k] ? 'Signed ' + day(forms[k].signed_at) + (forms[k].countersigned_at ? ', countersigned ' + day(forms[k].countersigned_at) : '') : '';
+  const i9 = p.i9_done_at ? ymdOf(p.i9_done_at) : '';
+  const i9Due = first ? addBiz(first, 3) : '';
+  if (g && !i9 && first) gaps.push('I-9 Section 2 not done; due ' + i9Due + ' (3 business days after the first shift)');
+  if (i9 && i9Due && i9 > i9Due) gaps.push('I-9 Section 2 done ' + i9 + ', after the 3-business-day limit (' + i9Due + ')');
+  const papers = [
+    ['Contract', signedForm('contract') || (a.contract ? esc(a.contract) : appFile ? 'Onboarding papers on file (from GHL)' : '')],
+    ['Handbook', signedForm('handbook')], ['Pay and units', [signedForm('pay'), signedForm('units')].filter(Boolean).join('; ')],
+    ['I-9 Section 2', i9 ? day(i9) + (i9Due ? (i9 <= i9Due ? ', within 3 business days of starting' : ', <span class="none">late (due ' + day(i9Due) + ')</span>') : '') : g ? '' : 'In Empeon (hired before the online application)'],
+    ['W-4 and direct deposit', p.empeon_done_at ? 'Done in Empeon ' + day(p.empeon_done_at) : a.empeon ? 'Empeon: ' + esc(a.empeon) : '']];
+  // 4. orientation, per topic
+  const vid = p.orientation_done_at ? ymdOf(p.orientation_done_at) : '';
+  if (!vid) gaps.push('(5)(B) no orientation date on file');
+  const orient = [['General orientation with the consumer present', 'Done by the consumer as the employer; recorded on the consumer’s file']].concat(ORIENT_TOPICS.map(t => [t, vid ? day(vid) + ', orientation video and handbook' : '']))
+    .concat([['Pandemic policy (the consumer trains them yearly)', 'Recorded on the consumer’s file (Missouri forms)']]);
+  // 5. work history
+  const fixes = corrections.filter(x => nameKey(x.attendant) === nameKey(name));
+  // 6. ending
+  const ends = [...(a.pastEnds || []), ...(a.ended ? [a.ended] : [])];
+  const tbl = (head, rows) => '<table><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + r.map(x => '<td>' + (x || nr) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+  const S = (n, title, cite, ok, inner) => '<section><h2><span class="n">' + n + '</span>' + title + ' <span class="cite">' + cite + '</span><span class="chip ' + (ok ? 'ok">On file' : 'miss">Needs attention') + '</span></h2>' + inner + '</section>';
+  const has = re => gaps.some(x => re.test(x));
+  const sec = [
+    S(1, 'Qualifications', '(5)(A)3', !has(/^\(5\)\(A\)3/), tbl(['Rule', 'How we know'], q.map(([k, v]) => [esc(k), v]))),
+    S(2, 'Background checks', '(5)(A)1, (8)(B)', !has(/^\(5\)\(A\)1|recheck overdue/), tbl(['Check', 'First check', 'Before first shift' + (first ? ' (' + day(first) + ')' : ''), 'Last check', 'Next due', 'Proof'], checks) +
+      (proofs.length ? '<p class="small">Proof on file: ' + proofs.map(x => esc(CHECK_LABEL[x.check] || x.check) + ' ' + day(x.checked_on || x.date_found)).join(' · ') + '</p>' : '')),
+    S(3, 'Hiring papers', 'federal I-9, payroll for the consumer', !has(/I-9/), tbl(['Paper', 'On file'], papers.map(([k, v]) => [esc(k), v]))),
+    S(4, 'Orientation', '(5)(B), (5)(A)2', !!vid, tbl(['Topic', 'Done'], orient.map(([k, v]) => [esc(k), v]))),
+    S(5, 'Work history', '(10): records of service delivery', true, tbl(['Consumer', 'First shift', 'Last shift', 'Hours this month', 'Shifts fixed by hand'],
+      [[esc((w && w.consumers.join(' and ')) || a.consumer || p.consumer_name || ''), day(first), day(w && w.last), w && w.hours ? String(w.hours) : '0', String(fixes.length) + (fixes.length ? ' (' + fixes.filter(x => x.formReceived === 'yes').length + ' with signed forms)' : '')]])),
+    S(6, 'Ending', 'the consumer decides', true, ends.length ? tbl(['Ended', 'Why and how', 'What the consumer said'], ends.map(e => [day(e.on), esc(endWords(e)), esc(e.said || '')])) : '<p>Still working.</p>')
+  ];
+  const done = sec.filter(x => x.includes('chip ok')).length;
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Attendant file, ' + esc(name) + '</title><style>' +
+    '@page{margin:16mm}body{font-family:Poppins,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12px;line-height:1.5;color:#1d2a36;max-width:900px;margin:0 auto;padding:24px}' +
+    'h1{font-family:Fraunces,Georgia,serif;font-size:28px;margin:2px 0;color:#0D365F}.kicker{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0f5f61}' +
+    '.sub{color:#55606b;font-size:12px}section{border-top:1px solid #dfe6ec;padding:14px 0 6px;page-break-inside:avoid}' +
+    'h2{font-size:14.5px;color:#0D365F;margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.n{width:22px;height:22px;border-radius:50%;background:#e3f1f0;display:inline-flex;align-items:center;justify-content:center;font-size:11px}' +
+    '.cite{font-weight:400;font-size:11px;color:#55606b}.chip{margin-left:auto;font-size:10.5px;font-weight:700;border-radius:999px;padding:2px 9px}.ok{background:#e7f5ee;color:#1f6b45}.miss{background:#fdecea;color:#a3201a}' +
+    'table{border-collapse:collapse;width:100%;margin:4px 0 6px}th,td{border-bottom:1px solid #eef2f5;padding:5px 7px;text-align:left;vertical-align:top}thead th{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:#55606b;border-bottom:1.5px solid #dfe6ec}' +
+    '.none{color:#a3201a;font-style:italic}.small{font-size:11px;color:#55606b}.gap{background:#fdecea;border-radius:8px;padding:12px 14px;margin:14px 0}.allok{background:#e7f5ee;color:#1f6b45;border-radius:8px;padding:12px 14px;margin:14px 0}' +
+    '.foot{margin-top:18px;padding-top:10px;border-top:1.5px solid #0D365F;color:#55606b;font-size:10.5px}@media print{.noprint{display:none}}</style></head><body>' +
+    '<div class="noprint" style="background:#0D365F;color:#fff;padding:12px 16px;border-radius:8px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span>Print, or choose <strong>Save as PDF</strong> in the print window.</span>' +
+    '<button onclick="window.print()" style="background:#54bdb8;color:#08343a;border:0;border-radius:6px;padding:9px 18px;font-weight:700;cursor:pointer">Print or save as PDF</button></div>' +
+    '<div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap"><div><div class="kicker">Attendant file</div><h1>' + esc(name) + '</h1>' +
+    '<div class="sub">' + [a.consumer || p.consumer_name ? 'Attendant for ' + esc(a.consumer || p.consumer_name) : '', a.hiredate ? 'hired ' + day(a.hiredate) : '', a.status === 'inactive' ? 'No longer working' : 'Working'].filter(Boolean).join(' · ') + '</div></div>' +
+    '<div class="sub" style="text-align:right"><b style="color:#0D365F">' + esc(company) + '</b><br>Employee of the consumer, never of the vendor<br>Printed ' + day(isoLocal(now)) + (printedBy ? ' by ' + esc(printedBy) : '') + '</div></div>' +
+    '<p class="sub" style="margin-top:10px"><b>' + done + ' of ' + sec.length + '</b> sections complete. Kept 6 years, per 19 CSR 15-8.400(10).</p>' +
+    (gaps.length ? '<div class="gap"><b style="color:#a3201a">Gaps in this file</b><ul>' + gaps.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>' : '<div class="allok"><b>No gaps found against 19 CSR 15-8.400 for this attendant.</b></div>') +
+    sec.join('') + '<div class="foot">' + esc(company) + ' · ' + esc(name) + '. The signed forms and check PDFs named here open from the attendant’s profile in the hub. No SSN or birth date is printed.</div></body></html>';
+}
+
 export function mountHubPacket(el, opts) {
   const { api } = opts;
   const roster = () => (opts.roster ? opts.roster() : []).filter(a => a.status !== 'inactive');
@@ -411,7 +510,7 @@ export function mountHubPacket(el, opts) {
     const nextCls = st.tone === 'r' ? 'r' : st.tone === 'y' ? 'y' : st.tone === 'g' ? 'g' : 'b';
     const nowKey = (st.steps.find(s => !s.done) || {}).key;
     const checks = (g.screening.checks || []);
-    el.innerHTML = `<button class="pill-btn" data-act="back">← All attendants</button>
+    el.innerHTML = `<div class="btns" style="margin:0"><button class="pill-btn" data-act="back">← All attendants</button><button class="btn o" data-act="file">Print attendant file</button></div>
       <div class="card"><h2>${esc(g.pool.first + ' ' + g.pool.last)}</h2><span class="pill ${st.tone}">${esc(st.label)}</span>
       <div class="next ${nextCls}"><b>Next:</b> ${esc(st.next)}</div>
       <dl><dt>Phone</dt><dd>${esc(g.pool.phone)}</dd><dt>Email</dt><dd>${esc(g.pool.email)}</dd><dt>Works for</dt><dd>${esc(p.consumer_name || '')}</dd>
@@ -453,7 +552,7 @@ export function mountHubPacket(el, opts) {
     const d = rosterDue(a, autoOig(a.id));
     const ws = wellskyByAttendant(opts.wellsky ? opts.wellsky() : null), w = ws.by[nameKey(a.wellskyName || a.name)];
     const field = { EDL: 'edlDate', FCSR: 'fcsrDate', OIG: 'leieDate' };
-    el.innerHTML = `<button class="pill-btn" data-act="back">← All attendants</button>
+    el.innerHTML = `<div class="btns" style="margin:0"><button class="pill-btn" data-act="back">← All attendants</button><button class="btn o" data-act="file">Print attendant file</button></div>
       <div class="card"><h2>${esc(a.name)}</h2><span class="pill ${d.tone}">${esc(d.label)}</span>
       <dl><dt>Works for</dt><dd>${esc((w && w.consumers.join(' and ')) || a.consumer)}</dd>
       <dt>First day of work</dt><dd>${w && w.first ? esc(fmtD(w.first)) + ' <span class="small">(first care log in WellSky)</span>' : '<span class="small">Not in WellSky yet. It comes from the daily First and Last Carelog email.</span>'}</dd>
@@ -487,6 +586,26 @@ export function mountHubPacket(el, opts) {
       <div class="cds-comm-history" data-refs="attendant:${esc(a.id)}" data-phones="${esc(a.phone || '')}"></div></div>`;
     if (window.cdsCommHistory) window.cdsCommHistory(el);
     loadProofs(a.id);
+  }
+  // Print attendant file: from either view, joined with the other by name.
+  async function printFile(b) {
+    const w = window.open('', '_blank');
+    if (!w) return alert('Your browser blocked the pop-up. Allow pop-ups for this site and try again.');
+    w.document.write('<p style="font-family:sans-serif;padding:24px">Putting the file together…</p>');
+    b.disabled = true;
+    try {
+      let packet = open.kind === 'packet' ? open.g : null, name = packet ? packet.pool.first + ' ' + packet.pool.last : '';
+      let ros = open.kind === 'roster' ? (opts.roster ? opts.roster() : []).find(x => x.id === open.id) : null;
+      if (ros) name = ros.name;
+      if (!ros) ros = (opts.roster ? opts.roster() : []).find(x => nameKey(x.name) === nameKey(name)) || null;
+      if (!packet) { const hit = list.find(x => nameKey(x.name) === nameKey(name)); if (hit) packet = await api('packetGet', { pool_id: hit.pool_id }); }
+      let proofs = [];
+      if (ros) proofs = (await api('rosterProofList', { attendant_id: ros.id })).items || [];
+      const html = attendantFileHtml({ name, roster: ros, packet, proofs, wellsky: opts.wellsky ? opts.wellsky() : null, autoOig: ros ? autoOig(ros.id) : null,
+        corrections: opts.corrections ? opts.corrections() : [], printedBy: opts.who ? String(opts.who()).split('@')[0] : '' });
+      w.document.open(); w.document.write(html); w.document.close();
+    } catch (e) { w.document.open(); w.document.write('<p style="font-family:sans-serif;padding:24px;color:#a3201a">The file could not be put together: ' + esc(e.message) + '</p>'); w.document.close(); }
+    b.disabled = false;
   }
   async function loadProofs(id) {
     const box = el.querySelector('#hp_proofs'); if (!box) return;
@@ -547,6 +666,7 @@ export function mountHubPacket(el, opts) {
         await opts.saveRoster(open.id, { status: 'inactive', ended: rec.record }); open = null; tab = 'inactive'; return draw();
       }
       if (act === 'ghl-import') return openImport();
+      if (act === 'file') return printFile(b);
       if (b.dataset.form) return openForm(open.id, b.dataset.form, !!b.dataset.print);
       if (act === 'form-back') return openPacket(open.id);
       if (act === 'form-print') return window.print();
