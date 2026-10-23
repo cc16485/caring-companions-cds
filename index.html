@@ -1057,18 +1057,34 @@ button.fu-tile.check span { color:#14606F; }
 
 <div id="page-authorizations" class="page">
   <div class="section-header">
-    <div class="section-title">📑 Authorizations &amp; Units</div>
+    <div class="section-title" id="auth_title">📑 Authorizations &amp; Units</div>
     <button class="btn btn-outline" onclick="renderAuthorizations()" style="font-size:12px">↻ Refresh</button>
   </div>
 
   <div id="auth_alerts"></div>
 
+  <!-- Slimmer Authorizations (2026-10-23, her switch 'authSlim'): the paperwork only. Hours and
+       shifts live on This month. The two upload cards move into #auth_up_slim while it is on. -->
+  <div id="auth_slim" style="display:none">
+    <details class="card" id="auth_up_box" style="margin-bottom:18px">
+      <summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--primary)">📤 Upload an authorization or a state scheduling worksheet</summary>
+      <div id="auth_up_slim" style="margin-top:14px"></div>
+    </details>
+    <div class="card" style="margin-bottom:18px">
+      <div class="card-title"><span class="icon">📑</span> Paperwork for each active consumer</div>
+      <div id="auth_slim_summary" style="font-size:12.5px;color:var(--gray-600);margin-bottom:10px"></div>
+      <div id="auth_slim_body"></div>
+    </div>
+  </div>
+
+  <div id="auth_old">
   <div class="card" style="margin-bottom:18px" id="wellsky_card">
     <div class="card-title"><span class="icon">⏱️</span> Hours this month, from WellSky</div>
     <div id="wellsky_body" style="font-size:12.5px"></div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div id="auth_up_home">
+  <div class="card" style="margin-bottom:18px" id="auth_up_card">
     <div class="card-title"><span class="icon">📤</span> Upload authorizations</div>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;line-height:1.6">
       The DHSS <strong>Home &amp; Community Based Services Care Plan</strong> PDF, one per consumer. Select as many
@@ -1080,8 +1096,8 @@ button.fu-tile.check span { color:#14606F; }
     <div id="auth_status" style="font-size:12.5px;margin-top:10px"></div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
-    <div class="card-title"><span class="icon">🗓️</span> Care planning calendars</div>
+  <div class="card" style="margin-bottom:18px" id="cp_card">
+    <div class="card-title"><span class="icon">🗓️</span> <span id="cp_card_title">Care planning calendars</span></div>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:10px;line-height:1.6">
       The state's <strong>CDS Scheduling Worksheet</strong> (the Care Planning Calendar spreadsheet). The file is kept
       exactly as it is, because that is the format the state expects back. The minutes and units are also read out of
@@ -1101,6 +1117,7 @@ button.fu-tile.check span { color:#14606F; }
     </div>
     <div id="cp_status" style="font-size:12.5px;margin-bottom:10px"></div>
     <div id="cp_table"></div>
+  </div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
@@ -1125,6 +1142,7 @@ button.fu-tile.check span { color:#14606F; }
       receivables report gives money rather than units. Set the hourly rate under <strong>Edit Rates</strong> on the
       Financials page; a unit is 15 minutes, so a quarter of the hourly figure.
     </div>
+  </div>
   </div>
 </div>
 
@@ -4426,7 +4444,7 @@ VISIT DATE: 2026-06-27
 <div class="modal-overlay" id="carePlanModal">
   <div class="modal" style="width:820px;max-width:98vw">
     <div class="modal-header">
-      <div class="modal-title">📋 Care Plan — <span id="cp_consumer_name"></span></div>
+      <div class="modal-title">📋 <span id="cp_modal_word">Care Plan</span> · <span id="cp_consumer_name"></span></div>
       <button class="modal-close" onclick="closeModal('carePlanModal')">×</button>
     </div>
     <input type="hidden" id="cp_consumer_id">
@@ -4779,7 +4797,8 @@ const SECTIONS = [
   { id: 'consumers',  label: 'Consumers',   chips: true, tabs: [
       { page: 'consumers',      label: 'Everyone' },
       { page: 'taxcompliance',  label: 'Tax & EIN' },
-      { page: 'careplans',      label: 'Care plans' } ] },
+      // Renamed with the slimmer Authorizations (her switch 'authSlim', 2026-10-23).
+      { page: 'careplans',      get label() { return typeof authSlimOn === 'function' && authSlimOn() ? 'Care plan days' : 'Care plans'; } } ] },
   { id: 'attendants', label: 'Attendants',  tabs: [
       { page: 'activeattendants', label: 'Active Attendants' } ] },
   // Caregiver Directory (her yes 2026-10-22): findcdscaregivers.com in its own section.
@@ -5045,11 +5064,12 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=3');
+    const { mountHours } = await import('./hours/hub-hours.js?v=4');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
       consumers: () => getData('consumers'), go: page => showPage(page), markChecked: key => markShiftChecked(key),
+      dsdsEnd: () => authSlimOn() ? dsdsAuthEnd : null,
       submissions: async () => {
         if (!_db) return [];
         const { data, error } = await _db.from('evv_submissions').select('consumer, attendant, visitdate, sig_attendant, sig_consumer, processed')
@@ -5535,8 +5555,8 @@ function consumerToFinish(c) {
   return [
     !(t.inFusion && (t.uploaded || t.exempt)) && 'Tax and EIN',
     // WellSky Active: not missing, but the new care plan still needs uploading.
-    !authOk && (wsAuthFor(c.name) ? 'Upload the new care plan' : auth ? 'Renewed authorization' : 'Authorization'),
-    !plan && 'Care plan',
+    !authOk && (wsAuthFor(c.name) ? (authSlimOn() ? 'Upload the new authorization' : 'Upload the new care plan') : auth ? 'Renewed authorization' : 'Authorization'),
+    !plan && (authSlimOn() ? 'State scheduling worksheet' : 'Care plan'),
     !c.backupPlan && 'Backup plan',
     c.trained !== 'yes' && 'Consumer training',
     ...moFormsMissing(c)
@@ -8923,6 +8943,8 @@ const HUB_SWITCHES = [
     does: 'On: the Office staff list on Settings is checked against the OIG list every month on the 11th with the attendants, other names too. Off: staff are not checked.' },
   { key: 'moManager', label: 'CDS manager training',
     does: 'On: Settings tracks the MMAC manager test (6 months) and the yearly MMAC meeting, and Today reminds you. Off: hidden.' },
+  { key: 'authSlim', label: 'Slimmer Authorizations tab',
+    does: 'On: Hours & EVV > Authorizations shows only the paperwork, one row per active consumer (authorization, end date, state scheduling worksheet), with the uploads in one box. Hours and shifts stay on This month, whose end dates use the DSDS authorization when it is uploaded. "Care plan" is renamed: Care plan days, State scheduling worksheet, Authorization. Off: as before.' },
 ];
 const hubSwitchOn = key => getObj(key).live === true;
 function renderHubSwitches() {
@@ -8947,6 +8969,7 @@ function hubSwitch(key, on) {
   renderHubSwitches();
   if (key === 'moManager') renderManagerCard();
   if (key === 'moForms' || key === 'moStaffOig') renderOfficeCard();
+  if (key === 'authSlim') { _hx = null; renderMainTabs(PAGE_TO_SECTION.automations); renderSectionNav(PAGE_TO_SECTION.automations, 'automations'); }
 }
 
 // The CDS manager named to MMAC (2026-10-22, her approved mockup). 19 CSR 15-8.400(1)(E): the manager
@@ -9608,6 +9631,7 @@ function renderProfile() {
   const wsA = wsAuthFor(c.name);
   const authUnits = auth && auth.months.length ? Math.max(...auth.months.map(m => m.units)) : null;
   const fmt = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  const slim = authSlimOn();
 
   // ── the obligation strip ──
   const chips = [
@@ -9618,10 +9642,10 @@ function renderProfile() {
     profChip('Proof uploaded', s.uploaded ? 'ok' : (s.exempt ? 'ok' : 'bad'),
       s.exempt ? 'a prior vendor uploaded it' : (s.uploaded ? 'on ' + esc(c.proofUploaded) : 'EIN Tax Documents')),
     (wsA && (!auth || daysLeft < 0))
-      ? profChip('Authorization', 'warn', esc(_wsLabelEnd(wsA)) + '; upload the new care plan')
+      ? profChip('Authorization', 'warn', esc(_wsLabelEnd(wsA)) + (slim ? '; upload the new authorization' : '; upload the new care plan'))
       : profChip('Authorization', !auth ? 'bad' : (daysLeft < 0 ? 'bad' : (daysLeft <= 60 ? 'warn' : 'ok')),
           !auth ? 'nothing on file' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'expires in ' + daysLeft + ' days')),
-    profChip('Care plan', plan ? 'ok' : 'warn', plan ? plan.monthlyUnits + ' units a month' : 'no calendar on file'),
+    profChip(slim ? 'State worksheet' : 'Care plan', plan ? 'ok' : 'warn', plan ? plan.monthlyUnits + ' units a month' : (slim ? 'none on file' : 'no calendar on file')),
     (function () {
       const d = desThreshold(c.name);
       if (c.desRegistered) return profChip('DES registered', 'ok', esc(c.desEan || 'registered'));
@@ -9751,7 +9775,9 @@ function renderProfile() {
     (fs ? line('First shift (WellSky)', esc(_niceDay(fs))) : '') +
     (prep.shiftStyle ? line('Shifts', prep.shiftStyle === 'set' ? 'Set shifts' : 'Shifts as needed') : '') +
     line('Authorization', (wsA && (!auth || daysLeft < 0))
-      ? '<span style="color:#9C6410">' + (auth ? 'hub care plan ended ' + esc(_niceDay(auth.planEnd)) : 'no care plan in the hub') + '; ' + esc(_wsLabelEnd(wsA)) + '. Upload the new DSDS care plan.</span>'
+      ? '<span style="color:#9C6410">' + (slim
+          ? (auth ? 'hub authorization ended ' + esc(_niceDay(auth.planEnd)) : 'no authorization in the hub') + '; ' + esc(_wsLabelEnd(wsA)) + '. Upload the new DSDS authorization.'
+          : (auth ? 'hub care plan ended ' + esc(_niceDay(auth.planEnd)) : 'no care plan in the hub') + '; ' + esc(_wsLabelEnd(wsA)) + '. Upload the new DSDS care plan.') + '</span>'
       : !auth ? '<span style="color:var(--danger)">nothing on file</span>' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'ends ' + esc(_niceDay(auth.planEnd)) + ' (' + daysLeft + ' days)')) +
     line('Tax and EIN', outstanding.length ? '<span style="color:#9C6410">' + outstanding.length + ' thing' + (outstanding.length === 1 ? '' : 's') + ' still needed</span>' : 'all set') +
     line('Backup plan', (c.backupPlan ? 'yes' : '<span style="color:var(--danger)">missing</span>') +
@@ -9766,10 +9792,10 @@ function renderProfile() {
         line('Period', esc(auth.planStart) + ' to ' + esc(auth.planEnd)) +
         line('Units a month', authUnits === null ? 'not printed on it' : String(authUnits)) +
         (plan && authUnits !== null && plan.monthlyUnits !== authUnits
-          ? '<div class="alert alert-warn" style="font-size:13px;margin-top:10px">The care plan totals ' + plan.monthlyUnits + ' units a month against ' + authUnits + ' authorized.</div>' : '')
+          ? '<div class="alert alert-warn" style="font-size:13px;margin-top:10px">The ' + (slim ? 'state scheduling worksheet' : 'care plan') + ' totals ' + plan.monthlyUnits + ' units a month against ' + authUnits + ' authorized.</div>' : '')
       : '<p style="font-size:14px;color:var(--danger);margin:12px 0"><strong>No authorization on file.</strong></p>') +
-    line('Care plan', plan ? plan.monthlyUnits + ' units a month' : 'no calendar on file') +
-    '<div style="margin-top:12px">' + btn('Care plan', "openCarePlan('" + c.id + "')", true) + '</div>';
+    line(slim ? 'State scheduling worksheet' : 'Care plan', plan ? plan.monthlyUnits + ' units a month' : (slim ? 'none on file' : 'no calendar on file')) +
+    '<div style="margin-top:12px">' + btn(slim ? 'Authorized tasks' : 'Care plan', "openCarePlan('" + c.id + "')", true) + '</div>';
   else if (tab === 'tax') body =
     '<div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));margin-top:10px">' + chips + '</div>' +
     '<div style="margin-top:12px">' + btn('Tax setup', "openTaxSetup('" + c.id + "')", true) + '</div>';
@@ -9804,7 +9830,7 @@ function renderProfile() {
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
         '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
-        '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">Care plan</a>' +
+        '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">' + (slim ? 'Authorized tasks' : 'Care plan') + '</a>' +
         (CDSRules.isActive(c)
           ? (c.ending ? '</div>' : '<a href="#" onclick="openEnding(\'' + c.id + '\');return false" style="color:var(--danger)">Ending or pausing services</a></div>')
           : (endTaxOpen(c) ? '<a href="#" onclick="openEndTax(\'' + c.id + '\');return false">Tax steps for ending</a>' : '') +
@@ -9969,14 +9995,17 @@ function renderCarePlans() {
   // care plan must be visible here, not absent.
   const withPlan = consumers.filter(c => plans[c.id]);
   const noPlan = consumers.filter(c => !plans[c.id]);
-  const missingNote = noPlan.length
+  let missingNote = noPlan.length
     ? '<div class="alert alert-warn" style="font-size:12.5px;margin-bottom:10px">⚠️ <strong>' + noPlan.length +
       ' active consumer' + (noPlan.length === 1 ? ' has' : 's have') + ' no care planning calendar on file:</strong> ' +
       noPlan.map(c => esc(c.name)).join(', ') + '.</div>'
     : '';
+  // Slimmer Authorizations: the table above already shows who has no worksheet.
+  const slim = authSlimOn();
+  if (slim) missingNote = '';
   if (!withPlan.length) {
     el.innerHTML = missingNote +
-      '<p style="font-size:13px;color:var(--gray-600)">No care planning calendars uploaded yet.</p>';
+      '<p style="font-size:13px;color:var(--gray-600)">' + (slim ? 'No state scheduling worksheets uploaded yet.' : 'No care planning calendars uploaded yet.') + '</p>';
     return;
   }
 
@@ -10212,8 +10241,115 @@ function markShiftChecked(key) {
   try { renderDailyRoutine(); } catch (e) {}
 }
 
+// ============================================================
+// SLIMMER AUTHORIZATIONS (2026-10-23, her yes; her switch 'authSlim', off until she checks it).
+// This tab is the paperwork only: one row per active consumer with the DSDS authorization, its
+// end date and the state scheduling worksheet. Hours, shifts and usage are on This month, read
+// from WellSky, so the WellSky card and the invoice-based usage table are hidden while it is on.
+// "Care plan" now means one thing per name: Care plan days (the days the consumer picks),
+// State scheduling worksheet (the state spreadsheet), Authorization (the DSDS care plan PDF).
+// ============================================================
+function authSlimOn() { try { return getObj('authSlim').live === true; } catch (e) { return false; } }
+
+// The DSDS authorization's end date for one consumer, for This month's end dates. null = none uploaded.
+function dsdsAuthEnd(name) {
+  const a = Object.values(getAuths().records).find(r => r.consumer && prNorm(r.consumer) === prNorm(name));
+  return a && a.planEnd ? { end: a.planEnd, priorAuth: a.priorAuth || '' } : null;
+}
+
+// Puts the two upload cards where the current layout wants them. Moving the nodes keeps their ids.
+function _authLayout(slim) {
+  const cards = ['auth_up_card', 'cp_card'].map(id => document.getElementById(id)).filter(Boolean);
+  const to = document.getElementById(slim ? 'auth_up_slim' : 'auth_up_home');
+  cards.forEach(n => { if (n.parentNode !== to) to.appendChild(n); });
+  document.getElementById('auth_slim').style.display = slim ? '' : 'none';
+  document.getElementById('auth_old').style.display = slim ? 'none' : '';
+  document.getElementById('auth_title').innerHTML = slim ? '📑 Authorizations' : '📑 Authorizations &amp; Units';
+  document.getElementById('cp_card_title').textContent = slim ? 'State scheduling worksheet' : 'Care planning calendars';
+}
+
+function renderAuthSlim() {
+  const { records } = getAuths();
+  const list = Object.values(records);
+  const consumers = getData('consumers').filter(CDSRules.isActive).sort((a, b) => a.name.localeCompare(b.name));
+  const plans = getObj('carePlans');
+  const bl = getBilling();
+  const ym = _todayIso().slice(0, 7);
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const byConsumer = {};
+  list.forEach(a => { if (a.consumer) byConsumer[prNorm(a.consumer)] = a; });
+  document.getElementById('auth_alerts').innerHTML = '';
+  if (!list.length) document.getElementById('auth_up_box').open = true;
+
+  const unitsThisMonth = a => {
+    if (a.format === 'units-not-stated') return 'not printed on it';
+    let mo = a.months.find(m => m.start.slice(0, 7) === ym);
+    if (!mo && a.format === 'flat' && ym >= a.planStart.slice(0, 7) && ym <= a.planEnd.slice(0, 7)) mo = a.months[0];
+    return mo ? mo.units.toLocaleString() : 'none this month';
+  };
+  // rank: 0 missing, 1 ended, 2 upload the new one, 3 ends soon, 4 worksheet to sort out, 5 fine
+  const rows = consumers.map(c => {
+    const a = byConsumer[prNorm(c.name)], ws = wsAuthFor(c.name), p = plans[c.id];
+    const daysLeft = a ? Math.round((new Date(a.planEnd + 'T12:00:00') - today) / 864e5) : null;
+    let rank = 5, pill = ['badge-green', 'Current'], todo = '';
+    if (!a && !ws) { rank = 0; pill = ['badge-red', 'Missing']; todo = 'Upload the authorization, or check they should still be active.'; }
+    else if (!a) { rank = 2; pill = ['badge-warn', 'Upload it']; todo = _wsLabelEnd(ws) + '. Upload the authorization from Fusion.'; }
+    else if (daysLeft < 0 && ws) { rank = 2; pill = ['badge-warn', 'Upload the new one']; todo = 'The hub copy ended ' + _niceDay(a.planEnd) + '; ' + _wsLabelEnd(ws) + '. Upload the new authorization from Fusion.'; }
+    else if (daysLeft < 0) {
+      const after = bl.entries.filter(e => prNorm(e.consumer) === prNorm(c.name) && e.period > a.planEnd.slice(0, 7)).reduce((t, e) => t + e.amount, 0);
+      rank = 1; pill = ['badge-red', 'Ended'];
+      todo = 'Ended ' + Math.abs(daysLeft) + ' days ago.' + (after > 0 ? ' ' + prFmt(after) + ' billed since.' : '') + ' Find the renewal before more work is done.';
+    }
+    else if (daysLeft <= 60) { rank = 3; pill = ['badge-warn', 'Ends in ' + daysLeft + ' days']; todo = 'Reassessment takes time, so ask DSDS now.'; }
+    // The worksheet, against the largest monthly figure (a full 31-day month), as on the worksheet card.
+    const authMax = a && a.months.length ? Math.max(...a.months.map(m => m.units)) : null;
+    let sheet, sheetCol = 'var(--gray-600)';
+    if (!p) { sheet = 'Not on file'; sheetCol = 'var(--warn)'; if (rank > 4) { rank = 4; pill = ['badge-warn', 'Worksheet']; todo = 'Upload the state scheduling worksheet.'; } }
+    else if (authMax === null) sheet = p.monthlyUnits + ' units a month';
+    else if (p.monthlyUnits === authMax) { sheet = p.monthlyUnits + ' units a month, matches'; sheetCol = 'var(--success)'; }
+    else {
+      const d = p.monthlyUnits - authMax;
+      sheet = p.monthlyUnits + ' units a month, ' + (d < 0 ? Math.abs(d) + ' under' : d + ' over') + ' the authorization';
+      sheetCol = d > 0 ? 'var(--danger)' : 'var(--warn)';
+      if (rank > 4) { rank = 4; pill = ['badge-warn', 'Worksheet']; todo = d > 0 ? 'The worksheet plans more than is authorized. Fix it before the state sees it.' : 'The worksheet plans less than is authorized.'; }
+    }
+    return { c, a, rank, pill, todo, sheet, sheetCol, daysLeft };
+  }).sort((x, y) => x.rank - y.rank || x.c.name.localeCompare(y.c.name));
+  const orphans = list.filter(a => !a.consumer);
+
+  const n = r => rows.filter(x => x.rank === r).length;
+  const bits = [[0, 'missing'], [1, 'ended'], [2, 'to upload'], [3, 'ending in 60 days'], [4, 'worksheet to sort out'], [5, 'all set']]
+    .map(([r, l]) => n(r) ? n(r) + ' ' + l : '').filter(Boolean);
+  document.getElementById('auth_slim_summary').textContent = consumers.length + ' active consumer' + (consumers.length === 1 ? '' : 's') +
+    (bits.length ? ': ' + bits.join(', ') : '') + (orphans.length ? '. ' + orphans.length + ' upload' + (orphans.length === 1 ? '' : 's') + ' matched nobody.' : '.');
+
+  if (!rows.length && !orphans.length) {
+    document.getElementById('auth_slim_body').innerHTML = '<div class="empty"><div class="empty-icon">📑</div><p>No active consumers.</p></div>';
+    return;
+  }
+  const cell = (main, sub) => main + (sub ? '<div style="font-size:11px;color:var(--gray-600)">' + sub + '</div>' : '');
+  document.getElementById('auth_slim_body').innerHTML = '<div class="table-wrap"><table><thead><tr>' +
+    '<th>Consumer</th><th>Authorization</th><th>Plan period</th><th>Units this month</th><th>State scheduling worksheet</th><th>What to do</th></tr></thead><tbody>' +
+    rows.map(r => '<tr>' +
+      '<td>' + cell('<a href="javascript:void(0)" onclick="openProfile(\'' + r.c.id + '\')" style="font-weight:700;color:var(--primary-light);text-decoration:none">' + esc(r.c.name) + '</a>',
+        r.c.dcn ? 'DCN ' + esc(r.c.dcn) : '') + '</td>' +
+      '<td style="font-size:12px">' + (r.a ? cell(esc(r.a.priorAuth || 'no number'), esc(r.a.procedureCode || '')) : '<span style="color:var(--gray-600)">none in the hub</span>') + '</td>' +
+      '<td style="font-size:12px">' + (r.a ? cell(esc(_niceDay(r.a.planStart)), 'to ' + esc(_niceDay(r.a.planEnd))) : '') + '</td>' +
+      '<td class="mono" style="font-size:12px">' + (r.a ? esc(unitsThisMonth(r.a)) : '') + '</td>' +
+      '<td style="font-size:12px;color:' + r.sheetCol + '">' + esc(r.sheet) + '</td>' +
+      '<td style="font-size:12px"><span class="badge ' + r.pill[0] + '">' + esc(r.pill[1]) + '</span>' + (r.todo ? '<div style="margin-top:4px">' + esc(r.todo) + '</div>' : '') + '</td>' +
+      '</tr>').join('') +
+    orphans.map(a => '<tr><td><strong>' + esc(a.name || a.dcn || a.source) + '</strong>' + (a.dcn ? '<div style="font-size:11px;color:var(--gray-600)">DCN ' + esc(a.dcn) + '</div>' : '') + '</td>' +
+      '<td style="font-size:12px">' + esc(a.priorAuth || '') + '</td><td style="font-size:12px">' + cell(esc(_niceDay(a.planStart)), 'to ' + esc(_niceDay(a.planEnd))) + '</td><td></td><td></td>' +
+      '<td style="font-size:12px"><span class="badge badge-warn">Matched nobody</span><div style="margin-top:4px">Check the DCN on the consumer record so it lines up.</div></td></tr>').join('') +
+    '</tbody></table></div>';
+}
+
 function renderAuthorizations() {
   renderCarePlans();
+  const slim = authSlimOn();
+  _authLayout(slim);
+  if (slim) { renderAuthSlim(); return; }
   try { renderWellSky(); } catch (e) { console.error('wellsky check:', e); }
   const { unitMinutes, records } = getAuths();
   const list = Object.values(records);
@@ -12199,6 +12335,7 @@ function openCarePlan(cid) {
 
   document.getElementById('cp_consumer_id').value = cid;
   document.getElementById('cp_consumer_name').textContent = c.name;
+  document.getElementById('cp_modal_word').textContent = authSlimOn() ? 'Authorized tasks' : 'Care Plan';
   document.getElementById('cp_start_date').value = c.carePlan ? c.carePlan.startDate || '' : '';
   document.getElementById('cp_end_date').value = c.carePlan ? c.carePlan.endDate || '' : '';
   document.getElementById('cp_service_type').value = c.carePlan ? c.carePlan.serviceType || 'PC-CDS' : 'PC-CDS';

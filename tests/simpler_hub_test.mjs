@@ -122,6 +122,12 @@ const at = d => new Date(d + 'T12:00:00');
   // 2026-10-22 (her ask): Switches became the Settings tab at the right of Help; Caregiver Directory got its own section.
   ok(SECTIONS.length === 8 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,directory,hours,money,help', 'the eight sections, in order (Hours & EVV added 10-22)');
   ok(SECTIONS.find(s => s.id === 'hours').tabs.map(t => t.page).join() === 'hoursmonth,authorizations,evvcorrections', 'Hours & EVV: This month, Authorizations, EVV forms');
+  // Slimmer Authorizations (her switch 'authSlim', 2026-10-23) renames Care plans; off = as before.
+  const cpTab = SECTIONS.find(s => s.id === 'consumers').tabs.find(t => t.page === 'careplans');
+  ok(cpTab.label === 'Care plans', 'switch off: the tab still says Care plans');
+  ctx.authSlimOn = () => true;
+  ok(cpTab.label === 'Care plan days', 'switch on: Care plan days');
+  delete ctx.authSlimOn;
   ok(resolve('hours').page === 'hoursmonth' && resolve('evv').page === 'evvcorrections', '#hours and #evv open the new section');
   ok(SECTIONS.find(s => s.id === 'help').tabs.map(t => t.label).join() === 'Deadlines,Compliance,Onboarding,Reference,Settings', 'Help ends with a Settings tab, the old Switches page');
   const tabCount = SECTIONS.reduce((t, s) => t + s.tabs.length, 0);
