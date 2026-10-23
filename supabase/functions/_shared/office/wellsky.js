@@ -269,12 +269,17 @@
     } else if (!check.lastRun.ok) {
       out.push({ t: tag + 'The last WellSky check did not finish: ' + check.lastRun.why, go: 'authorizations', bad: true, system: true });
     }
+    // Due (her approved rules 2026-10-23): a shift problem needs its correction form by Saturday
+    // 11:59 PM of that pay week (Sunday to Saturday), before payroll.
     const long = longShifts(check.shifts, reviewed, today);
     if (long.length) out.push({ t: tag + plural(long.length, 'long shift', 'long shifts') + ' to check before payroll', go: 'authorizations', bad: true,
-                                people: long.map(s => ({ name: s.consumer, why: short(s.date) + ', ' + s.attendant + ', ' + s.why, key: s.key, act: 'shift' })) });
+                                people: long.map(s => ({ name: s.consumer, why: short(s.date) + ', ' + s.attendant + ', ' + s.why, key: s.key, act: 'shift', due: payWeekEnd(s.date) })) });
     const open = openShifts(check.open, reviewed);
     if (open.length) out.push({ t: tag + plural(open.length, 'shift', 'shifts') + ' never clocked out (still In Progress in WellSky)', go: 'authorizations', bad: true,
-                                people: open.map(s => ({ name: s.consumer, why: s.attendant + ', ' + s.why, key: s.key, act: 'shift' })) });
+                                people: open.map(s => ({ name: s.consumer, why: s.attendant + ', ' + s.why, key: s.key, act: 'shift', due: payWeekEnd(s.clockIn.slice(0, 10)) })) });
+    const both = overlaps(check.shifts, now).filter(o => !(reviewed && reviewed[o.key]));
+    if (both.length) out.push({ t: tag + plural(both.length, 'time', 'times') + ' two attendants were on at once', go: 'hoursmonth', bad: true,
+                                people: both.map(o => ({ name: o.consumer, why: short(o.date) + ', ' + o.why, key: o.key, act: 'shift', due: payWeekEnd(o.date) })) });
     const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
     const h = hoursThisMonth(check.auths, check.shifts, pulledOn);
     const over = h.filter(x => x.status === 'over' || x.status === 'booked-over');
@@ -403,7 +408,51 @@
     return { known: true, days, cutoff, asOf, people };
   }
 
+
+  // ---------- pay week, two attendants at once, shifts this month (2026-10-23) ----------
+  // The Saturday that ends the Sunday-to-Saturday pay week a date falls in.
+  function payWeekEnd(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + (6 - d.getDay()));
+    return isoLocal(d);
+  }
+  // DHSS: one CDS attendant per consumer at a time. Same rule and keys as the Hours page
+  // (hours/hub-hours.js overlaps, tested to agree), so Checked on either clears both.
+  const OVERLAP_DAYS = 31;
+  const minutesOf = (date, t) => {
+    const m = /^(\d{1,2}):(\d{2})\s*([AP])M$/i.exec(String(t || '').trim());
+    if (!date || !m) return null;
+    const h = (+m[1] % 12) + (m[3].toUpperCase() === 'P' ? 12 : 0);
+    return Date.parse(date + 'T00:00:00Z') / 6e4 + h * 60 + +m[2];
+  };
+  function overlaps(shifts, now) {
+    now = now || new Date();
+    const since = isoLocal(new Date(now.getTime() - OVERLAP_DAYS * 864e5)), today = isoLocal(now);
+    const out = [];
+    for (const c of (shifts && shifts.consumers) || []) {
+      const list = (c.shifts || []).filter(s => s.date >= since && s.date <= today)
+        .map(s => Object.assign({}, s, { a: minutesOf(s.date, s.start), b: minutesOf(s.endDate || s.date, s.end) }))
+        .filter(s => s.a != null && s.b != null && s.b > s.a).sort((x, y) => x.a - y.a);
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length && list[j].a < list[i].b; j++) {
+        const x = list[i], y = list[j], same = x.attendant === y.attendant;
+        out.push({ key: 'overlap|' + c.name + '|' + x.date + '|' + x.start + '|' + y.start, consumer: firstLast(c.name), date: x.date,
+          why: same ? firstLast(x.attendant) + ' has two shifts that overlap (' + x.start + ' to ' + x.end + ' and ' + y.start + ' to ' + y.end + '). Probably entered twice.'
+            : firstLast(x.attendant) + ' (' + x.start + ' to ' + x.end + ') and ' + firstLast(y.attendant) + ' (' + y.start + ' to ' + y.end + ') at the same time. Only one attendant may work at a time.' });
+      }
+    }
+    return out.sort((a, b) => b.date.localeCompare(a.date));
+  }
+  // Worked shifts this calendar month up to today: the base for the EVV standard (her call
+  // 2026-10-23: no more than 5% of shifts need a manual fix, on the Dashboard and the Hours page).
+  const EVV_GOAL = 0.05;
+  function shiftsThisMonth(shifts, now) {
+    const today = isoLocal(now || new Date()), month = today.slice(0, 7);
+    let n = 0;
+    for (const c of (shifts && shifts.consumers) || []) for (const s of c.shifts || []) if (s.date && s.date.slice(0, 7) === month && s.date <= today) n++;
+    return n;
+  }
+
   root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
                       mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL, noShifts, NO_SHIFT_DAYS,
-                      LONG_HOURS, LONG_FACTOR, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
+                      LONG_HOURS, LONG_FACTOR, payWeekEnd, overlaps, shiftsThisMonth, EVV_GOAL, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -22,6 +22,11 @@
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
   const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+  // Due-date helpers (her approved rules 2026-10-23).
+  const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); };
+  const addBusinessDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() % 6) n--; } return isoLocal(d); };
+  const payWeekEnd = iso => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + (6 - d.getDay())); return isoLocal(d); };
+  const mdy = s => { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s || '').trim()); return m ? m[3] + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0') : ''; };
   const monDay = iso => iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '';
   // One meaning of "active" on Today and the Dashboard (her ask 2026-10-22, for Zach): a hub
   // consumer not marked inactive whose attendant worked a WellSky shift in the last 31 days.
@@ -191,7 +196,11 @@
       items: [
         einLate.length && { t: plural(einLate.length, 'consumer', 'consumers') + ' past the 90-day EIN deadline', go: 'taxcompliance', bad: true, people: byDue(einLate) },
         einSoon.length && { t: einSoon.length + ' inside three weeks of it', go: 'taxcompliance', people: byDue(einSoon) },
-        desDue.length  && { t: desDue.length + ' past $1,000 in a quarter and not registered with DES', go: 'taxcompliance', bad: true, people: byDue(desDue) }
+        desDue.length  && { t: desDue.length + ' past $1,000 in a quarter and not registered with DES', go: 'taxcompliance', bad: true, people: byDue(desDue) },
+        // State reports and tax filings due in 30 days or late, until marked sent (only when the caller hands quarterStatus in).
+        ...(data.quarterStatus ? [reportsDue(data.quarterStatus, now)].filter(r => r.length).map(r => ({
+          t: plural(r.length, 'state report or tax filing', 'state reports and tax filings') + ' due', go: 'calendar', bad: r.some(x => x.late || x.days <= 7),
+          people: r.map(x => ({ name: x.title, why: x.late ? 'late' : x.days === 0 ? 'due today' : plural(x.days, 'day', 'days') + ' left', due: x.due, key: x.key, act: 'report' })) })) : [])
       ].filter(Boolean),
       clear: 'Nothing outstanding with the state.'
     });
@@ -214,7 +223,8 @@
       items: [
         noAuth.length   && { t: noAuth.length + ' active consumer' + (noAuth.length !== 1 ? 's have' : ' has') + ' no authorization on file', go: 'authorizations', bad: true, people: byDue(noAuth) },
         expired.length  && { t: plural(expired.length, 'authorization', 'authorizations') + ' expired', go: 'authorizations', bad: true, people: byDue(expired) },
-        expiring.length && { t: expiring.length + ' expiring within 60 days', go: 'authorizations', people: byDue(expiring) }
+        expiring.length && { t: expiring.length + ' expiring within 60 days', go: 'authorizations', people: byDue(expiring) },
+        ...evvAndPayroll(data, now)
       ].filter(Boolean).concat(data.wellskyItems || []),   // the daily WellSky check (wellsky.js items)
       clear: 'Every consumer has a current authorization.'
     });
@@ -232,7 +242,8 @@
       items: [
         visitsOverdue.length && { t: plural(visitsOverdue.length, 'annual face-to-face visit', 'annual face-to-face visits') + ' overdue', go: 'consumers', bad: true, people: byDue(visitsOverdue) },
         visitsSoon.length    && { t: plural(visitsSoon.length, 'face-to-face visit', 'face-to-face visits') + ' in the last 2 months, book ' + (visitsSoon.length === 1 ? 'it' : 'them') + ' now', go: 'consumers', people: byDue(visitsSoon) },
-        monthDue.length      && { t: plural(monthDue.length, 'monthly check-in call', 'monthly check-in calls') + ' not yet logged this month', go: 'consumers', people: byDue(monthDue) }
+        monthDue.length      && { t: plural(monthDue.length, 'monthly check-in call', 'monthly check-in calls') + ' not yet logged this month', go: 'consumers', people: byDue(monthDue) },
+        ...dhssChanges(consumers, now)
       ].filter(Boolean),
       clear: 'Contacts and visits are up to date.'
     });
@@ -253,6 +264,7 @@
       items: [
         waiting.length && { t: waiting.length + ' new ' + (waiting.length !== 1 ? 'enquiries' : 'enquiry') + ' from the website, never contacted', go: 'pipeline', bad: true,
                             people: waiting },
+        ...leadDeadlines(pipeline, calls, todayIso),
         // "Follow-ups" is the calls-and-texts tab, so a lead's call-back date says "call back" (10-22).
         follow.length  && { t: plural(follow.length, 'lead', 'leads') + ' to call back today or overdue', go: 'pipeline',
                             people: follow.map(p => ({ name: p.name, county: p.county || '', at: '', id: p.id, act: 'lead', due: p.followup || '' })) },
@@ -301,6 +313,75 @@
   }
 
 
+  // ---------- approved due dates (her answers 2026-10-23, build step 4 of the hub audit) ----------
+  // EVV forms and payroll. data.evv = { corrections (agency_data evvCorrections), submissions
+  // (evv_submissions not processed) }; data.payroll = { runs (payrollTotals.runs), registers
+  // (attendantWages.registers) }. Each only when handed in.
+  function evvAndPayroll(data, now) {
+    const today = isoLocal(now), out = [];
+    if (data.evv) {
+      const ppl = [];
+      (data.evv.submissions || []).filter(x => x && !x.processed).forEach(x => {
+        const d = String(x.visitdate || '').slice(0, 10), miss = [!x.sig_consumer && 'the consumer', !x.sig_attendant && 'the attendant'].filter(Boolean);
+        ppl.push({ name: x.consumer || 'EVV form', why: miss.length ? 'needs ' + miss.join(' and ') + ' to sign' : 'signed form to review and fix in WellSky',
+                   due: d ? payWeekEnd(d) : '', act: 'evv' });
+      });
+      (data.evv.corrections || []).filter(c => c && c.wellskyDone !== 'yes' && c.status !== 'denied').forEach(c => {
+        const d = String(c.visitdate || '').slice(0, 10);
+        ppl.push({ name: c.consumer || 'EVV form', why: 'form on file, fix the shift in WellSky', due: d ? payWeekEnd(d) : '', act: 'evv' });
+      });
+      if (ppl.length) out.push({ t: plural(ppl.length, 'EVV form', 'EVV forms') + ' to finish (due Saturday 11:59 PM of that pay week)', go: 'evvcorrections',
+                                 bad: ppl.some(p => p.due && p.due < today), people: ppl.sort((a, b) => (a.due || '9').localeCompare(b.due || '9')) });
+    }
+    if (data.payroll) {
+      // Upload each payroll's Check Register and Payroll Summary the day after payday. Paydays drift
+      // around holidays, so the next one is expected 7 days after the last uploaded, due the day after.
+      const last = k => (data.payroll[k] || []).map(r => mdy(r.checkDate)).filter(Boolean).sort().pop() || '';
+      const sum = last('runs'), reg = last('registers');
+      const have = [sum, reg].filter(Boolean).sort()[0];
+      if (have) {
+        const due = addDays(have, 8);
+        if (due <= today) out.push({ t: 'Upload the latest Empeon payroll', go: 'payroll', bad: due < today,
+          people: [{ name: 'Check Register and Payroll Summary', why: 'last payroll on file paid ' + monDay(have) + (sum !== reg ? ' (one of the two is older)' : ''), due, act: 'payroll' }] });
+      }
+    }
+    return out;
+  }
+  // A check-in call that found a change in health or circumstances: report it to DHSS within 10 days.
+  // The call log keeps dhssFlag; Reported on Today saves dhssReported on that log.
+  function dhssChanges(consumers, now) {
+    const today = isoLocal(now), ppl = [];
+    (consumers || []).forEach(c => Object.entries(c.contacts || {}).forEach(([month, log]) => {
+      if (!log || !log.dhssFlag || log.dhssReported) return;
+      const d = String(log.date || '').slice(0, 10) || month + '-01';
+      ppl.push({ name: c.name, id: c.id, month, why: 'change found on the ' + monDay(d) + ' call' + (log.healthNotes || log.circNotes ? ': ' + String(log.healthNotes || log.circNotes).slice(0, 80) : ''),
+                 due: addDays(d, 10), act: 'dhss' });
+    }));
+    return ppl.length ? [{ t: plural(ppl.length, 'change', 'changes') + ' to report to DHSS (10 days from the call)', go: 'consumers',
+                           bad: ppl.some(p => p.due <= today), people: ppl.sort((a, b) => a.due.localeCompare(b.due)) }] : [];
+  }
+  // Leads: waiting on the state over 21 days (call DSDS), and leads already reached with no call back
+  // date (set one within 1 business day of the last contact). Same rule as the Leads page cards.
+  function leadDeadlines(pipeline, calls, todayIso) {
+    const state = [], noDate = [];
+    (pipeline || []).forEach(p => {
+      if (!p) return;
+      const k = leadCard(p, calls, todayIso, !!p.movedToConsumers);
+      if (k.step === 'state' && p.stateSubmit && daysBetween(p.stateSubmit, todayIso) > 21)
+        state.push({ name: p.name, id: p.id, why: 'sent to the state ' + monDay(p.stateSubmit) + ', call DSDS', due: addDays(p.stateSubmit, 21), act: 'lead' });
+      if (k.step === 'call' && !p.followup && !leadWaiting(p, calls)) {
+        const notes = (p.notes || []).filter(n => n && n.date && !isFormNote(n)).map(n => String(n.date).slice(0, 10)).sort();
+        const lastTouch = notes.pop() || String(p.addedAt || p.firstContact || '').slice(0, 10) || todayIso;
+        noDate.push({ name: p.name, id: p.id, why: 'no call back date set', due: addBusinessDays(lastTouch, 1), act: 'lead' });
+      }
+    });
+    const byD = l => l.sort((a, b) => a.due.localeCompare(b.due));
+    return [
+      state.length && { t: plural(state.length, 'lead', 'leads') + ' waiting on the state over 21 days', go: 'pipeline', bad: true, people: byD(state) },
+      noDate.length && { t: plural(noDate.length, 'lead needs', 'leads need') + ' a call back date', go: 'pipeline', bad: noDate.some(x => x.due < todayIso), people: byD(noDate) }
+    ].filter(Boolean);
+  }
+
   // ---------- Attendants on Today and in the 8am email (2026-10-22) ----------
   // w = { tasks, applications?, roster, autoOig? }
   //   tasks: open office to-dos from cds_tasks (area 'match') { id, kind, title, due_at, pool_id, caregiver }.
@@ -333,7 +414,13 @@
     const steps = tasks.filter(t => /^packet_/.test(t.kind));
     const withTask = new Set(steps.map(t => t.pool_id).filter(Boolean));
     const taskWho = t => ({ name: t.caregiver || 'New attendant', why: t.title, due: day(t.due_at), id: t.id, pool: t.pool_id || '', act: 'task' });
-    const ours = (w.applications || []).filter(a => a && !a.active && OUR_LABELS.includes(a.label) && !withTask.has(a.pool_id));
+    // I-9 Section 2 is due 3 business days after the first day worked (federal rule). The hub knows
+    // first shifts from WellSky (w.firstShift by lowercased name); anyone not active who already worked is late or due.
+    const i9 = (w.applications || []).filter(a => a && !a.active && w.firstShift && w.firstShift[String(a.name || '').toLowerCase()])
+      .map(a => { const f = w.firstShift[String(a.name).toLowerCase()];
+        return { name: a.name, why: 'worked ' + monDay(f) + ' before onboarding was finished. Complete I-9 Section 2 in Empeon.', due: addBusinessDays(f, 3), act: 'attendant', pool: a.pool_id }; });
+    const i9Pools = new Set(i9.map(x => x.pool));
+    const ours = (w.applications || []).filter(a => a && !a.active && OUR_LABELS.includes(a.label) && !withTask.has(a.pool_id) && !i9Pools.has(a.pool_id));
     const late = [], soon = [], missing = [];
     (w.roster || []).forEach(a => {
       const c = attendantChecks(a, (w.autoOig || {})[a.id], now);
@@ -346,6 +433,7 @@
     const byDue = l => l.sort((a, b) => (a.due || '9').localeCompare(b.due || '9') || String(a.name).localeCompare(String(b.name)));
     return [
       w.error && { t: 'The attendant to-dos could not be read: ' + w.error, go: 'activeattendants', bad: true },
+      i9.length && { t: plural(i9.length, 'attendant', 'attendants') + ' worked before I-9 Section 2 was done (3 business days)', go: 'activeattendants', bad: true, people: i9 },
       oig.length && { t: plural(oig.length, 'OIG possible match', 'OIG possible matches') + ' to decide today', go: 'activeattendants', bad: true,
                       people: byDue(oig.map(t => Object.assign(taskWho(t), { name: t.caregiver || 'OIG check', act: 'oig' }))) },
       steps.length && { t: plural(steps.length, 'office step', 'office steps') + ' for new attendants', go: 'activeattendants',
@@ -685,7 +773,7 @@
              whoCalled: wc, whoLabel: wc ? WHO_CALLED[wc] : '' };
   }
 
-  // State reports with a due date (2026-10-22, her yes): shown on Today's Coming up from 30 days
+  // State reports and tax filings with a due date (2026-10-22, her yes; on Today's step 1 since 2026-10-23) from 30 days
   // before until marked Submitted on the Deadlines page. A Submitted mark only counts for the due
   // date it was made for (quarterStatus[key + '_for']), so last year's mark never hides this year's.
   const REPORTS = [
@@ -694,7 +782,13 @@
     { key: 'q3',     title: 'Q3 Financial & Service Report (Jul to Sep)', due: y => [y, 10, 31] },
     { key: 'q4',     title: 'Q4 Financial & Service Report (Oct to Dec)', due: y => [y + 1, 1, 31] },
     { key: 'annual', title: 'Annual Service Report',                      due: y => [y + 1, 1, 31] },
-    { key: 'des',    title: 'DES wage reports in UInteract, one per registered consumer', quarterly: true }
+    { key: 'des',    title: 'DES wage reports in UInteract, one per registered consumer', quarterly: true },
+    // 2026-10-23 (her answers): fiscal year ends Dec 31, so the CPA audit is due 150 days later, May 30.
+    { key: 'audit',  title: 'Annual CPA audit (last year, ending Dec 31)', due: y => [y, 5, 30] },
+    { key: 'f941',   title: 'Federal 941, one per consumer EIN', quarterly: true },
+    { key: 'mo941',  title: 'MO 941, one per consumer EIN', quarterly: true },
+    { key: 'w2',     title: 'W-2s to attendants and W-3 to SSA, one per consumer EIN', due: y => [y + 1, 1, 31] },
+    { key: 'mow3',   title: 'MO W-3, one per consumer EIN', due: y => [y + 1, 2, 28] }
   ];
   const _iso = (y, m, d) => y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
   const QUARTER_DUE = [[4, 30], [7, 31], [10, 31], [1, 31]];
@@ -795,7 +889,7 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, isActive, activeNow, attendantWork, attendantChecks, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    dailyRoutine, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
