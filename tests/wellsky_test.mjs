@@ -121,7 +121,7 @@ eq(W.items({}, {}, now), [], 'nothing at all before the first pull');
 const stale = Object.assign({}, fresh, { live: true });
 eq(W.items(stale, {}, new Date(2026, 9, 21, 8, 0))[0].t, 'The WellSky check has not run since Oct 19. Log in to WellSky in Chrome and leave the Mac on.', 'a stopped check is red, live wording has no Practice tag');
 const broke = Object.assign({}, fresh, { lastRun: { at: now.toISOString(), ok: false, why: 'WellSky asked to log in again' } });
-eq(W.items(broke, {}, now)[0], { t: 'Practice: The last WellSky check did not finish: WellSky asked to log in again', go: 'authorizations', bad: true }, 'a failed run is red with the reason');
+eq(W.items(broke, {}, now)[0], { t: 'Practice: The last WellSky check did not finish: WellSky asked to log in again', go: 'authorizations', bad: true, system: true }, 'a failed run is red with the reason');
 const steps = R.dailyRoutine({ consumers: [], pipeline: [], authorizations: {}, attendantWages: {}, wellskyItems: I }, now);
 eq(steps[1].items.length, 5, 'the lines join step 2, Protect the money');
 eq(R.dailyRoutine({ consumers: [], pipeline: [], authorizations: {}, attendantWages: {} }, now)[1].items.length, 0, 'no WellSky lines when none are handed in');
