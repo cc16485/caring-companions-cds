@@ -124,6 +124,24 @@ export function rosterDue(a, autoOig, now = new Date()) {
   return { rows, label, tone: over ? 'r' : soonR || miss.length ? 'y' : 'g', due: !!(over || soonR), missing: miss.length > 0 };
 }
 
+// Ending an attendant (her rule 2026-10-22): the consumer's decision, on record.
+export const END_WHY = [['consumer', 'The consumer ended it'], ['attendant', 'The attendant quit (consumer told)'], ['other', 'Other (say what in the note)']];
+export const END_HOW = [['call', 'Phone call'], ['person', 'In person'], ['text', 'Text message'], ['email', 'Email'], ['letter', 'Signed letter or form']];
+export function endRecord({ why, how, on, said, by }, now = new Date()) {
+  const today = isoLocal(now);
+  if (!END_WHY.some(([k]) => k === why)) return { error: 'Pick why they are no longer working.' };
+  if (!END_HOW.some(([k]) => k === how)) return { error: 'Pick how the consumer told us.' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(on || '') || on > today) return { error: 'Pick the date the consumer told us (not in the future).' };
+  const words = String(said || '').trim();
+  if (words.length < 10) return { error: 'Write what the consumer said, or paste their text or email.' };
+  return { record: { why, how, on, said: words.slice(0, 4000), by: String(by || '').trim(), at: now.toISOString() } };
+}
+export function endWords(e) {
+  if (!e) return '';
+  const why = (END_WHY.find(([k]) => k === e.why) || [, ''])[1], how = (END_HOW.find(([k]) => k === e.how) || [, ''])[1];
+  return 'Ended ' + shortDay(e.on) + ': ' + why.replace(/ \(.*\)$/, '').toLowerCase() + ' (' + how.toLowerCase() + ')' + (e.by ? ', recorded by ' + e.by.replace(/@.*/, '') : '');
+}
+
 // The onboarding track: the packet's steps folded into the 7 the office sees, the last one
 // being the first clock-in in WellSky.
 export const TRACK = [
@@ -201,7 +219,8 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
   quiet.sort((x, y) => String(y.last).localeCompare(String(x.last)) || x.name.localeCompare(y.name));
   const gone = ended.map(a => { const w = find(a.wellskyName || a.name);
     return { kind: 'ended', id: a.id, name: a.name, label: 'No longer working', tone: 'b', last: w ? w.last : '',
-      meta: [a.consumer ? 'Was with ' + a.consumer : '', w && w.last ? 'last shift ' + shortDay(w.last) : ''].filter(Boolean).join(' · ') }; })
+      said: a.ended ? a.ended.said : '',
+      meta: [endWords(a.ended) || 'No record of how the consumer told us', a.consumer ? 'was with ' + a.consumer : '', w && w.last ? 'last shift ' + shortDay(w.last) : ''].filter(Boolean).join(' · ') }; })
     .sort((x, y) => x.name.localeCompare(y.name));
   return { starting, working, quiet, ended: gone, wellsky: ws,
     tiles: { starting: starting.length, working: working.length, due: [...working, ...quiet].filter(r => r.due).length,
@@ -248,7 +267,7 @@ export function mountHubPacket(el, opts) {
     const hoursNote = ws.hoursAsOf && ws.asOf && ws.hoursAsOf.slice(0, 10) !== ws.asOf.slice(0, 10)
       ? '; hours this month as of ' + shortDay(new Date(ws.hoursAsOf).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : '';
     const tabBtn = (k, label, n) => `<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${label} (${n})</button>`;
-    const endedRow = x => `<div class="row" style="cursor:default"><b>${esc(x.name)}</b><button class="btn o" data-reactivate="${esc(x.id)}">Make active again</button><span class="meta">${esc(x.meta || 'Marked no longer working')}</span></div>`;
+    const endedRow = x => `<div class="row" style="cursor:default"><b>${esc(x.name)}</b><button class="btn o" data-reactivate="${esc(x.id)}">Make active again</button><span class="meta">${esc(x.meta)}</span>${x.said ? `<span class="meta">The consumer said: "${esc(x.said)}"</span>` : ''}</div>`;
     let body;
     if (tab === 'onboarding') body = `<div class="ghead"><span>Consumer waiting goes first</span></div>
       ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is onboarding. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}`;
@@ -325,7 +344,7 @@ export function mountHubPacket(el, opts) {
       <h3>Rechecks</h3>
       <table><thead><tr><th>Check</th><th>Last done</th><th>Next due</th></tr></thead><tbody>
       ${d.rows.map(r => `<tr><td><b>${r.k}</b></td><td>${r.auto ? esc(fmtD(r.done)) + ' <span class="small">(ran by itself)</span>'
-        : `<input type="date" id="hp_${field[r.k]}" value="${esc(r.done || '')}" max="${ymd(new Date())}" aria-label="${r.k} last done">`}</td>
+        : `<input type="date" id="hp_${field[r.k]}" value="${esc(r.done || '')}" max="${isoLocal(new Date())}" aria-label="${r.k} last done">`}</td>
         <td>${r.due ? `<span class="pill ${r.tone}">${esc(fmtD(r.due))}</span>` : '<span class="small">Add the date it was last done</span>'}</td></tr>`).join('')}
       </tbody></table>
       <div class="btns"><button class="btn" data-act="dates">Save dates</button></div>
@@ -344,7 +363,12 @@ export function mountHubPacket(el, opts) {
     const fail = m => { const x = errEl(); if (x) x.textContent = m; else alert(m); };
     try {
       if (b.dataset.tab) { tab = b.dataset.tab; draw(); return; }
-      if (b.dataset.reactivate) { await opts.saveRoster(b.dataset.reactivate, { status: 'active' }); draw(); return; }
+      if (b.dataset.reactivate) {
+        // The end record is kept (pastEnds), never thrown away.
+        const a = (opts.roster ? opts.roster() : []).find(x => x.id === b.dataset.reactivate) || {};
+        await opts.saveRoster(b.dataset.reactivate, { status: 'active', ended: null, pastEnds: [...(a.pastEnds || []), ...(a.ended ? [a.ended] : [])] });
+        draw(); return;
+      }
       if (b.dataset.open) { const [k, id] = b.dataset.open.split(':'); return k === 'packet' ? openPacket(id) : openRosterCard(id); }
       const act = b.dataset.act;
       if (act === 'reload') return load();
@@ -353,18 +377,30 @@ export function mountHubPacket(el, opts) {
       if (act === 'dates') {
         const patch = {};
         for (const k of ['edlDate', 'fcsrDate', 'leieDate']) { const i = el.querySelector('#hp_' + k); if (i) patch[k] = i.value || ''; }
-        if (Object.values(patch).some(v => v && v > ymd(new Date()))) return fail('A check date cannot be in the future.');
+        if (Object.values(patch).some(v => v && v > isoLocal(new Date()))) return fail('A check date cannot be in the future.');
         await opts.saveRoster(open.id, patch);
         return openRosterCard(open.id, 'Saved.');
       }
+      // Her rule 2026-10-22: the consumer is the employer, so ending an attendant needs a record of
+      // how the consumer told us (their words, or the text or email pasted in), on what day, and who took it.
       if (act === 'leave') {
         const a = roster().find(x => x.id === open.id);
-        el.querySelector('#hp_leave').innerHTML = `<div class="ask"><b>Mark ${esc(a ? a.name : 'them')} as no longer working?</b><p class="small">Their rechecks stop and they leave the Attendants list.</p>
-          <div class="btns"><button class="btn bad" data-act="leave-yes">Yes, no longer working</button><button class="btn o" data-act="leave-no">Keep them</button></div></div>`;
+        el.querySelector('#hp_leave').innerHTML = `<div class="ask"><b>Mark ${esc(a ? a.name : 'them')} as no longer working</b>
+          <p class="small">The consumer is the employer, so we need their decision on record. Their rechecks stop and they move to Inactive.</p>
+          <dl><dt>Why</dt><dd><select id="hp_why"><option value="">Pick one</option>${END_WHY.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></dd>
+          <dt>How the consumer told us</dt><dd><select id="hp_how"><option value="">Pick one</option>${END_HOW.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></dd>
+          <dt>Date they told us</dt><dd><input type="date" id="hp_on" value="${isoLocal(new Date())}" max="${isoLocal(new Date())}"></dd>
+          <dt>What the consumer said</dt><dd><textarea id="hp_said" rows="3" style="width:100%;font:inherit;padding:7px 9px;border:2px solid #dfe6ec;border-radius:8px" placeholder="Their words from the call, or paste the text or email"></textarea></dd></dl>
+          <div class="btns"><button class="btn bad" data-act="leave-yes">Save and mark no longer working</button><button class="btn o" data-act="leave-no">Keep them</button></div><div class="err" id="hp_leave_err"></div></div>`;
         return;
       }
       if (act === 'leave-no') return openRosterCard(open.id);
-      if (act === 'leave-yes') { await opts.saveRoster(open.id, { status: 'inactive' }); open = null; tab = 'inactive'; return draw(); }
+      if (act === 'leave-yes') {
+        const v = id => (el.querySelector('#' + id) || {}).value || '';
+        const rec = endRecord({ why: v('hp_why'), how: v('hp_how'), on: v('hp_on'), said: v('hp_said'), by: opts.who ? opts.who() : '' });
+        if (rec.error) { el.querySelector('#hp_leave_err').textContent = rec.error; return; }
+        await opts.saveRoster(open.id, { status: 'inactive', ended: rec.record }); open = null; tab = 'inactive'; return draw();
+      }
       if (act === 'match') return opts.openMatch && opts.openMatch();
       if (b.dataset.copy) {
         const r = await api('packetCopy', { pool_id: open.id, kind: b.dataset.copy });
@@ -385,7 +421,7 @@ export function mountHubPacket(el, opts) {
           const f = inp.files[0]; if (!f) return;
           if (f.size > 15 * 1024 * 1024) return fail('That file is too big (15 MB limit).');
           const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
-          try { await api('recordCheck', { id: open.id, check_key: key, result: 'clear', checked_on: ymd(new Date()), proof: { mime: f.type || 'image/png', data }, note: 'Recorded from Active Attendants' }); openPacket(open.id); }
+          try { await api('recordCheck', { id: open.id, check_key: key, result: 'clear', checked_on: isoLocal(new Date()), proof: { mime: f.type || 'image/png', data }, note: 'Recorded from Active Attendants' }); openPacket(open.id); }
           catch (x) { fail(x.message); }
         };
         inp.click();
