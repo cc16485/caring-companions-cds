@@ -181,5 +181,11 @@ ok(!pp.some(p => p.id === 'a2'), 'an older date never replaces a newer Roster da
 const due = HP.rosterDue({ edlDate: '2026-01-27', fcsrDate: '2026-01-26' }, '2026-10-11', new Date('2026-10-22T12:00:00'));
 ok(due.tone === 'r' && /EDL overdue/.test(due.label), 'a pre-hire EDL from January shows overdue (every 3 months)');
 
+// ---------- a paper added by hand (a packet signed in GHL e-sign) ----------
+await refuses(() => S('rosterProofAdd', { attendant_id: 'a2', check_key: 'application' }), /Add the PDF/, 'a paper needs its PDF');
+const pa = await S('rosterProofAdd', { attendant_id: 'a2', check_key: 'application', proof: { mime: 'application/pdf', name: 'Flo application packet.pdf', data: 'data:application/pdf;base64,JVBERg==' } });
+ok(pa.ok && pa.item.check === 'application' && pa.item.source === 'hub' && !pa.item.checked_on, 'the application packet PDF is added, with no check date');
+await refuses(() => S('rosterProofAdd', { attendant_id: 'a2', check_key: 'ssn', proof: { mime: 'application/pdf', data: 'data:application/pdf;base64,JVBERg==' } }), /Pick FCSR/, 'only the kept kinds can be added');
+
 console.log(`roster proof: ${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);

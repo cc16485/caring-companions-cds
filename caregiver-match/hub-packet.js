@@ -90,7 +90,7 @@ const display = name => { const s = String(name || '').trim().replace(/\s+/g, ' 
 export function wellskyByAttendant(w, now = new Date()) {
   w = w || {};
   const today = isoLocal(now), month = today.slice(0, 7), by = {};
-  const get = raw => { const k = nameKey(raw); if (!k) return null; return by[k] || (by[k] = { key: k, name: display(raw), last: '', hours: 0, consumers: [] }); };
+  const get = raw => { const k = nameKey(raw); if (!k) return null; return by[k] || (by[k] = { key: k, name: display(raw), last: '', first: '', hours: 0, consumers: [] }); };
   const addC = (x, c) => { const n = display(c); if (n && !x.consumers.includes(n)) x.consumers.push(n); };
   // Shifts from the daily WellSky email when it names the attendant, else the Chrome schedule report.
   const sh = mergedShifts(w), fl = w.analytics && w.analytics.firstLast;
@@ -105,6 +105,11 @@ export function wellskyByAttendant(w, now = new Date()) {
     const x = c.attendant ? get(c.attendant) : null; if (!x) continue;
     addC(x, c.name);
     if (c.last && c.last <= today && c.last > x.last) x.last = c.last;
+  }
+  // First day of work: the attendant's first care log in WellSky (the daily First and Last Carelog email).
+  for (const a of (fl && fl.attendants) || []) {
+    const x = get(a.name); if (!x || !a.first || a.first > today) continue;
+    if (!x.first || a.first < x.first) x.first = a.first;
   }
   Object.values(by).forEach(x => { x.hours = Math.round(x.hours * 4) / 4; });
   return { by, have: !!((sh && sh.consumers) || (fl && fl.consumers)),
@@ -326,7 +331,7 @@ export function mountHubPacket(el, opts) {
     const paperList = Object.keys(paperBy).sort().map(n => `<li><b>${esc(n)}</b>: ${paperBy[n].map(x => esc(CHECK_LABEL[x.check]) + ' ' + paperLink(x)).join(' · ')}</li>`).join('');
     const noApp = (r.roster || []).filter(a => !papers.some(x => x.attendant_id === a.id && x.check === 'application') && !r.skipped.some(k => k.attendant_id === a.id && /No GHL contact/.test(k.why)));
     const rows = Object.entries(byAtt).sort((x, y) => x[1][0].name.localeCompare(y[1][0].name)).map(([id, xs]) => xs
-      .sort((a, b) => ['fcsr', 'edl', 'oig'].indexOf(a.check) - ['fcsr', 'edl', 'oig'].indexOf(b.check) || String(b.checked_on || b.date_found).localeCompare(String(a.checked_on || a.date_found)))
+      .sort((a, b) => ['fcsr', 'edl', 'oig'].indexOf(a.check) - ['fcsr', 'edl', 'oig'].indexOf(b.check) || String(a.checked_on || a.date_found || '9999').localeCompare(String(b.checked_on || b.date_found || '9999')))
       .map((x, i) => `<tr>${i ? '<td></td>' : `<td><b>${esc(x.name)}</b></td>`}<td><b>${CHECK_LABEL[x.check]}</b></td>
         <td>${paperLink(x)}${x.ghl_result ? `<div class="small">GHL: ${esc(x.ghl_result.replace(/^[^A-Za-z]+/, ''))}</div>` : ''}</td>
         <td><input type="date" data-proof="${esc(x.id)}" value="${esc(x.checked_on || x.date_found || '')}" max="${isoLocal(new Date())}" aria-label="${CHECK_LABEL[x.check]} date for ${esc(x.name)}">
@@ -400,6 +405,7 @@ export function mountHubPacket(el, opts) {
     el.innerHTML = `<button class="pill-btn" data-act="back">← All attendants</button>
       <div class="card"><h2>${esc(a.name)}</h2><span class="pill ${d.tone}">${esc(d.label)}</span>
       <dl><dt>Works for</dt><dd>${esc((w && w.consumers.join(' and ')) || a.consumer)}</dd>
+      <dt>First day of work</dt><dd>${w && w.first ? esc(fmtD(w.first)) + ' <span class="small">(first care log in WellSky)</span>' : '<span class="small">Not in WellSky yet. It comes from the daily First and Last Carelog email.</span>'}</dd>
       <dt>In WellSky</dt><dd>${w && w.last ? 'Last shift ' + esc(fmtD(w.last)) + (w.hours ? ' · ' + w.hours + ' hrs this month' : '') : ws.have ? 'No shifts in the WellSky reports' : 'WellSky has not sent anything yet'}</dd>
       ${[['Phone', a.phone], ['Email', a.email], ['Hired', fmtD(a.hiredate)], ['FCSR number', a.fcsrNum], ['Empeon', a.empeon], ['Contract', a.contract], ['EVV', a.evv]]
         .filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
@@ -419,6 +425,10 @@ export function mountHubPacket(el, opts) {
         <input type="date" id="hp_pd" value="${isoLocal(new Date())}" max="${isoLocal(new Date())}" aria-label="Day the check was run">
         <button class="btn" data-act="proof-add">Clear: add the PDF or screenshot</button></div>
         <p class="small">Only for a clear result. If a search finds something, call Samantha before anything else.</p></div>
+      <div class="copy"><b>Add a paper</b>
+        <div><select id="hp_ak" aria-label="Which paper"><option value="application">Application packet</option><option value="onboarding">Onboarding papers</option></select>
+        <button class="btn o" data-act="paper-add">Add the PDF</button></div>
+        <p class="small">For a packet signed in GHL: open Documents &amp; Contracts in GHL, find it under Completed, press the ⋮ menu, Download PDF, then add it here.</p></div>
       <input type="file" id="hp_proof" accept="image/*,application/pdf" hidden>
       <h3>Not working anymore?</h3>
       <div id="hp_leave"><div class="btns"><button class="btn o" data-act="leave">No longer working</button></div>
@@ -430,9 +440,12 @@ export function mountHubPacket(el, opts) {
   async function loadProofs(id) {
     const box = el.querySelector('#hp_proofs'); if (!box) return;
     try {
-      const { items } = await api('rosterProofList', { attendant_id: id });
+      const { items: got } = await api('rosterProofList', { attendant_id: id });
+      // Her ask 2026-10-22: the pre-hire check on top, its rechecks under it (oldest first).
+      const ORDER = ['application', 'onboarding', 'fcsr', 'edl', 'oig'], when = x => x.checked_on || x.date_found || '9999';
+      const items = got.slice().sort((a, b) => ORDER.indexOf(a.check) - ORDER.indexOf(b.check) || when(a).localeCompare(when(b)));
       if (!open || open.id !== id) return;
-      box.innerHTML = items.length ? `${items.some(x => x.check === 'application') ? '' : '<p>No application on file. Check their GHL Documents panel.</p>'}<table><tbody>${items.map(x => `<tr><td><b>${CHECK_LABEL[x.check]}</b></td><td>${esc(fmtD(x.checked_on || x.date_found) || (IS_CHECK(x.check) ? 'No date yet' : ''))}</td>
+      box.innerHTML = items.length ? `${items.some(x => x.check === 'application') ? '' : '<p>No application on file. Bring it in from GHL, or add the PDF below.</p>'}<table><tbody>${items.map(x => `<tr><td><b>${CHECK_LABEL[x.check]}</b>${IS_CHECK(x.check) ? `<div class="small">${items.findIndex(y => y.check === x.check) === items.indexOf(x) ? 'Pre-hire' : 'Recheck'}</div>` : ''}</td><td>${esc(fmtD(x.checked_on || x.date_found) || (IS_CHECK(x.check) ? 'No date yet' : ''))}</td>
         <td>${paperLink(x)}</td><td>${x.source === 'ghl' ? 'From GHL' : 'Added in the hub'}</td></tr>`).join('')}</tbody></table>`
         : '<p>No proof in the hub yet.</p><div class="btns"><button class="btn" data-act="ghl-import">Bring in papers and checks from GHL</button></div><p>This brings in everyone\'s application, onboarding papers and FCSR, EDL and OIG PDFs at once. Or add a recheck below.</p>';
     } catch (e) { box.textContent = 'Proof could not load: ' + e.message; }
@@ -509,6 +522,19 @@ export function mountHubPacket(el, opts) {
             if (p) await opts.saveRoster(id, p.patch);
             openRosterCard(id, CHECK_LABEL[key] + ' recheck saved with its proof.');
           } catch (x) { fail(x.message); }
+        };
+        inp.click();
+        return;
+      }
+      if (act === 'paper-add') {
+        const inp = el.querySelector('#hp_proof'), key = el.querySelector('#hp_ak').value, id = open.id;
+        inp.value = '';
+        inp.onchange = async () => {
+          const f = inp.files[0]; if (!f) return;
+          if (f.size > 15 * 1024 * 1024) return fail('That file is too big (15 MB limit).');
+          const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+          try { await api('rosterProofAdd', { attendant_id: id, check_key: key, proof: { mime: f.type || 'application/pdf', name: f.name, data } }); openRosterCard(id, CHECK_LABEL[key] + ' added.'); }
+          catch (x) { fail(x.message); }
         };
         inp.click();
         return;

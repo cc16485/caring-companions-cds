@@ -284,6 +284,20 @@ export function createRosterProof({ q, one, nowIso, audit, fail, crypto, deps })
     async rosterProofAdd({ staff: s, attendant_id, check_key, checked_on, result, proof }) {
       who(s);
       const day = await today();
+      // A paper (application, onboarding papers): the PDF only. GHL gives no file for a packet
+      // signed through its e-sign, so the office downloads it there and adds it here.
+      if (PAPERS[check_key]) {
+        if (!proof || !proof.data) fail('Add the PDF.');
+        const att0 = (await roster()).find(a => a.id === attendant_id);
+        if (!att0) fail('That attendant is not on the active Roster.');
+        if (!deps.media || !deps.media.putFile) fail('Saving papers works on the live hub only.');
+        const mid = await deps.media.putFile({ folder: 'roster/' + att0.id, name: check_key, mime: proof.mime || 'application/pdf', data: proof.data, by: 'staff:' + s });
+        const row0 = await one(`insert into cds_roster_proof (attendant_id, attendant_name, check_key, media_id, file_name, source, source_hash, date_found, created_by)
+          values ($1,$2,$3,$4,$5,'hub',$6,$7,$8) returning *`,
+          [att0.id, att0.name, check_key, mid, String(proof.name || PAPERS[check_key]).slice(0, 200), 'hub:' + mid, day, s]);
+        await audit('staff:' + s, 'roster_paper_add', 'attendant:' + att0.id, { kind: check_key });
+        return { ok: true, item: await view(row0) };
+      }
       if (!CHECK_KEYS.includes(check_key)) fail('Pick FCSR, EDL or OIG.');
       if (!validDay(checked_on, day)) fail('Pick the day the check was run (not in the future).');
       if (result !== 'clear') fail('Only a clear result is recorded here. If the search found something, call Samantha before anything else.');

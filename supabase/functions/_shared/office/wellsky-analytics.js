@@ -82,6 +82,9 @@ export function readFirstLast(files) {
   });
   // Who worked the first shift: the attendant whose own first care log for that consumer is earliest.
   const tf = byName(files, /client_then_caregiver\.csv$/);
+  // Each attendant's first care log with any of these consumers = their first day of work
+  // (2026-10-22, Samantha: "add the attendants first date of work").
+  const attendants = [];
   if (tf) {
     const u = table(tf.text);
     const jN = col(u.head, /^client name$/, /client.*name/), jC = col(u.head, /^caregiver name$/, /caregiver.*name/), jF = col(u.head, /^first carelog date$/, /first.*date/);
@@ -89,10 +92,26 @@ export function readFirstLast(files) {
       const best = {};
       u.rows.forEach(r => { const d = day(r[jF]); if (r[jN] && r[jC] && d && (!best[r[jN]] || d < best[r[jN]].d)) best[r[jN]] = { d, who: r[jC] }; });
       consumers.forEach(c => { if (best[c.name] && best[c.name].d === c.first) c.attendant = best[c.name].who; });
+      const by = {};
+      u.rows.forEach(r => { const d = day(r[jF]), who = String(r[jC] || '').trim(); if (!who || !d) return;
+        const a = by[who] || (by[who] = { name: who, first: d, consumers: [] });
+        if (d < a.first) a.first = d;
+        if (r[jN] && !a.consumers.includes(r[jN])) a.consumers.push(r[jN]); });
+      attendants.push(...Object.values(by).sort((x, y) => x.name.localeCompare(y.name)));
     }
   }
+  // caregiver.csv, when the email has it: each attendant's own first care log with anyone (also
+  // consumers no longer active), so it wins over the per-consumer rows above.
+  const gf = byName(files, /(^|\/)caregiver\.csv$/);
+  if (gf) {
+    const g = table(gf.text);
+    const kN = col(g.head, /^caregiver last first name$/, /^caregiver name$/, /caregiver.*name/), kF = col(g.head, /^first carelog date$/, /first.*date/);
+    if (kN >= 0 && kF >= 0) g.rows.forEach(r => { const d = day(r[kF]), who = String(r[kN] || '').trim(); if (!who || !d) return;
+      const a = attendants.find(x => x.name === who);
+      if (a) { if (d < a.first) a.first = d; } else attendants.push({ name: who, first: d, consumers: [] }); });
+  }
   if (!consumers.length) fail('The First and Last Carelog email listed no consumers. Columns: ' + t.head.join(', '));
-  return { consumers, unread };
+  return { consumers, unread, attendants };
 }
 
 // Authorization Care Logs: one row per shift in the last 7 days. A blank clock out means
