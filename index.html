@@ -4868,9 +4868,16 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=3');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=4');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
+      // Check dates typed on the card, and "No longer working", save to the Roster list.
+      saveRoster: async (id, patch) => {
+        const list = getData('attendants').map(a => a.id === id ? Object.assign({}, a, patch) : a);
+        await setData('attendants', list);
+        renderAttendants(); updateDashboard(); renderAttendantCheck();
+      },
+      wellsky: () => getObj('wellskyCheck'),
       oigPeople: () => { const d = oig && oig.data(); return d && d.live ? d.people : {}; },
       openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch') });
     _hpMounted = true;
@@ -5452,6 +5459,12 @@ function renderAttendantCheck(note) {
     '<div class="card-title"><span class="icon">🔄</span> Check against WellSky</div>';
   if (!r.ok) {
     host.innerHTML = h + '<div style="font-size:13px;color:var(--gray-600)">The WellSky check has not sent a schedule yet, so there is nothing to compare with.</div></div>';
+    return;
+  }
+  // Everything matches: one quiet line, so the attendants list is the first thing on the page (2026-10-22).
+  if (!r.missing.length && !r.quiet.length && !r.different.length && !note) {
+    host.innerHTML = '<div class="card" style="padding:10px 14px;font-size:13px;color:var(--gray-600)"><span style="color:var(--success);font-weight:700">✓ Everyone on the Roster matches WellSky</span>' +
+      ' (WellSky schedule ' + esc(new Date(r.at || 0).toLocaleString('en-US', { month: 'short', day: 'numeric' })) + (r.stale ? ', not updated since' : '') + ').</div>';
     return;
   }
   h += '<div style="font-size:12.5px;color:var(--gray-600)">From this morning\'s WellSky schedule (' + esc(A.short(r.from)) + ' to ' + esc(A.short(r.to)) + '). ' +

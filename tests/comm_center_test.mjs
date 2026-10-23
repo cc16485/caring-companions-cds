@@ -486,7 +486,7 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   ok(/_comm\.live/.test(code), 'commForToday checks live');
   ok(/data-refs="lead:' \+ esc\(p\.id\)/.test(html) && /data-refs="consumer:' \+ esc\(c\.id\)/.test(html), 'calls and texts on lead and consumer profiles');
   const hp = readFileSync(ROOT + '/caregiver-match/hub-packet.js', 'utf8');
-  ok((hp.match(/cds-comm-history/g) || []).length === 2 && /hub-packet\.js\?v=3/.test(html), 'and on both attendant cards');
+  ok((hp.match(/cds-comm-history/g) || []).length === 2 && /hub-packet\.js\?v=4/.test(html), 'and on both attendant cards');
   ok(/&& !c\.fromComms\) : \[\];/.test(html), 'the lead profile\'s logged calls leave out the ones read from GoHighLevel');
   const a2 = html.indexOf('// ---- Step 2: need, owner, care or safety'), b2 = html.indexOf('// "Calls and texts" on a profile');
   ok(a2 > 0 && b2 > a2 && !/—/.test(html.slice(a2, b2)) && !/—/.test(html.slice(html.indexOf('function needOwnersHtml'), html.indexOf('async function swNeedOwner'))), 'step 2 page code: no em dashes');
