@@ -76,5 +76,18 @@ ok(!Object.values(L).join(' ').includes('\u2014'), 'no em dashes in the letter')
   ok(R.dailyRoutine({ consumers: [{ id: '1', name: 'A' }], pipeline: [] }, now).length === 4, 'no closings: the email keeps its four steps');
 }
 
+// ── no open authorization with us (her ask 2026-10-22) ──
+{
+  const r = R.endingReason('authEnded');
+  ok(r && r.noDsds && r.group === 'other', 'authEnded is in Other reasons and needs no DSDS');
+  ok(!r.steps.some(s => s.k === 'dsds' || s.k === 'letter'), 'no DSDS form, no letter');
+  ok(R.endingMissing({ kind: 'authEnded', steps: {} }).length === 2, 'Fusion check and proof are required');
+  const done = { id: '1', name: 'Pat Old', status: 'closing', ending: { kind: 'authEnded', steps: { fusion: { date: '2026-10-22' }, file: { date: '2026-10-22' } } } };
+  const it = R.closureItems([done], new Date('2026-10-22T12:00:00'), null)[0];
+  ok(/ready to mark inactive/.test(it.t), 'Today says ready to mark inactive, not waiting on DSDS');
+  const half = { id: '2', name: 'Pat Half', status: 'closing', ending: { kind: 'authEnded', steps: {} } };
+  ok(/next, checked Fusion/.test(R.closureItems([half], new Date('2026-10-22T12:00:00'), null)[0].t), 'Today names the Fusion check first');
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
