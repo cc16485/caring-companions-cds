@@ -210,20 +210,28 @@
     const authWho = (a, why) => { const n = String(a.consumer || a.name || ''), c = byName.get(n.toUpperCase());
       const due = /ended/.test(why) ? '' : (a.planEnd || '');
       return c ? who(c, why, due, 'profile') : { name: n, why, due, act: '' }; };
-    const expired = auths.filter(a => a.planEnd && new Date(a.planEnd + 'T12:00:00') < now).map(a => authWho(a, 'authorization ended ' + monDay(a.planEnd)));
+    // An authorization WellSky shows Active is not expired or missing, only out of date in the
+    // hub (2026-10-22). The hub hands in wsAuth(name); the email does not, so it is unchanged.
+    const wsAuth = typeof data.wsAuth === 'function' ? data.wsAuth : () => null;
+    const isOld = a => a.planEnd && new Date(a.planEnd + 'T12:00:00') < now;
+    const wsOld = auths.filter(a => isOld(a) && wsAuth(a.consumer || a.name)).map(a => authWho(a, 'WellSky shows it active, upload the new care plan'));
+    const expired = auths.filter(a => isOld(a) && !wsAuth(a.consumer || a.name)).map(a => authWho(a, 'authorization ended ' + monDay(a.planEnd)));
     const expiring = auths.filter(a => {
       if (!a.planEnd) return false;
       const d = Math.round((new Date(a.planEnd + 'T12:00:00') - now) / DAY);
       return d >= 0 && d <= 60;
     }).map(a => authWho(a, 'renew the authorization'));
-    const noAuth = now31.filter(c => !auths.some(a =>
-      String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase())).map(c => who(c, 'no authorization on file', '', 'profile'));
+    const noHub = now31.filter(c => !auths.some(a =>
+      String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase()));
+    const noAuth = noHub.filter(c => !wsAuth(c.name)).map(c => who(c, 'no authorization on file', '', 'profile'));
+    noHub.filter(c => wsAuth(c.name)).forEach(c => wsOld.push(who(c, 'WellSky shows it active, upload the care plan', '', 'profile')));
     steps.push({
       n: 2, title: 'Protect the money',
       items: [
         noAuth.length   && { t: noAuth.length + ' active consumer' + (noAuth.length !== 1 ? 's have' : ' has') + ' no authorization on file', go: 'authorizations', bad: true, people: byDue(noAuth) },
         expired.length  && { t: plural(expired.length, 'authorization', 'authorizations') + ' expired', go: 'authorizations', bad: true, people: byDue(expired) },
         expiring.length && { t: expiring.length + ' expiring within 60 days', go: 'authorizations', people: byDue(expiring) },
+        wsOld.length    && { t: plural(wsOld.length, 'care plan', 'care plans') + ' to upload (WellSky shows the authorization active, the hub has old or no dates)', go: 'authorizations', people: byDue(wsOld) },
         ...evvAndPayroll(data, now)
       ].filter(Boolean).concat(data.wellskyItems || []),   // the daily WellSky check (wellsky.js items)
       clear: 'Every consumer has a current authorization.'

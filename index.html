@@ -25,8 +25,8 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=23"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=9"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=24"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -944,6 +944,11 @@ button.fu-tile.check span { color:#14606F; }
         <button type="button" id="rosterSegActive" class="on" onclick="setRosterView('active')">Active</button>
         <button type="button" id="rosterSegInactive" onclick="setRosterView('inactive')">Inactive</button>
       </div>
+      <label class="ld-search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="ld-sr">Find a consumer</span>
+        <input type="search" id="rosterSearch" placeholder="Find a consumer or attendant by name" oninput="renderConsumers()">
+      </label>
       <button class="btn btn-outline btn-sm" id="openBulkContactsBtn" onclick="openBulkContacts()" style="font-size:12px">&#128197; Record completed monthly contacts</button>
     </div>
 
@@ -5011,7 +5016,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=14');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=16');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5266,8 +5271,12 @@ function renderConsumers() {
   // 2026-10-22 her ask: a clear roster. One row = who they are, this month's
   // call (the one thing the office does for everyone), the visit, and how much
   // is left. Everything else lives on the profile; the name opens it.
-  const active = consumers.filter(CDSRules.isActive).sort((a, b) => a.name.localeCompare(b.name));
-  const inactive = consumers.filter(c => !CDSRules.isActive(c)).sort((a, b) => a.name.localeCompare(b.name));
+  // Find by name (her ask 2026-10-23): the consumer's name, their attendant's name, or a phone number.
+  const allAtt = getData('attendants');
+  const find = rosterFind((document.getElementById('rosterSearch') || {}).value);
+  const hit = c => find(c.name, c.phone, ...allAtt.filter(a => (a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name))).map(a => a.name));
+  const active = consumers.filter(CDSRules.isActive).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
+  const inactive = consumers.filter(c => !CDSRules.isActive(c)).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
   document.getElementById('rosterSegActive').textContent = 'Active (' + active.length + ')';
   document.getElementById('rosterSegInactive').textContent = 'Inactive (' + inactive.length + ')';
   const showInactive = _rosterView === 'inactive';
@@ -5283,6 +5292,7 @@ function renderConsumers() {
     (callsLeft ? callsLeft + ' call' + (callsLeft === 1 ? '' : 's') + ' left this month' : 'every call done this month');
   const allAttendants = getData('attendants');
   const noShift = noShiftList();
+  if (!showInactive && !active.length && find.on) { tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><p>No active consumer matches. Try Inactive, or fewer letters.</p></div></td></tr>'; return; }
   const link = (c, html) => '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="color:inherit;text-decoration:none">' + html + '</a>';
 
   if (!showInactive) tbody.innerHTML = active.map(c => {
@@ -5319,6 +5329,18 @@ function renderConsumers() {
 // Active / Inactive switch on the roster (her ask 2026-10-22). Inactive
 // consumers keep their record and history; this list is where they live.
 let _rosterView = 'active';
+// "smith", "Pam Bell", "Bell, Pam" or "417 555" all find a person. Every word typed must be in
+// one of the names, in any order; digits match a phone.
+function rosterFind(q) {
+  const words = String(q || '').toLowerCase().replace(/[’']/g, '').split(/[\s,]+/).filter(Boolean);
+  const f = (...vals) => {
+    if (!words.length) return true;
+    const text = vals.filter(Boolean).map(v => String(v).toLowerCase().replace(/[’']/g, '')).join(' '), digits = vals.filter(Boolean).map(v => String(v).replace(/\D/g, '')).join(' ');
+    return words.every(w => /^\d+$/.test(w) ? digits.includes(w) : text.includes(w));
+  };
+  f.on = words.length > 0;
+  return f;
+}
 function setRosterView(v) { _rosterView = v; renderConsumers(); }
 
 function renderInactiveRoster(list, tbody) {
@@ -5326,7 +5348,7 @@ function renderInactiveRoster(list, tbody) {
     ? list.length + ' inactive · their records and history are kept'
     : '';
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><p>No inactive consumers.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><p>' + ((document.getElementById('rosterSearch') || {}).value ? 'No inactive consumer matches.' : 'No inactive consumers.') + '</p></div></td></tr>';
     return;
   }
   const link = (c, html) => '<a href="javascript:void(0)" onclick="openProfile(\'' + c.id + '\')" style="color:inherit;text-decoration:none">' + html + '</a>';
@@ -5490,6 +5512,17 @@ function logHomeVisit(cid) {
   if (c) { c.homeVisitDate = date; setData('consumers', consumers); renderConsumers(); }
 }
 
+// WellSky's Active personal care authorization for one consumer, or null (her yes
+// 2026-10-22). Rule: CDSWellSky.wsActiveAuths. Never changes the hub's own dates.
+function wsAuthFor(name) {
+  const m = CDSWellSky.wsActiveAuths(getObj('wellskyCheck'), new Date());
+  return m[CDSWellSky.nameKey(name)] || null;
+}
+// A label date already past is just an old label on an Active authorization (Gasper's).
+const _wsLabelEnd = ws => !ws ? '' : !ws.end ? 'WellSky shows it active'
+  : ws.end >= CDSWellSky.isoLocal(new Date()) ? 'WellSky label ends ' + _niceDay(ws.end)
+  : 'WellSky shows it active (its label still says ' + _niceDay(ws.end) + ')';
+
 // What is still open for one consumer, in short words. The roster shows the
 // count; the profile shows the list.
 function consumerToFinish(c) {
@@ -5499,7 +5532,8 @@ function consumerToFinish(c) {
   const plan = getObj('carePlans')[c.id] || (c.carePlan && c.carePlan.tasks && c.carePlan.tasks.length);
   return [
     !(t.inFusion && (t.uploaded || t.exempt)) && 'Tax and EIN',
-    !authOk && (auth ? 'Renewed authorization' : 'Authorization'),
+    // WellSky Active: not missing, but the new care plan still needs uploading.
+    !authOk && (wsAuthFor(c.name) ? 'Upload the new care plan' : auth ? 'Renewed authorization' : 'Authorization'),
     !plan && 'Care plan',
     !c.backupPlan && 'Backup plan',
     c.trained !== 'yes' && 'Consumer training',
@@ -9569,6 +9603,7 @@ function renderProfile() {
 
   const today = new Date(); today.setHours(12, 0, 0, 0);
   const daysLeft = auth ? Math.round((new Date(auth.planEnd + 'T12:00:00') - today) / 864e5) : null;
+  const wsA = wsAuthFor(c.name);
   const authUnits = auth && auth.months.length ? Math.max(...auth.months.map(m => m.units)) : null;
   const fmt = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 
@@ -9580,8 +9615,10 @@ function renderProfile() {
     profChip('Entered in Fusion', s.inFusion ? 'ok' : 'bad', s.inFusion ? 'HCBS Eligibility' : 'both numbers required'),
     profChip('Proof uploaded', s.uploaded ? 'ok' : (s.exempt ? 'ok' : 'bad'),
       s.exempt ? 'a prior vendor uploaded it' : (s.uploaded ? 'on ' + esc(c.proofUploaded) : 'EIN Tax Documents')),
-    profChip('Authorization', !auth ? 'bad' : (daysLeft < 0 ? 'bad' : (daysLeft <= 60 ? 'warn' : 'ok')),
-      !auth ? 'nothing on file' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'expires in ' + daysLeft + ' days')),
+    (wsA && (!auth || daysLeft < 0))
+      ? profChip('Authorization', 'warn', esc(_wsLabelEnd(wsA)) + '; upload the new care plan')
+      : profChip('Authorization', !auth ? 'bad' : (daysLeft < 0 ? 'bad' : (daysLeft <= 60 ? 'warn' : 'ok')),
+          !auth ? 'nothing on file' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'expires in ' + daysLeft + ' days')),
     profChip('Care plan', plan ? 'ok' : 'warn', plan ? plan.monthlyUnits + ' units a month' : 'no calendar on file'),
     (function () {
       const d = desThreshold(c.name);
@@ -9711,7 +9748,9 @@ function renderProfile() {
     line('Start date', c.cdsStartDate ? esc(_niceDay(c.cdsStartDate)) : 'not on file') +
     (fs ? line('First shift (WellSky)', esc(_niceDay(fs))) : '') +
     (prep.shiftStyle ? line('Shifts', prep.shiftStyle === 'set' ? 'Set shifts' : 'Shifts as needed') : '') +
-    line('Authorization', !auth ? '<span style="color:var(--danger)">nothing on file</span>' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'ends ' + esc(_niceDay(auth.planEnd)) + ' (' + daysLeft + ' days)')) +
+    line('Authorization', (wsA && (!auth || daysLeft < 0))
+      ? '<span style="color:#9C6410">' + (auth ? 'hub care plan ended ' + esc(_niceDay(auth.planEnd)) : 'no care plan in the hub') + '; ' + esc(_wsLabelEnd(wsA)) + '. Upload the new DSDS care plan.</span>'
+      : !auth ? '<span style="color:var(--danger)">nothing on file</span>' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'ends ' + esc(_niceDay(auth.planEnd)) + ' (' + daysLeft + ' days)')) +
     line('Tax and EIN', outstanding.length ? '<span style="color:#9C6410">' + outstanding.length + ' thing' + (outstanding.length === 1 ? '' : 's') + ' still needed</span>' : 'all set') +
     line('Backup plan', (c.backupPlan ? 'yes' : '<span style="color:var(--danger)">missing</span>') +
       ' <a href="#" onclick="toggleBackup(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">' + (c.backupPlan ? 'undo' : 'mark done') + '</a>') +
@@ -10233,7 +10272,7 @@ function renderAuthorizations() {
   const byConsumer = {};
   list.forEach(a => { if (a.consumer) byConsumer[prNorm(a.consumer)] = a; });
   const active = consumers.filter(CDSRules.isActive);
-  const missing = active.filter(c => !byConsumer[prNorm(c.name)]);
+  let missing = active.filter(c => !byConsumer[prNorm(c.name)]);
   const orphans = list.filter(a => !a.consumer);   // documents that matched nobody
 
   const rows = active.map(c => byConsumer[prNorm(c.name)])
@@ -10259,7 +10298,11 @@ function renderAuthorizations() {
 
   // ── alerts ──
   const expiring = rows.filter(r => r.daysLeft >= 0 && r.daysLeft <= 60);
-  const expired = rows.filter(r => r.daysLeft < 0);
+  // WellSky Active (2026-10-22): an old hub record WellSky shows active is "upload the new
+  // care plan", not "expired". The hub's dates are never changed.
+  const wsOf = r => r.a.consumer ? wsAuthFor(r.a.consumer) : null;
+  const expired = rows.filter(r => r.daysLeft < 0 && !wsOf(r));
+  const wsOld = rows.filter(r => r.daysLeft < 0 && wsOf(r));
   const over = rows.filter(r => r.pct !== null && r.pct > 100);
   // Under-use is the expensive one and nothing was watching it. Units the state
   // authorised and we did not deliver are two problems at once: the consumer was
@@ -10311,6 +10354,15 @@ function renderAuthorizations() {
   }
   // The consumers with NOTHING on file. Listed first, because a missing
   // authorization is a bigger problem than an expiring one.
+  const wsMissing = missing.filter(c => wsAuthFor(c.name));
+  const noneAtAll = missing.filter(c => !wsAuthFor(c.name));
+  if (wsOld.length || wsMissing.length) {
+    alerts += '<div class="alert alert-warn" style="margin-bottom:12px">📄 <strong>' + (wsOld.length + wsMissing.length) +
+      ' care plan' + (wsOld.length + wsMissing.length === 1 ? '' : 's') + ' to upload.</strong> WellSky shows these authorizations active, but the hub has old or no DSDS care plan dates. Upload the new care plan from Fusion and this clears:<br>' +
+      wsOld.map(r => esc(r.a.consumer) + ': hub ended ' + esc(_niceDay(r.a.planEnd)) + ', ' + esc(_wsLabelEnd(wsOf(r)))).concat(
+      wsMissing.map(c => esc(c.name) + ': no care plan in the hub, ' + esc(_wsLabelEnd(wsAuthFor(c.name))))).join('<br>') + '</div>';
+  }
+  missing = noneAtAll;
   if (missing.length) {
     alerts = '<div class="alert" style="margin-bottom:12px;background:var(--danger-pale);' +
       'border-left:4px solid var(--danger);color:var(--danger)">⛔ <strong>' + missing.length +
@@ -13182,7 +13234,7 @@ function renderDailyRoutine() {
     authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages'), calls: _leadCalls,
     wellskyItems: wsAll.filter(i => !i.system),
     wsPeople: _activePeople(), nameKey: CDSWellSky.nameKey,
-    firstShiftOf, followups: commForToday(), noShift: noShiftList(),
+    firstShiftOf, followups: commForToday(), noShift: noShiftList(), wsAuth: wsAuthFor,
     attendantWork: _todayAttWork(),
     // Approved due dates (2026-10-23): reports and tax filings, EVV forms, payroll uploads.
     quarterStatus: getObj('quarterStatus'),

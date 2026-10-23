@@ -6,7 +6,7 @@
 // Public  : applyStart (the one link everyone forwards: caringcds.com/apply)
 // Attendant (their private link): packet, packetSave, packetEsign, packetIdentity,
 //           packetSign, packetBookCall, packetSelf (orientation / Empeon done)
-// Office  : packetList, packetGet, packetMark, packetCountersign, packetCopy
+// Office  : packetList, packetGet, packetFormView, packetMark, packetCountersign, packetCopy
 // Job     : packetJob (reminders, Step 2 opening, orientation completions)
 //
 // Her rules built in: as little office work as possible; nothing signed in Step 2
@@ -14,6 +14,7 @@
 // messages held until the packet switches are on; office texts only in office
 // hours (weekdays 9 to 4 Central), email any time. No em dashes.
 import { FORMS, STEP1, STEP2, CONTRACT_PARTS, formText, COMPANY, HANDBOOK_URL, ORIENTATION_URL } from './forms.js';
+import { answerSections, docBlocks } from './view.js';
 import * as P from './rules.js';
 import { PACKET_TEMPLATES, fill } from './messages.js';
 import { CONSENT_WORDING } from '../match/messages.js';
@@ -332,6 +333,25 @@ export function createPacket(h) {
         label: x.st.label, tone: x.st.tone, next: x.st.next, active: x.st.active, list_choice: x.p.list_choice,
         consumer_waiting: !!r.consumer_name && !x.st.active, started_at: x.p.created_at, step1_at: x.p.step1_signed_at }); }
       return { attendants: out };
+    },
+    // One signed form, as they signed it, for View and Print on the profile (2026-10-22). The
+    // wording is rebuilt and checked against the fingerprint kept at signing; a later version of the
+    // form says so instead of pretending. Each view is in the audit log.
+    async packetFormView({ staff, pool_id, form }) {
+      who(staff);
+      const x = await load(pool_id);
+      if (!x) fail('Not found', 404);
+      const f = x.forms[form], def = FORMS[form];
+      if (!f || !def) fail('That form is not signed yet.', 404);
+      const v = vars(x);
+      const same = f.version === def.version && (await crypto.hash(formText(form, v))) === f.fingerprint;
+      await audit('staff:' + staff, 'packet_form_viewed', 'pool:' + pool_id, { form });
+      return { form, title: def.title, company: COMPANY, attendant: v.attendant, consumer: x.p.consumer_name || '',
+        version: f.version, wording: same ? 'exact' : f.version === def.version ? 'names_changed' : 'newer_version',
+        blocks: same || f.version === def.version ? docBlocks(def, v) : [],
+        answers: answerSections(f.answers || {}), initials: f.initials || null,
+        signed_name: f.signed_name, signed_at: f.signed_at, signed_ip: f.signed_ip || '', signed_agent: f.signed_agent || '',
+        countersigned_name: f.countersigned_name || '', countersigned_at: f.countersigned_at || null, fingerprint: f.fingerprint };
     },
     async packetGet({ staff, pool_id }) {
       who(staff);

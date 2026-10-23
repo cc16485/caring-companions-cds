@@ -63,6 +63,10 @@ const CSS = `
 .hp .ok{color:#1f7a4d;font-weight:700;margin-top:6px}
 .hp .ask{background:#f7f9fb;border-radius:10px;padding:10px 12px;margin-top:6px}
 .hp .btn.bad{background:#b42318}
+.hp .hp-print p{font-size:14.5px;line-height:1.5}
+@media print{body *{visibility:hidden!important}.hp .hp-print,.hp .hp-print *{visibility:visible!important}
+.hp .hp-print{position:absolute;left:0;top:0;width:100%;border:0;margin:0;padding:0}.hp .hp-noprint{display:none!important}
+.hp .hp-print h3{break-after:avoid}.hp .hp-print dl{break-inside:avoid}}
 `;
 
 // ---------- the three groups (pure, tested in tests/attendants_page_test.mjs) ----------
@@ -264,10 +268,13 @@ export function mountHubPacket(el, opts) {
       ? new Date(p.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) : null; };   // the Central day, not the UTC one
   const ended = () => (opts.roster ? opts.roster() : []).filter(a => a.status === 'inactive');
   // Tabs (her ask 2026-10-22): Onboarding / Working / Inactive. Opens on Onboarding when someone is in it.
-  let list = [], open = null, err = '', tab = null;
+  let list = [], open = null, err = '', tab = null, query = '';
   if (!document.getElementById('hp_css')) { const s = document.createElement('style'); s.id = 'hp_css'; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add('hp');
   el.addEventListener('click', onClick);
+  // Find by name (her ask 2026-10-23): searches every tab at once.
+  el.addEventListener('input', e => { if (e.target.id !== 'hp_find') return; query = e.target.value; const pos = e.target.selectionStart; draw();
+    const i = el.querySelector('#hp_find'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch { /* not a text input */ } } });
   load();
 
   async function load() {
@@ -298,7 +305,17 @@ export function mountHubPacket(el, opts) {
     const tabBtn = (k, label, n) => `<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${label} (${n})</button>`;
     const endedRow = x => `<div class="row" style="cursor:default"><b>${esc(x.name)}</b><button class="btn o" data-reactivate="${esc(x.id)}">Make active again</button><span class="meta">${esc(x.meta)}</span>${x.said ? `<span class="meta">The consumer said: "${esc(x.said)}"</span>` : ''}</div>`;
     let body;
-    if (tab === 'onboarding') body = `<div class="ghead"><span>Consumer waiting goes first</span></div>
+    const words = query.toLowerCase().replace(/[’']/g, '').split(/[\s,]+/).filter(Boolean);
+    const hit = x => words.every(w => (x.name + ' ' + (x.meta || '')).toLowerCase().replace(/[’']/g, '').includes(w));
+    if (words.length) {
+      const found = [...g.starting.map(x => ({ ...x, where: 'Onboarding' })), ...g.working.map(x => ({ ...x, where: 'Working' })),
+        ...g.quiet.map(x => ({ ...x, where: 'Not working lately' }))].filter(hit);
+      const gone = g.ended.filter(hit);
+      body = `<div class="ghead"><span>${found.length + gone.length} found on every tab</span></div>
+        ${found.map(x => rowHtml({ ...x, meta: x.where + (x.meta ? ' · ' + x.meta : '') })).join('')}
+        ${gone.map(endedRow).join('')}
+        ${found.length + gone.length ? '' : '<p class="small">Nobody matches. Try fewer letters.</p>'}`;
+    } else if (tab === 'onboarding') body = `<div class="ghead"><span>Consumer waiting goes first</span></div>
       ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is onboarding. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}`;
     else if (tab === 'working') body = `<div class="ghead"><span>${ws.have ? 'Shift in WellSky in the last ' + WORKING_DAYS + ' days. WellSky ' + esc(asOf) + esc(hoursNote) : 'WellSky has not sent anything yet, so everyone shows here'}</span>
         <span>${t.due ? `<span class="pill r">${t.due} check due or overdue</span> ` : ''}${t.dates ? `<span class="pill y">${t.dates} with check dates to add</span>` : ''}</span></div>
@@ -308,6 +325,9 @@ export function mountHubPacket(el, opts) {
       <section class="grp"><div class="ghead"><h3>No longer working</h3><span>Marked no longer working. No rechecks.</span></div>
       ${g.ended.length ? g.ended.map(endedRow).join('') : '<p class="small">Nobody.</p>'}</section>`;
     el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><div class="btns" style="margin:0"><button class="btn o" data-act="ghl-import">Bring in papers and checks from GHL</button><button data-act="reload" class="pill-btn">Refresh</button></div></div>
+      <label style="display:flex;align-items:center;gap:8px;max-width:380px;margin:8px 0 0;padding:0 14px;min-height:42px;background:#fff;border:2px solid #dfe6ec;border-radius:999px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="hp_find" value="${esc(query)}" placeholder="Find an attendant or consumer by name" aria-label="Find an attendant or consumer by name" style="border:0;outline:0;font:inherit;font-size:14.5px;flex:1;min-width:0;background:transparent"></label>
       <div class="hp-tabs" role="tablist">${tabBtn('onboarding', 'Onboarding', g.starting.length)}${tabBtn('working', 'Working', g.working.length)}${tabBtn('inactive', 'Inactive', g.quiet.length + g.ended.length)}</div>
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       ${body}
@@ -352,6 +372,36 @@ export function mountHubPacket(el, opts) {
       <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}</div>`;
   }
 
+  // One signed form, as they signed it (her ask 2026-10-22: View and Print on the profile).
+  async function openForm(poolId, form, print) {
+    el.innerHTML = '<div class="small" style="padding:12px">Loading the signed form…</div>';
+    let f;
+    try { f = await api('packetFormView', { pool_id: poolId, form }); } catch (e) { return openPacket(poolId); }
+    open = { kind: 'form', id: poolId };
+    const when = d => d ? new Date(d).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) + ' Central' : '';
+    const note = f.wording === 'exact' ? '' : f.wording === 'names_changed'
+      ? '<p class="small"><b>Note:</b> a name in this form changed after it was signed, so the wording below has today\'s names. Version and fingerprint are what they signed.</p>'
+      : '<p class="small"><b>Note:</b> this form was signed on version ' + esc(f.version) + ', and the wording has changed since. Their answers and signature below are exactly as signed.</p>';
+    el.innerHTML = `<div class="hp-noprint btns" style="margin:0 0 8px"><button class="pill-btn" data-act="form-back">← Back to ${esc(f.attendant)}</button><button class="btn" data-act="form-print">Print</button></div>
+      <article class="card hp-print">
+      <div class="small">${esc(f.company)}</div>
+      <h2>${esc(f.title)}</h2>
+      <dl><dt>Attendant</dt><dd>${esc(f.attendant)}</dd>${f.consumer ? `<dt>Consumer</dt><dd>${esc(f.consumer)}</dd>` : ''}</dl>
+      ${note}
+      ${f.blocks.map(b => b.h ? `<h3>${esc(b.h)}${f.initials && f.initials[b.h.split('.')[0]] ? ` <span class="pill b">Initialed ${esc(f.initials[b.h.split('.')[0]])}</span>` : ''}</h3>` : `<p>${esc(b.p)}</p>`).join('')}
+      ${f.answers.map(sec => `<h3>${esc(sec.h)}</h3><dl>${sec.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`).join('')}
+      <h3>Signature</h3>
+      <dl><dt>Signed by</dt><dd style="font-family:'Brush Script MT',cursive;font-size:22px">${esc(f.signed_name)}</dd>
+      <dt>Signed</dt><dd>${esc(when(f.signed_at))}</dd>
+      <dt>How</dt><dd>Typed name, electronic signature (they agreed to sign electronically first)</dd>
+      ${f.signed_ip ? `<dt>From</dt><dd>${esc(f.signed_ip)}${f.signed_agent ? '<div class="small">' + esc(f.signed_agent) + '</div>' : ''}</dd>` : ''}
+      ${f.countersigned_at ? `<dt>Countersigned</dt><dd>${esc(f.countersigned_name)}, ${esc(when(f.countersigned_at))}</dd>` : ''}
+      <dt>Form version</dt><dd>${esc(f.version)}<div class="small">Fingerprint ${esc(String(f.fingerprint || '').slice(0, 16))}…</div></dd></dl>
+      </article>`;
+    el.scrollIntoView({ block: 'start' });
+    if (print) setTimeout(() => window.print(), 150);
+  }
+
   async function openPacket(id) {
     el.innerHTML = '<div class="small" style="padding:12px">Loading…</div>';
     let g;
@@ -391,7 +441,8 @@ export function mountHubPacket(el, opts) {
       ${p.list_choice === 'join' ? `<p class="small">Their caregiver profile is in Caregiver Match. Approve it there (one tap) once their checks are clear.</p>` : ''}
 
       <h3>Signed forms</h3>
-      <dl>${Object.values(g.forms).map(f => `<dt>${esc(f.title)}</dt><dd>${esc(f.signed_name)}, ${esc(fmtD(f.signed_at))}${f.countersigned_at ? ' · countersigned by ' + esc(f.countersigned_name) : ''}</dd>`).join('') || '<dt>None yet</dt><dd></dd>'}</dl>
+      ${Object.keys(g.forms).length ? `<table><tbody>${Object.entries(g.forms).map(([k, f]) => `<tr><td><b>${esc(f.title)}</b><div class="small">${esc(f.signed_name)}, ${esc(fmtD(f.signed_at))}${f.countersigned_at ? ' · countersigned by ' + esc(f.countersigned_name) : ''}</div></td>
+        <td style="white-space:nowrap"><button class="btn o" data-form="${esc(k)}">View</button> <button class="btn o" data-form="${esc(k)}" data-print="1">Print</button></td></tr>`).join('')}</tbody></table>` : '<p class="small">None yet.</p>'}
       <div class="cds-comm-history" data-refs="pool:${esc(id)}" data-phones="${esc(g.pool.phone || '')}"></div>
       <div class="err" id="hp_err"></div></div>`;
     if (window.cdsCommHistory) window.cdsCommHistory(el);
@@ -496,6 +547,9 @@ export function mountHubPacket(el, opts) {
         await opts.saveRoster(open.id, { status: 'inactive', ended: rec.record }); open = null; tab = 'inactive'; return draw();
       }
       if (act === 'ghl-import') return openImport();
+      if (b.dataset.form) return openForm(open.id, b.dataset.form, !!b.dataset.print);
+      if (act === 'form-back') return openPacket(open.id);
+      if (act === 'form-print') return window.print();
       if (act === 'ghl-save') {
         const items = [...el.querySelectorAll('input[data-proof]')].filter(i => i.value).map(i => ({ id: i.dataset.proof, checked_on: i.value }));
         if (!items.length) return fail('Type at least one date.');
