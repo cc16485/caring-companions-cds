@@ -202,5 +202,19 @@ ok(Object.values(forms).every(f => !JSON.stringify(f.doc).includes('—')), 'no 
 ok(JSON.stringify(forms).includes('Troutman Enterprises, LLC DBA Caring Companions In-Home Senior Care') && !/DBA Caring Companions"/.test(JSON.stringify(forms)), 'company name as she corrected it');
 ok(JSON.stringify(forms.contract.doc).includes('$15.00 to $16.00') && JSON.stringify(forms.pay.doc).includes('every Thursday'), 'pay wording as she approved');
 
+// ---------- View and Print a signed form (2026-10-22) ----------
+const fv = await S('packetFormView', { pool_id: pool.id, form: 'application' });
+ok(fv.title === 'CDS Attendant Application' && fv.wording === 'exact' && fv.blocks.length > 0, 'the application comes back as signed, wording matches the fingerprint');
+ok(fv.signed_name === 'Jordan Ellis' && fv.signed_ip === '1.2.3.4' && fv.signed_agent === 'test' && fv.signed_at, 'who signed, when, from where');
+ok(fv.answers.some(sec => sec.h === 'References') && fv.answers.some(sec => sec.h === 'Work history'), 'their answers by section');
+ok(!/\b\d{3}-?\d{2}-?\d{4}\b/.test(JSON.stringify(fv.answers)) && !/ssn|sealed|dob/i.test(JSON.stringify(fv.answers.map(s => s.rows.map(r => r[0])))), 'no SSN, date of birth or sealed field');
+const fc = await S('packetFormView', { pool_id: pool.id, form: 'contract' });
+ok(fc.initials && Object.keys(fc.initials).length === 13 && fc.blocks.some(b => b.h && /^1\./.test(b.h)), 'the contract shows its 13 initialed parts');
+await refuses(() => S('packetFormView', { pool_id: pool.id, form: 'nope' }), /not signed/, 'an unknown form is refused');
+await refuses(() => H('staff', 'packetFormView', { pool_id: pool.id, form: 'application' }), /sign in/i, 'not signed in: refused (live also checks the office staff list)');
+ok((await pg.query(`select count(*)::int n from cds_audit where action='packet_form_viewed'`)).rows[0].n >= 2, 'each view is in the audit log');
+const V = await import(ROOT + '/supabase/functions/_shared/packet/view.js');
+ok(!JSON.stringify(V.answerSections({ first: 'A', last: 'B', other_ssn_sealed: 'x', ssn: '123456789', dob: '1990-01-01' })).match(/123456789|1990|sealed/), 'secret fields never shown, even if stored');
+
 console.log(`${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);
