@@ -30,7 +30,7 @@
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Tax Setup in stages (2026-10-25, her switch 'taxStages'). -->
-<script src="tax/tax-stages.js?v=1"></script>
+<script src="tax/tax-stages.js?v=2"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
      so a PDF carrying the consumer's SSN never passes through anything of ours
      on its way to being cut up. Deferred: nothing on load needs it. -->
@@ -12068,8 +12068,9 @@ function taxStagesRefresh() {
   document.getElementById('tx_clock_pill').innerHTML = '<span class="tx-pill ' + ck.tone + '">' + esc(ck.text) + '</span>';
   const steps = S.steps(c), done = steps.filter(s => S.isDone(c, s.id)).length;
   document.getElementById('tx_chips').innerHTML = '<span class="tax-chip' + (done === steps.length ? ' done' : '') + '" style="font-weight:700">' + done + ' of ' + steps.length + ' done</span>' +
-    steps.map(s => { const d = S.isDone(c, s.id); return '<button type="button" class="tax-chip' + (d ? ' done' : s.id === nx.id && !nx.wait ? ' now' : '') +
-      '" style="cursor:pointer" title="Go to this step" onclick="taxGoCard(' + s.card + ')">' + (d ? '✓' : '○') + ' ' + esc(s.chip) + '</button>'; }).join('');
+    steps.map(s => { const d = S.isDone(c, s.id), imp = S.implied(c, s.id); return '<button type="button" class="tax-chip' + (d ? ' done' : s.id === nx.id && !nx.wait ? ' now' : '') +
+      '" style="cursor:pointer' + (imp ? ';border-style:dashed' : '') + '" title="' + (imp ? 'Not recorded here, but a later step shows it was done' : 'Go to this step') +
+      '" onclick="taxGoCard(' + s.card + ')">' + (d ? '✓' : '○') + ' ' + esc(s.chip) + '</button>'; }).join('');
   // Stage headings: open, waiting, locked or done.
   const grid = modal.querySelector('.tax-grid');
   S.STAGES.forEach(st => {

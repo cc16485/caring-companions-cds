@@ -24,21 +24,32 @@
   const has = v => !!String(v || '').trim();
 
   // Same "done" rules as the chips on the old screen, plus the two new ones.
+  // Current consumers (2026-10-25, David on the live screen): many were set up before the hub
+  // tracked the packet, so a later step counts as proof of the earlier one it needs. An EIN means
+  // the packet came back; a MO Tax ID means the 2643A went in; a DES registration means payroll
+  // has run, which the IRS only allows once it approved the 2678. See implied().
+  const desDone = c => !!c.desRegistered || filed(c, 'DES');
   const DONE = {
-    packet:  c => has(c.packetSigned),
-    split:   c => (c.packetForms || []).length > 0,
+    packet:  c => has(c.packetSigned) || has(c.ein),
+    split:   c => (c.packetForms || []).length > 0 || has(c.ein),
     check:   c => has(c.ein) || c.einCheck === 'has' || c.einCheck === 'none',
     ein:     c => has(c.ein),
     f8821:   c => !!c.irs8821 || filed(c, 'IRS-8821'),
-    f2678:   c => !!c.irs2678 || filed(c, 'IRS-2678'),
-    f2643a:  c => !!c.mo2643a || filed(c, 'MO-2643A'),
+    f2678:   c => !!c.irs2678 || filed(c, 'IRS-2678') || desDone(c),
+    f2643a:  c => !!c.mo2643a || filed(c, 'MO-2643A') || has(c.moTaxId),
     f2827:   c => !!c.mo2827 || filed(c, 'MO-2827'),
     motaxid: c => has(c.moTaxId),
     fusion:  c => !!c.fusionEntered,
     proof:   c => has(c.proofUploaded) || !!c.priorVendorProof,
     empeon:  c => has(c.empeonUpdated),
-    des:     c => !!c.desRegistered || filed(c, 'DES'),
+    des:     desDone,
   };
+  // Done only because a later step shows it, not recorded here.
+  const RECORDED = {
+    packet: c => has(c.packetSigned), split: c => (c.packetForms || []).length > 0,
+    f2678: c => !!c.irs2678 || filed(c, 'IRS-2678'), f2643a: c => !!c.mo2643a || filed(c, 'MO-2643A'),
+  };
+  const implied = (c, id) => !!RECORDED[id] && DONE[id](c) && !RECORDED[id](c);
 
   // card = the data-card of the section on the screen (10 = the existing-EIN check, 11 = waiting).
   const STEPS = [
@@ -75,7 +86,7 @@
   const stageOpen = (c, st) => !st.needs || st.needs.every(id => isDone(c, id));
 
   // 2678 approval: the approval letter is the document saved on the 2678 filing.
-  const approved2678 = c => !!(((c.filings || {})['IRS-2678'] || {}).docPath);
+  const approved2678 = c => !!(((c.filings || {})['IRS-2678'] || {}).docPath) || desDone(c);
 
   // The one thing to do now, or what we are waiting on and when to chase it.
   // { id, card, wait, what, why }
@@ -95,6 +106,9 @@
       if (!c.taxKind) why += ' Transferring from another vendor? Answer the question above first.';
       return go('ein', 'Apply for ' + n + '\'s federal EIN', why);
     }
+    // Both numbers in hand: the audited Fusion step comes before any paperwork still missing.
+    if (DONE.motaxid(c) && !DONE.fusion(c)) return go('fusion', 'Enter both numbers in Fusion', 'Participant page, HCBS Eligibility section. This is the step that gets audited.');
+    if (DONE.motaxid(c) && !DONE.proof(c)) return go('proof', 'Upload the proof in Fusion', 'Under EIN Tax Documents, or the auditor will not find it. A W-9 is not proof.');
     if (!DONE.f8821(c)) return go('f8821', 'Send Form 8821', 'Quickest: fax to 855-214-7522. It lets the IRS talk to us without ' + n + ' on every call.');
     if (!DONE.f2678(c)) return go('f2678', 'Mail Form 2678 today', 'Mail only, and approval takes weeks. Payroll cannot run until it comes.');
     if (!DONE.f2643a(c)) return go('f2643a', 'Register ' + n + ' with Missouri (Form 2643A)', 'Online, signed out. Save the confirmation number.');
@@ -138,5 +152,5 @@
     return '';
   }
 
-  root.CDSTaxStages = { STEPS, STAGES, steps, isDone, stageOpen, next, clock, packetFlag, approved2678, mdy, addDays };
+  root.CDSTaxStages = { STEPS, STAGES, steps, isDone, implied, stageOpen, next, clock, packetFlag, approved2678, mdy, addDays };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
