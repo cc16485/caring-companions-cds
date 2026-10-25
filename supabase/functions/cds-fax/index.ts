@@ -1,6 +1,6 @@
 // cds-fax: one-click fax from Tax & Enrollment Setup, and incoming faxes on Today (2026-10-25, her yes).
 // From the CDS hub, with the person's sign-in: { action: 'list' | 'queue' | 'cancel' | 'dismiss' | 'applied' | 'handled' }.
-// From the Google script in intake@caringcds.com (header x-fax-key = secret FAX_GOOGLE_KEY, kept in
+// From the Google script in zach@caringcds.com (header x-fax-key = secret FAX_GOOGLE_KEY, kept in
 // cds-security, never in this public repo): { kind: 'ping' | 'next' | 'sent' | 'result' | 'incoming' }.
 // Only the three forms in FAX_FORMS, only to their own fax numbers, only the signed form saved for that
 // consumer. Her switch 'faxLive' off = nothing sent, nothing new taken in. Logic: _shared/office/fax.js.

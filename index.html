@@ -9173,7 +9173,7 @@ const HUB_SWITCHES = [
   { key: 'taxStages', label: 'Tax Setup in stages',
     does: 'On: Tax & Enrollment Setup reads top to bottom in one column, grouped by when each step happens (today, the day the EIN arrives, waiting, Fusion proof, payroll, after the first $1,000 quarter). A Next line at the top says the one thing to do, the 90-day Fusion clock sits beside it, and it asks once whether the consumer is new or transferring. Every card, link and instruction is the same as before. Off: the two-column screen as before.' },
   { key: 'faxLive', label: 'One-click fax',
-    does: 'On: the 2643A and 2827 steps on Tax Setup get a Fax it now button (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from intake@caringcds.com through eFax by the Google script in that mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in intake@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
+    does: 'On: the 2643A and 2827 steps on Tax Setup get a Fax it now button (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
 const hubSwitchOn = key => getObj(key).live === true;
 function renderHubSwitches() {
@@ -12203,8 +12203,9 @@ function taxSetEinCheck(v) {
 }
 // ---------------------------------------------------------------------------
 // ONE-CLICK FAX (2026-10-25, her yes; her switch 'faxLive'). "Fax it now" on the 2643A and 2827
-// steps (the 8821 was taken off the same day: an e-signed 8821 goes online only). The server (cds-fax) picks the number and the signed form itself; the Google script in
-// intake@caringcds.com sends it through eFax and hands back the receipt, which is written here as
+// steps (the 8821 was taken off the same day: an e-signed 8821 goes online only). Sent from
+// zach@caringcds.com (her call, 2026-10-25; it was intake@caringcds.com before it was ever used). The server (cds-fax) picks the number and the signed form itself; the Google script in
+// zach@caringcds.com sends it through eFax and hands back the receipt, which is written here as
 // the step's filing record (Sent date, Fax, the receipt as the document). Faxes that come in, and
 // any fax that failed or has no receipt, show on Today. The confirm step is inside the step, not a
 // pop-up, because pop-ups can be blocked when the hub is open inside GoHighLevel.
@@ -12286,11 +12287,11 @@ function faxStepHtml(key, c, cut, held) {
   if (last) {
     const t = last.status;
     if ((t === 'queued' || t === 'sending') && !last.stale)
-      status = '⏳ Waiting to send. The intake mailbox sends it within a minute or two.' + (t === 'queued' ? ' <a href="#" onclick="faxCancel(\'' + last.id + '\');return false">Stop it</a>' : '');
+      status = '⏳ Waiting to send. Zach\'s mailbox sends it within a minute or two.' + (t === 'queued' ? ' <a href="#" onclick="faxCancel(\'' + last.id + '\');return false">Stop it</a>' : '');
     else if (t === 'queued' || t === 'sending')
-      status = '<span style="color:var(--danger)">✗ Not sent: the intake mailbox has not picked it up after 10 minutes. Is the Google script in intake@caringcds.com running?</span>';
+      status = '<span style="color:var(--danger)">✗ Not sent: Zach\'s mailbox has not picked it up after 10 minutes. Is the Google script in zach@caringcds.com running?</span>';
     else if (t === 'sent' && !last.stale)
-      status = '📨 Sent from intake@caringcds.com at ' + esc(_faxWhen(last.sentAt)) + '. Waiting for the eFax receipt.';
+      status = '📨 Sent from zach@caringcds.com at ' + esc(_faxWhen(last.sentAt)) + '. Waiting for the eFax receipt.';
     else if (t === 'sent')
       status = '<span style="color:var(--danger)">✗ No receipt from eFax since ' + esc(_faxWhen(last.sentAt)) + '. Check Messages in eFax, then send it again if it did not go.</span>';
     else if (t === 'delivered')
@@ -12309,7 +12310,7 @@ function faxStepHtml(key, c, cut, held) {
   else if (held) action = '';
   else if (moving) action = '';
   else if (_fax.ask === key)
-    action = '<div style="margin-top:2px"><strong>Fax ' + esc(form.label || key) + ' for ' + esc(c.name) + ' to ' + esc(form.toNice || '') + '</strong> (' + esc(form.office || '') + ') from intake@caringcds.com?</div>' +
+    action = '<div style="margin-top:2px"><strong>Fax ' + esc(form.label || key) + ' for ' + esc(c.name) + ' to ' + esc(form.toNice || '') + '</strong> (' + esc(form.office || '') + ') from zach@caringcds.com?</div>' +
       '<div style="display:flex;gap:6px;margin-top:5px"><button type="button" class="btn btn-sm btn-primary" style="font-size:10.5px"' + (_fax.busy ? ' disabled' : '') +
       ' onclick="faxSend(\'' + key + '\')">' + (_fax.busy ? 'Sending…' : 'Yes, fax it') + '</button>' +
       '<button type="button" class="btn btn-sm btn-outline" style="font-size:10.5px" onclick="_fax.ask=\'\';refreshPacketHold()">Cancel</button></div>';
@@ -12355,7 +12356,7 @@ function renderTodayFaxes() {
   (d.problems || []).forEach(p => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill bad">Fax problem</span> ' +
     esc((((d.forms || {})[p.formKey] || {}).label) || p.formKey) + ' for <b>' + esc(p.consumerName || '') + '</b>: ' +
     esc(p.status === 'failed' ? 'did not go through' + (p.resultText ? ' (' + p.resultText + ')' : '') : p.status === 'unclear' ? 'eFax sent a receipt the hub could not read'
-      : p.status === 'sent' ? 'no receipt from eFax since ' + _faxWhen(p.sentAt) : 'not sent, the intake mailbox has not picked it up') +
+      : p.status === 'sent' ? 'no receipt from eFax since ' + _faxWhen(p.sentAt) : 'not sent, Zach\'s mailbox has not picked it up') +
     '</span><span style="display:flex;gap:10px"><a href="#" onclick="openTaxSetup(\'' + esc(p.consumerId) + '\');return false">Open Tax Setup</a>' +
     '<a href="#" onclick="faxDismiss(\'' + p.id + '\');return false">Dismiss</a></span></div>'));
   host.innerHTML = rows.length ? '<div class="card"><div class="cute-title" style="font-size:19px;margin-bottom:6px">Faxes</div>' + rows.join('') + '</div>' : '';

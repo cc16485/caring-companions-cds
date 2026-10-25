@@ -3,9 +3,9 @@
 // Out: a person clicks "Fax it now" on a Tax Setup step. Only the two Missouri forms can go
 // (2643A, 2827; the e-signed 8821 goes online only), only to the fax number written here (never one sent by the
 // page), and only the signed form already saved for that consumer. The Google script in
-// intake@caringcds.com picks it up, emails it to eFax (the only address eFax lets send) and hands
+// zach@caringcds.com picks it up, emails it to eFax (the only address eFax lets send) and hands
 // back eFax's receipt, which becomes the form's filing record on the consumer's Tax Setup.
-// In: faxes that arrive in intake@caringcds.com are kept here and shown on Today until someone
+// In: faxes that arrive in zach@caringcds.com are kept here and shown on Today until someone
 // marks them handled.
 // Her switch 'faxLive' (agency_data): off = nothing is sent and nothing new is taken in.
 // No em dashes in anything a person reads.
@@ -15,7 +15,7 @@ export const FAX_FORMS = {
   'MO-2643A': { to: '15735221722', label: 'Form 2643A', office: 'the Missouri Department of Revenue' },
   'MO-2827':  { to: '15735221722', label: 'Form 2827', office: 'the Missouri Department of Revenue' },
 };
-export const FROM = 'intake@caringcds.com';
+export const FROM = 'zach@caringcds.com';
 export const STALE_PICKUP_MIN = 10;     // queued this long and the Google script has not taken it
 export const STALE_RECEIPT_MIN = 120;   // sent this long and no receipt from eFax
 const MAX_PDF = 9 * 1024 * 1024;
@@ -118,7 +118,7 @@ export function createFax({ db, store, now = () => Date.now(), token = () => Mat
     throw new FaxError('Unknown request.');
   }
 
-  // ---------- from the Google script in intake@caringcds.com ----------
+  // ---------- from the Google script in zach@caringcds.com ----------
   async function google(body) {
     const k = body && body.kind;
     if (k === 'ping') return { ok: true, live: await live() };
@@ -146,7 +146,7 @@ export function createFax({ db, store, now = () => Date.now(), token = () => Mat
     if (k === 'sent') {
       if (body.error) {
         await q(`update public.cds_fax set status = 'failed', result_at = $2, result_text = $3 where id = $1 and status = 'sending'`,
-          [body.id, nowIso(), 'Gmail could not send it from intake@caringcds.com: ' + String(body.error).slice(0, 300)]);
+          [body.id, nowIso(), 'Gmail could not send it from zach@caringcds.com: ' + String(body.error).slice(0, 300)]);
         return { ok: true };
       }
       await q(`update public.cds_fax set status = 'sent', sent_at = $2 where id = $1 and status = 'sending'`, [body.id, nowIso()]);
