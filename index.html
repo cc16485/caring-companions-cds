@@ -759,6 +759,8 @@ button.fu-tile.check span { color:#14606F; }
   </div>
 
   <div id="dailyRoutine" style="margin-bottom:18px"></div>
+  <!-- Faxes that came in, and outgoing faxes with a problem (her switch 'faxLive', 2026-10-25). -->
+  <div id="todayFaxes" style="margin-bottom:18px"></div>
   <div id="todayComing" style="margin-bottom:18px"></div>
 
 </div>
@@ -6238,6 +6240,7 @@ function openTaxSetup(cid) {
   document.getElementById('tax_proof_status').innerHTML = '';
   document.getElementById('tax_packet_status').innerHTML = '';
   taxStagesApply();
+  faxOpenFor(cid);
   openModal('taxSetupModal');
 }
 
@@ -9112,6 +9115,8 @@ const HUB_SWITCHES = [
     does: 'On: Hours & EVV > Authorizations shows only the paperwork, one row per active consumer (authorization, end date, state scheduling worksheet), with the uploads in one box. Hours and shifts stay on This month, whose end dates use the DSDS authorization when it is uploaded. "Care plan" is renamed: Care plan days, State scheduling worksheet, Authorization. Off: as before.' },
   { key: 'taxStages', label: 'Tax Setup in stages',
     does: 'On: Tax & Enrollment Setup reads top to bottom in one column, grouped by when each step happens (today, the day the EIN arrives, waiting, Fusion proof, payroll, after the first $1,000 quarter). A Next line at the top says the one thing to do, the 90-day Fusion clock sits beside it, and it asks once whether the consumer is new or transferring. Every card, link and instruction is the same as before. Off: the two-column screen as before.' },
+  { key: 'faxLive', label: 'One-click fax',
+    does: 'On: the 8821, 2643A and 2827 steps on Tax Setup get a Fax it now button. The signed form is sent from intake@caringcds.com through eFax by the Google script in that mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in intake@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
 const hubSwitchOn = key => getObj(key).live === true;
 function renderHubSwitches() {
@@ -11822,6 +11827,7 @@ function renderFilings(c) {
           'Opens an addressed email. Attach the signed form above and send from the eFax address. ' +
           'Keep the confirmation eFax sends back: that is the receipt.</div>' : '')
         : '') +
+      faxStepHtml(spec.key, c, cut, held) +
       (spec.before ? '<div style="font-size:10.5px;color:var(--danger);margin-bottom:6px;line-height:1.55;' +
         'background:var(--danger-pale,#fdedec);border-left:3px solid var(--danger);border-radius:5px;' +
         'padding:6px 8px">' + spec.before + '</div>' : '') +
@@ -12137,6 +12143,175 @@ function taxSetEinCheck(v) {
   _taxSaveField('einCheck', v);
   if (v === 'has') { const e = document.getElementById('tax_ein'); e.focus(); e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 }
+// ---------------------------------------------------------------------------
+// ONE-CLICK FAX (2026-10-25, her yes; her switch 'faxLive'). "Fax it now" on the 8821, 2643A and
+// 2827 steps. The server (cds-fax) picks the number and the signed form itself; the Google script in
+// intake@caringcds.com sends it through eFax and hands back the receipt, which is written here as
+// the step's filing record (Sent date, Fax, the receipt as the document). Faxes that come in, and
+// any fax that failed or has no receipt, show on Today. The confirm step is inside the step, not a
+// pop-up, because pop-ups can be blocked when the hub is open inside GoHighLevel.
+// ---------------------------------------------------------------------------
+const FAX_KEYS = ['IRS-8821', 'MO-2643A', 'MO-2827'];
+let _fax = { cid: '', data: null, error: '', ask: '', busy: false, timer: null };
+let _faxToday = { data: null, at: 0, error: '', loading: false, note: {} };
+async function faxCall(body) {
+  const { data } = await _db.auth.getSession();
+  const jwt = data && data.session ? data.session.access_token : '';
+  let r;
+  try {
+    r = await fetch(SUPABASE_URL + '/functions/v1/cds-fax', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt }, body: JSON.stringify(body) });
+  } catch (e) { throw new Error('The fax service could not be reached. Check the connection and try again.'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'The fax service could not be reached.');
+  return j;
+}
+const _faxWhen = iso => {
+  if (!iso) return '';
+  const d = new Date(iso), t = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? t : _niceDay(d.toLocaleDateString('en-CA')) + ' ' + t;
+};
+
+function faxOpenFor(cid) {
+  clearInterval(_fax.timer);
+  _fax = { cid, data: null, error: '', ask: '', busy: false, timer: null };
+  if (!hubSwitchOn('faxLive') || !_db) return;
+  faxLoad();
+  // While the window is open and a fax is on its way, look again every 20 seconds.
+  _fax.timer = setInterval(() => {
+    const open = document.getElementById('taxSetupModal').classList.contains('open');
+    if (!open || document.getElementById('tax_consumer_id').value !== cid) { clearInterval(_fax.timer); return; }
+    const moving = ((_fax.data && _fax.data.out) || []).some(r => ['queued', 'sending', 'sent'].includes(r.status) && !r.stale);
+    if (moving) faxLoad();
+  }, 20000);
+}
+async function faxLoad() {
+  const cid = _fax.cid;
+  try { _fax.data = await faxCall({ action: 'list', consumerId: cid }); _fax.error = ''; }
+  catch (e) { _fax.error = e.message; }
+  if (_fax.cid !== cid) return;
+  await faxApplyDelivered();
+  const c = getData('consumers').find(x => x.id === cid);
+  if (c) renderFilings(c);
+}
+// A delivered fax becomes the filing record: Sent date, Fax, the eFax receipt as the document.
+// Something already typed or uploaded on the step is kept.
+async function faxApplyDelivered() {
+  const rows = ((_fax.data && _fax.data.out) || []).filter(r => r.status === 'delivered' && !r.applied);
+  if (!rows.length) return;
+  const consumers = getData('consumers');
+  const c = consumers.find(x => x.id === _fax.cid);
+  if (!c) return;
+  c.filings = c.filings || {};
+  rows.forEach(r => {
+    const f = c.filings[r.formKey] = Object.assign({}, c.filings[r.formKey]);
+    if (!f.sentAt) f.sentAt = new Date(r.sentAt || r.resultAt).toLocaleDateString('en-CA');
+    if (!f.channel) f.channel = 'fax';
+    if (!f.ref) f.ref = 'eFax receipt';
+    if (!f.docPath && r.receiptPath) { f.docPath = r.receiptPath; f.docName = 'eFax receipt.pdf'; f.docAt = new Date().toLocaleDateString('en-CA'); }
+    f.faxId = r.id;
+  });
+  await setData('consumers', consumers);
+  for (const r of rows) { try { await faxCall({ action: 'applied', id: r.id }); r.applied = true; } catch (e) { console.error('fax applied:', e); } }
+}
+
+function faxStepHtml(key, c, cut, held) {
+  if (!FAX_KEYS.includes(key) || !hubSwitchOn('faxLive')) return '';
+  const box = inner => '<div style="background:#eef6fb;border:1px solid #cfe3ef;border-radius:6px;padding:7px 9px;margin-bottom:6px;font-size:11px;line-height:1.55">' + inner + '</div>';
+  if (_fax.cid !== (c && c.id)) return '';
+  if (_fax.error) return box('<span style="color:var(--danger)">📠 ' + esc(_fax.error) + '</span>');
+  if (!_fax.data) return box('<span style="color:var(--gray-600)">📠 Checking for faxes…</span>');
+  const form = (_fax.data.forms || {})[key] || {};
+  const rows = (_fax.data.out || []).filter(r => r.formKey === key);
+  const last = rows[0];
+  let status = '';
+  if (last) {
+    const t = last.status;
+    if ((t === 'queued' || t === 'sending') && !last.stale)
+      status = '⏳ Waiting to send. The intake mailbox sends it within a minute or two.' + (t === 'queued' ? ' <a href="#" onclick="faxCancel(\'' + last.id + '\');return false">Stop it</a>' : '');
+    else if (t === 'queued' || t === 'sending')
+      status = '<span style="color:var(--danger)">✗ Not sent: the intake mailbox has not picked it up after 10 minutes. Is the Google script in intake@caringcds.com running?</span>';
+    else if (t === 'sent' && !last.stale)
+      status = '📨 Sent from intake@caringcds.com at ' + esc(_faxWhen(last.sentAt)) + '. Waiting for the eFax receipt.';
+    else if (t === 'sent')
+      status = '<span style="color:var(--danger)">✗ No receipt from eFax since ' + esc(_faxWhen(last.sentAt)) + '. Check Messages in eFax, then send it again if it did not go.</span>';
+    else if (t === 'delivered')
+      status = '<span style="color:var(--success)">✓ Fax went through ' + esc(_faxWhen(last.resultAt)) + ' to ' + esc(last.to) + '.</span>' +
+        (last.receiptPath ? ' <a href="#" onclick="openProofFile(\'' + esc(last.receiptPath) + '\');return false">eFax receipt</a>' : '');
+    else if (t === 'failed')
+      status = '<span style="color:var(--danger)">✗ This fax did not go through' + (last.resultText ? ': ' + esc(last.resultText) : '.') + ' Fix it, then Fax it now again.</span>';
+    else if (t === 'unclear')
+      status = '<span style="color:#8a5a00">⚠ eFax sent a receipt the hub could not read. Open it to check.</span>' +
+        (last.receiptPath ? ' <a href="#" onclick="openProofFile(\'' + esc(last.receiptPath) + '\');return false">eFax receipt</a>' : '');
+  }
+  const moving = last && ['queued', 'sending', 'sent'].includes(last.status) && !last.stale;
+  let action = '';
+  if (!_fax.data.live) action = '<span style="color:var(--gray-600)">One-click fax is switched off on the server.</span>';
+  else if (!cut) action = '<span style="color:var(--gray-600)">Get the signed form from the packet first, then it can be faxed from here.</span>';
+  else if (held) action = '';
+  else if (moving) action = '';
+  else if (_fax.ask === key)
+    action = '<div style="margin-top:2px"><strong>Fax ' + esc(form.label || key) + ' for ' + esc(c.name) + ' to ' + esc(form.toNice || '') + '</strong> (' + esc(form.office || '') + ') from intake@caringcds.com?</div>' +
+      '<div style="display:flex;gap:6px;margin-top:5px"><button type="button" class="btn btn-sm btn-primary" style="font-size:10.5px"' + (_fax.busy ? ' disabled' : '') +
+      ' onclick="faxSend(\'' + key + '\')">' + (_fax.busy ? 'Sending…' : 'Yes, fax it') + '</button>' +
+      '<button type="button" class="btn btn-sm btn-outline" style="font-size:10.5px" onclick="_fax.ask=\'\';refreshPacketHold()">Cancel</button></div>';
+  else action = '<button type="button" class="btn btn-sm btn-primary" style="font-size:10.5px" onclick="_fax.ask=\'' + key + '\';refreshPacketHold()">📠 ' +
+    (last && last.status === 'delivered' ? 'Fax it again' : 'Fax it now') + '</button> <span style="color:var(--gray-600)">The receipt is saved here by itself.</span>';
+  if (!status && !action) return '';
+  return box((status ? '<div>' + status + '</div>' : '') + (action ? '<div style="margin-top:' + (status ? '5px' : '0') + '">' + action + '</div>' : ''));
+}
+async function faxSend(key) {
+  if (_fax.busy) return;
+  _fax.busy = true; refreshPacketHold();
+  // Sending again past the "already on its way" guard only when the last one is stuck.
+  const last = ((_fax.data && _fax.data.out) || []).find(r => r.formKey === key);
+  try { await faxCall({ action: 'queue', consumerId: _fax.cid, formKey: key, again: !!(last && last.stale) }); _fax.ask = ''; }
+  catch (e) { _fax.error = ''; alert(e.message); }
+  _fax.busy = false;
+  await faxLoad();
+}
+async function faxCancel(id) {
+  try { await faxCall({ action: 'cancel', id }); } catch (e) { alert(e.message); }
+  await faxLoad();
+}
+
+// Today: faxes that came in until someone marks them handled, and outgoing faxes with a problem.
+function renderTodayFaxes() {
+  const host = document.getElementById('todayFaxes');
+  if (!host) return;
+  if (!hubSwitchOn('faxLive') || !_db) { host.innerHTML = ''; return; }
+  if (!_faxToday.loading && Date.now() - _faxToday.at > 60000) {
+    _faxToday.loading = true;
+    faxCall({ action: 'list' }).then(d => { _faxToday.data = d; _faxToday.error = ''; }, e => { _faxToday.error = e.message; })
+      .finally(() => { _faxToday.loading = false; _faxToday.at = Date.now(); renderTodayFaxes(); });
+  }
+  const d = _faxToday.data;
+  if (_faxToday.error) { host.innerHTML = '<div class="alert alert-danger" style="font-size:13px"><div><strong>Faxes did not load:</strong> ' + esc(_faxToday.error) + '</div></div>'; return; }
+  if (!d) { host.innerHTML = ''; return; }
+  const rows = [];
+  (d.incoming || []).filter(f => f.status === 'new').forEach(f => rows.push('<div class="cp-line" style="flex-wrap:wrap;gap:6px"><span style="color:var(--cute-ink)"><span class="cp-pill warn">New fax</span> From <b>' +
+    esc(f.from) + '</b>, ' + esc(_faxWhen(f.receivedAt)) + '</span><span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+    (f.filePath ? '<a href="#" onclick="openProofFile(\'' + esc(f.filePath) + '\');return false">Open it</a>' : '') +
+    '<input type="text" id="faxNote_' + f.id + '" placeholder="What was it? (optional)" style="font-size:12px;padding:4px 8px;border:1px solid var(--gray-300);border-radius:6px;min-width:200px">' +
+    '<button type="button" class="btn btn-sm btn-outline" style="font-size:11.5px" onclick="faxHandled(\'' + f.id + '\')">Mark handled</button></span></div>'));
+  (d.problems || []).forEach(p => rows.push('<div class="cp-line"><span style="color:var(--cute-ink)"><span class="cp-pill bad">Fax problem</span> ' +
+    esc((((d.forms || {})[p.formKey] || {}).label) || p.formKey) + ' for <b>' + esc(p.consumerName || '') + '</b>: ' +
+    esc(p.status === 'failed' ? 'did not go through' + (p.resultText ? ' (' + p.resultText + ')' : '') : p.status === 'unclear' ? 'eFax sent a receipt the hub could not read'
+      : p.status === 'sent' ? 'no receipt from eFax since ' + _faxWhen(p.sentAt) : 'not sent, the intake mailbox has not picked it up') +
+    '</span><span style="display:flex;gap:10px"><a href="#" onclick="openTaxSetup(\'' + esc(p.consumerId) + '\');return false">Open Tax Setup</a>' +
+    '<a href="#" onclick="faxDismiss(\'' + p.id + '\');return false">Dismiss</a></span></div>'));
+  host.innerHTML = rows.length ? '<div class="card"><div class="cute-title" style="font-size:19px;margin-bottom:6px">Faxes</div>' + rows.join('') + '</div>' : '';
+}
+async function faxHandled(id) {
+  const el = document.getElementById('faxNote_' + id);
+  try { await faxCall({ action: 'handled', id, note: el ? el.value : '' }); } catch (e) { alert(e.message); return; }
+  _faxToday.at = 0; renderTodayFaxes();
+}
+async function faxDismiss(id) {
+  try { await faxCall({ action: 'dismiss', id }); } catch (e) { alert(e.message); return; }
+  _faxToday.at = 0; renderTodayFaxes();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const m = document.getElementById('taxSetupModal');
   if (m) ['input', 'change'].forEach(ev => m.addEventListener(ev, e => {
@@ -13903,6 +14078,7 @@ function firstShiftOf(c) {
 
 // The top of Today: hello, a one-line count, and what is coming up.
 function renderTodayTop() {
+  try { renderTodayFaxes(); } catch (e) { console.error('today faxes:', e); }
   const hello = document.getElementById('todayHello');
   if (hello) {
     const h = new Date().getHours();
