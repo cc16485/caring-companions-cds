@@ -30,7 +30,7 @@
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Tax Setup in stages (2026-10-25, her switch 'taxStages'). -->
-<script src="tax/tax-stages.js?v=2"></script>
+<script src="tax/tax-stages.js?v=3"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
      so a PDF carrying the consumer's SSN never passes through anything of ours
      on its way to being cut up. Deferred: nothing on load needs it. -->
@@ -3411,10 +3411,10 @@ button.fu-tile.check span { color:#14606F; }
         <div style="font-weight:700;font-size:13px;color:var(--primary);margin-bottom:4px">STEP 2 — IRS Form 8821 (Tax Information Authorization)</div>
         <div style="margin-bottom:10px">
           This authorizes Caring Companions to receive the consumer's IRS tax correspondence and speak to the IRS on their behalf.<br>
-          ⚠️ <strong>Wet/faxed signature required</strong> — do NOT rely on e-sign until you confirm with your accountant.<br>
-          1. Consumer signs Form 8821 with their name and EIN.<br>
-          2. Mail or fax to IRS per the form's instructions.<br>
-          3. Keep a copy in the consumer's file.
+          ⚠️ <strong>E-signed 8821s go online only.</strong> The IRS does not accept an electronically signed 8821 by fax or mail, and the Hub and GoHighLevel packets are e-signed.<br>
+          1. Consumer signs Form 8821 in their enrollment packet.<br>
+          2. Submit it at <a href="https://www.irs.gov/submit8821" target="_blank" rel="noopener">IRS.gov/Submit8821</a> (needs an IRS Secure Access account the first time).<br>
+          3. Save the confirmation on the 8821 step. Only a paper 8821 signed by hand can be faxed or mailed.
         </div>
 
         <div style="font-weight:700;font-size:13px;color:var(--primary);margin-bottom:4px">STEP 3 — IRS Form 2678 (Employer/Payer Agent Appointment)</div>
@@ -3588,7 +3588,7 @@ button.fu-tile.check span { color:#14606F; }
     </div>
 
     <div id="tax_wet_banner" style="background:#fff3cd;border-radius:6px;padding:8px 12px;font-size:11.5px;margin-bottom:10px;line-height:1.6">
-      ⚠️ <strong>Wet signature:</strong> Forms 8821 and 2678 may require original signatures — confirm with your accountant before marking filed. &nbsp;|&nbsp; ⚠️ <strong>DES:</strong> Cannot register in UInteract until after first payroll and $1,000+ paid in a single quarter.
+      ⚠️ <strong>E-signed forms:</strong> an e-signed 8821 goes online only (IRS.gov/Submit8821). Form 2678 may still require an original signature — confirm with your accountant before marking filed. &nbsp;|&nbsp; ⚠️ <strong>DES:</strong> Cannot register in UInteract until after first payroll and $1,000+ paid in a single quarter.
     </div>
     <div class="tax-grid">
 <section data-card="1" class="tax-card">
@@ -6242,6 +6242,7 @@ function openTaxSetup(cid) {
   taxStagesApply();
   faxOpenFor(cid);
   openModal('taxSetupModal');
+  autoFileHubPacket(cid);
 }
 
 function saveTaxSetup() {
@@ -7370,34 +7371,39 @@ async function mountLeadEnrollCard(p) {
   const el = document.getElementById('lpEnroll');
   if (!el || !_db) return;
   try {
-    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=1');
-    mountLeadEnroll(el, { api: cdsMatchApi, lead: p, PDFLib: window.PDFLib, blank: ENROLL_BLANK,
+    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=2');
+    mountLeadEnroll(el, { api: cdsMatchApi, lead: p, PDFLib: window.PDFLib, blank: ENROLL_BLANK, afterAgentSigned: fileHubPacketForLead,
       consumer: () => getData('consumers').find(c => (c.name || '').trim().toLowerCase() === (p.name || '').trim().toLowerCase()) || null });
   } catch (e) { el.innerHTML = '<div class="field-note" style="color:var(--danger)">The enrollment packet card did not load: ' + esc(e.message) + '</div>'; }
 }
 
 // Tax Setup: the signed forms from the Hub packet, each saved on its own, named the way
 // the splitter names them, so the IRS and Missouri steps below pick them up unchanged.
-async function importHubPacket() {
-  const cid = document.getElementById('tax_consumer_id').value;
-  const status = document.getElementById('tax_packet_status');
-  const consumers = getData('consumers');
-  const c = consumers.find(x => x.id === cid);
-  if (!c) return;
-  const say = (m, ok) => { status.innerHTML = '<span style="color:' + (ok === false ? 'var(--danger)' : ok ? 'var(--success)' : 'var(--gray-600)') + '">' + m + '</span>'; };
+// The signed forms from a Hub packet, filled and saved onto the consumer's Tax Setup steps.
+// 2026-10-25 (her ask): this also runs by itself, so nobody has to press the button: right after the
+// office signs the packet as agent (when the consumer is already on the Consumers list), and whenever
+// Tax Setup opens with no forms filed yet. It never replaces forms already there (a Hub import or a
+// GoHighLevel split). Returns { ok, count, why }.
+const _hubFiling = {};
+async function fileHubPacket(cid, say) {
+  say = say || (() => {});
+  if (_hubFiling[cid]) return { ok: false, why: 'busy' };
+  _hubFiling[cid] = true;
   try {
+    const c0 = getData('consumers').find(x => x.id === cid);
+    if (!c0) return { ok: false, why: 'no consumer' };
     if (typeof PDFLib === 'undefined') throw new Error('The PDF library did not load. Reload the page.');
-    say('Looking for ' + esc(c.name) + "'s signed packet…");
+    say('Looking for ' + esc(c0.name) + "'s signed packet…");
     const { packets } = await cdsMatchApi('enrollList', {});
     const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const mine = packets.filter(k => k.consumer_id === cid || (!k.consumer_id && norm(k.name) === norm(c.name)));
-    if (!mine.length) { say('No signed Hub packet for ' + esc(c.name) + ' yet. Send it from their lead (Leads, open the lead, Send enrollment packet).', false); return; }
+    const mine = packets.filter(k => k.consumer_id === cid || (!k.consumer_id && norm(k.name) === norm(c0.name)));
+    if (!mine.length) return { ok: false, why: 'none', msg: 'No signed Hub packet for ' + esc(c0.name) + ' yet. Send it from their lead (Leads, open the lead, Send enrollment packet).' };
     const k = mine[0];
-    if (!k.office_signed) { say('The packet is signed by the consumer but not by you as agent yet. Open their lead and press Sign as agent first.', false); return; }
+    if (!k.office_signed) return { ok: false, why: 'agent', msg: 'The packet is signed by the consumer but not by you as agent yet. Open their lead and press Sign as agent first.' };
     const { buildEnrollPdfs } = await import('./enroll/enroll-pdf.js?v=1');
     const data = await cdsMatchApi('enrollPdfData', { lead_id: k.lead_id });
-    const files = await buildEnrollPdfs(PDFLib, data, { blank: ENROLL_BLANK, consumer: c });
-    const stem = consumerStem(c.name), saved = [];
+    const files = await buildEnrollPdfs(PDFLib, data, { blank: ENROLL_BLANK, consumer: c0 });
+    const stem = consumerStem(c0.name), saved = [];
     for (let n = 0; n < files.length; n++) {
       const f = files[n];
       say('Saving ' + (n + 1) + ' of ' + files.length + ' (' + esc(f.title) + ')…');
@@ -7407,13 +7413,64 @@ async function importHubPacket() {
       const lay = PACKET_LAYOUT.find(l => l.file === f.file);
       saved.push({ path, name, file: f.file, title: f.title, dest: lay ? lay.dest : 'file', at: _todayIso(), from: 'hub' });
     }
+    // Read the list again just before saving, so nothing changed meanwhile is lost.
+    const consumers = getData('consumers');
+    const c = consumers.find(x => x.id === cid);
+    if (!c) return { ok: false, why: 'no consumer' };
     c.packetForms = saved;
-    if (!c.packetSigned) { c.packetSigned = String(k.signed_at).slice(0, 10); document.getElementById('tax_packet_signed').value = c.packetSigned; }
+    if (!c.packetSigned) c.packetSigned = String(k.signed_at).slice(0, 10);
     setData('consumers', consumers);
     await cdsMatchApi('enrollLinkConsumer', { lead_id: k.lead_id, consumer_id: cid });
-    renderPacketForms(c);
-    say('✓ ' + saved.length + ' signed forms saved, each on its own. The ones that get sent out are in their steps below.', true);
+    return { ok: true, count: saved.length, signed: c.packetSigned, c };
+  } finally { delete _hubFiling[cid]; }
+}
+
+async function importHubPacket() {
+  const cid = document.getElementById('tax_consumer_id').value;
+  const status = document.getElementById('tax_packet_status');
+  const say = (m, ok) => { status.innerHTML = '<span style="color:' + (ok === false ? 'var(--danger)' : ok ? 'var(--success)' : 'var(--gray-600)') + '">' + m + '</span>'; };
+  try {
+    const r = await fileHubPacket(cid, m => say(m));
+    if (r.why === 'busy') { say('Already getting the forms…'); return; }
+    if (!r.ok) { say(r.msg || 'Could not get the forms.', false); return; }
+    _taxAfterFiled(r);
+    say('✓ ' + r.count + ' signed forms saved, each on its own. The ones that get sent out are in their steps below.', true);
   } catch (e) { say('Could not get the forms: ' + esc(e.message || String(e)), false); }
+}
+// Tax Setup open for this consumer: show the filed forms at once.
+function _taxAfterFiled(r) {
+  const open = document.getElementById('taxSetupModal').classList.contains('open');
+  if (!open || document.getElementById('tax_consumer_id').value !== r.c.id) return;
+  const sig = document.getElementById('tax_packet_signed');
+  if (!sig.value) sig.value = r.signed || '';
+  renderPacketForms(r.c);
+  renderFilings(r.c);
+}
+// By itself, when Tax Setup opens and nothing is filed yet. Quiet unless it files something or fails.
+async function autoFileHubPacket(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c || (Array.isArray(c.packetForms) && c.packetForms.length) || !_db) return;
+  const status = document.getElementById('tax_packet_status');
+  try {
+    const r = await fileHubPacket(cid);
+    if (!r.ok) return;
+    _taxAfterFiled(r);
+    if (status && document.getElementById('tax_consumer_id').value === cid)
+      status.innerHTML = '<span style="color:var(--success)">✓ The ' + r.count + ' signed forms from ' + esc(r.c.name) + "'s Hub packet were filed here by themselves.</span>";
+  } catch (e) {
+    if (status && document.getElementById('tax_consumer_id').value === cid)
+      status.innerHTML = '<span style="color:var(--danger)">The signed Hub packet could not be filed by itself: ' + esc(e.message || String(e)) + ' Press Get the signed forms from the Hub packet to try again.</span>';
+  }
+}
+// Right after the office signs as agent on the lead (enroll/hub-enroll.js calls this).
+async function fileHubPacketForLead(lead) {
+  const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const c = getData('consumers').find(x => norm(x.name) === norm(lead && lead.name));
+  if (!c) return 'Their forms will file themselves into Tax Setup once they are on the Consumers list.';
+  if (Array.isArray(c.packetForms) && c.packetForms.length) return 'Tax Setup already has their signed forms, so nothing was replaced.';
+  const r = await fileHubPacket(c.id);
+  if (!r.ok) throw new Error(r.msg || 'The signed forms could not be filed into Tax Setup.');
+  return 'The ' + r.count + ' signed forms are filed in ' + c.name + "'s Tax Setup.";
 }
 
 function pccpCopy(btn) {
@@ -9116,7 +9173,7 @@ const HUB_SWITCHES = [
   { key: 'taxStages', label: 'Tax Setup in stages',
     does: 'On: Tax & Enrollment Setup reads top to bottom in one column, grouped by when each step happens (today, the day the EIN arrives, waiting, Fusion proof, payroll, after the first $1,000 quarter). A Next line at the top says the one thing to do, the 90-day Fusion clock sits beside it, and it asks once whether the consumer is new or transferring. Every card, link and instruction is the same as before. Off: the two-column screen as before.' },
   { key: 'faxLive', label: 'One-click fax',
-    does: 'On: the 8821, 2643A and 2827 steps on Tax Setup get a Fax it now button. The signed form is sent from intake@caringcds.com through eFax by the Google script in that mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in intake@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
+    does: 'On: the 2643A and 2827 steps on Tax Setup get a Fax it now button (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from intake@caringcds.com through eFax by the Google script in that mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in intake@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
 const hubSwitchOn = key => getObj(key).live === true;
 function renderHubSwitches() {
@@ -11480,8 +11537,8 @@ const PACKET_LAYOUT = [
     send: { fax: '855-641-6935', mail: 'IRS, Attn: EIN Operation, Cincinnati OH 45999' },
     note: 'Send this one first. Everything Missouri needs waits on the EIN it produces.' },
   { pages: [10], file: 'IRS-8821', title: 'IRS Form 8821, Tax Information Authorization', dest: 'IRS',
-    send: { fax: '855-214-7522', online: 'IRS.gov/Submit8821',
-            mail: 'IRS, 1973 Rulon White Blvd MS 6737, Ogden UT 84201' } },
+    // E-signed (Hub or GoHighLevel packet): online only, the IRS will not take it by fax or mail (2026-10-25).
+    send: { online: 'IRS.gov/Submit8821' } },
   { pages: [12, 13], file: 'IRS-2678', title: 'IRS Form 2678, Employer/Payer Appointment of Agent', dest: 'IRS',
     send: { mail: 'Department of the Treasury, IRS Center, Ogden UT 84201' },
     note: 'Mail only. The IRS gives no fax number for this one.' },
@@ -11720,13 +11777,14 @@ const FILINGS = [
     fastest: '<strong>Quickest: online, issued in minutes.</strong> Fax takes about 4 business days, mail about 4 weeks. Open Mon-Fri 6am-1am ET, Sat 6am-9pm, Sun 6pm-midnight.',  label: 'Form SS-4 / EIN application',
     channels: ['online', 'fax', 'mail'],
     doc: 'CP 575 or 147C letter', ref: 'EIN issued' },
+  // 2026-10-25: the IRS takes an e-signed 8821 ONLY online at IRS.gov/Submit8821 (Instructions for
+  // Form 8821, Electronic Signatures). Every 8821 signed in the Hub or GoHighLevel packet is e-signed,
+  // so no fax or mail route is offered for it. A wet-signed paper 8821 is the only kind that can be faxed.
   { key: 'IRS-8821',
-    efax: '18552147522',
-    mailTo: 'Internal Revenue Service, 1973 Rulon White Blvd MS 6737, Ogden UT 84201',
     link: { href: 'https://www.irs.gov/submit8821', label: 'Submit Form 8821 online' },
-    fastest: '<strong>Quickest: fax to 855-214-7522.</strong> IRS.gov/Submit8821 also works but needs a Secure Access account set up first, so the fax is faster the first time.',  label: 'Form 8821',
-    channels: ['fax', 'online', 'mail'],
-    doc: 'Fax receipt or acknowledgement', ref: 'Reference' },
+    fastest: '<strong>Online only: IRS.gov/Submit8821.</strong> The IRS does not accept an e-signed 8821 by fax or mail, and every 8821 signed in the Hub or GoHighLevel packet is e-signed. The first time, it needs an IRS Secure Access account. Save the confirmation it gives you below.',  label: 'Form 8821',
+    channels: ['online'],
+    doc: 'Online confirmation', ref: 'Confirmation number' },
   { key: 'IRS-2678',
     mailTo: 'Department of the Treasury, Internal Revenue Service Center, Ogden UT 84201',
     fastest: '<strong>No quick route: mail only.</strong> The IRS gives no fax number for this one and approval takes weeks, so send it the day the EIN arrives.',  label: 'Form 2678',
@@ -12144,14 +12202,14 @@ function taxSetEinCheck(v) {
   if (v === 'has') { const e = document.getElementById('tax_ein'); e.focus(); e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 }
 // ---------------------------------------------------------------------------
-// ONE-CLICK FAX (2026-10-25, her yes; her switch 'faxLive'). "Fax it now" on the 8821, 2643A and
-// 2827 steps. The server (cds-fax) picks the number and the signed form itself; the Google script in
+// ONE-CLICK FAX (2026-10-25, her yes; her switch 'faxLive'). "Fax it now" on the 2643A and 2827
+// steps (the 8821 was taken off the same day: an e-signed 8821 goes online only). The server (cds-fax) picks the number and the signed form itself; the Google script in
 // intake@caringcds.com sends it through eFax and hands back the receipt, which is written here as
 // the step's filing record (Sent date, Fax, the receipt as the document). Faxes that come in, and
 // any fax that failed or has no receipt, show on Today. The confirm step is inside the step, not a
 // pop-up, because pop-ups can be blocked when the hub is open inside GoHighLevel.
 // ---------------------------------------------------------------------------
-const FAX_KEYS = ['IRS-8821', 'MO-2643A', 'MO-2827'];
+const FAX_KEYS = ['MO-2643A', 'MO-2827'];   // not the 8821: e-signed, so online only
 let _fax = { cid: '', data: null, error: '', ask: '', busy: false, timer: null };
 let _faxToday = { data: null, at: 0, error: '', loading: false, note: {} };
 async function faxCall(body) {

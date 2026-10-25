@@ -82,6 +82,11 @@ export function mountLeadEnroll(el, opts) {
       } else if (act === 'agent') {
         await api('enrollOfficeSign', { lead_id: lead.id, typed_name: (el.querySelector('#enrAgentName') || {}).value || '' });
         say('Signed as agent.');
+        // The signed forms file themselves into the consumer's Tax Setup (2026-10-25, her ask).
+        if (opts.afterAgentSigned) {
+          try { say('Signed as agent. ' + await opts.afterAgentSigned(lead)); }
+          catch (err2) { say('Signed as agent. ' + err2.message + ' Open Tax Setup and press Get the signed forms from the Hub packet.', 'bad'); }
+        }
       } else if (act === 'pdf') {
         if (!opts.PDFLib) throw new Error('The PDF library did not load. Reload the page.');
         const data = await api('enrollPdfData', { lead_id: lead.id });

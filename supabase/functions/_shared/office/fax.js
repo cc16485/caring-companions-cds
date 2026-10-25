@@ -1,7 +1,7 @@
 // One-click fax (2026-10-25, her yes). The rules behind the cds-fax server function.
 //
-// Out: a person clicks "Fax it now" on a Tax Setup step. Only the three forms the state and IRS take
-// by fax can go (8821, 2643A, 2827), only to the fax number written here (never one sent by the
+// Out: a person clicks "Fax it now" on a Tax Setup step. Only the two Missouri forms can go
+// (2643A, 2827; the e-signed 8821 goes online only), only to the fax number written here (never one sent by the
 // page), and only the signed form already saved for that consumer. The Google script in
 // intake@caringcds.com picks it up, emails it to eFax (the only address eFax lets send) and hands
 // back eFax's receipt, which becomes the form's filing record on the consumer's Tax Setup.
@@ -10,8 +10,8 @@
 // Her switch 'faxLive' (agency_data): off = nothing is sent and nothing new is taken in.
 // No em dashes in anything a person reads.
 
+// Not the 8821 (taken off 2026-10-25): the IRS takes an e-signed 8821 only online at IRS.gov/Submit8821.
 export const FAX_FORMS = {
-  'IRS-8821': { to: '18552147522', label: 'Form 8821', office: 'the IRS' },
   'MO-2643A': { to: '15735221722', label: 'Form 2643A', office: 'the Missouri Department of Revenue' },
   'MO-2827':  { to: '15735221722', label: 'Form 2827', office: 'the Missouri Department of Revenue' },
 };
@@ -84,7 +84,7 @@ export function createFax({ db, store, now = () => Date.now(), token = () => Mat
       if (!c) throw new FaxError('That consumer was not found. Reload the hub and try again.', 404);
       const form = (Array.isArray(c.packetForms) ? c.packetForms : []).find(p => p && p.file === body.formKey && p.path);
       if (!form) throw new FaxError('There is no signed ' + spec.label + ' saved for ' + c.name + ' yet. Get the forms from the packet first.');
-      if (body.formKey !== 'IRS-8821' && !String(c.ein || '').trim()) throw new FaxError('Missouri cannot register the employer until the IRS issues the EIN. Fill in the Federal EIN first.');
+      if (!String(c.ein || '').trim()) throw new FaxError('Missouri cannot register the employer until the IRS issues the EIN. Fill in the Federal EIN first.');
       // No double sends: one at a time per consumer and form, unless the last one failed or was cancelled.
       const busy = await q(`select id from public.cds_fax where direction = 'out' and consumer_id = $1 and form_key = $2
                             and status in ('queued', 'sending', 'sent') and requested_at > now() - interval '1 day'`, [c.id, body.formKey]);
