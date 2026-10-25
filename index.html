@@ -29,6 +29,8 @@
 <script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
+<!-- Tax Setup in stages (2026-10-25, her switch 'taxStages'). -->
+<script src="tax/tax-stages.js?v=1"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
      so a PDF carrying the consumer's SSN never passes through anything of ours
      on its way to being cut up. Deferred: nothing on load needs it. -->
@@ -294,6 +296,38 @@
   .tax-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
     border-radius: 999px; padding: 4px 10px; border: 1.5px solid var(--gray-300); color: var(--gray-600); background: var(--gray-100); }
   .tax-chip.done { border-color: var(--success); color: var(--success); background: #eafaf1; }
+  /* Tax Setup in stages (2026-10-25, her switch 'taxStages'): one column, grouped by when each step happens. */
+  #taxSetupModal.staged .tax-grid { grid-template-columns: 1fr; max-width: 980px; margin-left: auto; margin-right: auto; }
+  #taxSetupModal.staged #tax_staged_top { position: sticky; top: -14px; z-index: 5; background: #fff; margin: -14px -24px 12px; padding: 12px 24px 10px;
+    border-bottom: 1px solid var(--gray-200); display: grid; gap: 10px; }
+  #taxSetupModal.staged #tax_progress { display: none !important; }
+  .tx-kind { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12.5px; color: var(--gray-700); }
+  .tx-kind.ask { background: #fff3cd; border-radius: 8px; padding: 6px 10px; }
+  .tx-next { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: center; background: var(--gray-100);
+    border-left: 5px solid var(--accent, #54bdb8); border-radius: 8px; padding: 10px 14px; }
+  .tx-next.wait { border-left-color: #E7B35A; }
+  .tx-next .tag { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #1f7c77; }
+  .tx-next.wait .tag { color: #8a5a00; }
+  .tx-next .what { font-weight: 700; font-size: 14px; color: var(--primary); }
+  .tx-next .why { grid-column: 2; font-size: 12px; color: var(--gray-600); }
+  .tx-next .btn { grid-row: 1 / 3; grid-column: 3; }
+  .tx-clock { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12.5px; }
+  .tx-clock .form-group { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0; }
+  .tx-clock .form-group label { margin: 0; white-space: nowrap; }
+  .tx-pill { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .tx-pill.idle { background: var(--gray-100); color: var(--gray-600); } .tx-pill.ok { background: #eafaf1; color: var(--success); }
+  .tx-pill.warn { background: #fff3cd; color: #8a5a00; } .tx-pill.bad { background: #fdedec; color: var(--danger); }
+  .tax-chip.now { border-color: var(--primary); color: var(--primary); background: #fff; box-shadow: 0 0 0 2px rgba(14,56,96,.18); }
+  .tx-stage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; border-bottom: 2px solid var(--gray-200); padding: 10px 0 5px; margin-top: 8px; }
+  .tx-stage h3 { margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 19px; color: var(--primary); }
+  .tx-stage .when { font-size: 12px; color: var(--gray-600); }
+  .tx-stage .tx-pill { margin-left: auto; }
+  .tx-stage.audited { border-bottom-color: var(--danger); } .tx-stage.audited h3 { color: var(--danger); }
+  .tx-stage .lock { flex-basis: 100%; font-size: 12px; color: #8a5a00; background: #fff3cd; border-radius: 6px; padding: 5px 10px; margin-top: 4px; }
+  #taxSetupModal.staged .tax-card.tx-later { opacity: .62; }
+  #taxSetupModal.staged .tax-card.tx-later:focus-within, #taxSetupModal.staged .tax-card.tx-later:hover { opacity: 1; }
+  #taxSetupModal.staged .tax-card.tx-now { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(14,56,96,.12); }
+  #taxSetupModal .tax-card { scroll-margin-top: 190px; }
   @media (max-width: 900px) {
     #taxSetupModal .modal { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
     #taxSetupModal .tax-grid { grid-template-columns: 1fr; }
@@ -3351,6 +3385,8 @@ button.fu-tile.check span { color:#14606F; }
     <input type="hidden" id="tax_consumer_id">
     <div style="font-size:14px;font-weight:700;margin-bottom:8px;color:var(--primary)" id="tax_consumer_name"></div>
     <div id="tax_progress" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <!-- Her switch 'taxStages': the kind question, Next bar and 90-day clock. Empty when off. -->
+    <div id="tax_staged_top"></div>
 
     <!-- Step-by-step instructions panel -->
     <div style="margin-bottom:14px">
@@ -3549,7 +3585,7 @@ button.fu-tile.check span { color:#14606F; }
       </div>
     </div>
 
-    <div style="background:#fff3cd;border-radius:6px;padding:8px 12px;font-size:11.5px;margin-bottom:10px;line-height:1.6">
+    <div id="tax_wet_banner" style="background:#fff3cd;border-radius:6px;padding:8px 12px;font-size:11.5px;margin-bottom:10px;line-height:1.6">
       ⚠️ <strong>Wet signature:</strong> Forms 8821 and 2678 may require original signatures — confirm with your accountant before marking filed. &nbsp;|&nbsp; ⚠️ <strong>DES:</strong> Cannot register in UInteract until after first payroll and $1,000+ paid in a single quarter.
     </div>
     <div class="tax-grid">
@@ -3559,6 +3595,7 @@ button.fu-tile.check span { color:#14606F; }
       <div class="form-group"><label>Packet Sent (date)</label><input type="date" id="tax_packet_sent"></div>
       <div class="form-group"><label>Packet Signed &amp; Returned (date)</label><input type="date" id="tax_packet_signed"></div>
     </div>
+    <div id="tax_packet_flag" style="display:none;font-size:11.5px;color:var(--warning,#B45309);background:#fff3cd;border-radius:6px;padding:6px 10px;margin:-4px 0 8px"></div>
 
     <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">Signed in the Hub? Get the forms</div>
     <div style="font-size:11.5px;color:var(--gray-600);margin-bottom:8px;line-height:1.6">
@@ -3661,6 +3698,9 @@ button.fu-tile.check span { color:#14606F; }
            onchange="uploadProofFile(event)" style="font-size:12px">
     <div id="tax_proof_status" style="font-size:11.5px;margin-top:6px"></div>
 </section>
+<!-- Only with her switch 'taxStages': the existing-EIN check (transferring consumers) and the waiting stage. -->
+<section data-card="10" class="tax-card tax-staged-only" style="display:none" id="tax_card_check"></section>
+<section data-card="11" class="tax-card tax-staged-only" style="display:none" id="tax_card_wait"></section>
 <section data-card="9" class="tax-card">
 <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:14px 0 4px">LAST &nbsp;·&nbsp; Empeon (payroll)</div>
     <div class="form-row">
@@ -6197,6 +6237,7 @@ function openTaxSetup(cid) {
   if (build) build.textContent = ' · build ' + document.lastModified;
   document.getElementById('tax_proof_status').innerHTML = '';
   document.getElementById('tax_packet_status').innerHTML = '';
+  taxStagesApply();
   openModal('taxSetupModal');
 }
 
@@ -9069,6 +9110,8 @@ const HUB_SWITCHES = [
     does: 'On: Settings tracks the MMAC manager test (6 months) and the yearly MMAC meeting, and Today reminds you. Off: hidden.' },
   { key: 'authSlim', label: 'Slimmer Authorizations tab',
     does: 'On: Hours & EVV > Authorizations shows only the paperwork, one row per active consumer (authorization, end date, state scheduling worksheet), with the uploads in one box. Hours and shifts stay on This month, whose end dates use the DSDS authorization when it is uploaded. "Care plan" is renamed: Care plan days, State scheduling worksheet, Authorization. Off: as before.' },
+  { key: 'taxStages', label: 'Tax Setup in stages',
+    does: 'On: Tax & Enrollment Setup reads top to bottom in one column, grouped by when each step happens (today, the day the EIN arrives, waiting, Fusion proof, payroll, after the first $1,000 quarter). A Next line at the top says the one thing to do, the 90-day Fusion clock sits beside it, and it asks once whether the consumer is new or transferring. Every card, link and instruction is the same as before. Off: the two-column screen as before.' },
 ];
 const hubSwitchOn = key => getObj(key).live === true;
 function renderHubSwitches() {
@@ -11784,7 +11827,7 @@ function renderFilings(c) {
         'padding:6px 8px">' + spec.before + '</div>' : '') +
       (!held && spec.walkthrough ? spec.walkthrough : '') +
       (spec.ifBlocked ? '<div style="font-size:10.5px;color:var(--gray-700);margin-bottom:6px;line-height:1.5;' +
-        'background:#fff3cd;border-radius:5px;padding:6px 8px">' + spec.ifBlocked + '</div>' : '') +
+        'background:#fff3cd;border-radius:5px;padding:6px 8px">' + taxOwnDeadline(spec.ifBlocked, c) + '</div>' : '') +
       (!held && spec.mailTo ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px;line-height:1.5">' +
         '✉ Mail to: <strong>' + esc(spec.mailTo) + '</strong></div>' : '') +
       (spec.note ? '<div style="font-size:10.5px;color:var(--gray-600);margin-bottom:5px">' + spec.note + '</div>' : '') +
@@ -11811,6 +11854,7 @@ function renderFilings(c) {
       '<div id="filing-status-' + spec.key + '" style="font-size:10.5px;margin-top:3px"></div>' +
       '</div>';
   });
+  taxStagesRefresh();
 }
 
 function _filingConsumer() {
@@ -11901,6 +11945,7 @@ const TAX_PROGRESS_STEPS = [
 function focusTaxCard(n) {
   document.querySelectorAll('#taxSetupModal .tax-card').forEach(el => {
     el.style.display = (n === null || Number(el.dataset.card) === n) ? '' : 'none';
+    if (el.classList.contains('tax-staged-only') && !hubSwitchOn('taxStages')) el.style.display = 'none';
   });
   const all = document.getElementById('tax_show_all');
   if (all) all.style.display = n === null ? 'none' : '';
@@ -11932,6 +11977,172 @@ function refreshPacketHold() {
   if (Array.isArray(c.packetForms) && c.packetForms.length) renderPacketForms(c);
   renderFilings(c);
 }
+
+// ---------------------------------------------------------------------------
+// TAX SETUP IN STAGES (2026-10-25, her yes to mockup 5FdC5XFmaZcKfo6vXLVz2V; her switch 'taxStages').
+// The same cards and fields, moved into one column in the order the work happens, with stage
+// headings between them. Nothing is saved differently: the cards keep their own fields and
+// Save Tax Setup reads them as before. The only new saved values are the consumer's kind
+// (c.taxKind 'new' | 'transfer') and the existing-EIN check result (c.einCheck 'has' | 'none'),
+// both saved on the click, like the filing records. The rules are in tax/tax-stages.js.
+// Off: everything is put back where it was.
+// ---------------------------------------------------------------------------
+const _taxStartHome = {};   // where the CDS start date field lives when not staged
+function taxStagesOn() { return hubSwitchOn('taxStages') && typeof CDSTaxStages === 'object'; }
+
+// The saved record with the screen's unsaved fields laid over it, so the Next line follows typing.
+function _taxLive() {
+  const { c } = _filingConsumer();
+  if (!c) return null;
+  const v = id => (document.getElementById(id) || {}).value || '';
+  const k = id => !!(document.getElementById(id) || {}).checked;
+  return Object.assign({}, c, {
+    packetSent: v('tax_packet_sent'), packetSigned: v('tax_packet_signed'), ein: v('tax_ein').trim(), moTaxId: v('tax_mo_tax_id').trim(),
+    irs8821: k('tax_irs8821'), irs2678: k('tax_irs2678'), mo2643a: k('tax_mo2643a'), mo2827: k('tax_mo2827'),
+    desRegistered: k('tax_des_reg'), cdsStartDate: v('tax_cds_start'), proofUploaded: v('tax_proof_uploaded'),
+    fusionEntered: k('tax_fusion_entered'), priorVendorProof: k('tax_prior_vendor'), empeonUpdated: v('tax_empeon_updated'),
+  });
+}
+
+// The old wording names one past deadline; staged, it names this consumer's own Fusion due date.
+function taxOwnDeadline(html, c) {
+  if (!taxStagesOn()) return html;
+  const start = (document.getElementById('tax_cds_start') || {}).value || (c && c.cdsStartDate) || '';
+  const own = start ? 'the Fusion due date (' + CDSTaxStages.mdy(CDSTaxStages.addDays(start, 90)) + ')' : 'the 90-day Fusion deadline';
+  return html.replace('which will not make August 31', 'which will not make ' + own);
+}
+
+function taxStagesApply() {
+  const modal = document.getElementById('taxSetupModal');
+  const grid = modal.querySelector('.tax-grid');
+  const start = document.getElementById('tax_cds_start').closest('.form-group');
+  grid.querySelectorAll('.tx-stage').forEach(el => el.remove());
+  grid.querySelectorAll('.tax-card').forEach(el => el.classList.remove('tx-later', 'tx-now'));
+  if (!taxStagesOn()) {
+    if (!modal.classList.contains('staged')) return;
+    modal.classList.remove('staged');
+    // Back to the old order and places.
+    [...grid.querySelectorAll('.tax-card')].sort((a, b) => a.dataset.card - b.dataset.card).forEach(el => grid.appendChild(el));
+    if (_taxStartHome.parent) _taxStartHome.parent.insertBefore(start, _taxStartHome.parent.firstChild);
+    document.getElementById('tax_staged_top').innerHTML = '';
+    document.getElementById('tax_wet_banner').style.display = '';
+    document.getElementById('tax_packet_flag').style.display = 'none';
+    document.getElementById('tax_prior_vendor').closest('.form-group').style.display = '';
+    grid.querySelectorAll('.tax-staged-only').forEach(el => { el.style.display = 'none'; });
+    return;
+  }
+  modal.classList.add('staged');
+  document.getElementById('tax_wet_banner').style.display = 'none';
+  const top = document.getElementById('tax_staged_top');
+  top.innerHTML = '<div id="tx_kind"></div><div id="tx_next"></div><div class="tx-clock" id="tx_clock"><span id="tx_clock_pill"></span></div>' +
+    '<div id="tx_chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>';
+  if (!_taxStartHome.parent) _taxStartHome.parent = start.parentNode;
+  document.getElementById('tx_clock').insertBefore(start, document.getElementById('tx_clock_pill'));
+  // Cards in stage order, a heading before each stage.
+  CDSTaxStages.STAGES.forEach(st => {
+    const h = document.createElement('div');
+    h.className = 'tx-stage' + (st.audited ? ' audited' : '');
+    h.dataset.stage = st.id;
+    grid.appendChild(h);
+    st.cards.forEach(n => { const el = grid.querySelector('.tax-card[data-card="' + n + '"]'); if (el) grid.appendChild(el); });
+  });
+  taxStagesRefresh();
+}
+
+function taxStagesRefresh() {
+  const modal = document.getElementById('taxSetupModal');
+  if (!modal || !modal.classList.contains('staged') || !taxStagesOn()) return;
+  const c = _taxLive();
+  if (!c) return;
+  const S = CDSTaxStages, today = new Date().toLocaleDateString('en-CA'), first = esc(String(c.name || '').split(/\s+/)[0]);
+  const nx = S.next(c, today);
+  const kind = c.taxKind;
+  const kb = (k, label) => '<button type="button" class="btn btn-sm ' + (kind === k ? 'btn-primary' : 'btn-outline') + '" onclick="taxSetKind(\'' + k + '\')">' + label + '</button>';
+  document.getElementById('tx_kind').innerHTML = '<div class="tx-kind' + (kind ? '' : ' ask') + '"><span>Is ' + first +
+    ' new to CDS, or transferring from another vendor?' + (kind ? '' : ' <strong>Not answered yet.</strong>') + '</span>' + kb('new', 'New to CDS') + kb('transfer', 'Transferring') + '</div>';
+  document.getElementById('tx_next').innerHTML = '<div class="tx-next' + (nx.wait ? ' wait' : '') + '"><span class="tag">' + (nx.wait ? 'Waiting' : 'Next') + '</span>' +
+    '<span class="what">' + esc(nx.what) + '</span>' +
+    '<button type="button" class="btn btn-sm ' + (nx.wait ? 'btn-outline' : 'btn-primary') + '" onclick="taxGoCard(' + nx.card + ')">Go to this step</button>' +
+    '<span class="why">' + esc(nx.why) + '</span></div>';
+  const ck = S.clock(c, today);
+  document.getElementById('tx_clock_pill').innerHTML = '<span class="tx-pill ' + ck.tone + '">' + esc(ck.text) + '</span>';
+  const steps = S.steps(c), done = steps.filter(s => S.isDone(c, s.id)).length;
+  document.getElementById('tx_chips').innerHTML = '<span class="tax-chip' + (done === steps.length ? ' done' : '') + '" style="font-weight:700">' + done + ' of ' + steps.length + ' done</span>' +
+    steps.map(s => { const d = S.isDone(c, s.id); return '<button type="button" class="tax-chip' + (d ? ' done' : s.id === nx.id && !nx.wait ? ' now' : '') +
+      '" style="cursor:pointer" title="Go to this step" onclick="taxGoCard(' + s.card + ')">' + (d ? '✓' : '○') + ' ' + esc(s.chip) + '</button>'; }).join('');
+  // Stage headings: open, waiting, locked or done.
+  const grid = modal.querySelector('.tax-grid');
+  S.STAGES.forEach(st => {
+    const h = grid.querySelector('.tx-stage[data-stage="' + st.id + '"]');
+    const ids = steps.filter(s => s.stage === st.id).map(s => s.id);
+    const allDone = ids.length && ids.every(id => S.isDone(c, id));
+    const open = S.stageOpen(c, st);
+    const pill = allDone ? '<span class="tx-pill ok">Done</span>' : !open ? '<span class="tx-pill idle">Not yet</span>' :
+      st.id === 'C' ? '<span class="tx-pill warn">Waiting</span>' : st.id === 'F' ? '<span class="tx-pill idle">Later</span>' : '<span class="tx-pill idle">Open</span>';
+    h.innerHTML = '<h3>' + esc(st.name) + '</h3><span class="when">' + esc(st.when) + '</span>' + pill + (!open && !allDone ? '<div class="lock">' + esc(st.lock) + '</div>' : '');
+    st.cards.forEach(n => { const el = grid.querySelector('.tax-card[data-card="' + n + '"]'); if (el) el.classList.toggle('tx-later', !open && !allDone); });
+  });
+  grid.querySelectorAll('.tax-card').forEach(el => el.classList.toggle('tx-now', Number(el.dataset.card) === nx.card && !nx.wait));
+  // The existing-EIN check, transferring consumers only.
+  const chk = document.getElementById('tax_card_check');
+  chk.style.display = kind === 'transfer' ? '' : 'none';
+  if (kind === 'transfer') {
+    const res = c.einCheck === 'has' ? '<div style="font-size:12px;color:var(--success);font-weight:600;margin-top:8px">✓ The IRS says ' + first + ' already has one. Enter it in the Federal EIN box below; do not apply again.</div>'
+      : c.einCheck === 'none' ? '<div style="font-size:12px;color:var(--success);font-weight:600;margin-top:8px">✓ None found. Go ahead and apply below.</div>' : '';
+    chk.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">Check ' + first + ' does not already have an EIN</div>' +
+      '<div style="font-size:11px;color:var(--danger);line-height:1.55;background:var(--danger-pale,#fdedec);border-left:3px solid var(--danger);border-radius:5px;padding:6px 8px">' + FILINGS[0].before + '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">' +
+        '<button type="button" class="btn btn-sm ' + (c.einCheck === 'has' ? 'btn-primary' : 'btn-outline') + '" onclick="taxSetEinCheck(\'has\')">They already have one</button>' +
+        '<button type="button" class="btn btn-sm ' + (c.einCheck === 'none' ? 'btn-primary' : 'btn-outline') + '" onclick="taxSetEinCheck(\'none\')">None found</button></div>' + res;
+  }
+  // Waiting on Missouri and the IRS: the same follow-up details as the 2643A and 2678 cards.
+  const w = document.getElementById('tax_card_wait');
+  w.style.display = '';
+  const f = filingsFor(c), sent43 = (f['MO-2643A'] || {}).sentAt, sent78 = (f['IRS-2678'] || {}).sentAt;
+  const line = (ok, title, body) => '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--gray-200)">' +
+    '<span style="font-weight:700;color:' + (ok ? 'var(--success)' : 'var(--gray-600)') + '">' + (ok ? '✓' : '○') + '</span>' +
+    '<div style="font-size:12px;line-height:1.55"><strong>' + title + '</strong><br><span style="color:var(--gray-600)">' + body + '</span></div></div>';
+  w.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:8px 0 4px">What we are waiting for</div>' +
+    line(!!(c.moTaxId || '').trim(), 'MO Tax ID',
+      (c.moTaxId || '').trim() ? 'In: ' + esc(c.moTaxId) + '. It is entered in the Missouri registration step above.'
+        : (sent43 ? 'Registered ' + S.mdy(sent43) + '. ' : 'Starts once the 2643A is sent. ') +
+          'Allow 2-3 business days. The confirmation number from the 2643A is the only thing you get at submission and is what Revenue will ask for. ' +
+          'If nothing has arrived after a week' + (sent43 ? ' (by ' + S.mdy(S.addDays(sent43, 7)) + ')' : '') + ', ring <strong>(573) 751-5860</strong> with it and ask them to read you the account number. ' +
+          'Type the MO Tax ID into the Missouri registration step when it comes.') +
+    line(S.approved2678(c), 'IRS approval of the 2678',
+      S.approved2678(c) ? 'Approval letter saved on the 2678 step.'
+        : (sent78 ? 'Mailed ' + S.mdy(sent78) + '. ' : 'Starts once the 2678 is mailed. ') +
+          'Approval takes weeks, and payroll cannot run until the IRS approves it. Upload the approval letter on the 2678 step when it arrives.');
+  // Prior-vendor proof only matters for a transfer (shown anyway if it was already ticked).
+  document.getElementById('tax_prior_vendor').closest('.form-group').style.display = (kind === 'transfer' || c.priorVendorProof) ? '' : 'none';
+  const flag = S.packetFlag(c), fl = document.getElementById('tax_packet_flag');
+  fl.textContent = flag; fl.style.display = flag ? '' : 'none';
+}
+
+function taxGoCard(n) {
+  const el = document.querySelector('#taxSetupModal .tax-card[data-card="' + n + '"]');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// Saved on the click, like a filing record: the rest of the screen still waits for Save Tax Setup.
+function _taxSaveField(field, value) {
+  const { consumers, c } = _filingConsumer();
+  if (!c) return;
+  c[field] = value;
+  setData('consumers', consumers);
+  taxStagesRefresh();
+}
+function taxSetKind(k) { _taxSaveField('taxKind', k); }
+function taxSetEinCheck(v) {
+  _taxSaveField('einCheck', v);
+  if (v === 'has') { const e = document.getElementById('tax_ein'); e.focus(); e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const m = document.getElementById('taxSetupModal');
+  if (m) ['input', 'change'].forEach(ev => m.addEventListener(ev, e => {
+    // The start date also sets the due date named in the EIN step's fax-or-mail note.
+    if (e.target.id === 'tax_cds_start' && taxStagesOn()) refreshPacketHold(); else taxStagesRefresh();
+  }));
+});
 
 // ---------------------------------------------------------------------------
 // If the packet is ever changed, paste this into the browser console with the
