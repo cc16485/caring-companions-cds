@@ -21,25 +21,26 @@ ok(true, 'fax.sql runs twice');
 const grants = (await pg.query(`select count(*)::int n from information_schema.role_table_grants where table_name='cds_fax' and grantee in ('anon','authenticated')`)).rows[0].n;
 eq(grants, 0, 'nobody outside can read the fax table');
 
-const files = { 'mg1/packet/GASPER_MICHAEL_IRS-8821.pdf': new Uint8Array([37, 80, 68, 70, 1]), 'mg1/packet/GASPER_MICHAEL_MO-2643A.pdf': new Uint8Array([37, 80, 68, 70, 2]) };
+const files = { 'mg1/packet/GASPER_MICHAEL_MO-2827.pdf': new Uint8Array([37, 80, 68, 70, 1]), 'mg1/packet/GASPER_MICHAEL_MO-2643A.pdf': new Uint8Array([37, 80, 68, 70, 2]) };
 const store = { async download(p) { if (!files[p]) throw new Error('nf'); return files[p]; }, async upload(p, b) { files[p] = b; } };
 let T = Date.parse('2026-10-26T15:00:00Z'), n = 0;
 const db = { query: (t, p) => pg.query(t, p) };
 const F = createFax({ db, store, now: () => T, token: () => 'tok' + (++n).toString().padStart(5, '0') });
 const setLive = async v => { await pg.query(`delete from public.agency_data where data_key='faxLive'`); await pg.query(`insert into public.agency_data (data_key, data_value) values ('faxLive', $1)`, [JSON.stringify({ live: v })]); };
 await pg.query(`insert into public.agency_data (data_key, data_value) values ('consumers', $1)`, [JSON.stringify([
-  { id: 'mg1', name: 'Michael Gasper', ein: '', packetForms: [{ file: 'IRS-8821', name: 'GASPER_MICHAEL_IRS-8821.pdf', path: 'mg1/packet/GASPER_MICHAEL_IRS-8821.pdf' },
+  { id: 'mg1', name: 'Michael Gasper', ein: '12-3456789', packetForms: [{ file: 'MO-2827', name: 'GASPER_MICHAEL_MO-2827.pdf', path: 'mg1/packet/GASPER_MICHAEL_MO-2827.pdf' },
     { file: 'MO-2643A', name: 'GASPER_MICHAEL_MO-2643A.pdf', path: 'mg1/packet/GASPER_MICHAEL_MO-2643A.pdf' }] },
-  { id: 'db2', name: 'David Example', ein: '12-1111111', packetForms: [] }])]);
+  { id: 'db2', name: 'David Example', ein: '12-1111111', packetForms: [] },
+  { id: 'ne3', name: 'No Ein Yet', ein: '', packetForms: [{ file: 'MO-2643A', name: 'X.pdf', path: 'ne3/x.pdf' }] }])]);
 
 // ---------- the forms and numbers ----------
-eq(Object.keys(FAX_FORMS), ['IRS-8821', 'MO-2643A', 'MO-2827'], 'only the three faxable forms (no SS-4, no 2678)');
-eq([FAX_FORMS['IRS-8821'].to, FAX_FORMS['MO-2643A'].to, FAX_FORMS['MO-2827'].to], ['18552147522', '15735221722', '15735221722'], 'the same numbers as the Tax Setup steps');
-eq(niceNumber('18552147522'), '(855) 214-7522', 'numbers shown the usual way');
+eq(Object.keys(FAX_FORMS), ['MO-2643A', 'MO-2827'], 'only the two Missouri forms (no SS-4, no 2678, no e-signed 8821)');
+eq([FAX_FORMS['MO-2643A'].to, FAX_FORMS['MO-2827'].to], ['15735221722', '15735221722'], 'the same number as the Tax Setup steps');
+eq(niceNumber('15735221722'), '(573) 522-1722', 'numbers shown the usual way');
 
 // ---------- switch off ----------
 await setLive(false);
-await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821' }), /switched off/, 'off: nothing can be queued');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2827' }), /switched off/, 'off: nothing can be queued');
 eq(await F.google({ kind: 'next' }), { ok: true, off: true, faxes: [] }, 'off: the script gets nothing to send');
 eq((await F.google({ kind: 'incoming', from: '4175551234', pdf: bytesToBase64(new Uint8Array([1])) })).off, true, 'off: incoming faxes are not taken in');
 eq((await F.hub('zach@caringcds.com', { action: 'list' })).live, false, 'the hub sees it is off');
@@ -48,22 +49,23 @@ eq((await F.hub('zach@caringcds.com', { action: 'list' })).live, false, 'the hub
 await setLive(true);
 await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-SS-4' }), 'That form cannot be faxed from here.', 'the SS-4 cannot be faxed from here');
 await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-2678' }), 'That form cannot be faxed from here.', 'the 2678 is mail only');
-await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'nobody', formKey: 'IRS-8821' }), /not found/, 'unknown consumer');
-await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'db2', formKey: 'IRS-8821' }), /no signed Form 8821 saved for David Example/, 'no signed form saved: refused');
-await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2643A' }), /until the IRS issues the EIN/, 'Missouri forms wait for the EIN');
-let r = await F.hub('Zach@CaringCDS.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821', to: '19995551212', path: 'someone-else.pdf' });
-eq([r.fax.status, r.fax.to, r.fax.requestedBy], ['queued', '(855) 214-7522', 'zach@caringcds.com'], 'queued to the 8821 number, whatever the page sends');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821' }), 'That form cannot be faxed from here.', 'an e-signed 8821 cannot be faxed (online only)');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'nobody', formKey: 'MO-2827' }), /not found/, 'unknown consumer');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'db2', formKey: 'MO-2827' }), /no signed Form 2827 saved for David Example/, 'no signed form saved: refused');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'ne3', formKey: 'MO-2643A' }), /until the IRS issues the EIN/, 'Missouri forms wait for the EIN');
+let r = await F.hub('Zach@CaringCDS.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2827', to: '19995551212', path: 'someone-else.pdf' });
+eq([r.fax.status, r.fax.to, r.fax.requestedBy], ['queued', '(573) 522-1722', 'zach@caringcds.com'], 'queued to the 8821 number, whatever the page sends');
 const row1 = (await pg.query(`select * from public.cds_fax where id=$1`, [r.fax.id])).rows[0];
-eq([row1.doc_path, row1.token], ['mg1/packet/GASPER_MICHAEL_IRS-8821.pdf', 'CDS-FAX-tok00001'], 'the saved signed form, with a reference');
-await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821' }), /already on its way/, 'no double send');
+eq([row1.doc_path, row1.token], ['mg1/packet/GASPER_MICHAEL_MO-2827.pdf', 'CDS-FAX-tok00001'], 'the saved signed form, with a reference');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2827' }), /already on its way/, 'no double send');
 
 // ---------- the Google script sends it ----------
 let nx = await F.google({ kind: 'next' });
 eq(nx.faxes.length, 1, 'one fax to send');
 const f = nx.faxes[0];
-eq([f.to, f.subject, f.filename], ['18552147522@efaxsend.com', 'Form 8821 for Michael Gasper · CDS-FAX-tok00001', 'GASPER_MICHAEL_IRS-8821.pdf'], 'addressed to eFax, reference in the subject');
+eq([f.to, f.subject, f.filename], ['15735221722@efaxsend.com', 'Form 2827 for Michael Gasper · CDS-FAX-tok00001', 'GASPER_MICHAEL_MO-2827.pdf'], 'addressed to eFax, reference in the subject');
 eq(Array.from(base64ToBytes(f.pdf)), [37, 80, 68, 70, 1], 'the signed form attached');
-ok(/sent to the IRS/.test(f.body) && /417-719-7870/.test(f.body) && !/—/.test(f.body + f.subject), 'cover note, no em dashes');
+ok(/sent to the Missouri Department of Revenue/.test(f.body) && /417-719-7870/.test(f.body) && !/—/.test(f.body + f.subject), 'cover note, no em dashes');
 eq((await F.google({ kind: 'next' })).faxes.length, 0, 'not handed out twice');
 await F.google({ kind: 'sent', id: f.id, gmailId: 'g-out-1' });
 let list = await F.hub('zach@caringcds.com', { action: 'list', consumerId: 'mg1' });
@@ -74,31 +76,31 @@ eq([list.out[0].stale, list.problems.length], [true, 1], 'no receipt after 2 hou
 
 // ---------- the receipt ----------
 eq((await F.google({ kind: 'result', token: 'CDS-FAX-nothing', ok: true })).matched, false, 'unknown reference: not matched');
-r = await F.google({ kind: 'result', token: 'cds-fax-TOK00001', ok: true, text: 'Successful transmission to 18552147522', pdf: bytesToBase64(new Uint8Array([9, 9])), gmailId: 'g-rcpt-1' });
+r = await F.google({ kind: 'result', token: 'cds-fax-TOK00001', ok: true, text: 'Successful transmission to 15735221722', pdf: bytesToBase64(new Uint8Array([9, 9])), gmailId: 'g-rcpt-1' });
 eq([r.matched, r.status], [true, 'delivered'], 'receipt matched by its reference');
 list = await F.hub('zach@caringcds.com', { action: 'list', consumerId: 'mg1' });
-eq([list.out[0].status, list.out[0].receiptPath, list.problems.length], ['delivered', 'mg1/filings/fax-IRS-8821-' + f.id.slice(0, 8) + '-receipt.pdf', 0], 'delivered, receipt saved with the consumer\'s filings');
+eq([list.out[0].status, list.out[0].receiptPath, list.problems.length], ['delivered', 'mg1/filings/fax-MO-2827-' + f.id.slice(0, 8) + '-receipt.pdf', 0], 'delivered, receipt saved with the consumer\'s filings');
 ok(files[list.out[0].receiptPath], 'the receipt file is stored');
 await F.hub('zach@caringcds.com', { action: 'applied', id: f.id });
 ok((await F.hub('zach@caringcds.com', { action: 'list', consumerId: 'mg1' })).out[0].applied, 'marked as written to the Tax Setup step');
 
 // ---------- a failure, matched by number ----------
-r = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821' });
+r = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2827' });
 nx = await F.google({ kind: 'next' }); await F.google({ kind: 'sent', id: nx.faxes[0].id });
-r = await F.google({ kind: 'result', to: '1 (855) 214-7522', ok: false, text: 'Unsuccessful transmission: busy' });
+r = await F.google({ kind: 'result', to: '1 (573) 522-1722', ok: false, text: 'Unsuccessful transmission: busy' });
 eq([r.matched, r.status], [true, 'failed'], 'no reference: matched by the fax number, failed');
 list = await F.hub('zach@caringcds.com', { action: 'list', consumerId: 'mg1' });
 eq([list.problems.length, list.problems[0].resultText], [1, 'Unsuccessful transmission: busy'], 'a failed fax is a problem on Today');
 const failedId = list.problems[0].id;
 T += 1000;
-const again = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821' });
+const again = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2827' });
 ok(!!again.fax, 'after a failure it can be sent again');
 eq((await F.hub('zach@caringcds.com', { action: 'list' })).problems.filter(p => p.id === failedId).length, 0, 'sent again: the failed one drops off Today by itself');
 await F.hub('zach@caringcds.com', { action: 'cancel', id: again.fax.id });
 eq((await F.hub('zach@caringcds.com', { action: 'list' })).problems.filter(p => p.id === failedId).length, 1, 'cancelled the resend: the failure is back');
 await F.hub('zach@caringcds.com', { action: 'dismiss', id: failedId });
 eq((await F.hub('zach@caringcds.com', { action: 'list' })).problems.filter(p => p.status === 'failed').length, 0, 'dismissed: off Today');
-await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821' });
+await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2827' });
 
 // ---------- cancel, and a form missing from storage ----------
 const q2 = (await F.hub('zach@caringcds.com', { action: 'list', consumerId: 'mg1' })).out.find(o => o.status === 'queued');

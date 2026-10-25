@@ -109,7 +109,7 @@
     // Both numbers in hand: the audited Fusion step comes before any paperwork still missing.
     if (DONE.motaxid(c) && !DONE.fusion(c)) return go('fusion', 'Enter both numbers in Fusion', 'Participant page, HCBS Eligibility section. This is the step that gets audited.');
     if (DONE.motaxid(c) && !DONE.proof(c)) return go('proof', 'Upload the proof in Fusion', 'Under EIN Tax Documents, or the auditor will not find it. A W-9 is not proof.');
-    if (!DONE.f8821(c)) return go('f8821', 'Send Form 8821', 'Quickest: fax to 855-214-7522. It lets the IRS talk to us without ' + n + ' on every call.');
+    if (!DONE.f8821(c)) return go('f8821', 'Submit Form 8821 online', 'At IRS.gov/Submit8821: an e-signed 8821 cannot be faxed or mailed. It lets the IRS talk to us without ' + n + ' on every call.');
     if (!DONE.f2678(c)) return go('f2678', 'Mail Form 2678 today', 'Mail only, and approval takes weeks. Payroll cannot run until it comes.');
     if (!DONE.f2643a(c)) return go('f2643a', 'Register ' + n + ' with Missouri (Form 2643A)', 'Online, signed out. Save the confirmation number.');
     if (!DONE.f2827(c)) return go('f2827', 'Send Form 2827', 'Quickest: email it to businesstaxregister@dor.mo.gov.');

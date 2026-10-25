@@ -19,7 +19,7 @@
 var HUB = 'https://siivpekcaryeyttszwav.supabase.co/functions/v1/cds-fax';
 var LABEL = 'eFax';
 var EFAX = '(from:efax.com OR from:j2.com OR from:j2global.com OR from:efaxcorporate.com OR from:123mail.net OR from:consensus.com)';
-var OUR_FAX_NUMBERS = ['8552147522', '5735221722'];   // the IRS 8821 and Missouri Revenue numbers the hub sends to
+var OUR_FAX_NUMBERS = ['5735221722'];   // Missouri Revenue, the only number the hub sends to
 
 function setUp() {
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
