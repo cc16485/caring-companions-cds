@@ -56,6 +56,18 @@ eq([S.next(c, TODAY).what, S.next(c, TODAY).wait], ['All set until the first $1,
 c.desRegistered = true;
 eq(S.next(c, TODAY).what, 'Michael\'s tax setup is complete', 'complete');
 
+// A current consumer set up before the hub tracked the packet (David on the live screen, 10-25):
+// EIN, MO Tax ID and DES in, no packet dates. Later steps prove the earlier ones.
+const dv = { name: 'David Example', ein: '12-1111111', moTaxId: '99999999', desRegistered: true };
+n = S.next(dv, TODAY);
+eq([n.id, n.what], ['fusion', 'Enter both numbers in Fusion'], 'current consumer: the audited Fusion step, not the packet');
+eq(['packet', 'split', 'f2643a', 'f2678'].map(id => [S.isDone(dv, id), S.implied(dv, id)]), [[true, true], [true, true], [true, true], [true, true]], 'packet, split, 2643A and 2678 shown done, marked as implied');
+ok(S.approved2678(dv), 'DES means payroll ran, so the 2678 was approved');
+eq([S.isDone(dv, 'f8821'), S.isDone(dv, 'f2827')], [false, false], '8821 and 2827 are not implied');
+const dv2 = Object.assign({}, dv, { fusionEntered: true, proofUploaded: '2026-10-01' });
+eq(S.next(dv2, TODAY).id, 'f8821', 'Fusion done: then the missing 8821');
+ok(!S.implied(mg, 'packet'), 'a recorded packet is not implied');
+
 // The 90-day Fusion clock.
 eq(S.clock(mg, TODAY), { tone: 'idle', text: 'Add the CDS start date to start the 90-day Fusion clock' }, 'no start date');
 eq(S.clock({ cdsStartDate: '2026-08-18' }, TODAY).text, 'Fusion proof due 11/16/2026 · 22 days left', 'amber zone text');
