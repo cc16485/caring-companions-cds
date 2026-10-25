@@ -117,7 +117,7 @@ eq([m3.status, m3.problem], ['failed', true], 'and it says so (no silent failure
 files['mg1/packet/GASPER_MICHAEL_MO-2643A.pdf'] = new Uint8Array([1]);
 const q4 = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2643A' });
 await F.google({ kind: 'next' }); await F.google({ kind: 'sent', id: q4.fax.id, error: 'Service invoked too many times' });
-eq((await F.hub('zach@caringcds.com', { action: 'list', consumerId: 'mg1' })).out.find(o => o.id === q4.fax.id).resultText, 'Gmail could not send it from intake@caringcds.com: Service invoked too many times', 'Gmail refusal shown');
+eq((await F.hub('zach@caringcds.com', { action: 'list', consumerId: 'mg1' })).out.find(o => o.id === q4.fax.id).resultText, 'Gmail could not send it from zach@caringcds.com: Service invoked too many times', 'Gmail refusal shown');
 // Not picked up: is the script running?
 const q5 = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'MO-2643A' });
 T += 11 * 60000;

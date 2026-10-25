@@ -1,6 +1,7 @@
-/* CDS one-click fax (2026-10-25). Google Apps Script in intake@caringcds.com.
+/* CDS one-click fax (2026-10-25). Google Apps Script in zach@caringcds.com (her call:
+ * Zach runs CDS, and faxes coming in to the office number already go to him).
  *
- * intake@caringcds.com is the only address the office eFax Protect account lets send faxes, so
+ * zach@caringcds.com is on the office eFax Protect account's Send Email Addresses, so
  * faxes asked for in the CDS hub ("Fax it now" on Tax & Enrollment Setup) are sent from here.
  * Every minute this script:
  *   1. asks the hub (cds-fax) for faxes waiting to go, emails each one to <number>@efaxsend.com
@@ -10,6 +11,7 @@
  *      labels them "eFax" and takes them out of the inbox;
  *   3. finds faxes that came in to (417) 719-7870 and hands each one to the hub, where it stays on
  *      Today until someone marks it handled. These stay in the inbox, labelled "eFax".
+ *    (The email to Zach is the one eFax already sends him; nothing extra lands in his inbox.)
  * When the hub's 'One-click fax' switch is off, the hub hands out nothing and takes nothing in.
  * It never deletes an email and never sends anything the hub did not ask for, only to eFax.
  * The hub key lives in Project Settings > Script Properties as FAX_KEY.
@@ -26,7 +28,7 @@ function setUp() {
   ScriptApp.newTrigger('tick').timeBased().everyMinutes(1).create();
   if (!GmailApp.getUserLabelByName(LABEL)) GmailApp.createLabel(LABEL);
   var me = Session.getActiveUser().getEmail();
-  if (me && me.toLowerCase() !== 'intake@caringcds.com') Logger.log('Careful: this script is in ' + me + '. eFax only accepts faxes sent from intake@caringcds.com.');
+  if (me && me.toLowerCase() !== 'zach@caringcds.com') Logger.log('Careful: this script is in ' + me + '. eFax only accepts faxes sent from zach@caringcds.com.');
   var r = post({ kind: 'ping' });
   Logger.log(r.ok ? 'Ready. The hub accepted the key. One-click fax is ' + (r.live ? 'ON.' : 'OFF (turn it on in the hub when ready).') : 'The hub did not accept the key: ' + (r.error || 'unknown'));
 }
