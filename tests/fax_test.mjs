@@ -21,7 +21,7 @@ ok(true, 'fax.sql runs twice');
 const grants = (await pg.query(`select count(*)::int n from information_schema.role_table_grants where table_name='cds_fax' and grantee in ('anon','authenticated')`)).rows[0].n;
 eq(grants, 0, 'nobody outside can read the fax table');
 
-const files = { 'mg1/packet/GASPER_MICHAEL_MO-2827.pdf': new Uint8Array([37, 80, 68, 70, 1]), 'mg1/packet/GASPER_MICHAEL_MO-2643A.pdf': new Uint8Array([37, 80, 68, 70, 2]) };
+const files = { 'ne3/s.pdf': new Uint8Array([7]), 'mg1/packet/GASPER_MICHAEL_MO-2827.pdf': new Uint8Array([37, 80, 68, 70, 1]), 'mg1/packet/GASPER_MICHAEL_MO-2643A.pdf': new Uint8Array([37, 80, 68, 70, 2]) };
 const store = { async download(p) { if (!files[p]) throw new Error('nf'); return files[p]; }, async upload(p, b) { files[p] = b; } };
 let T = Date.parse('2026-10-26T15:00:00Z'), n = 0;
 const db = { query: (t, p) => pg.query(t, p) };
@@ -31,10 +31,14 @@ await pg.query(`insert into public.agency_data (data_key, data_value) values ('c
   { id: 'mg1', name: 'Michael Gasper', ein: '12-3456789', packetForms: [{ file: 'MO-2827', name: 'GASPER_MICHAEL_MO-2827.pdf', path: 'mg1/packet/GASPER_MICHAEL_MO-2827.pdf' },
     { file: 'MO-2643A', name: 'GASPER_MICHAEL_MO-2643A.pdf', path: 'mg1/packet/GASPER_MICHAEL_MO-2643A.pdf' }] },
   { id: 'db2', name: 'David Example', ein: '12-1111111', packetForms: [] },
-  { id: 'ne3', name: 'No Ein Yet', ein: '', packetForms: [{ file: 'MO-2643A', name: 'X.pdf', path: 'ne3/x.pdf' }] }])]);
+  { id: 'ne3', name: 'No Ein Yet', ein: '', packetForms: [{ file: 'MO-2643A', name: 'X.pdf', path: 'ne3/x.pdf' }, { file: 'IRS-SS-4', name: 'S.pdf', path: 'ne3/s.pdf' }] },
+  { id: 'tr4', name: 'Transfer Unchecked', ein: '', taxKind: 'transfer', packetForms: [{ file: 'IRS-SS-4', name: 'S.pdf', path: 'tr4/s.pdf' }] },
+  { id: 'tr5', name: 'Has One', ein: '', taxKind: 'transfer', einCheck: 'has', packetForms: [{ file: 'IRS-SS-4', name: 'S.pdf', path: 'tr5/s.pdf' }] },
+  { id: 'tr6', name: 'Transfer Checked', ein: '', taxKind: 'transfer', einCheck: 'none', packetForms: [{ file: 'IRS-SS-4', name: 'S.pdf', path: 'tr6/s.pdf' }] }])]);
 
 // ---------- the forms and numbers ----------
-eq(Object.keys(FAX_FORMS), ['MO-2643A', 'MO-2827'], 'only the two Missouri forms (no SS-4, no 2678, no e-signed 8821)');
+eq(Object.keys(FAX_FORMS), ['IRS-SS-4', 'MO-2643A', 'MO-2827'], 'the SS-4 and the two Missouri forms (no 2678, no e-signed 8821)');
+eq(FAX_FORMS['IRS-SS-4'].to, '18556416935', 'SS-4 to the IRS EIN fax number on the Tax Setup step');
 eq([FAX_FORMS['MO-2643A'].to, FAX_FORMS['MO-2827'].to], ['15735221722', '15735221722'], 'the same number as the Tax Setup steps');
 eq(niceNumber('15735221722'), '(573) 522-1722', 'numbers shown the usual way');
 
@@ -47,7 +51,10 @@ eq((await F.hub('zach@caringcds.com', { action: 'list' })).live, false, 'the hub
 
 // ---------- what can be queued ----------
 await setLive(true);
-await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-SS-4' }), 'That form cannot be faxed from here.', 'the SS-4 cannot be faxed from here');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-SS-4' }), /already has a federal EIN/, 'SS-4: never when the EIN is in');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'tr4', formKey: 'IRS-SS-4' }), /transferring from another vendor/, 'SS-4: a transfer needs the existing-EIN check first');
+await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'tr5', formKey: 'IRS-SS-4' }), /already has an EIN. Enter it/, 'SS-4: the IRS said they have one');
+
 await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-2678' }), 'That form cannot be faxed from here.', 'the 2678 is mail only');
 await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'mg1', formKey: 'IRS-8821' }), 'That form cannot be faxed from here.', 'an e-signed 8821 cannot be faxed (online only)');
 await refuses(() => F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'nobody', formKey: 'MO-2827' }), /not found/, 'unknown consumer');
@@ -136,6 +143,17 @@ T += 3 * 864e5;
 await pg.query(`update public.cds_fax set handled_at = now() - interval '3 days' where id = $1`, [r.id]);
 eq((await F.hub('krystal@mo-care.com', { action: 'list' })).incoming.length, 0, 'handled ones drop off after 2 days');
 
+// ---------- the SS-4 (added 2026-10-26) ----------
+while ((await F.google({ kind: 'next' })).faxes.length) {}
+let ss = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'ne3', formKey: 'IRS-SS-4' });
+eq([ss.fax.status, ss.fax.to], ['queued', '(855) 641-6935'], 'SS-4: a new consumer with no EIN can be faxed');
+let ssNext = await F.google({ kind: 'next' });
+eq([ssNext.faxes[0].to, ssNext.faxes[0].subject], ['18556416935@efaxsend.com', 'Form SS-4 for No Ein Yet · ' + ssNext.faxes[0].token], 'SS-4 addressed to the IRS EIN fax');
+await F.google({ kind: 'sent', id: ssNext.faxes[0].id });
+eq((await F.google({ kind: 'result', token: ssNext.faxes[0].token, ok: true, text: 'Successful transmission to 18556416935. Re: Form SS-4' })).status, 'delivered', 'SS-4 receipt matched');
+const tr6 = await F.hub('zach@caringcds.com', { action: 'queue', consumerId: 'tr6', formKey: 'IRS-SS-4' });
+eq(tr6.fax.status, 'queued', 'SS-4: a transfer after None found can be faxed');
+await F.hub('zach@caringcds.com', { action: 'cancel', id: tr6.fax.id });
 await refuses(() => F.google({ kind: 'queue' }), 'not allowed', 'the script cannot queue a fax');
 await refuses(() => F.hub('zach@caringcds.com', { action: 'next' }), 'Unknown request.', 'the hub cannot take the script\'s actions');
 ok(!/—/.test(readFileSync(ROOT + '/supabase/functions/_shared/office/fax.js', 'utf8')), 'no em dashes in the fax rules');
