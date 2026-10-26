@@ -76,18 +76,22 @@ function readEfaxEmails() {
       var text = subject + '\n' + (m.getPlainBody() || '').slice(0, 4000);
       var pdfs = m.getAttachments().filter(function (a) { return /pdf/i.test(a.getContentType()) || /\.pdf$/i.test(a.getName()); });
       var token = (text.match(/CDS-FAX-[a-z0-9]{8}/i) || [])[0] || '';
-      var receipt = !!token || /transmission|receipt|confirmation|not sent|unsuccessful|delivery (status|report)|fax (was )?(sent|delivered)/i.test(subject);
+      // What eFax sends (seen in Zach's inbox 2026-10-26): receipts from send@mail.efax.com, subject
+      // "Successful transmission to 14177197870. Re: <our subject>"; incoming faxes from
+      // message@inbound.efax.com, subject "Fax Message Notification - 2 page(s)", with no attachment
+      // (eFax Protect keeps the fax in its portal).
+      var incoming = /inbound\.efax\.com/i.test(m.getFrom()) || /fax message notification|new fax|fax from/i.test(subject);
+      var receipt = !incoming && (!!token || /transmission|receipt|confirmation|not sent|unsuccessful|delivery (status|report)|fax (was )?(sent|delivered)/i.test(subject));
       var r;
       if (receipt) {
         var to = '';
         OUR_FAX_NUMBERS.forEach(function (n) { if (!to && text.replace(/\D/g, '').indexOf(n) !== -1) to = n; });
-        r = post({ kind: 'result', token: token, to: to, ok: verdict(text), text: subject + ' ' + (m.getPlainBody() || '').slice(0, 400),
+        r = post({ kind: 'result', token: token, to: to, ok: verdict(subject, text), text: subject + ' ' + (m.getPlainBody() || '').slice(0, 400),
           pdf: pdfs.length ? Utilities.base64Encode(pdfs[0].getBytes()) : '', gmailId: id });
         if (r.ok) { th.addLabel(label); if (r.matched) th.moveToArchive(); }
-      } else if (pdfs.length && /fax/i.test(subject + ' ' + m.getFrom())) {
-        var from = (subject.match(/\+?1?[\s(.-]*\d{3}[\s).-]*\d{3}[\s.-]*\d{4}/) || [])[0] || '';
-        r = post({ kind: 'incoming', gmailId: id, from: from, subject: subject, receivedAt: m.getDate().toISOString(),
-          pdf: Utilities.base64Encode(pdfs[0].getBytes()) });
+      } else if (incoming || (pdfs.length && /fax/i.test(subject + ' ' + m.getFrom()))) {
+        r = post({ kind: 'incoming', gmailId: id, from: callerNumber(subject, m.getPlainBody() || ''), subject: subject, receivedAt: m.getDate().toISOString(),
+          pdf: pdfs.length ? Utilities.base64Encode(pdfs[0].getBytes()) : '' });
         if (r.ok) th.addLabel(label);
         if (r.off) return;            // switch off: try again next time
       } else { r = { ok: true }; }
@@ -100,10 +104,28 @@ function readEfaxEmails() {
 }
 
 // true = went through, false = did not, null = the hub shows it for a person to check.
-function verdict(text) {
-  if (/unsuccessful|not successful|was not (sent|delivered)|could not be (sent|delivered)|fail(ed|ure)|no answer|busy signal|not a fax machine|error/i.test(text)) return false;
-  if (/success|delivered|was sent|sent successfully|transmission (is )?complete/i.test(text)) return true;
+// The subject decides when it can (eFax says "Successful transmission" there), so a word like
+// "error" in the small print of the email cannot turn a good fax into a failed one.
+function verdict(subject, text) {
+  var bad = /unsuccessful|not successful|was not (sent|delivered)|could not be (sent|delivered)|fail(ed|ure)|no answer|busy signal|not a fax machine|error/i;
+  var good = /success|delivered|was sent|sent successfully|transmission (is )?complete/i;
+  if (bad.test(subject)) return false;
+  if (good.test(subject)) return true;
+  if (bad.test(text)) return false;
+  if (good.test(text)) return true;
   return null;
+}
+
+// The number a fax came from, if eFax says (subject first, then a "From" or "Caller ID" line).
+// Never our own number.
+function callerNumber(subject, body) {
+  var phone = /\+?1?[\s(.-]*(\d{3})[\s).-]*(\d{3})[\s.-]*(\d{4})/;
+  var found = '';
+  [subject, (body.match(/(?:from|caller ?id|sender|sent by)[^\n\d]{0,30}[^\n]{0,40}/i) || [''])[0]].forEach(function (t) {
+    var m = !found && t && t.match(phone);
+    if (m && (m[1] + m[2] + m[3]) !== '4177197870') found = m[1] + m[2] + m[3];
+  });
+  return found;
 }
 
 // Sender and subject of the latest eFax emails, so the patterns above can be checked. Nothing is sent.
