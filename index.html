@@ -9173,7 +9173,7 @@ const HUB_SWITCHES = [
   { key: 'taxStages', label: 'Tax Setup in stages',
     does: 'On: Tax & Enrollment Setup reads top to bottom in one column, grouped by when each step happens (today, the day the EIN arrives, waiting, Fusion proof, payroll, after the first $1,000 quarter). A Next line at the top says the one thing to do, the 90-day Fusion clock sits beside it, and it asks once whether the consumer is new or transferring. Every card, link and instruction is the same as before. Off: the two-column screen as before.' },
   { key: 'faxLive', label: 'One-click fax',
-    does: 'On: the 2643A and 2827 steps on Tax Setup get a Fax it now button (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
+    does: 'On: the SS-4, 2643A and 2827 steps on Tax Setup get a Fax it now button (the SS-4 only when there is no EIN yet and, for a transfer, after the existing-EIN check) (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
 const hubSwitchOn = key => getObj(key).live === true;
 function renderHubSwitches() {
@@ -12210,7 +12210,7 @@ function taxSetEinCheck(v) {
 // any fax that failed or has no receipt, show on Today. The confirm step is inside the step, not a
 // pop-up, because pop-ups can be blocked when the hub is open inside GoHighLevel.
 // ---------------------------------------------------------------------------
-const FAX_KEYS = ['MO-2643A', 'MO-2827'];   // not the 8821: e-signed, so online only
+const FAX_KEYS = ['IRS-SS-4', 'MO-2643A', 'MO-2827'];   // not the 8821: e-signed, so online only. SS-4 added 2026-10-26.
 let _fax = { cid: '', data: null, error: '', ask: '', busy: false, timer: null };
 let _faxToday = { data: null, at: 0, error: '', loading: false, note: {} };
 async function faxCall(body) {
@@ -12309,6 +12309,7 @@ function faxStepHtml(key, c, cut, held) {
   else if (!cut) action = '<span style="color:var(--gray-600)">Get the signed form from the packet first, then it can be faxed from here.</span>';
   else if (held) action = '';
   else if (moving) action = '';
+  else if (key === 'IRS-SS-4' && _faxSs4Stop(c)) action = '<span style="color:var(--gray-600)">' + esc(_faxSs4Stop(c)) + '</span>';
   else if (_fax.ask === key)
     action = '<div style="margin-top:2px"><strong>Fax ' + esc(form.label || key) + ' for ' + esc(c.name) + ' to ' + esc(form.toNice || '') + '</strong> (' + esc(form.office || '') + ') from zach@caringcds.com?</div>' +
       '<div style="display:flex;gap:6px;margin-top:5px"><button type="button" class="btn btn-sm btn-primary" style="font-size:10.5px"' + (_fax.busy ? ' disabled' : '') +
@@ -12318,6 +12319,14 @@ function faxStepHtml(key, c, cut, held) {
     (last && last.status === 'delivered' ? 'Fax it again' : 'Fax it now') + '</button> <span style="color:var(--gray-600)">The receipt is saved here by itself.</span>';
   if (!status && !action) return '';
   return box((status ? '<div>' + status + '</div>' : '') + (action ? '<div style="margin-top:' + (status ? '5px' : '0') + '">' + action + '</div>' : ''));
+}
+// The SS-4 is never faxed twice or before a transfer's existing-EIN check (the server checks the same).
+function _faxSs4Stop(c) {
+  const ein = ((document.getElementById('tax_ein') || {}).value || c.ein || '').trim();
+  if (ein) return 'The federal EIN is in, so the SS-4 is not sent again.';
+  if (c.einCheck === 'has') return 'The IRS says they already have an EIN. Enter it above instead of applying again.';
+  if (c.taxKind === 'transfer' && c.einCheck !== 'none') return 'Transferring consumer: do the existing-EIN check above first, then this can be faxed.';
+  return '';
 }
 async function faxSend(key) {
   if (_fax.busy) return;
