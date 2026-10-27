@@ -734,7 +734,6 @@ button.fu-tile.check span { color:#14606F; }
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="header_user" style="font-size:11px;color:rgba(255,255,255,0.7);margin-right:4px"></span>
-    <button onclick="officeFaxOpen(this)" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:5px 12px;border-radius:6px;font-size:12px;font-family:Poppins,sans-serif;cursor:pointer;font-weight:500" title="Our fax number and the eFax sign-in">📠 Fax</button>
     <button onclick="exportData()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:5px 12px;border-radius:6px;font-size:12px;font-family:Poppins,sans-serif;cursor:pointer;font-weight:500" title="Download all data as a backup file">💾 Backup</button>
     <button onclick="document.getElementById('importFileInput').click()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:5px 12px;border-radius:6px;font-size:12px;font-family:Poppins,sans-serif;cursor:pointer;font-weight:500" title="Restore data from a backup file">📂 Restore</button>
     <button onclick="signOut()" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);padding:5px 12px;border-radius:6px;font-size:12px;font-family:Poppins,sans-serif;cursor:pointer;font-weight:500" title="Sign out">Sign Out</button>
@@ -15950,33 +15949,6 @@ async function bpDelete(id) {
 }
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
-</script>
-<!-- 2026-10-21 (her call): office fax number + eFax sign-in, one click from every page. The password is never written here (this code is public); Samantha gives it out herself. -->
-<script>
-function officeFaxOpen(btn){
-  let p = document.getElementById('officeFaxPop');
-  if (p) { p.remove(); return; }
-  p = document.createElement('div');
-  p.id = 'officeFaxPop';
-  const r = btn.getBoundingClientRect();
-  p.style.cssText = 'position:fixed;top:' + (r.bottom + 6) + 'px;right:' + Math.max(8, innerWidth - r.right) + 'px;z-index:9999;background:#fff;color:#1f2d3d;border:1px solid #d6dde5;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:14px 16px;width:min(290px,calc(100vw - 16px));font-size:13px;line-height:1.5;text-align:left;';
-  const row = (label, val) => '<div style="margin-bottom:10px;"><div style="font-size:11px;color:#5b6b7b;">' + label + '</div>'
-    + '<div style="display:flex;align-items:center;gap:8px;"><b style="font-size:14px;word-break:break-all;">' + val + '</b>'
-    + '<button type="button" data-copy="' + val + '" style="margin-left:auto;flex:0 0 auto;font-size:11px;padding:3px 8px;border:1px solid #c9d3dd;border-radius:6px;background:#f6f9fb;color:#1f2d3d;cursor:pointer;">Copy</button></div></div>';
-  p.innerHTML = row('Our fax number', '(417) 719-7870')
-    + row('eFax sign-in', 'samantha@ccseniorhomecare.com')
-    + '<div style="font-size:12px;color:#5b6b7b;margin-bottom:12px;">Get the password from Samantha.</div>'
-    + '<a href="https://myportal.efax.com/" target="_blank" rel="noopener" style="display:block;text-align:center;background:#0D365F;color:#fff;padding:8px 10px;border-radius:7px;font-weight:600;text-decoration:none;">Open eFax ↗</a>';
-  p.addEventListener('click', e => {
-    const b = e.target.closest('[data-copy]');
-    if (!b) return;
-    navigator.clipboard.writeText(b.dataset.copy).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1500); }, () => { b.textContent = 'Select it'; });
-  });
-  document.body.appendChild(p);
-  setTimeout(() => document.addEventListener('click', function off(e){
-    if (!p.contains(e.target) && !btn.contains(e.target)) { p.remove(); document.removeEventListener('click', off); }
-  }), 0);
-}
 </script>
 </body>
 </html>
