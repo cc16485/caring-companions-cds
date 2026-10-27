@@ -46,6 +46,10 @@ export const SWITCHES = [
   { key: 'fcsr_notices', field: 'live', label: 'FCSR notices to attendants', warn: 'This one reaches attendants.',
     does: () => 'When the office records that an FCSR came back with something and presses Save and send, texts and emails the attendant: the Good Cause Waiver steps, or that the EDL means they cannot work in CDS. Plus one waiver reminder text 3 weeks later. While off, they wait in Messages.',
     on: 'Attendants will get the FCSR notice the office sends from their profile.', off: 'FCSR notices will wait in Messages instead of being sent.' },
+  { key: 'id_room', field: 'live', label: 'ID check video room texts', warn: 'This one reaches attendants.',
+    does: v => 'When an attendant books their 5-minute ID check, texts and emails them the time and the video room link, then texts the link again about 15 minutes before. '
+      + (v.url ? 'Room link saved below.' : 'No room link saved yet: add it below first.') + ' While off, they wait in Messages.',
+    on: 'Attendants who book an ID check will get the room link by text and email.', off: 'ID check room texts will wait in Messages instead of being sent.' },
   { key: 'enroll_alerts', field: 'live', label: 'Enrollment packet alerts',
     does: v => 'Emails ' + listNames((v.recipients || []).map(r => r.name)) + ' the moment a consumer signs every form in their enrollment packet ("sign 2678 and 2827 as agent"). Texts them too on weekdays 9am to 4pm.',
     on: 'The office will be told the moment a consumer signs their enrollment packet.', off: 'No enrollment packet alerts. The to-do still appears, and the lead shows it is signed.' },
@@ -89,7 +93,8 @@ export function createSwitches(deps) {
     const rows = await q(`select key, value, updated_at, updated_by from cds_match_settings where key = any($1)`, [SWITCHES.map(s => s.key)]);
     const last = await q(`select distinct on (target) target, actor, at, detail from cds_audit where action='switch' order by target, at desc`);
     const cc = rows.find(x => x.key === 'comm_center');
-    return { canChange: can, needOwners: needOwnersOf(cc ? cc.value : null), switches: SWITCHES.map(sw => {
+    const room = rows.find(x => x.key === 'id_room');
+    return { canChange: can, needOwners: needOwnersOf(cc ? cc.value : null), idRoom: room ? { url: String((room.value || {}).url || '') } : null, switches: SWITCHES.map(sw => {
       const r = rows.find(x => x.key === sw.key);
       const l = last.find(x => x.target === sw.key);
       const value = r ? r.value : null;
@@ -141,12 +146,31 @@ export function createSwitches(deps) {
     return { ok: true, message: 'Done. New ' + label + ' cards go to ' + name + '.' };
   }
 
+  // The GoHighLevel Meeting Room link for the 5-minute ID check (2026-10-27). Pasted here by Samantha,
+  // so the passcode in the link never goes through anyone else. Empty clears it.
+  async function setRoomLink(email, url) {
+    email = String(email || '').toLowerCase();
+    if (!(await owners()).includes(email)) throw new SwitchError('Only Samantha can change the room link.', 403);
+    url = String(url || '').trim();
+    if (url && !/^https:\/\/[^\s<>"']+$/.test(url)) throw new SwitchError('Paste the whole room link, starting with https://');
+    if (url.length > 400) throw new SwitchError('That link is too long.');
+    const r = await one(`select value from cds_match_settings where key='id_room'`);
+    if (!r) throw new SwitchError('The ID check room is not set up yet, so this cannot be changed here.');
+    const was = String((r.value || {}).url || '');
+    await q(`update cds_match_settings set value = value || jsonb_build_object('url', $2::text), updated_at=$3, updated_by=$4 where key=$1`, ['id_room', url, now(), email]);
+    // The link holds the room passcode, so the record keeps only that it changed.
+    await q(`insert into cds_audit (actor, action, target, detail) values ($1, 'id_room_link', 'id_room', $2::jsonb)`,
+      [email, JSON.stringify({ from: was ? 'set' : 'empty', to: url ? 'set' : 'empty' })]);
+    return { ok: true, message: url ? 'Done. Room link saved.' : 'Done. Room link removed.' };
+  }
+
   async function handle(email, body) {
     const action = String(body && body.action || 'list');
     if (action === 'list') return list(email);
     if (action === 'set') return set(email, String(body.key || ''), body.on);
     if (action === 'set_need_owner') return setNeedOwner(email, String(body.need || ''), body.owner);
+    if (action === 'set_room_link') return setRoomLink(email, body.url);
     throw new SwitchError('Unknown request');
   }
-  return { list, set, setNeedOwner, handle };
+  return { list, set, setNeedOwner, setRoomLink, handle };
 }

@@ -27,6 +27,7 @@ await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='
 await pg.exec(`insert into cds_match_settings (key, value, updated_by) values ('lead_alerts', '{"recipients":[{"name":"Samantha","email":"s@x.test","phone":"+14175550001"},{"name":"Krystal","email":"k@x.test","phone":"+14175550002"}]}'::jsonb, 't') on conflict (key) do nothing`);
 await pg.exec(strip(readFileSync(ROOT + '/oig_check.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/id_room.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/fcsr_waiver.sql', 'utf8')));
 const SQL = strip(readFileSync(ROOT + '/consumer_packet.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);

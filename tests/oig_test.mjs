@@ -82,6 +82,7 @@ await pg.exec(strip(readFileSync(ROOT + '/caregiver_signup_alert.sql', 'utf8')))
 const SQL = strip(readFileSync(ROOT + '/oig_check.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
 await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/id_room.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/fcsr_waiver.sql', 'utf8')));
 ok(true, 'the SQL runs twice');
 eq((await pg.query(`select value from cds_match_settings where key='oig_check'`)).rows[0].value, { live: false }, 'starts in practice');
