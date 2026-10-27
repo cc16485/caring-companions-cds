@@ -85,8 +85,9 @@ export function backgroundMissing(a = {}, identityDone) {
   return m;
 }
 
-// The 5-minute ID check: the next 3 weekdays, a few times each, Central time.
-export function callSlots(nowIso) {
+// The 5-minute ID check: the next 3 weekdays, a few times each, Central time. taken = times
+// another attendant already booked ('YYYY-MM-DD HH:MM'), left out so one room never has two.
+export function callSlots(nowIso, taken = []) {
   const out = [];
   const d = new Date(nowIso);
   for (let i = 1; out.length < 15 && i < 10; i++) {
@@ -97,7 +98,7 @@ export function callSlots(nowIso) {
     for (const t of ['09:30', '10:30', '13:00', '14:30', '15:30']) {
       const label = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric' }).format(day)
         + ', ' + (+t.slice(0, 2) > 12 ? +t.slice(0, 2) - 12 : +t.slice(0, 2)) + ':' + t.slice(3) + (+t.slice(0, 2) >= 12 ? 'pm' : 'am');
-      out.push({ value: ymd + ' ' + t, label });
+      if (!taken.includes(ymd + ' ' + t)) out.push({ value: ymd + ' ' + t, label });
     }
   }
   return out;

@@ -10,6 +10,7 @@ const { createMatch } = await import(ROOT + '/supabase/functions/_shared/match/h
 const { practiceDeps } = await import(ROOT + '/caregiver-match/practice/deps.js');
 const P = await import(ROOT + '/supabase/functions/_shared/packet/rules.js');
 const F = await import(ROOT + '/supabase/functions/_shared/packet/forms.js');
+const PK = await import(ROOT + '/caregiver-match/hub-packet.js');
 
 let pass = 0, failN = 0;
 const ok = (c, m) => { if (c) pass++; else { failN++; console.log('FAIL', m); } };
@@ -28,6 +29,9 @@ await pg.exec(strip(readFileSync(ROOT + '/oig_check.sql', 'utf8')));
 const SQL = strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
 ok(true, 'packet SQL runs twice');
+const ROOM_SQL = strip(readFileSync(ROOT + '/id_room.sql', 'utf8'));
+await pg.exec(ROOM_SQL); await pg.exec(ROOM_SQL);
+ok((await pg.query(`select value from cds_match_settings where key='id_room'`)).rows[0].value.live === false, 'ID room SQL runs twice, switch off');
 const GCW_SQL = strip(readFileSync(ROOT + '/fcsr_waiver.sql', 'utf8'));
 await pg.exec(GCW_SQL); await pg.exec(GCW_SQL);
 ok(true, 'FCSR waiver SQL runs twice');
@@ -162,6 +166,29 @@ ok(!!pk2.step2_signed_at && cf.initials['13'] === 'JE', 'all 4 Step 2 forms sign
 await refuses(() => H('caregiver', 'packetBookCall', { link, slot: '2099-01-01 09:30' }), /times shown/, 'only offered call times');
 const bk = await H('caregiver', 'packetBookCall', { link, slot: v.call_slots[0].value });
 ok(bk.ok && (await pg.query(`select count(*)::int n from cds_tasks where pool_id=$1 and kind='packet_call'`, [pool.id])).rows[0].n === 1, 'call booked -> office to-do with the time');
+// ---------- the ID check video room (2026-10-27) ----------
+const booked = (await outbox()).filter(o => o.template === 'packet_att_id_booked' && o.pool_id === pool.id);
+ok(booked.length === 2 && booked.map(o => o.channel).sort().join() === 'email,sms' && booked.every(o => o.body.includes(bk.slot)), 'booking sends the time by text and email');
+await refuses(() => H('caregiver', 'packetBookCall', { link, slot: v.call_slots[1].value }), /already booked/, 'one booking per attendant');
+const pk3 = (await pg.query(`select call_at, to_char(call_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') v from cds_packets where pool_id=$1`, [pool.id])).rows[0];
+ok(pk3.v === v.call_slots[0].value, 'booked time saved as a real time (Central)');
+ok(!P.callSlots(new Date().toISOString(), [v.call_slots[0].value]).some(sl => sl.value === v.call_slots[0].value), 'a taken time is not offered to anyone else');
+let dup = false; try { await pg.query(`update cds_packets set call_at=$2 where pool_id=(select pool_id from cds_packets where pool_id<>$1 limit 1)`, [pool.id, pk3.call_at]); } catch { dup = true; }
+ok(dup || !(await pg.query(`select 1 from cds_packets where pool_id<>$1 limit 1`, [pool.id])).rows.length, 'the database refuses two attendants at one time');
+ok((await H('caregiver', 'packet', { link })).room_url === null && (await S('packetGet', { pool_id: pool.id })).room_url === null, 'no room link saved: nothing shown');
+const ROOM = 'https://ccemployeeportal.com/meet/cds-id-check?pwd=test';
+await pg.query(`update cds_match_settings set value = jsonb_build_object('live', false, 'url', $1::text) where key='id_room'`, [ROOM]);
+ok((await H('caregiver', 'packet', { link })).room_url === null && (await S('packetGet', { pool_id: pool.id })).room_url === ROOM, 'switch off: office sees the room, the attendant page does not');
+await pg.query(`update cds_match_settings set value = value || '{"live": true}'::jsonb where key='id_room'`);
+ok((await H('caregiver', 'packet', { link })).room_url === ROOM, 'switch on: the attendant page shows the room link once booked');
+ok(/Open the video room/.test(PK.nextCardHtml(PK.nextHow({ step1: true, now: 'call' }, { room_url: ROOM }))), 'office ID check card links the room');
+await pg.query(`update cds_packets set call_at = now() + interval '3 hours' where pool_id=$1`, [pool.id]);
+await H('job', 'packetJob', {});
+ok(!(await outbox()).some(o => o.template === 'packet_att_id_soon'), 'no "starting soon" text hours ahead');
+await pg.query(`update cds_packets set call_at = now() + interval '12 minutes' where pool_id=$1`, [pool.id]);
+await H('job', 'packetJob', {}); await H('job', 'packetJob', {});
+const soon = (await outbox()).filter(o => o.template === 'packet_att_id_soon');
+ok(soon.length === 1 && soon[0].body.includes(ROOM) && soon[0].channel === 'sms', '"starting soon" text with the room link, once');
 await H('caregiver', 'packetSelf', { link, what: 'empeon' });
 await H('caregiver', 'packetSelf', { link, what: 'orientation' });
 let s1 = (await S('packetGet', { pool_id: pool.id })).status;

@@ -260,7 +260,8 @@ export function nextHow(st, g) {
     papers: { title: 'Waiting on ' + first + ' to sign their papers', who: 'Attendant', tone: 'b', steps: ['They sign the contract, pay rate, unit agreement and handbook from their private link. They were sent it when checks cleared.', 'Nothing to do unless it has been 3 days. Then call them.'] },
     empeon_invite: { title: 'Send ' + first + '\'s Empeon invite', who: 'Office', mins: 'About 3 minutes', tone: 'r', steps: ['Tap Copy for Empeon below.', 'In Empeon, start a new hire and paste the details. ' + consumer + ' is the employer.', 'Send the invite.', 'Tap Empeon invite sent.'] },
     empeon: { title: 'Waiting on ' + first + ' in Empeon', who: 'Attendant', tone: 'b', steps: ['They fill out the W-4, I-9 part 1 and direct deposit, and upload photos of their ID front and back.', 'Nothing to do unless it has been 3 days. Then call them.'] },
-    call: { title: '5-minute ID check with ' + first, who: 'Office and attendant', mins: '5 minutes', tone: 'r', steps: [p.call_slot ? 'Booked for ' + p.call_slot + '.' : 'They book a time from their link.', 'Video call them. They hold up the same ID they uploaded to Empeon, front and back.', 'Check the name and photo match.', 'Tap ID seen on the video call.'] },
+    call: { title: '5-minute ID check with ' + first, who: 'Office and attendant', mins: '5 minutes', tone: 'r', steps: [p.call_slot ? 'Booked for ' + p.call_slot + '.' : 'They book a time from their link.', (g && g.room_url ? 'Open the video room at that time and let them in from the waiting room.' : 'Video call them.') + ' They hold up the same ID they uploaded to Empeon, front and back.', 'Check the name and photo match.', 'Tap ID seen on the video call.'],
+      links: g && g.room_url ? [['Open the video room', g.room_url]] : [] },
     i9: { title: 'I-9 Section 2 in Empeon', who: 'Office', mins: 'About 5 minutes', tone: 'r', steps: ['Open their I-9 in Empeon.', 'Fill out Section 2 with the documents you saw on the call.', 'Tick the box for the remote exam (E-Verify alternative procedure).', 'Tap I-9 Section 2 done in Empeon.'] },
     countersign: { title: 'Countersign ' + first + '\'s contract', who: 'Office', mins: '1 minute', tone: 'r', steps: ['Type your full name in the box below and tap Countersign.'] },
   };
@@ -649,6 +650,7 @@ export function mountHubPacket(el, opts) {
       <div class="btns">
         <button class="btn o" data-copy="empeon">Copy for Empeon</button>
         ${p.empeon_invited_at ? `<span class="pill g">Empeon invite sent ${esc(fmtD(p.empeon_invited_at))}</span>` : ['gcw_needed', 'edl', 'not_moving', 'finding'].includes(fcsrState(g.screening)) ? '' : '<button class="btn" data-mark="empeon_invited">Empeon invite sent</button>'}
+        ${!p.id_checked_at && st.checksClear && g.room_url ? `<a class="btn o" href="${esc(g.room_url)}" target="_blank" rel="noopener">Open the video room ↗</a>` : ''}
         ${p.id_checked_at ? `<span class="pill g">ID seen ${esc(fmtD(p.id_checked_at))}</span>` : st.checksClear ? `<button class="btn" data-mark="id_checked">ID seen on the video call</button>` : ''}
         ${p.i9_done_at ? `<span class="pill g">I-9 done ${esc(fmtD(p.i9_done_at))}</span>` : p.id_checked_at ? '<button class="btn" data-mark="i9_done">I-9 Section 2 done in Empeon</button>' : ''}
       </div>

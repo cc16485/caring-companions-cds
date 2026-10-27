@@ -63,7 +63,8 @@ export function createPacket(h) {
     const sw = await setting(swKey, { live: false });
     let status, error = null;
     if (deps.mode === 'practice') status = 'practice';
-    else if (!sw.live) { status = 'held'; error = { packet_alerts: 'Attendant application alerts are switched off (Switches card).', fcsr_notices: 'FCSR notices to attendants are switched off (Switches card).' }[swKey] || 'Attendant application texts are switched off (Switches card).'; }
+    else if (t.room && !vars.room) { status = 'held'; error = 'No video room link saved yet (Switches card, ID check video room).'; }
+    else if (!sw.live) { status = 'held'; error = { packet_alerts: 'Attendant application alerts are switched off (Switches card).', fcsr_notices: 'FCSR notices to attendants are switched off (Switches card).', id_room: 'ID check video room texts are switched off (Switches card).' }[swKey] || 'Attendant application texts are switched off (Switches card).'; }
     else { try { await deps.send({ channel, to, subject, body }); status = 'sent'; } catch (e) { status = 'failed'; error = String(e && e.message || e).slice(0, 300); } }
     return one(`insert into cds_outbox (audience, pool_id, channel, template, to_display, body, status, error, automatic, created_by)
       values ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) returning id, status`,
@@ -90,6 +91,12 @@ export function createPacket(h) {
   // Date of birth on file and the SSN sealed.
   const identityDone = async (poolId, scr) => !!(scr && scr.dob) && !!(await one('select 1 as y from cds_screening_secret where pool_id=$1', [poolId]));
   const nameOf = (pool) => [pool.first_name, pool.last_name].filter(Boolean).join(' ');
+  // The ID check video room (setting id_room). The link goes to the attendant only once its switch is on.
+  const roomUrl = async () => String((await setting('id_room', { live: false, url: '' })).url || '');
+  const roomLive = async () => { const r = await setting('id_room', { live: false, url: '' }); return r.live === true && !!r.url; };
+  // Open times already booked by someone else, as 'YYYY-MM-DD HH:MM' Central.
+  const takenSlots = async () => (await q(`select to_char(call_at at time zone 'America/Chicago', 'YYYY-MM-DD HH24:MI') as v
+    from cds_packets where call_at > now() and id_checked_at is null`)).map(r => r.v);
 
   // ================= PUBLIC: the one application link =================
   const pub = {
@@ -164,7 +171,8 @@ export function createPacket(h) {
         missing: { application: P.applicationMissing(x.p.answers || {}, { mo: (await setting('apply_questions', { live: false })).live === true }), background: P.backgroundMissing(x.p.answers || {}, await identityDone(x.pool_id, scr)) },
         docs, contract_parts: CONTRACT_PARTS, company: COMPANY,
         orientation_done: !!x.p.orientation_done_at, empeon_done: !!x.p.empeon_done_at, call_slot: x.p.call_slot,
-        call_slots: x.st.step2Open && !x.p.call_slot ? P.callSlots(x.now) : [],
+        call_slots: x.st.step2Open && !x.p.call_slot ? P.callSlots(x.now, await takenSlots()) : [],
+        room_url: x.p.call_slot && !x.p.id_checked_at && await roomLive() ? await roomUrl() : null,
         handbook_url: HANDBOOK_URL, orientation_url: ORIENTATION_URL,
         listing_consent: CONSENT_WORDING.profile.text,
         profile: { photo: !!(x.c.profile && (x.c.profile.photo_draft || x.c.profile.photo_approved)), draft: (x.c.profile && x.c.profile.draft) || {},
@@ -254,11 +262,20 @@ export function createPacket(h) {
     async packetBookCall({ link, slot }) {
       const x = await mine(link);
       if (!x.st.step2Open) fail('This opens once your background checks are clear.');
-      const ok = P.callSlots(x.now).find(s => s.value === slot);
-      if (!ok) fail('Please pick one of the times shown.');
-      await q('update cds_packets set call_slot=$2, call_booked_at=now() where pool_id=$1', [x.pool_id, ok.label]);
+      if (x.p.call_slot) fail('Your ID check is already booked for ' + x.p.call_slot + '. Need a different time? Call (417) 218-2888.');
+      if (!P.callSlots(x.now).some(s => s.value === slot)) fail('Please pick one of the times shown.');
+      const ok = P.callSlots(x.now, await takenSlots()).find(s => s.value === slot);
+      if (!ok) fail('That time was just taken. Please pick another one.');
+      // One attendant per time (unique index cds_packets_one_call_per_time backs this up).
+      const r = await one(`update cds_packets set call_slot=$2, call_at=($3::timestamp at time zone 'America/Chicago'), call_booked_at=now()
+        where pool_id=$1 and not exists (select 1 from cds_packets o where o.pool_id<>$1 and o.id_checked_at is null
+          and o.call_at = ($3::timestamp at time zone 'America/Chicago')) returning pool_id`, [x.pool_id, ok.label, slot]).catch(() => null);
+      if (!r) fail('That time was just taken. Please pick another one.');
       await h.task('packet_call', ('5-minute ID check: ' + nameOf(x.c.pool) + ', ' + ok.label + '. See their ID live, then I-9 Section 2 in Empeon.').slice(0, 300),
         { pool_id: x.pool_id }, 'packet_call:' + x.pool_id + ':' + slot, null);
+      const room = await roomUrl(), first = (x.p.answers || {}).first || x.c.pool.first_name;
+      for (const ch of ['sms', 'email']) await send({ template: 'att_id_booked', channel: ch, audience: 'caregiver', pool_id: x.pool_id,
+        to: ch === 'sms' ? x.c.pool.phone : x.c.pool.email, vars: { first, time: ok.label, room } });
       return { ok: true, slot: ok.label };
     },
     // Things the attendant tells us they finished (the office sees who said so).
@@ -367,7 +384,7 @@ export function createPacket(h) {
           result: (x.c.screening.raw || {}).screen_result || null, result_at: (x.c.screening.raw || {}).screen_result_at || null,
           reviewed_at: (x.c.screening.raw || {}).finding_reviewed_at || null, reviewed_by: (x.c.screening.raw || {}).finding_reviewed_by || null,
           notice: (x.c.screening.raw || {}).finding_notice || null, decided_at: (x.c.screening.raw || {}).gcw_decided_at || null, note: (x.c.screening.raw || {}).findings_note || null },
-        status: x.st, listing: x.c.listing };
+        status: x.st, listing: x.c.listing, room_url: (await roomUrl()) || null };
     },
     async packetMark({ staff, pool_id, what }) {
       who(staff);
@@ -526,6 +543,16 @@ export function createPacket(h) {
         await h.task('packet_empeon', ('Checks clear: send the Empeon invite to ' + nameOf(pool) + ' (Copy for Empeon).').slice(0, 300), { pool_id }, 'packet_empeon:' + pool_id,
           (await one('select cds_next_business_4pm(now()) as d')).d);
         opened++;
+      }
+      // ID check starting soon: one text with the room link, on the job run 0 to 20 minutes before.
+      if (x.p.call_at && !x.p.call_reminded_at && !x.p.id_checked_at) {
+        const mins = (new Date(x.p.call_at) - new Date(now)) / 60000;
+        if (mins > 0 && mins <= 20) {
+          await q('update cds_packets set call_reminded_at=now() where pool_id=$1', [pool_id]);
+          await send({ template: 'att_id_soon', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone,
+            vars: { first, clock: chicago(x.p.call_at, { hour: 'numeric', minute: '2-digit' }), room: await roomUrl() } });
+          sent++;
+        } else if (mins <= 0) await q('update cds_packets set call_reminded_at=now() where pool_id=$1', [pool_id]);
       }
       // Waiting on a Good Cause Waiver: a "check the waiver status" to-do every 2 weeks (her yes 2026-10-23).
       const raw = x.c.screening.raw || {};

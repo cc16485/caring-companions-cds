@@ -34,6 +34,14 @@ export const PACKET_TEMPLATES = {
     sms: 'Good news, {first}! Your background checks are clear. Open your link to sign your attendant papers and book your 5-minute ID check: {link}',
     email_subject: 'Your checks are clear: next steps',
     email: 'Hi {first},\n\nGood news: your background checks are clear. Open your private link to finish onboarding:\n\n{link}\n\nYou will sign your attendant papers, set up payroll in Empeon, and book a 5-minute video call to show us your ID.\n\nYour Attendant Handbook is always here: ' + HANDBOOK_URL + '\n\n' + SIGN_OFF },
+  // The 5-minute ID check video room (2026-10-27). {room} = the GoHighLevel Meeting Room link from
+  // setting id_room; without one the message waits in Messages instead of going out with no link.
+  att_id_booked: { audience: 'caregiver', switch: 'id_room', room: true,
+    sms: 'Hi {first}, your 5-minute ID check with Caring Companions CDS is booked for {time} (Central). At that time, open this link and wait to be let in: {room} Have the same original ID documents you uploaded to Empeon with you. Need a different time? Call ' + OFFICE + '.',
+    email_subject: 'Your 5-minute ID check: {time}',
+    email: 'Hi {first},\n\nYour 5-minute ID check is booked for {time} (Central time).\n\nAt that time, open this link on your phone or computer and wait to be let in:\n\n{room}\n\nPlease have the same original ID documents you uploaded to Empeon with you, so you can hold them up to the camera. Copies or photos of them will not work.\n\nNeed a different time? Call ' + OFFICE + '.\n\n' + SIGN_OFF },
+  att_id_soon: { audience: 'caregiver', switch: 'id_room', room: true,
+    sms: 'Hi {first}, your 5-minute ID check is at {clock} today. Open this link then and wait to be let in: {room} Have your original ID documents with you.' },
   // FCSR came back with something (2026-10-23, wording she approved on the mockup). The text never
   // says what came up; the email names the check and the next step, never the details.
   att_fcsr_gcw: { audience: 'caregiver', switch: 'fcsr_notices',

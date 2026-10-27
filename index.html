@@ -5117,7 +5117,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=18');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=19');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -6442,7 +6442,7 @@ async function renderSwitches(reload) {
   host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
     '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
     '<div id="hubSwitches"></div>' +
-    rows + '</div>' + needOwnersHtml(d) + todayOwnersHtml();
+    rows + idRoomHtml(d) + '</div>' + needOwnersHtml(d) + todayOwnersHtml();
   renderHubSwitches();
 }
 // Who owns each need (Communication Center step 2, 2026-10-22). A new follow-up card goes to this
@@ -6472,6 +6472,31 @@ async function swNeedOwner(need, owner) {
   } catch (e) {
     _swNote = { key: 'need_owner', text: 'Could not change it: ' + e.message.replace(/\.$/, '') + '. Nothing changed.', bad: true };
     renderSwitches(true);
+  }
+}
+// The 5-minute ID check video room (2026-10-27): the GoHighLevel Meeting Room link, pasted by
+// Samantha. It is sent to attendants only while the ID check video room switch is on.
+function idRoomHtml(d) {
+  if (!d.idRoom) return '';
+  const url = d.idRoom.url;
+  const body = d.canChange
+    ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><input type="url" id="swRoomUrl" value="' + esc(url) + '" placeholder="Paste the GoHighLevel Meeting Room link" aria-label="ID check room link" style="flex:1;min-width:220px;min-height:36px;border-radius:8px;border:1.5px solid var(--gray-200);padding:0 10px;font:inherit;font-size:13px">' +
+      '<button class="btn btn-sm btn-primary" style="font-size:11.5px" onclick="swRoomLink()">Save link</button>' +
+      (url ? ' <a class="btn btn-sm btn-outline" style="font-size:11.5px" href="' + esc(url) + '" target="_blank" rel="noopener">Open the room</a>' : '') + '</div>'
+    : '<div style="font-size:12.5px;margin-top:4px">' + (url ? '<a href="' + esc(url) + '" target="_blank" rel="noopener">Open the room</a>' : 'No room link saved yet.') + '</div>';
+  return '<div style="padding:10px 0;border-top:1px solid var(--gray-200)"><div style="font-weight:700;font-size:13.5px">ID check video room link</div>' +
+    '<div style="font-size:12.5px;color:var(--gray-800);margin-top:2px">The GoHighLevel Meeting Room for the 5-minute ID check (CDS sub-account, Meeting Room, Team rooms). Keep recording off in that room: attendants hold up their ID cards.</div>' +
+    body + (_swNote && _swNote.key === 'id_room_link' ? '<div style="font-size:12.5px;margin-top:6px;font-weight:600;color:' + (_swNote.bad ? 'var(--danger)' : 'var(--success)') + '">' + esc(_swNote.text) + '</div>' : '') + '</div>';
+}
+async function swRoomLink() {
+  const el = document.getElementById('swRoomUrl');
+  try {
+    const r = await _swCall({ action: 'set_room_link', url: el ? el.value : '' });
+    _swNote = { key: 'id_room_link', text: r.message, bad: false };
+    await renderSwitches(true);
+  } catch (e) {
+    _swNote = { key: 'id_room_link', text: 'Could not save it: ' + e.message.replace(/\.$/, '') + '. Nothing changed.', bad: true };
+    renderSwitches(false);
   }
 }
 function swAsk(key) { _swAsk = key; _swNote = null; renderSwitches(false); }
