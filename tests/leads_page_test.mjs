@@ -147,7 +147,7 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   const m = html.slice(html.indexOf('id="closeLeadModal"'), html.indexOf('id="addPipelineModal"'));
   ['closed_inactive', 'closed_ni', 'closed_other', 'closed_spam'].forEach(st => ok(m.includes("closeLeadAs('" + st + "')"), 'Close offers ' + st));
-  ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam'(,'closed_pool')?\]/.test(html), 'the hub knows all four (and closed_pool from Who called)');
+  ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam'(,'closed_pool')?(,'closed_linked')?\]/.test(html), 'the hub knows all four (and closed_pool, closed_linked)');
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(r.includes('openCloseLead(') && r.includes('reopenLead(') && r.includes('c.cameIso'), 'rows have Close, Reopen and the came-in date');
   // 10-29: one row per person, sortable by came in and last contact

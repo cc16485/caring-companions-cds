@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=26"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=27"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -640,6 +640,29 @@ input, select, textarea { border-radius:10px; }
              border:2px solid #e4e1d8; background:#fff; font:inherit; cursor:pointer; }
 .ld-choice:hover, .ld-choice:focus-visible { border-color:var(--cute-teal); box-shadow:0 6px 18px rgba(31,122,140,.14); }
 .ld-choice b { font-size:16.5px; color:#0D365F; }
+/* Contacts and linking (2026-10-29) */
+.rp-lbl { display:block; font-size:13px; font-weight:600; color:var(--gray-700, #3c4a58); margin-bottom:6px; }
+.rp-roles { display:flex; flex-wrap:wrap; gap:8px; }
+.rp-roles label { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 14px; border:1.5px solid #e4e1d8; border-radius:12px; background:#fff; font-size:14px; cursor:pointer; }
+.rp-roles label:has(input:checked) { border-color:var(--cute-teal); background:var(--cute-teal-pale); }
+.rp-pick { display:flex; flex-direction:column; background:#fff; border:1px solid #e4e1d8; border-radius:12px; overflow:hidden; max-height:220px; overflow-y:auto; }
+.rp-pick:empty { display:none; }
+.rp-pick button { display:flex; justify-content:space-between; gap:10px; text-align:left; min-height:44px; padding:8px 14px; border:0; border-top:1px solid #efece4; background:#fff; font:inherit; font-size:14px; cursor:pointer; }
+.rp-pick button:first-child { border-top:0; }
+.rp-pick button.on { background:var(--cute-teal-pale); }
+.rp-pick button span { color:#55677a; font-size:13px; }
+.rp-card { margin-top:14px; }
+.rp-row { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:10px 0; border-top:1px solid #efece4; font-size:14px; }
+.rp-row:first-of-type { border-top:0; }
+.rp-row small { display:block; color:#55677a; font-size:12.5px; }
+.rp-tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11.5px; font-weight:700; margin-left:6px; }
+.rp-tag.family { background:var(--cute-honey-pale); color:#7A4E0B; }
+.rp-tag.attendant { background:#EAF0FA; color:#2B4C7E; }
+.rp-tag.other { background:#F1EFE8; color:#3c4a58; }
+.rp-linkbtn { border:0; background:none; padding:0; color:#14606F; font:inherit; font-size:13px; font-weight:600; text-decoration:underline; cursor:pointer; }
+.ch-filter { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
+.ch-filter button { min-height:36px; padding:0 12px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+.ch-filter button.on { background:#14304d; border-color:#14304d; color:#fff; }
 .ld-choice span { font-size:14px; color:#55677a; }
 .lp-msgs { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
 /* Follow-ups and calls and texts (Communication Center, 2026-10-22) */
@@ -3946,8 +3969,71 @@ button.fu-tile.check span { color:#14606F; }
     <button type="button" class="ld-choice" onclick="closeLeadAs('closed_ni')"><b>Not interested</b><span>Told us they do not want CDS right now.</span></button>
     <button type="button" class="ld-choice" onclick="closeLeadAs('closed_other')"><b>Went with another agency</b><span>Chose someone else.</span></button>
     <button type="button" class="ld-choice" onclick="closeLeadAs('closed_spam')"><b>Spam</b><span>Not a real person, a sales pitch, or a fake form.</span></button>
+    <button type="button" class="ld-choice" onclick="closeModal('closeLeadModal');openLinkLead(document.getElementById('cl_id').value)"><b>They called about someone else</b><span>Family or the attendant of a consumer or another lead. Link them.</span></button>
     <div class="form-group" style="margin-top:6px"><label for="cl_note">Note (optional)</label>
       <textarea id="cl_note" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:10px;font-family:inherit;font-size:13px" placeholder="For example: no answer after 3 calls"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- Link a lead to the person they called about (2026-10-29, her mockup 6CxaqzDSJABjRYnGxc6tZg) -->
+<div class="modal-overlay" id="linkLeadModal">
+  <div class="modal" style="width:620px;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:24px" id="lk_title">Who is this?</div>
+      <button class="modal-close" onclick="closeModal('linkLeadModal')" aria-label="Close">×</button>
+    </div>
+    <input type="hidden" id="lk_id">
+    <p style="margin:0 0 14px;font-size:14.5px;color:#55677a" id="lk_intro"></p>
+    <div class="form-group"><label for="lk_q">They called about</label>
+      <input type="search" id="lk_q" placeholder="Start typing a consumer or lead name" oninput="lkRender()" autocomplete="off">
+    </div>
+    <div id="lk_list" class="rp-pick" role="listbox" aria-label="People"></div>
+    <div class="form-group" style="margin-top:12px"><span class="rp-lbl" id="lk_role_lbl">They are</span>
+      <div class="rp-roles" role="radiogroup" aria-labelledby="lk_role_lbl">
+        <label><input type="radio" name="lk_role" value="family"> Family member</label>
+        <label><input type="radio" name="lk_role" value="attendant"> Attendant</label>
+        <label><input type="radio" name="lk_role" value="other"> Someone else</label>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label for="lk_rel">In a word (optional)</label><input type="text" id="lk_rel" placeholder="For example: daughter, granddaughter, case manager"></div>
+      <div class="form-group"><label for="lk_phone">Their phone</label><input type="tel" id="lk_phone"></div>
+    </div>
+    <div class="field-note" id="lk_what" style="margin-bottom:10px"></div>
+    <div class="field-note" id="lk_err" style="color:var(--danger);font-weight:600"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button type="button" class="btn btn-primary" id="lk_go" onclick="saveLinkLead()">Link them</button>
+      <button type="button" class="btn btn-outline" onclick="closeModal('linkLeadModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add a contact by hand (family, attendant or someone else) -->
+<div class="modal-overlay" id="contactModal">
+  <div class="modal" style="width:520px;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:24px" id="rpc_title">Add a contact</div>
+      <button class="modal-close" onclick="closeModal('contactModal')" aria-label="Close">×</button>
+    </div>
+    <input type="hidden" id="rpc_kind"><input type="hidden" id="rpc_owner">
+    <div class="form-row">
+      <div class="form-group"><label for="rpc_name">Name</label><input type="text" id="rpc_name"></div>
+      <div class="form-group"><label for="rpc_phone">Phone</label><input type="tel" id="rpc_phone"></div>
+    </div>
+    <div class="form-group"><span class="rp-lbl" id="rpc_role_lbl">They are</span>
+      <div class="rp-roles" role="radiogroup" aria-labelledby="rpc_role_lbl">
+        <label><input type="radio" name="rpc_role" value="family"> Family member</label>
+        <label><input type="radio" name="rpc_role" value="attendant"> Attendant</label>
+        <label><input type="radio" name="rpc_role" value="other"> Someone else</label>
+      </div>
+    </div>
+    <div class="form-group"><label for="rpc_rel">In a word (optional)</label><input type="text" id="rpc_rel" placeholder="For example: son, neighbor, case manager"></div>
+    <div class="field-note">Their calls and texts on the CDS lines show on this profile from now on. Nothing is sent to anyone.</div>
+    <div class="field-note" id="rpc_err" style="color:var(--danger);font-weight:600"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button type="button" class="btn btn-primary" onclick="saveContact()">Save</button>
+      <button type="button" class="btn btn-outline" onclick="closeModal('contactModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -5366,6 +5452,7 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // ============================================================
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+let _convertLeadId = '';
 function addConsumer() {
   const name = document.getElementById('c_name').value.trim();
   if (!name) { alert('Consumer name is required.'); return; }
@@ -5394,8 +5481,19 @@ function addConsumer() {
     mo2643a: document.getElementById('c_mo2643a').checked,
     mo2827: document.getElementById('c_mo2827').checked,
     desRegistered: document.getElementById('c_des_reg').checked,
-    desEan: ''
+    desEan: '',
+    relatedPeople: []
   });
+  // Contacts from the lead they were (2026-10-29): family and attendants move over, and any lead linked
+  // to that lead now points at the new consumer.
+  const L = _convertLeadId && getData('pipeline').find(p => p.id === _convertLeadId);
+  _convertLeadId = '';
+  if (L && String(L.name || '').trim().toLowerCase() === name.toLowerCase() && CDSRules.relatedPeople(L).length) {
+    consumers[consumers.length - 1].relatedPeople = CDSRules.relatedPeople(L);
+    L.relatedPeople = [];
+    getData('pipeline').forEach(x => { if (x.linkedTo && x.linkedTo.kind === 'lead' && x.linkedTo.id === L.id) x.linkedTo = Object.assign({}, x.linkedTo, { kind: 'consumer', id: id }); });
+    setData('pipeline', getData('pipeline'));
+  }
   setData('consumers', consumers);
   closeModal('addConsumerModal');
   // Reset form
@@ -6681,9 +6779,10 @@ const PIPELINE_STATUS_LABELS = {
   new: 'New, not called yet', nurturing: 'Following up', submitted: 'Sent to the state',
   processing: 'The state is working on it', authorized: 'Approved by the state', transfer_complete: 'Transfer done',
   closed_ni: 'Closed, not interested', closed_other: 'Closed, went with another agency',
-  closed_inactive: 'Closed, inactive', closed_spam: 'Closed, spam', closed_pool: 'Closed, moved to Caregiver Pool'
+  closed_inactive: 'Closed, inactive', closed_spam: 'Closed, spam', closed_pool: 'Closed, moved to Caregiver Pool',
+  closed_linked: 'Linked to the person they called about'
 };
-const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other','closed_inactive','closed_spam','closed_pool'];
+const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other','closed_inactive','closed_spam','closed_pool','closed_linked'];
 const PIPELINE_DONE_STATUSES = ['authorized','transfer_complete'];
 
 // ============================================================================
@@ -7064,6 +7163,8 @@ function reopenLead(id) {
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === id);
   if (!p) return;
+  // A linked lead reopens by taking them off the person they were linked to.
+  if (p.status === 'closed_linked') { const o = rpOwnerOf(p); if (o) return rpUnlink(o.kind, o.owner.id, o.contact.id, true); }
   p.status = 'nurturing';
   delete p.closedAt;
   if (!p.notes) p.notes = [];
@@ -7215,6 +7316,155 @@ function lpWhen(v){
       d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
 }
 
+// ============================================================================
+// CONTACTS AND LINKING (2026-10-29, her approved mockup 6CxaqzDSJABjRYnGxc6tZg)
+// A family member or attendant who calls often comes in as a lead. Link them to the person they called
+// about (a consumer or another lead): they go on that person's Contacts, their calls and texts show on
+// that profile (the phone book points their number there), and their own lead closes as closed_linked.
+// Unlink puts everything back. The rules live in CDSRules.linkLead / addContact / unlinkContact.
+// Nothing is sent to anyone and GoHighLevel is not touched.
+// ============================================================================
+let _lkPick = null, _rpAsk = '';
+const _rpOwner = (kind, id) => kind === 'consumer' ? getData('consumers').find(c => String(c.id) === String(id)) : getData('pipeline').find(p => p.id === id);
+// Where a linked lead hangs now: { kind, owner, contact }.
+function rpOwnerOf(lead) {
+  const L = lead && lead.linkedTo;
+  if (!L) return null;
+  const owner = _rpOwner(L.kind, L.id);
+  const contact = owner && CDSRules.relatedPeople(owner).find(x => x.fromLead === lead.id);
+  return contact ? { kind: L.kind, owner, contact } : null;
+}
+async function _rpSave(kind) {
+  // Save both lists: a link changes the lead and the consumer (or two leads) together.
+  await setData('pipeline', getData('pipeline'));
+  if (kind === 'consumer') await setData('consumers', getData('consumers'));
+}
+function _rpRefresh() {
+  renderPipeline();
+  if (document.getElementById('page-leadprofile')?.classList.contains('active')) renderLeadProfile();
+  if (document.getElementById('page-profile')?.classList.contains('active')) renderProfile();
+  updateDashboard();
+}
+
+function openLinkLead(id) {
+  const p = getData('pipeline').find(x => x.id === id);
+  if (!p) return;
+  _lkPick = null;
+  document.getElementById('lk_id').value = id;
+  document.getElementById('lk_title').textContent = 'Who is ' + (p.name || 'this') + '?';
+  document.getElementById('lk_intro').textContent = (p.name || 'They') + ' came in as a lead, but called about someone else. Link them to that person.';
+  document.getElementById('lk_q').value = '';
+  document.getElementById('lk_rel').value = '';
+  document.getElementById('lk_phone').value = p.phone || '';
+  document.querySelectorAll('input[name="lk_role"]').forEach(r => { r.checked = r.value === (p.whoCalled === 'pair' ? 'attendant' : p.whoCalled === 'family' ? 'family' : ''); });
+  document.getElementById('lk_err').textContent = '';
+  lkRender();
+  openModal('linkLeadModal');
+  setTimeout(() => document.getElementById('lk_q').focus(), 50);
+}
+function lkRender() {
+  const id = document.getElementById('lk_id').value;
+  const q = document.getElementById('lk_q').value.trim().toLowerCase();
+  const list = document.getElementById('lk_list');
+  const people = getData('consumers').filter(c => c && c.id && c.name).map(c => ({ kind: 'consumer', id: String(c.id), name: c.name,
+      sub: (CDSRules.isActive(c) ? 'Consumer' : 'Consumer, ' + (c.status || 'inactive')) + (c.county ? ', ' + c.county + ' County' : '') }))
+    .concat(getData('pipeline').filter(p => p && p.id && p.id !== id && !PIPELINE_CLOSED_STATUSES.includes(p.status) && p.name)
+      .map(p => ({ kind: 'lead', id: p.id, name: p.name, sub: 'Lead, ' + (PIPELINE_TYPE_LABELS[p.type] || 'Still deciding') })));
+  const shown = q.length < 2 ? (_lkPick ? people.filter(x => x.kind === _lkPick.kind && x.id === _lkPick.id) : [])
+    : people.filter(x => x.name.toLowerCase().includes(q)).slice(0, 12);
+  list.innerHTML = shown.map(x => '<button type="button" role="option" aria-selected="' + !!(_lkPick && _lkPick.kind === x.kind && _lkPick.id === x.id) + '"' +
+    ' class="' + (_lkPick && _lkPick.kind === x.kind && _lkPick.id === x.id ? 'on' : '') + '" onclick="lkChoose(\'' + x.kind + '\',\'' + esc(x.id) + '\')"><b>' + esc(x.name) + '</b><span>' + esc(x.sub) + '</span></button>').join('') +
+    (q.length >= 2 && !shown.length ? '<div class="field-note" style="padding:10px 14px">Nobody by that name. Check the spelling, or add them as a lead first.</div>' : '');
+  const p = getData('pipeline').find(x => x.id === id) || {};
+  const who = p.name || 'They';
+  const t = _lkPick && _rpOwner(_lkPick.kind, _lkPick.id);
+  document.getElementById('lk_what').innerHTML = !t ? 'Pick the person they called about.'
+    : _lkPick.kind === 'consumer'
+      ? esc(who) + ' goes on <b>' + esc(t.name) + '</b>’s Contacts. Their calls and texts show on ' + esc(t.name) + '’s profile, and their lead closes as linked. Nothing is sent to anyone.'
+      : 'The two leads become one: ' + esc(who) + ' goes on <b>' + esc(t.name) + '</b>’s lead as a contact, and comes along when ' + esc(t.name) + ' becomes a consumer. Nothing is sent to anyone.';
+  document.getElementById('lk_go').textContent = t ? 'Link ' + String(who).split(' ')[0] + ' to ' + String(t.name).split(' ')[0] : 'Link them';
+}
+function lkChoose(kind, id) {
+  _lkPick = { kind, id };
+  const t = _rpOwner(kind, id);
+  if (t) document.getElementById('lk_q').value = t.name;
+  lkRender();
+}
+async function saveLinkLead() {
+  const id = document.getElementById('lk_id').value;
+  const role = (document.querySelector('input[name="lk_role"]:checked') || {}).value || '';
+  const err = document.getElementById('lk_err');
+  if (!_lkPick) { err.textContent = 'Pick who they called about from the list.'; return; }
+  const kind = _lkPick.kind;
+  const r = CDSRules.linkLead({ pipeline: getData('pipeline'), consumers: getData('consumers') }, id, _lkPick,
+    { role, relation: document.getElementById('lk_rel').value, phone: document.getElementById('lk_phone').value.trim(), by: _ldWhoBy() });
+  if (r.error) { err.textContent = r.error; return; }
+  await _rpSave(kind);
+  closeModal('linkLeadModal');
+  _rpRefresh();
+}
+
+function openAddContact(kind, ownerId) {
+  const o = _rpOwner(kind, ownerId);
+  if (!o) return;
+  document.getElementById('rpc_kind').value = kind;
+  document.getElementById('rpc_owner').value = ownerId;
+  document.getElementById('rpc_title').textContent = 'Add a contact for ' + (o.name || 'them');
+  ['rpc_name', 'rpc_phone', 'rpc_rel'].forEach(f => document.getElementById(f).value = '');
+  document.querySelectorAll('input[name="rpc_role"]').forEach(r => r.checked = false);
+  document.getElementById('rpc_err').textContent = '';
+  openModal('contactModal');
+}
+async function saveContact() {
+  const kind = document.getElementById('rpc_kind').value, o = _rpOwner(kind, document.getElementById('rpc_owner').value);
+  if (!o) return;
+  const r = CDSRules.addContact(o, { name: document.getElementById('rpc_name').value, phone: document.getElementById('rpc_phone').value,
+    role: (document.querySelector('input[name="rpc_role"]:checked') || {}).value, relation: document.getElementById('rpc_rel').value }, { by: _ldWhoBy() });
+  if (r.error) { document.getElementById('rpc_err').textContent = r.error; return; }
+  await _rpSave(kind);
+  closeModal('contactModal');
+  _rpRefresh();
+}
+// Unlink asks inside the card first (pop-ups can be blocked inside GoHighLevel).
+function rpAsk(contactId) { _rpAsk = contactId; _rpRefresh(); }
+async function rpUnlink(kind, ownerId, contactId, sure) {
+  if (!sure) return rpAsk(contactId);
+  const o = _rpOwner(kind, ownerId);
+  if (!o) return;
+  const r = CDSRules.unlinkContact({ pipeline: getData('pipeline'), consumers: getData('consumers') }, o, contactId, { by: _ldWhoBy() });
+  _rpAsk = '';
+  if (r.error) { alert(r.error); return; }
+  await _rpSave(kind);
+  _rpRefresh();
+}
+// The Contacts card, on a lead profile (kind 'lead') or a consumer profile (kind 'consumer').
+function rpCardHtml(kind, o) {
+  const list = CDSRules.relatedPeople(o), oid = esc(String(o.id));
+  const rows = list.map(x => {
+    const lead = x.fromLead ? getData('pipeline').find(p => p.id === x.fromLead) : null;
+    const ask = _rpAsk === x.id;
+    return '<div class="rp-row"><div><b>' + esc(x.name || 'No name') + '</b><span class="rp-tag ' + esc(x.role) + '">' + esc(CDSRules.CONTACT_ROLES[x.role] || 'Contact') + '</span>' +
+      '<small>' + esc([x.relation, x.phone].filter(Boolean).join('. ') || 'No phone yet') + '</small>' +
+      '<small>' + (x.fromLead ? 'Linked from their lead' : 'Added') + (x.at && !isNaN(Date.parse(x.at)) ? ' ' + esc(_niceDay(CDSRules.isoLocal(new Date(x.at)))) : '') + (x.by ? ' by ' + esc(x.by) : '') +
+        (lead ? '. <button type="button" class="rp-linkbtn" onclick="openLeadProfile(\'' + esc(lead.id) + '\')">Their lead notes</button>' : '') + '</small></div>' +
+      (ask ? '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn btn-sm btn-primary" onclick="rpUnlink(\'' + kind + '\',\'' + oid + '\',\'' + esc(x.id) + '\',true)">' + (x.fromLead ? 'Yes, unlink. Their lead opens again' : 'Yes, take them off') + '</button>' +
+          '<button type="button" class="btn btn-sm btn-outline" onclick="rpAsk(\'\')">Keep</button></div>'
+        : '<button type="button" class="rp-linkbtn" onclick="rpUnlink(\'' + kind + '\',\'' + oid + '\',\'' + esc(x.id) + '\')">' + (x.fromLead ? 'Unlink' : 'Remove') + '</button>') +
+      '</div>';
+  }).join('');
+  return '<div class="card rp-card" style="padding:18px 20px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><b style="color:var(--primary)">Contacts</b>' +
+      '<button type="button" class="btn btn-sm btn-outline" onclick="openAddContact(\'' + kind + '\',\'' + oid + '\')">+ Add a contact</button></div>' +
+    '<div class="field-note" style="margin:2px 0 6px">' + (kind === 'consumer' ? esc(o.name) + ' is the boss. These are the people who call about them.' : 'Family and attendants who call about ' + esc(o.name || 'them') + '. They move to Consumers with them.') + '</div>' +
+    (rows || '<div class="field-note">Nobody yet.</div>') + '</div>';
+}
+// Phones and names for "Calls and texts", so contacts show before the phone book catches up.
+function rpPhones(o) { return [o.phone].concat(CDSRules.relatedPeople(o).map(x => x.phone)).filter(Boolean).join(','); }
+function rpNames(o) {
+  return CDSRules.relatedPeople(o).filter(x => x.phone).map(x => String(x.phone).replace(/\D/g, '').slice(-10) + '=' +
+    encodeURIComponent((x.name || 'Contact') + ', ' + (x.relation || (CDSRules.CONTACT_ROLES[x.role] || '').toLowerCase()))).join('|');
+}
+
 function renderLeadProfile(){
   const host = document.getElementById('lprof_body'); if(!host) return;
   const p = getData('pipeline').find(x => x.id === _lprofId);
@@ -7241,6 +7491,18 @@ function renderLeadProfile(){
     row('Where they are', ({ready:'Wants to switch now', shopping:'Calling around', unsure:'Unsure'})[p.readiness]) +
     '</div>';
 
+  // ---- linked to the person they called about (2026-10-29) ----
+  if (p.status === 'closed_linked' && p.linkedTo) {
+    const o = rpOwnerOf(p), L = p.linkedTo;
+    html += '<div class="alert alert-info" style="margin-bottom:14px;font-size:14px"><div><b>Linked to ' + esc(L.name || 'someone') + '</b> as ' +
+      esc(o && o.contact.relation ? o.contact.relation + ', ' : '') + esc((CDSRules.CONTACT_ROLES[L.role] || 'contact').toLowerCase()) + '. Their calls and texts show on ' + esc(L.name || 'that') + '\u2019s profile.' +
+      '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">' +
+        (L.kind === 'consumer' ? '<button class="btn btn-sm btn-primary" onclick="openProfile(\'' + esc(L.id) + '\')">Open ' + esc(String(L.name || '').split(' ')[0] || 'them') + '</button>'
+          : '<button class="btn btn-sm btn-primary" onclick="openLeadProfile(\'' + esc(L.id) + '\')">Open ' + esc(String(L.name || '').split(' ')[0] || 'them') + '</button>') +
+        (o ? '<button class="btn btn-sm btn-outline" onclick="rpUnlink(\'' + o.kind + '\',\'' + esc(String(o.owner.id)) + '\',\'' + esc(o.contact.id) + '\',true)">Unlink. Open this lead again</button>' : '') +
+      '</div></div></div>';
+  }
+
   // ---- what to do next, and the messages that used to crowd the Leads table ----
   const card = window.CDSRules && window.CDSRules.leadCard ? window.CDSRules.leadCard(p, _leadCalls, _todayIso(), !!p.movedToConsumers) : null;
   const pid = esc(p.id);
@@ -7249,6 +7511,7 @@ function renderLeadProfile(){
       '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(card.next) + '</span></div>' : '') +
     '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
       '<button class="btn btn-primary" onclick="openPipelineEdit(\'' + pid + '\')">Log a call</button>' +
+      (p.status !== 'closed_linked' ? '<button class="btn btn-outline" onclick="openLinkLead(\'' + pid + '\')">Called about someone else? Link them</button>' : '') +
       (card && card.step === 'ready' ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
       (PIPELINE_CLOSED_STATUSES.includes(p.status)
         ? '<button class="btn btn-outline" onclick="reopenLead(\'' + pid + '\')">Reopen</button>'
@@ -7405,7 +7668,8 @@ function renderLeadProfile(){
       : '<div class="field-note">No notes yet.</div>') +
     '</div>';
 
-  html += '<div class="cds-comm-history" data-refs="lead:' + esc(p.id) + '" data-phones="' + esc(p.phone || '') + '"></div>';
+  if (p.status !== 'closed_linked') html += rpCardHtml('lead', p);
+  html += '<div class="cds-comm-history" data-refs="lead:' + esc(p.id) + '" data-phones="' + esc(rpPhones(p)) + '" data-names="' + esc(rpNames(p)) + '"></div>';
   host.innerHTML = html;
   if (window.cdsCommHistory) window.cdsCommHistory(host);
   mountLeadEnrollCard(p);
@@ -8343,9 +8607,11 @@ function fuCheckin(cid, day, family, line) {
 window.cdsCommHistory = function (root) {
   if (!root || !_db) return;
   root.querySelectorAll('.cds-comm-history').forEach(el => commHistoryFill(el,
-    (el.dataset.refs || '').split(',').filter(Boolean), (el.dataset.phones || '').split(',').filter(Boolean)));
+    (el.dataset.refs || '').split(',').filter(Boolean), (el.dataset.phones || '').split(',').filter(Boolean),
+    Object.fromEntries((el.dataset.names || '').split('|').filter(Boolean).map(x => { const i = x.indexOf('='); return [x.slice(0, i), decodeURIComponent(x.slice(i + 1))]; }))));
 };
-async function commHistoryFill(el, refs, phones) {
+async function commHistoryFill(el, refs, phones, names) {
+  names = names || {};
   el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b><div class="field-note">Loading…</div></div>';
   let h;
   try { h = await _commCall({ action: 'history', refs, phones }); }
@@ -8354,18 +8620,35 @@ async function commHistoryFill(el, refs, phones) {
   const phoneIco = ico + '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>';
   const textIco = ico + '<path d="M4 5h16v11H8l-4 4z"/></svg>';
   const rows = (h.items || []).map(i => {
-    const who = (i.who || 'them') + (i.family ? ' (family)' : '');
+    // A contact (2026-10-29): "Kim (granddaughter, attendant)". Names typed on the record show before the phone book catches up.
+    const typed = names[i.phone10];
+    const who = typed ? typed.split(', ')[0] + ' (' + typed.split(', ').slice(1).join(', ') + ')'
+      : i.contact ? (i.who || 'Contact') + (i.detail ? ' (' + i.detail.replace(/ for .*$/, '') + ')' : '')
+      : (i.who || 'them') + (i.family ? ' (family)' : '');
+    i._who = typed ? typed.split(', ')[0] : i.contact || i.family ? (i.who || 'Contact') : 'main';
     const we = i.staff_name || 'We';
     const mins = i.seconds >= 60 ? Math.round(i.seconds / 60) + ' min' : i.seconds + ' sec';
     let t, missed = false;
     if (i.channel === 'sms') t = i.direction === 'inbound' ? 'Text from ' + who + ': "' + (i.body || '') + '"' : we + ' texted ' + who + ': "' + (i.body || '') + '"';
     else if (i.direction === 'inbound') { if (i.answered) t = who + ' called. ' + we + ' answered. ' + mins + '.'; else { missed = true; t = 'Missed call from ' + who + '.' + (i.voicemail ? ' Voicemail.' : ''); } }
     else t = i.answered ? we + ' called ' + who + '. Talked ' + mins + '.' : we + ' called ' + who + '. ' + (i.voicemail ? 'Went to their voicemail.' : 'No answer.');
-    return '<div class="ch-row"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small></div></div>';
+    return '<div class="ch-row" data-who="' + esc(i._who) + '"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small></div></div>';
   }).join('');
   el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b>' +
     '<div class="field-note" style="margin:2px 0 8px">From GoHighLevel, both CDS lines. A call never counts as a monthly check-in unless you record it.</div>' +
-    (rows ? '<div class="ch-list">' + rows + '</div>' : '<div class="field-note">No calls or texts yet.</div>') + '</div>';
+    (rows ? chFilterHtml(h.items || []) + '<div class="ch-list">' + rows + '</div>' : '<div class="field-note">No calls or texts yet.</div>') + '</div>';
+}
+// Everyone / one person, when contacts call too (2026-10-29).
+function chFilterHtml(items) {
+  const whos = [...new Set(items.map(i => i._who))];
+  if (whos.length < 2) return '';
+  return '<div class="ch-filter" role="group" aria-label="Show calls from">' + ['all'].concat(whos).map((w, n) =>
+    '<button type="button" class="' + (n ? '' : 'on') + '" aria-pressed="' + !n + '" onclick="chFilter(this,\'' + esc(w) + '\')">' + (w === 'all' ? 'Everyone' : w === 'main' ? 'Them' : esc(w)) + '</button>').join('') + '</div>';
+}
+function chFilter(btn, who) {
+  const card = btn.closest('.card');
+  card.querySelectorAll('.ch-filter button').forEach(b => { b.classList.toggle('on', b === btn); b.setAttribute('aria-pressed', b === btn); });
+  card.querySelectorAll('.ch-row').forEach(r => { r.style.display = who === 'all' || r.dataset.who === who ? '' : 'none'; });
 }
 
 function convertToConsumer(id) {
@@ -8374,6 +8657,7 @@ function convertToConsumer(id) {
   if (!p || !confirm(`Move ${p.name} to the active Consumer roster?`)) return;
   p.status = p.type === 'pccp' ? 'transfer_complete' : 'authorized';
   p.movedToConsumers = _todayIso();
+  _convertLeadId = p.id;   // addConsumer brings their Contacts along
   setData('pipeline', pipeline);
   // Pre-fill add consumer modal
   document.getElementById('c_name').value = p.name;
@@ -10141,7 +10425,8 @@ function renderProfile() {
         '<select onchange="setConsumerTrained(\'' + c.id + '\',this.value)" style="font-size:13px">' +
       [['no', 'Needed'], ['partial', 'Partly done'], ['yes', 'Done']].map(([v, l]) => '<option value="' + v + '"' + ((c.trained || 'no') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>') +
     (function () { const t = consumerToFinish(c);
-      return t.length ? line('Still to finish', '<span style="color:#9C6410">' + t.map(esc).join(', ') + '</span>') : line('Still to finish', 'nothing'); })();
+      return t.length ? line('Still to finish', '<span style="color:#9C6410">' + t.map(esc).join(', ') + '</span>') : line('Still to finish', 'nothing'); })() +
+    rpCardHtml('consumer', c);
   else if (tab === 'hours') body =
     (auth
       ? line('Prior authorization', esc(auth.priorAuth || 'none')) + line('Code', esc(auth.procedureCode || 'none')) +
@@ -10164,7 +10449,7 @@ function renderProfile() {
   else if (tab === 'closings') body = closingRecords(c);
   else if (tab === 'docs') body = consumerDocsHtml(c);
   else if (tab === 'calls') body =
-    '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(c.phone || '') + '"></div>';
+    '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"></div>';
   else body = c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>';
 
   host.innerHTML =

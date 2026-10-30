@@ -55,7 +55,7 @@ ok(R.CLOSED_LABELS.closed_pool === 'Moved to the Caregiver Pool', 'pool: label')
 // the page: switch read from agency_data, off by default, labels only when on
 const html = readFileSync(ROOT + '/index.html', 'utf8');
 ok(/const ldWhoLive = \(\) => getObj\('leadsWhoCalled'\)\.live === true;/.test(html), 'page: off unless leadsWhoCalled.live is true');
-ok(/'closed_pool'\]/.test(html), 'page: closed_pool is a closed status');
+ok(/'closed_pool'[,\]]/.test(html.slice(html.indexOf('PIPELINE_CLOSED_STATUSES ='), html.indexOf('PIPELINE_CLOSED_STATUSES =') + 200)), 'page: closed_pool is a closed status');
 ok(/cds-rules\.js\?v=(1[4-9]|[2-9]\d)\b/.test(html), 'page loads rules v=14 or later');
 ok(!/[—]/.test(Object.values(R.WHO_NEXT).join(' ') + Object.values(R.WHO_CALLED).join(' ')), 'no em dashes');
 

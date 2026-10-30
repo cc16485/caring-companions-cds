@@ -102,9 +102,23 @@ export function phoneBookRows({ pipeline = [], consumers = [], attendants = [], 
   const rows = [];
   const add = (phone, ref, kind, name, detail) => { const p = ten(phone); if (p) rows.push({ phone10: p, ref, kind, name: name || '', detail: detail || '' }); };
   const consumerByName = new Map(consumers.filter(c => c && c.name).map(c => [normName(c.name), c]));
-  for (const c of consumers) if (c && c.id) add(c.phone, 'consumer:' + c.id, 'consumer', c.name, c.status && c.status !== 'Active' ? c.status : '');
+  // Contacts (2026-10-29): family and attendants linked to someone point at that person's record.
+  const ROLE_WORD = { family: 'Family', attendant: 'Attendant', other: 'Contact' };
+  const addPeople = (r, ref, name) => {
+    for (const x of Array.isArray(r.relatedPeople) ? r.relatedPeople : []) {
+      if (!x || !x.phone) continue;
+      add(x.phone, 'family:' + ref, x.role === 'attendant' ? 'attendant' : 'family', x.name || ROLE_WORD[x.role] || 'Contact',
+        (x.relation ? x.relation + ', ' : '') + (ROLE_WORD[x.role] || 'Contact').toLowerCase() + ' for ' + name);
+    }
+  };
+  for (const c of consumers) if (c && c.id) {
+    add(c.phone, 'consumer:' + c.id, 'consumer', c.name, c.status && c.status !== 'Active' ? c.status : '');
+    addPeople(c, 'consumer:' + c.id, c.name);
+  }
   for (const p of pipeline) {
     if (!p || !p.id) continue;
+    // A linked lead's number now lives as a contact on the person they called about.
+    if (p.status === 'closed_linked') continue;
     // A lead already on Consumers is that consumer, so their numbers point there.
     const asConsumer = consumerByName.get(normName(p.name));
     const ref = asConsumer ? 'consumer:' + asConsumer.id : 'lead:' + p.id;
@@ -116,6 +130,7 @@ export function phoneBookRows({ pipeline = [], consumers = [], attendants = [], 
     for (const ph of [R.responsiblePartyPhone, R.responsiblePartyAltPhone])
       add(ph, 'family:' + ref, 'family', R.responsiblePartyName || 'Family', (R.responsiblePartyRelationship ? R.responsiblePartyRelationship + ' of ' : 'Family of ') + name);
     if (p.attendant && p.attendant.phone) add(p.attendant.phone, 'attendant:lead-' + p.id, 'attendant', p.attendant.name || 'Attendant', 'Attendant for ' + name);
+    addPeople(p, ref, name);
   }
   // Attendants: the old roster and Active Attendants (attendant_pool) can hold the same person.
   // Same phone and same name is one attendant; the pool record wins.
@@ -449,13 +464,15 @@ export function createComms(deps) {
     const own = [...new Set((Array.isArray(extraPhones) ? extraPhones : []).map(ten).filter(Boolean))].slice(0, 10);
     if (!refs.length && !own.length) return { items: [], phones: [] };
     const fam = refs.map(r => 'family:' + r);
-    const phones = (await q(`select distinct phone10, ref, kind, name from cds_phone_book where ref = any($1) or ref = any($2)`, [refs, fam]));
+    const phones = (await q(`select distinct phone10, ref, kind, name, detail from cds_phone_book where ref = any($1) or ref = any($2)`, [refs, fam]));
     for (const p of own) if (!phones.some(x => x.phone10 === p)) phones.push({ phone10: p, ref: '', kind: '', name: '' });
     if (!phones.length) return { items: [], phones: [] };
     const items = await q(`select id, channel, direction, at, phone10, status, seconds, answered, voicemail, staff_name, body from cds_comms
       where phone10 = any($1) order by at desc limit 60`, [[...new Set(phones.map(p => p.phone10))]]);
     const whoByPhone = new Map(phones.map(p => [p.phone10, p]));
-    return { items: items.map(i => ({ ...i, who: (whoByPhone.get(i.phone10) || {}).name || '', family: ((whoByPhone.get(i.phone10) || {}).kind === 'family') })),
+    const viaContact = p => String(p.ref || '').startsWith('family:');
+    return { items: items.map(i => { const w = whoByPhone.get(i.phone10) || {};
+               return { ...i, who: w.name || '', family: w.kind === 'family', contact: viaContact(w), detail: viaContact(w) ? (w.detail || '') : '' }; }),
              phones: phones.map(p => ({ phone10: p.phone10, name: p.name, kind: p.kind })) };
   }
   // Phones the office has called (answered or not), texted, or talked to when they called in, with
@@ -472,7 +489,7 @@ export function createComms(deps) {
     const rows = await q(`select distinct on (ref) ref, kind, name, detail from cds_phone_book where source='sync' and kind <> 'staff' order by ref, name`);
     const extra = [];
     for (const c of await agency('consumers')) if (c && c.id) extra.push({ ref: 'consumer:' + c.id, kind: 'consumer', name: c.name, detail: '' });
-    for (const p of await agency('pipeline')) if (p && p.id) extra.push({ ref: 'lead:' + p.id, kind: 'lead', name: p.name, detail: '' });
+    for (const p of await agency('pipeline')) if (p && p.id && p.status !== 'closed_linked') extra.push({ ref: 'lead:' + p.id, kind: 'lead', name: p.name, detail: '' });
     const all = [...new Map([...extra, ...rows].map(r => [r.ref, r])).values()];
     return { people: all.filter(r => r.name).map(r => ({ ref: r.ref, name: r.name, role: KIND_LABEL[r.kind] || r.kind, detail: r.detail || '' }))
       .sort((a, b) => a.name.localeCompare(b.name)) };
