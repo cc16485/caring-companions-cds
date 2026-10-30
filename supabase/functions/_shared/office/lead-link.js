@@ -33,14 +33,44 @@ export function createLeadLink(deps) {
     if (!/^[0-9A-Za-z]{16}$/.test(String(k || ''))) throw new LinkError(EXPIRED, 401);
     const l = await one('select * from cds_lead_links where token_hash=$1', [await tokenHash(k)]);
     if (!l || Date.parse(l.expires_at) < now()) throw new LinkError(EXPIRED, 401);
+    if (l.comm_id) return { l, lead: null };
     const lead = await one('select * from site_leads where id=$1 and agency_id=$2', [l.site_lead_id, AGENCY_ID]);
     if (!lead) throw new LinkError(EXPIRED, 401);
     return { l, lead };
   }
 
+  // A voicemail link (2026-10-29): the voicemail's note and words, Listen, call back, and whether
+  // anyone already did. Nothing to log here: calling back from GoHighLevel closes the follow-up.
+  async function voicemailOf(l) {
+    const v = await one(`select c.id, c.at, c.phone10, c.ghl_contact_id, c.conversation_id, c.seconds, n.note, n.final_note, n.transcript, n.status
+      from cds_comms c left join cds_call_notes n on n.comm_id = c.id where c.id=$1`, [l.comm_id]);
+    if (!v) throw new LinkError(EXPIRED, 401);
+    return v;
+  }
+  async function voicemailView(l) {
+    const v = await voicemailOf(l);
+    const at = Date.parse(v.at);
+    const back = v.phone10 ? await q(`select direction, channel, answered, staff_name, at from cds_comms where phone10=$1 and at > $2
+      and (direction='outbound' or (channel='call' and answered)) order by at desc limit 5`, [v.phone10, v.at]) : [];
+    const pretty = v.phone10 ? '(' + v.phone10.slice(0, 3) + ') ' + v.phone10.slice(3, 6) + '-' + v.phone10.slice(6) : 'A hidden number';
+    const contactUrl = deps.ghl && deps.ghl.appUrl ? (v.ghl_contact_id ? deps.ghl.appUrl('/contacts/detail/' + encodeURIComponent(v.ghl_contact_id))
+      : v.conversation_id ? deps.ghl.appUrl('/conversations/conversations/' + encodeURIComponent(v.conversation_id)) : null) : null;
+    const word = r => r.channel === 'sms' ? 'Texted' : r.answered ? 'Talked' : 'Called, no answer';
+    return {
+      kind: 'voicemail', me: l.person_name, name: pretty, first: 'them', phone: v.phone10 || '',
+      came_in: isNaN(at) ? '' : whenShort(at, now()),
+      note: v.final_note || v.note || '', transcript: v.transcript || '',
+      unread: !v.note ? (v.status === 'no_transcript' ? 'GoHighLevel has no words for this voicemail. Listen to it.' : 'Not read yet. Listen to it.') : '',
+      back: back.map(r => ({ by: r.staff_name || 'The office', what: word(r), at: whenShort(Date.parse(r.at), now()) })),
+      open_minutes: back.length ? null : Math.max(0, Math.round((now() - at) / 60000)),
+      contact_url: contactUrl, can_ring: !!deps.bridge && !!v.ghl_contact_id, can_listen: !!deps.recording,
+      followups_url: HUB + '#followups',
+    };
+  }
   async function view(k) {
     const { l, lead } = await linkOf(k);
     await q('update cds_lead_links set last_opened_at=$2 where token_hash=$1', [l.token_hash, new Date(now()).toISOString()]);
+    if (!lead) return voicemailView(l);
     const calls = await q('select by_name, outcome, note, at from cds_lead_calls where site_lead_id=$1 order by at desc limit 10', [lead.id]);
     const at = Date.parse(lead.submitted_at);
     const last = calls[0] || null;
@@ -70,6 +100,7 @@ export function createLeadLink(deps) {
 
   async function called(k, input) {
     const { l, lead } = await linkOf(k);
+    if (!lead) throw new LinkError('Call them back from GoHighLevel. That closes the follow-up for everyone.');
     const outcome = String(input.outcome || '');
     if (!OUTCOMES[outcome]) throw new LinkError('Pick what happened first.');
     const note = String(input.note || '').trim().slice(0, 300);
@@ -87,7 +118,18 @@ export function createLeadLink(deps) {
   async function ring(k) {
     const { l, lead } = await linkOf(k);
     if (!deps.bridge) throw new LinkError('Ringing your phone is not set up yet. Call from the CDS line, (417) 218-2888.');
+    if (!lead) {
+      const v = await voicemailOf(l);
+      if (!v.ghl_contact_id) throw new LinkError('This caller is not a GoHighLevel contact. Call from the CDS line, (417) 218-2888.');
+      return deps.bridge.ring({ email: l.person_email, name: l.person_name }, { id: 'voicemail:' + v.id, first_name: '', phone: v.phone10, ghl_contact_id: v.ghl_contact_id });
+    }
     return deps.bridge.ring({ email: l.person_email, name: l.person_name }, lead);
+  }
+  // The voicemail's recording, for Listen. Only for a voicemail link.
+  async function recording(k) {
+    const { l } = await linkOf(k);
+    if (!l.comm_id || !deps.recording) throw new LinkError('There is no recording here.', 404);
+    return deps.recording(l.comm_id);
   }
 
   async function handle(body) {
@@ -97,5 +139,5 @@ export function createLeadLink(deps) {
     if (action === 'ring') return ring(body.k);
     throw new LinkError('Unknown request');
   }
-  return { view, called, ring, handle };
+  return { view, called, ring, recording, handle };
 }

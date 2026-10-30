@@ -74,6 +74,9 @@ export const SWITCHES = [
   { key: 'call_notes', field: 'live', label: 'Call notes from recorded calls',
     does: v => 'After each answered call on the CDS lines of ' + (v.min_seconds || 60) + ' seconds or more, reads GoHighLevel\u2019s transcript and writes a short note and a suggested call back date for the person. The note waits on their profile and on Leads until someone presses OK; nothing is saved to the person or sent to anyone before that.',
     on: 'New recorded calls will get a note to check within about 10 minutes.', off: 'No new call notes. Notes already made stay where they are.' },
+  { key: 'voicemail_leads', field: 'live', label: 'Text when a voicemail sounds like a new lead',
+    does: v => 'Every voicemail on the CDS lines is read. When one sounds like someone new asking about CDS, ' + ((v.emails || []).map(firstName).join(' and ') || 'nobody yet') + ' get' + ((v.emails || []).length === 1 ? 's' : '') + ' a text with a private link to hear it and call back, weekdays 9am to 4pm (later ones wait for 9am). No text if someone already called them back. Nothing is sent to the caller. While off, the texts are written as practice only.',
+    on: 'The next voicemail that sounds like a new lead will text Samantha and Zach.', off: 'No voicemail texts. Voicemails are still read, and Follow-ups shows what they said.' },
 ];
 function hour(h) { h = +h; return (h % 12 || 12) + (h < 12 ? 'am' : 'pm'); }
 

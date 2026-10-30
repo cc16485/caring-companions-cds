@@ -45,6 +45,10 @@ await pg.exec(strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8')));
 const NOTES_SQL = strip(readFileSync(ROOT + '/call_notes.sql', 'utf8'));
 await pg.exec(NOTES_SQL); await pg.exec(NOTES_SQL);
 ok(true, 'call_notes.sql runs twice');
+// voicemail leads (2026-10-29): voicemails get notes too; links can point at a voicemail
+await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
+await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/voicemail_leads.sql', 'utf8')));
 const s0 = (await pg.query(`select value from cds_match_settings where key='call_notes'`)).rows[0].value;
 ok(s0.live === false && s0.min_seconds === 60 && !!s0.since, 'starts off, 60 seconds, only calls from now on');
 for (const role of ['anon', 'authenticated']) {
@@ -102,7 +106,7 @@ const quiet = call('4175550102', 8, 200);         // Walter: no transcript yet
 const missed = call('4175550102', 9, 0, 'no-answer');
 
 let r = await tick(20);
-ok(r.ok && !('notes' in r) && (await rows()).length === 0, 'switch off: no notes, nothing sent to Claude');
+ok(r.ok && !r.notes && (await rows()).length === 0, 'switch off: no notes for answered calls, nothing sent to Claude (voicemails have their own setting)');
 ok(aiCalls.length === 0, 'Claude was not asked');
 
 await pg.query(`update cds_match_settings set value = jsonb_set(value, '{live}', 'true') where key='call_notes'`);

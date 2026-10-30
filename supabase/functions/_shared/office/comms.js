@@ -104,9 +104,10 @@ export function plainMessage(m, conv) {
 export const NOTE_MODEL = 'claude-opus-5-5';
 export const NOTE_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['about_person', 'note', 'call_back', 'people'],
+  required: ['about_person', 'new_lead', 'note', 'call_back', 'people'],
   properties: {
     about_person: { type: 'boolean' },
+    new_lead: { type: 'boolean' },
     note: { type: 'string' },
     call_back: { type: 'string' },
     people: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'relation', 'phone'],
@@ -120,7 +121,9 @@ const NOTE_SYSTEM = [
   'Never use em dashes. Do not mention the transcript, the recording or yourself.',
   'call_back: a date as YYYY-MM-DD only when a call back day was agreed or is clearly needed (count from the call date; "Friday" means the next Friday after the call date). Otherwise an empty string.',
   'people: everyone named on the call other than the office staff and the person the hub thinks this is, who matters to their care (family, an attendant, a case manager): their name, how they relate to the client in one or two words, and a phone number only if it was said aloud (digits only, else empty).',
-  'about_person: false only when the call is clearly not about that person (a wrong number, or a call about a different client). Otherwise true.'
+  'about_person: false only when the call is clearly not about that person (a wrong number, or a call about a different client). Otherwise true.',
+  'new_lead: true only when the caller is someone new asking about getting care or CDS services for themselves or someone in their family, or a case manager or other referral source sending someone new. False for a current client, attendant or family member calling about existing care, a job seeker, a sales call, a wrong number, or anything unclear.',
+  'Some calls are a voicemail: nobody answered and the caller left a message. Then write what they asked for and how to reach them.'
 ].join('\n');
 // GoHighLevel's transcription: pieces with a speaker channel and the words (the same reading as the Staffing hub's call reader).
 export function transcriptText(t) {
@@ -136,7 +139,8 @@ export function transcriptText(t) {
 export function noteRequest(ctx) {
   const lines = [
     'Call date: ' + ctx.weekday + ', ' + ctx.day + '.',
-    (ctx.direction === 'outbound' ? 'The office called them' : 'They called the office') + (ctx.staff ? ' (' + ctx.staff + ' for the office)' : '') + '. ' + ctx.minutes + ' minutes.',
+    ctx.voicemail ? 'They called the office, nobody answered, and they left this voicemail.'
+      : (ctx.direction === 'outbound' ? 'The office called them' : 'They called the office') + (ctx.staff ? ' (' + ctx.staff + ' for the office)' : '') + '. ' + ctx.minutes + ' minutes.',
     'The hub thinks this is: ' + (ctx.who ? ctx.who + (ctx.role ? ', ' + ctx.role : '') + (ctx.detail ? ' (' + ctx.detail + ')' : '') : 'an unknown number') + '.',
     '<transcript>\n' + ctx.transcript + '\n</transcript>'
   ];
@@ -157,7 +161,7 @@ export function cleanNote(resp, day) {
   const cb = /^\d{4}-\d{2}-\d{2}$/.test(String(j.call_back || '')) && !isNaN(Date.parse(j.call_back)) && j.call_back >= day ? j.call_back : '';
   const people = (Array.isArray(j.people) ? j.people : []).slice(0, 6).map(x => ({ name: noDash(x && x.name).slice(0, 80), relation: noDash(x && x.relation).slice(0, 40),
     phone: ten(x && x.phone) })).filter(x => x.name);
-  return { note, followup: cb, people, about: j.about_person !== false };
+  return { note, followup: cb, people, about: j.about_person !== false, newLead: j.new_lead === true };
 }
 
 // ---------- the phone book ----------
@@ -466,28 +470,42 @@ export function createComms(deps) {
     const r = await one(`select value from cds_match_settings where key='call_notes'`);
     return r && r.value && typeof r.value === 'object' ? r.value : null;
   }
+  // Voicemail leads (2026-10-29): voicemails get a note too, read even while call_notes is off.
+  async function voicemailSettings() {
+    const r = await one(`select value from cds_match_settings where key='voicemail_leads'`);
+    return r && r.value && typeof r.value === 'object' ? r.value : null;
+  }
   const chicago = ms => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
   const weekdayOf = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'long' });
   // A few calls per run, oldest first. A call too new for a transcript waits for the next run; after
   // 30 minutes with none it is saved as no_transcript so it is never quietly missing (her rule).
-  async function makeNotes(ns) {
+  // ns = call_notes (answered calls, when live), vs = voicemail_leads (voicemails left on a CDS line).
+  async function makeNotes(ns, vs) {
     if (!deps.ghl.transcript || !deps.ai) return { notes: 0, noteError: 'not set up on the server' };
-    const min = Math.max(30, Number(ns.min_seconds) || 60);
-    const from = Math.max(Date.parse(ns.since || 0) || 0, nowMs() - 2 * 86400000);
+    const on = ns && ns.live === true;
+    const min = Math.max(30, Number(on && ns.min_seconds) || 60);
+    const NEVER = Date.parse('9999-01-01T00:00:00Z');   // a side that is off reads nothing
+    const from = on ? Math.max(Date.parse(ns.since || 0) || 0, nowMs() - 2 * 86400000) : NEVER;
+    const vmMin = Math.max(10, Number(vs && vs.min_seconds) || 25);
+    // A voicemail is read once, up to 3 days back (the catch-up for her 11:33am call), never before vs.since.
+    const vmFrom = vs ? Math.max(Date.parse(vs.since || 0) || 0, nowMs() - 3 * 86400000) : NEVER;
     const todo = await q(`select c.*, n.attempts from cds_comms c left join cds_call_notes n on n.comm_id = c.id
-      where c.channel='call' and c.answered and c.seconds >= $1 and c.at >= $2 and c.at <= $3
+      where c.channel='call' and c.at <= $3
+        and ((c.answered and c.seconds >= $1 and c.at >= $2) or (c.voicemail and c.direction='inbound' and c.seconds >= $5 and c.at >= $6))
         and (n.comm_id is null or (n.status = 'failed' and n.attempts < 3)) order by c.at limit $4`,
-      [min, iso(from), iso(nowMs() - 2 * 60000), Math.max(1, Math.min(8, Number(ns.per_run) || 4))]);
-    let made = 0, waiting = 0, failed = 0, none = 0;
+      [min, iso(from), iso(nowMs() - 2 * 60000), Math.max(1, Math.min(8, Number((on ? ns : vs || {}).per_run) || 4)), vmMin, iso(vmFrom)]);
+    let made = 0, waiting = 0, failed = 0, none = 0, leads = 0;
     for (const c of todo) {
       const at = Date.parse(c.at);
       const who = c.phone10 ? resolve(await bookFor(c.phone10)) : { state: 'unknown', person: null };
-      const save = async (status, f = {}) => q(`insert into cds_call_notes (comm_id, phone10, person_ref, status, note, followup, people, transcript, model, error, attempts, made_at)
-          values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11, now())
+      const vm = !c.answered && !!c.voicemail;
+      const save = async (status, f = {}) => q(`insert into cds_call_notes (comm_id, phone10, person_ref, status, note, followup, people, transcript, model, error, attempts, made_at, voicemail, new_lead)
+          values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11, now(), $12, $13)
           on conflict (comm_id) do update set person_ref=excluded.person_ref, status=excluded.status, note=excluded.note, followup=excluded.followup, people=excluded.people,
-            transcript=coalesce(excluded.transcript, cds_call_notes.transcript), model=excluded.model, error=excluded.error, attempts=excluded.attempts, made_at=now()`,
+            transcript=coalesce(excluded.transcript, cds_call_notes.transcript), model=excluded.model, error=excluded.error, attempts=excluded.attempts, made_at=now(),
+            voicemail=excluded.voicemail, new_lead=excluded.new_lead`,
         [c.id, c.phone10 || null, who.person ? who.person.ref : null, status, f.note || null, f.followup || null, JSON.stringify(f.people || []),
-         f.transcript || null, f.model || null, f.error || null, (Number(c.attempts) || 0) + 1]);
+         f.transcript || null, f.model || null, f.error || null, (Number(c.attempts) || 0) + 1, vm, !!f.newLead]);
       if (who.state === 'staff' || who.state === 'ignore') { await save('skipped', { error: who.state === 'staff' ? 'a call with our own team' : 'marked Not for CDS' }); continue; }
       let text = '';
       try { text = transcriptText(await deps.ghl.transcript(c.id)); }
@@ -499,16 +517,21 @@ export function createComms(deps) {
       if (text.length > 200000) text = text.slice(0, 200000) + '\n(the rest of this very long call was left out)';
       const p = who.person;
       const req = noteRequest({ who: p ? p.name : '', role: p ? (KIND_LABEL[p.kind] || p.kind) : '', detail: p ? p.detail : '',
-        day: chicago(at), weekday: weekdayOf(at), direction: c.direction, staff: c.staff_name || '', minutes: Math.max(1, Math.round(c.seconds / 60)), transcript: text });
+        day: chicago(at), weekday: weekdayOf(at), direction: c.direction, staff: c.staff_name || '', minutes: Math.max(1, Math.round(c.seconds / 60)), transcript: text, voicemail: vm });
       let r;
       try { r = cleanNote(await deps.ai(req), chicago(at)); } catch (e) { r = { error: 'the note could not be written: ' + String(e && e.message || e).slice(0, 200) }; }
       if (r.error) { failed++; await save('failed', { error: r.error, transcript: text, model: NOTE_MODEL }); continue; }
       made++;
-      await save(r.about ? 'waiting' : 'not_about', { note: r.note, followup: r.followup, people: r.people, transcript: text, model: NOTE_MODEL });
+      // A new lead only from a voicemail, and only from a number that is not a current consumer, family or attendant.
+      const newLead = vm && r.newLead && (who.state === 'unknown' || (who.state === 'known' && who.person.kind === 'lead')
+        || (who.state === 'several' && who.candidates.every(x => x.kind === 'lead')));
+      if (newLead) leads++;
+      await save(r.about ? 'waiting' : 'not_about', { note: r.note, followup: r.followup, people: r.people, transcript: text, model: NOTE_MODEL, newLead });
     }
-    await q(`update cds_match_settings set value = value || jsonb_build_object('state', $1::jsonb), updated_at=now() where key='call_notes'`,
-      [JSON.stringify({ last_run: iso(nowMs()), last_made: made, last_failed: failed, last_no_transcript: none, last_waiting_for_transcript: waiting })]);
-    return { notes: made, notesFailed: failed, notesNoTranscript: none };
+    const state = JSON.stringify({ last_run: iso(nowMs()), last_made: made, last_failed: failed, last_no_transcript: none, last_waiting_for_transcript: waiting, last_new_leads: leads });
+    await q(`update cds_match_settings set value = value || jsonb_build_object('state', $1::jsonb), updated_at=now() where key = any($2)`,
+      [state, [on && 'call_notes', vs && 'voicemail_leads'].filter(Boolean)]);
+    return { notes: made, notesFailed: failed, notesNoTranscript: none, voicemailLeads: leads };
   }
   // Desktop step proof: a made-up call (no client details) through the real request and the real key.
   // Saves nothing.
@@ -559,8 +582,8 @@ export function createComms(deps) {
       const c = await cards(await settings());
       // Call notes: their own switch, and a failure here never stops the follow-ups above.
       let n = {};
-      const ns = await noteSettings();
-      if (ns && ns.live === true) n = await makeNotes(ns).catch(e => ({ noteError: String(e && e.message || e).slice(0, 300) }));
+      const ns = await noteSettings(), vs = await voicemailSettings();
+      if ((ns && ns.live === true) || vs) n = await makeNotes(ns, vs).catch(e => ({ noteError: String(e && e.message || e).slice(0, 300) }));
       return { ok: true, phoneBook: book, ...read, ...c, ...n };
     } catch (e) {
       await saveState({ last_error: String(e && e.message || e).slice(0, 300), last_error_at: iso(nowMs()) }).catch(() => {});
@@ -600,13 +623,32 @@ export function createComms(deps) {
       const v = cardView(t, await bookFor(t.phone10));
       const c = await one(`select ghl_contact_id from cds_comms where phone10=$1 and ghl_contact_id is not null order by at desc limit 1`, [t.phone10]);
       v.contactId = c ? c.ghl_contact_id : null;
+      // What their voicemail said (2026-10-29), once it has been read.
+      const vm = await one(`select coalesce(n.final_note, n.note) note, n.new_lead from cds_call_notes n join cds_comms c on c.id = n.comm_id
+        where c.phone10=$1 and n.voicemail and n.note is not null and c.at >= $2 order by c.at desc limit 1`, [t.phone10, iso(Date.parse(t.due_at) - 864e5)]);
+      if (vm) { v.voicemailNote = vm.note; v.newLead = !!vm.new_lead; }
       out.push(v);
     }
     const today = iso(nowMs()).slice(0, 10);
     const closedToday = await q(`select id, title, done_by, done_at, closed_reason from cds_tasks where area='followup' and done_at >= $1 order by done_at desc`, [today + 'T05:00:00Z']);
     const match = await one(`select count(*)::int n from cds_tasks where area='match' and done_at is null`);
     return { live: !!s.live, state: s.state || {}, cardsFrom: s.cards_from || null, cards: out, closedToday, caregiverListTodos: match ? match.n : 0,
+             voicemailProblems: await voicemailProblems(),
              today: chicagoDay(nowMs()), needs: NEEDS, people: peopleOf(s) };
+  }
+  // Voicemails nobody could read, or whose lead text did not send, while that number still needs a call back.
+  // Red on Today and in the 8am email until someone calls (her rule: nothing fails silently).
+  async function voicemailProblems() {
+    let rows;
+    try {
+      rows = await q(`select c.id, c.at, c.phone10, c.conversation_id, n.status, n.error, n.lead_alert_failed from cds_call_notes n join cds_comms c on c.id = n.comm_id
+        where n.voicemail and c.at > $1 and (n.status = 'no_transcript' or (n.status = 'failed' and n.attempts >= 3) or n.lead_alert_failed is not null)
+          and (c.phone10 is null or exists (select 1 from cds_tasks t where t.area='followup' and t.done_at is null and t.phone10 = c.phone10))
+        order by c.at desc limit 20`, [iso(nowMs() - 7 * 864e5)]);
+    } catch (e) { return []; }   // before voicemail_leads.sql runs
+    return rows.map(r => ({ id: r.id, at: r.at, phone10: r.phone10, conversationId: r.conversation_id,
+      why: r.lead_alert_failed ? 'The text about this voicemail did not send: ' + r.lead_alert_failed
+        : r.status === 'no_transcript' ? 'GoHighLevel has no words for this voicemail. Listen to it.' : 'This voicemail could not be read: ' + (r.error || 'unknown') }));
   }
   // Who a card can belong to: setting comm_center.people ({ email, name }), else the owners' emails.
   function peopleOf(s) {

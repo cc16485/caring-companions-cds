@@ -706,6 +706,7 @@ input, select, textarea { border-radius:10px; }
 .fu-events { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:6px; }
 .fu-events li { font-size:14.5px; line-height:1.45; }
 .fu-events li span { color:#55677a; font-size:13px; margin-right:6px; }
+.fu-said { margin-top:8px; background:#F1F5F9; border-radius:8px; padding:7px 10px; font-size:14px; line-height:1.45; }
 .fu-who { display:flex; flex-direction:column; gap:8px; background:#f6f5f0; border-radius:14px; padding:12px 14px; }
 .fu-who b { color:#0D365F; font-size:14.5px; }
 .fu-who input[type=text] { min-height:42px; padding:0 12px; border:1.5px solid #e4e1d8; border-radius:10px; font:inherit; font-size:14.5px; }
@@ -8701,6 +8702,7 @@ async function renderFollowups(reload) {
       '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') + '</div>' +
       (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
       '<ul class="fu-events">' + events + '</ul>' +
+      (c.voicemailNote ? '<div class="fu-said"><b>' + (c.newLead ? 'Sounds like a new lead. ' : '') + 'They said:</b> ' + esc(c.voicemailNote) + '</div>' : '') +
       (c.urgent && c.urgentWhy ? '<p class="fu-why">' + esc(c.urgentWhy) + '</p>' : '') +
       (c.kind === 'who_is_this' ? commWhoHtml(c) : '') +
       (!step2 ? '' : '<div class="fu-sel">' +
@@ -14725,6 +14727,10 @@ function renderDailyRoutine() {
     '<a href="#" onclick="showPage(\'pipeline\');return false" style="color:inherit;font-weight:600;text-decoration:underline">open Leads</a>' +
     '<div style="font-size:11.5px;margin-top:4px">' + esc(r.alert_failed || '') + '</div></div></div>').join('');
 
+  // A voicemail nobody could read, or whose text did not send (2026-10-29), stays red until someone calls back.
+  const vmHtml = ((typeof _comm !== 'undefined' && _comm && _comm.voicemailProblems) || []).map(v =>
+    '<div class="alert alert-danger" style="font-size:13px;margin-bottom:10px"><div><strong>Voicemail from ' + esc(v.phone10 ? _cnPhone(v.phone10) : 'a hidden number') + ' ' + esc(_commWhen(v.at)) + ' needs a listen.</strong> ' +
+    esc(v.why) + ' <a href="' + esc(CDS_GHL_APP + '/conversations/conversations/' + encodeURIComponent(v.conversationId || '')) + '" target="_blank" rel="noopener" style="color:inherit;font-weight:600;text-decoration:underline">open in GoHighLevel</a></div></div>').join('');
   const totalOpen = steps.reduce((t, s) => t + s.items.length, 0);
   // Everyone / Mine (build step 5, 2026-10-23): Mine shows the parts of Today this person owns.
   const me = (_acWho() || '').trim().toLowerCase();
@@ -14747,7 +14753,7 @@ function renderDailyRoutine() {
           ? 'Work down the list. Everything else can wait until it is clear.'
           : 'Nothing outstanding. This is what a clear morning looks like.') +
       '</div>' +
-      mineBar + systemHtml + attErr + failedHtml +
+      mineBar + systemHtml + attErr + failedHtml + vmHtml +
       shown.map(st =>
         '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--gray-200)">' +
           '<span style="flex:none;width:26px;height:26px;border-radius:50%;background:' +

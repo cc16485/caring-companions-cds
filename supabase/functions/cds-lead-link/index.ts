@@ -8,6 +8,8 @@
 // the only GoHighLevel change it makes is the contact's "Assigned to" and the tag
 // hub-call-bridge, on the person's own tap. Action 'setup' is the installer's check only
 // (header x-setup-key = secret CDS_SETUP_KEY): names and yes/no, never ids or numbers.
+// 2026-10-29 a link can be for a voicemail that sounds like a new lead (voicemail_leads): action
+// 'recording' plays that one voicemail, read from GoHighLevel. Nothing else.
 import postgres from 'npm:postgres@3.4.4';
 import { createLeadLink, LinkError } from '../_shared/office/lead-link.js';
 import { createCallBridge } from '../_shared/office/call-bridge.js';
@@ -58,10 +60,20 @@ async function findContact(who: { phone?: string; email?: string }): Promise<any
   return null;
 }
 
+// The voicemail's recording (CDS sub-account only), as the browser gets it.
+async function recording(commId: string) {
+  if (!env('CDS_GHL_TOKEN') || env('CDS_GHL_LOCATION_ID') !== CDS_LOCATION) throw new LinkError('GoHighLevel is not set up here.', 502);
+  const r = await fetch(GHL + '/conversations/messages/' + encodeURIComponent(commId) + '/locations/' + CDS_LOCATION + '/recording',
+    { headers: { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-04-15', Accept: '*/*', 'User-Agent': 'CaringCompanionsCDSHub/1.0 (+https://hub.caringcds.com)' } });
+  if (!r.ok) throw new LinkError(r.status === 404 ? 'GoHighLevel has no recording for this voicemail.' : 'The recording could not be read (' + r.status + ').', r.status === 404 ? 404 : 502);
+  return r;
+}
+
 const link = createLeadLink({
-  bridge,
+  bridge, recording,
   db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
   ghl: {
+    appUrl: (path: string) => APP + path,
     async contactUrl(who: { contactId?: string | null; phone?: string; email?: string }) {
       if (who.contactId) return APP + '/contacts/detail/' + encodeURIComponent(who.contactId);
       const c = await findContact(who);
@@ -100,6 +112,10 @@ Deno.serve(async (req) => {
       const key = env('CDS_SETUP_KEY');
       if (!key || key.length < 32 || req.headers.get('x-setup-key') !== key) return json({ error: 'not allowed' }, 401);
       return json(await bridge.setup());
+    }
+    if (body?.action === 'recording') {
+      const r = await link.recording(body.k) as Response;
+      return new Response(r.body, { headers: { ...h, 'Content-Type': r.headers.get('content-type') || 'audio/x-wav', 'Cache-Control': 'private, no-store' } });
     }
     return json(await link.handle(body));
   }
