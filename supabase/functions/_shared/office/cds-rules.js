@@ -757,14 +757,27 @@
 
   // The day a lead came in, for the card (2026-10-22). A website lead has the exact time
   // (addedAt, shown as the Central day); someone the office added uses the first contact date they typed.
-  function cameIn(p, todayIso) {
+  // The day a lead came in (yyyy-mm-dd), for the Leads sort.
+  function cameInIso(p) {
     if (!p) return '';
     const typed = /^\d{4}-\d{2}-\d{2}$/.test(String(p.firstContact || '')) ? p.firstContact : '';
     const at = Date.parse(p.addedAt || '');
-    let iso = '';
-    if (p.fromWebsite && !isNaN(at)) iso = isoLocal(new Date(at));
-    else if (typed) iso = typed;
-    else if (!isNaN(at)) iso = isoLocal(new Date(at));
+    if (p.fromWebsite && !isNaN(at)) return isoLocal(new Date(at));
+    if (typed) return typed;
+    if (!isNaN(at)) return isoLocal(new Date(at));
+    return '';
+  }
+  // The last day we talked to them: a call note (not the form, not a Who called tap) or a call
+  // logged from the lead link page. The hub adds office-line calls and texts on top.
+  function lastContactIso(p, calls) {
+    const notes = (Array.isArray(p && p.notes) ? p.notes : []).filter(n => n && n.date && !isFormNote(n) && !n.whoCalled)
+      .map(n => String(n.date).slice(0, 10));
+    const logged = p && p.siteLeadId ? (calls || []).filter(c => c && c.site_lead_id === p.siteLeadId && c.at)
+      .map(c => isoLocal(new Date(c.at))) : [];
+    return notes.concat(logged).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().pop() || '';
+  }
+  function cameIn(p, todayIso) {
+    const iso = cameInIso(p);
     if (!iso) return '';
     const sameYear = String(todayIso || '').slice(0, 4) === iso.slice(0, 4);
     return 'Came in ' + new Date(iso + 'T12:00:00').toLocaleDateString('en-US', sameYear
@@ -867,6 +880,7 @@
     // needsToday: a call that should happen today (the Leads summary line).
     const needsToday = (step === 'call' && (tone === 'late' || tone === 'today')) || (step === 'state' && tone === 'late');
     return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '', came: cameIn(p, todayIso),
+             cameIso: cameInIso(p), lastIso: lastContactIso(p, calls),
              whoCalled: wc, whoLabel: wc ? WHO_CALLED[wc] : '' };
   }
 
@@ -987,7 +1001,7 @@
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
-                    leadCard, formWho, LEAD_KINDS, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
+                    leadCard, formWho, LEAD_KINDS, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
