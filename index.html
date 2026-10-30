@@ -531,17 +531,6 @@ input, select, textarea { border-radius:10px; }
 .ld-add { display:inline-flex; align-items:center; gap:8px; min-height:48px; padding:0 24px; border:0; border-radius:999px; background:var(--cute-teal);
           color:#fff; font:inherit; font-weight:700; font-size:15px; cursor:pointer; box-shadow:0 6px 16px rgba(31,122,140,.25); }
 .ld-add:hover { background:#155A68; }
-.ld-steps { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap:14px; margin-bottom:16px; }
-.ld-step { display:flex; flex-direction:column; gap:8px; padding:16px 20px; border-radius:20px; border:2px solid #e4e1d8; background:transparent;
-           text-align:left; font:inherit; cursor:pointer; }
-.ld-step:hover { background:#fff; }
-.ld-step.on { background:#fff; border-color:var(--cute-teal); box-shadow:0 6px 18px rgba(31,122,140,.14); }
-.ld-step .ld-num { display:inline-flex; align-items:center; justify-content:center; min-width:36px; height:36px; padding:0 8px; border-radius:999px;
-                   background:#f2f0e9; color:#0D365F; font-weight:700; font-size:16px; }
-.ld-step.on .ld-num { background:var(--cute-teal); color:#fff; }
-.ld-step .ld-name { font-family:'Fraunces', Georgia, serif; font-size:20px; font-weight:600; color:#0D365F; }
-.ld-step .ld-desc { font-size:13.5px; color:#55677a; line-height:1.45; }
-.ld-step .ld-late { font-size:12.5px; font-weight:700; color:#9B2C1A; }
 .ld-tools { display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; margin-bottom:16px; }
 .ld-search { display:flex; align-items:center; gap:8px; flex:1 1 260px; max-width:380px; min-height:44px; padding:0 16px; background:#fff;
              border:1.5px solid #e4e1d8; border-radius:999px; }
@@ -562,16 +551,46 @@ input, select, textarea { border-radius:10px; }
 .ld-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(330px, 100%), 1fr)); gap:16px; }
 /* Leads list (her ask 10-29: cards too big, sort by came in / last contact): one row per person */
 .ld-sortpick { display:flex; align-items:center; gap:8px; min-height:44px; font-size:14.5px; color:#55677a; }
+/* GoHighLevel way, made better (her ask 10-29): Smart List tabs, toolbar, sortable columns, pages */
+.ld-tabs { display:flex; flex-wrap:wrap; gap:4px 22px; border-bottom:1.5px solid #e4e1d8; margin-bottom:14px; }
+.ld-tab { display:flex; align-items:center; gap:7px; min-height:46px; padding:0 2px; border:0; border-bottom:3px solid transparent; margin-bottom:-1.5px; background:none;
+  font:inherit; font-size:15px; font-weight:600; color:#3c4a58; cursor:pointer; }
+.ld-tab:hover { color:#0D365F; }
+.ld-tab.on { color:#14606F; border-bottom-color:var(--cute-teal); }
+.ld-tabn { min-width:22px; padding:1px 7px; border-radius:999px; background:#efece4; color:#3c4a58; font-size:12px; font-weight:700; text-align:center; }
+.ld-tab.on .ld-tabn { background:var(--cute-teal); color:#fff; }
+.ld-tab .ld-late { font-size:12px; font-weight:700; color:#9B2C1A; }
+.ld-count { display:inline-flex; align-items:center; min-height:34px; padding:0 14px; border-radius:999px; background:#EAF0FA; color:#2B4C7E; font-size:13.5px; font-weight:700; }
+.ld-pager { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:12px 4px 0; font-size:14px; color:#55677a; }
+.ld-pager:empty { display:none; }
+.ld-pagebtns { display:flex; gap:8px; align-items:center; }
+.ld-pagebtns select, .ld-pagebtns button { min-height:38px; padding:0 14px; border:1.5px solid #e4e1d8; border-radius:10px; background:#fff; font:inherit; font-size:14px; color:#14304d; cursor:pointer; }
+.ld-pagebtns button:disabled { color:#a8b0b9; cursor:default; }
+.ld-av { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:999px; font-size:12px; font-weight:700; }
+.ld-av.k-lead { background:#E3F3F1; color:#14606F; } .ld-av.k-referral { background:#FFF1D6; color:#7A4E0B; } .ld-av.k-pccp { background:#EAF0FA; color:#2B4C7E; }
+.ld-nm { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.ld-tags { display:flex; flex-wrap:wrap; gap:4px; }
+.ld-tags .ld-web { padding:1px 8px; font-size:11px; }
+.ld-c-phone { min-width:0; }
+.ld-c-phone .ld-tel { display:inline-flex; flex-wrap:wrap; align-items:center; gap:2px 6px; flex-basis:auto; font-size:13.5px; white-space:nowrap; }
+.ld-c-phone .ld-tel small { flex-basis:100%; padding-left:20px; font-weight:600; font-size:12px; color:#55677a; }
+.ld-c-name .ld-kind { max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+.ld-row .ld-btns { justify-content:flex-end; }
+.ld-act { display:inline-flex; align-items:center; gap:6px; color:var(--cute-ink); white-space:nowrap; }
+.ld-act svg { color:#55677a; }
+.ld-arrow { display:inline-flex; vertical-align:middle; font-size:10px; opacity:.75; }
+.ld-colbtn.on .ld-arrow { opacity:1; }
+.ld-colbtn { display:inline-flex; align-items:center; gap:4px; text-decoration:none !important; }
 .ld-sortpick select { min-height:40px; padding:0 10px; border:1.5px solid #e4e1d8; border-radius:12px; background:#fff; font:inherit; font-size:14px; color:var(--cute-ink); }
 .ld-list { background:#fff; border-radius:20px; box-shadow:var(--cute-shadow); overflow:hidden; }
-.ld-row { display:grid; grid-template-columns:minmax(170px,1.3fr) 92px 104px 128px minmax(220px,3fr) auto; gap:4px 16px; align-items:center;
+.ld-row { display:grid; grid-template-columns:minmax(190px,1.4fr) 140px 90px 124px 124px minmax(200px,2.4fr) 196px; gap:4px 16px; align-items:center;
   padding:10px 18px; border-top:1px solid #efece4; }
 .ld-row:hover:not(.ld-headrow) { background:#fbfaf6; }
 .ld-row.closed { opacity:.65; }
 .ld-headrow { border-top:0; background:#f6f5f0; padding-top:8px; padding-bottom:8px; font-size:12px; font-weight:700; color:#55677a; text-transform:uppercase; letter-spacing:.04em; }
 .ld-colbtn { border:0; background:none; padding:0; font:inherit; color:inherit; text-transform:inherit; letter-spacing:inherit; text-align:left; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
 .ld-colbtn.on { color:#14606F; text-decoration:none; }
-.ld-c-name { display:flex; flex-wrap:wrap; align-items:center; gap:3px 8px; min-width:0; }
+.ld-c-name { display:flex; align-items:center; gap:10px; min-width:0; }
 .ld-namebtn { border:0; background:none; padding:0; font-family:'Fraunces', Georgia, serif; font-size:17px; font-weight:600; color:#0D365F; text-align:left; cursor:pointer; }
 .ld-namebtn:hover { text-decoration:underline; }
 .ld-c-name .ld-kind, .ld-c-name .wc { padding:2px 8px; font-size:11px; }
@@ -592,7 +611,7 @@ input, select, textarea { border-radius:10px; }
 @media (max-width: 900px) {
   .ld-headrow { display:none; }
   .ld-row { grid-template-columns:1fr 1fr; align-items:start; padding:12px 16px; }
-  .ld-c-name, .ld-c-about, .ld-btns { grid-column:1 / -1; }
+  .ld-c-name, .ld-c-phone, .ld-c-about, .ld-btns { grid-column:1 / -1; }
   .ld-lbl { display:block; font-size:11px; font-weight:700; color:#8a96a3; text-transform:uppercase; letter-spacing:.04em; }
   .ld-c-due { grid-column:1 / -1; }
   .ld-row .ld-btns button { flex:1 1 auto; }
@@ -726,11 +745,8 @@ button.fu-tile.check span { color:#14606F; }
 .ch-dot.missed { background:#FBE7E3; }
 .ch-row small { display:block; color:#55677a; font-size:12.5px; }
 @media (max-width: 600px) {
-  .ld-steps { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
-  .ld-step { padding:10px 8px; align-items:center; text-align:center; gap:4px; border-radius:16px; }
-  .ld-step > span:first-child { flex-direction:column; gap:4px !important; }
-  .ld-step .ld-name { font-size:15px; }
-  .ld-step .ld-desc { display:none; }
+  .ld-tabs { gap:2px 16px; }
+  .ld-tab { font-size:14px; }
   .ld-helpbtn { margin-left:0; }
 }
 
@@ -1004,7 +1020,8 @@ button.fu-tile.check span { color:#14606F; }
       </button>
     </div>
 
-    <div class="ld-steps" id="ldSteps" role="tablist" aria-label="Lead steps"></div>
+    <!-- 2026-10-29 her ask: "match the GHL way, but make better": Smart List style tabs, a toolbar, sortable columns, pages. -->
+    <div class="ld-tabs" id="ldSteps" role="tablist" aria-label="Lead steps"></div>
 
     <div class="ld-tools">
       <label class="ld-search">
@@ -1012,14 +1029,17 @@ button.fu-tile.check span { color:#14606F; }
         <span class="ld-sr">Find someone</span>
         <input type="search" id="ldSearch" placeholder="Find someone by name or phone" oninput="renderPipeline()">
       </label>
+      <span class="ld-count" id="ldCount"></span>
       <label class="ld-sortpick">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>
         <span>Sort</span>
         <select id="ldSort" onchange="ldSortBy(this.value)">
           <option value="need">Who to call first</option>
-          <option value="new">Came in: newest first</option>
-          <option value="old">Came in: oldest first</option>
-          <option value="quiet">Last contact: longest ago</option>
-          <option value="recent">Last contact: most recent</option>
+          <option value="came:desc">Came in: newest first</option>
+          <option value="came:asc">Came in: oldest first</option>
+          <option value="last:asc">Last activity: longest ago</option>
+          <option value="last:desc">Last activity: most recent</option>
+          <option value="name:asc">Name: A to Z</option>
         </select>
       </label>
       <label class="ld-closed">
@@ -1038,6 +1058,7 @@ button.fu-tile.check span { color:#14606F; }
     <!-- Who called (2026-10-22, her mockup 9FKrkUhoS3cmbTyymKpaSj): the switch row and filters, only when on -->
     <div id="ldWho"></div>
     <div class="ld-list" id="ldCards"></div>
+    <div class="ld-pager" id="ldPager"></div>
   </div>
 
   <!-- ── ACTIVE CONSUMERS SUB-SECTION ── -->
@@ -8117,7 +8138,7 @@ function lpSetBackground(value){
 
 // Leads (2026-10-21, her mockup): three steps and one card per person. Which
 // step, the who-they-are line and the Next line all come from CDSRules.leadCard.
-let _ldStep = 'call';
+let _ldStep = 'all';
 const LD_STEPS = [
   { id: 'call',  label: 'To call',        desc: 'New people and call backs that are due.' },
   { id: 'state', label: 'Sent to state',  desc: 'Paperwork is in. Waiting on the state.' },
@@ -8125,18 +8146,30 @@ const LD_STEPS = [
 ];
 const LD_KIND_CLASS = { lead: 'k-lead', referral: 'k-referral', pccp: 'k-pccp' };
 
-function ldPickStep(id) { _ldStep = id; renderPipeline(); }
+function ldPickStep(id) { _ldStep = id; _ldPage = 0; renderPipeline(); }
 
-// Sort (her ask 10-29): who to call first, the day they came in, or the last time we talked.
-let _ldSort = 'need';
-try { _ldSort = localStorage.getItem('ldSort') || 'need'; } catch (e) {}
+// Sort (her ask 10-29), the GoHighLevel way (her ask later 10-29): every column heading sorts, a second
+// click flips it. 'need' = who to call first. Saved per computer.
+let _ldSort = 'need', _ldPage = 0, _ldPer = 50;
+try {
+  const OLD = { new: 'came:desc', old: 'came:asc', quiet: 'last:asc', recent: 'last:desc' };   // the first sort menu's words
+  const v = localStorage.getItem('ldSort') || 'need'; _ldSort = OLD[v] || v;
+  _ldPer = +localStorage.getItem('ldPer') || 50;
+} catch (e) {}
 function ldSortBy(k) {
-  _ldSort = k;
+  _ldSort = k; _ldPage = 0;
   try { localStorage.setItem('ldSort', k); } catch (e) {}
   renderPipeline();
 }
-// Clicking a column heading flips between its two orders.
-function ldSortCol(col) { ldSortBy(col === 'came' ? (_ldSort === 'new' ? 'old' : 'new') : (_ldSort === 'quiet' ? 'recent' : 'quiet')); }
+// Clicking a heading sorts by it; clicking it again flips the order. When sorts by who to call first.
+const LD_FIRST_DIR = { name: 'asc', came: 'desc', last: 'asc' };
+function ldSortCol(col) {
+  if (col === 'need') return ldSortBy('need');
+  const [c, d] = _ldSort.split(':');
+  ldSortBy(col + ':' + (c === col ? (d === 'asc' ? 'desc' : 'asc') : LD_FIRST_DIR[col] || 'asc'));
+}
+function ldPage(n) { _ldPage = Math.max(0, n); renderPipeline(); document.getElementById('ldCards')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+function ldPer(n) { _ldPer = +n || 50; _ldPage = 0; try { localStorage.setItem('ldPer', String(_ldPer)); } catch (e) {} renderPipeline(); }
 const _ldDay = iso => {
   if (!iso) return '';
   const d = new Date(iso + 'T12:00:00');
@@ -8145,7 +8178,20 @@ const _ldDay = iso => {
 const _ldAgo = iso => {
   if (!iso) return '';
   const n = Math.round((new Date(_todayIso() + 'T12:00:00') - new Date(iso + 'T12:00:00')) / 864e5);
-  return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago';
+  return n <= 0 ? 'Today' : n === 1 ? 'Yesterday' : n < 14 ? n + ' days ago' : n < 60 ? Math.round(n / 7) + ' weeks ago' : Math.round(n / 30) + ' months ago';
+};
+// "8 hours ago" when we know the time of day (a call or text on the office line).
+const _ldAgoAt = at => {
+  const ms = Date.now() - Date.parse(at);
+  if (!(ms >= 0)) return '';
+  const h = Math.floor(ms / 36e5);
+  return h < 1 ? Math.max(1, Math.floor(ms / 6e4)) + ' min ago' : h < 24 ? h + (h === 1 ? ' hour ago' : ' hours ago') : _ldAgo(CDSRules.isoLocal(new Date(at)));
+};
+const _ldInitials = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
+const LD_ICON = {
+  call: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>',
+  note: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12l-4 4H4z"/><path d="M8 9h8M8 13h5"/></svg>',
+  sort: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>'
 };
 
 function renderPipeline() {
@@ -8186,14 +8232,15 @@ function renderPipeline() {
       : urgent.length <= 3 ? '<strong>' + (firstNames.length > 1 ? firstNames.slice(0, -1).join(', ') + ' and ' + firstNames.slice(-1) : firstNames[0]) + '</strong> ' + (urgent.length === 1 ? 'needs' : 'need') + ' you today.'
       : '<strong>' + urgent.length + ' people</strong> need you today.');
 
-  stepsEl.innerHTML = LD_STEPS.map(s => {
-    const inStep = open.filter(x => x.c.step === s.id);
+  // Tabs, like GoHighLevel's Smart Lists: All, then the three steps (the steps' words show on hover).
+  const tabs = [{ id: 'all', label: 'All', desc: 'Everyone still open.' }].concat(LD_STEPS);
+  if (!tabs.some(t => t.id === _ldStep)) _ldStep = 'all';
+  stepsEl.innerHTML = tabs.map(s => {
+    const inStep = s.id === 'all' ? open : open.filter(x => x.c.step === s.id);
     const late = inStep.filter(x => x.c.tone === 'late').length;
     const on = s.id === _ldStep;
-    return '<button type="button" role="tab" aria-selected="' + on + '" class="ld-step' + (on ? ' on' : '') + '" onclick="ldPickStep(\'' + s.id + '\')">' +
-      '<span style="display:flex;align-items:center;gap:12px"><span class="ld-num">' + inStep.length + '</span><span class="ld-name">' + s.label + '</span></span>' +
-      '<span class="ld-desc">' + s.desc + '</span>' +
-      (late ? '<span class="ld-late">' + late + ' late</span>' : '') + '</button>';
+    return '<button type="button" role="tab" aria-selected="' + on + '" class="ld-tab' + (on ? ' on' : '') + '" title="' + esc(s.desc) + '" onclick="ldPickStep(\'' + s.id + '\')">' +
+      esc(s.label) + ' <span class="ld-tabn">' + inStep.length + '</span>' + (late ? '<span class="ld-late">' + late + ' late</span>' : '') + '</button>';
   }).join('');
 
   const showClosed = document.getElementById('pipeShowClosed')?.checked;
@@ -8203,54 +8250,75 @@ function renderPipeline() {
   // Searching looks across every step, so nobody hides behind the wrong tab.
   const q = (document.getElementById('ldSearch')?.value || '').trim().toLowerCase();
   const qDigits = q.replace(/\D/g, '');
+  if (q !== (renderPipeline._q || '')) { renderPipeline._q = q; _ldPage = 0; }
   // Contacts count too: search finds Kim on Walter's lead, by name or number.
   const match = x => !q || [x.p].concat(CDSRules.relatedPeople(x.p)).some(r => String(r.name || '').toLowerCase().includes(q) ||
     (qDigits.length >= 3 && String(r.phone || '').replace(/\D/g, '').includes(qDigits)));
-  let shown = q ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
+  let shown = q || _ldStep === 'all' ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
   try { renderLdWho(shown, wcOn); } catch (e) { console.error('who called:', e); }
   if (wcOn && _ldWhoFilter !== 'all') shown = shown.filter(x => x.c.whoCalled === _ldWhoFilter);
-  // Last contact also counts office-line calls and texts (the same list that marks a website lead called).
-  // A call with their family or attendant (Contacts) counts as contact too.
+  if (showClosed) shown = shown.concat(closed.filter(match));
+  // Last activity: the newest of a call note, a call or text on the office line (theirs or their
+  // Contacts'), or a note from a linked lead. A call or text keeps its time of day.
   shown.forEach(x => {
-    const lines = [x.p.phone].concat(CDSRules.relatedPeople(x.p).map(r => r.phone)).map(ph => String(ph || '').replace(/\D/g, '').slice(-10))
-      .filter(Boolean).map(ph => _commReachedAt[ph]).filter(l => l && !isNaN(Date.parse(l))).map(l => R.isoLocal ? R.isoLocal(new Date(l)) : String(l).slice(0, 10));
-    const noteDays = CDSRules.linkedNotes(x.p, pipeline).filter(n => !CDSRules.isFormNote(n)).map(n => String(n.date || '').slice(0, 10));
-    x.last = [x.c.lastIso].concat(lines, noteDays).filter(Boolean).sort().pop() || '';
+    let at = '';
+    [x.p.phone].concat(CDSRules.relatedPeople(x.p).map(r => r.phone)).map(ph => String(ph || '').replace(/\D/g, '').slice(-10)).filter(Boolean)
+      .forEach(ph => { const l = _commReachedAt[ph]; if (l && !isNaN(Date.parse(l)) && (!at || Date.parse(l) > Date.parse(at))) at = l; });
+    const lineDay = at ? R.isoLocal(new Date(at)) : '';
+    const noteDays = CDSRules.linkedNotes(x.p, pipeline).filter(n => !CDSRules.isFormNote(n)).map(n => String(n.date || '').slice(0, 10)).concat(x.c.lastIso || []);
+    const noteDay = noteDays.filter(Boolean).sort().pop() || '';
+    x.last = [lineDay, noteDay].filter(Boolean).sort().pop() || '';
+    x.lastKind = !x.last ? '' : lineDay && lineDay >= noteDay ? 'call' : 'note';
+    x.lastAt = x.lastKind === 'call' ? at : '';
   });
   const need = (a, b) => a.c.sort - b.c.sort || String(a.c.followup).localeCompare(String(b.c.followup));
-  // Never talked to sorts as the longest ago; an unknown came-in day goes last either way.
+  const [col, dir] = _ldSort.split(':');
+  const sgn = dir === 'desc' ? -1 : 1;
+  // Never talked to sorts as the longest ago; an unknown came-in day goes last either way; ties: who to call first.
   const by = {
-    need,
-    new: (a, b) => (b.c.cameIso || '').localeCompare(a.c.cameIso || '') || need(a, b),
-    old: (a, b) => (a.c.cameIso || '9').localeCompare(b.c.cameIso || '9') || need(a, b),
-    quiet: (a, b) => (a.last || '').localeCompare(b.last || '') || need(a, b),
-    recent: (a, b) => (b.last || '').localeCompare(a.last || '') || need(a, b)
+    name: (a, b) => sgn * String(a.p.name || '').localeCompare(String(b.p.name || ''), 'en', { sensitivity: 'base' }) || need(a, b),
+    came: (a, b) => (!a.c.cameIso - !b.c.cameIso) || sgn * String(a.c.cameIso).localeCompare(String(b.c.cameIso)) || need(a, b),
+    last: (a, b) => sgn * (String(a.lastAt || a.last || '').localeCompare(String(b.lastAt || b.last || ''))) || need(a, b)
   };
-  if (!by[_ldSort]) _ldSort = 'need';
-  shown.sort(by[_ldSort]);
+  if (col !== 'need' && !by[col]) _ldSort = 'need';
+  shown.sort(_ldSort === 'need' ? need : by[col]);
   const sel = document.getElementById('ldSort');
   if (sel) sel.value = _ldSort;
-  if (showClosed) shown = shown.concat(closed.filter(match));
+  const cnt = document.getElementById('ldCount');
+  if (cnt) cnt.textContent = shown.length + (shown.length === 1 ? ' lead' : ' leads');
 
+  const pager = document.getElementById('ldPager');
   if (!shown.length) {
+    if (pager) pager.innerHTML = '';
     cardsEl.innerHTML = '<div class="ld-empty">' + (q ? 'Nobody matches that search.'
       : _ldStep === 'call' ? 'Nobody to call right now.'
       : _ldStep === 'state' ? 'Nobody is waiting on the state.'
-      : 'Nobody is ready to start yet.') + '</div>';
+      : _ldStep === 'ready' ? 'Nobody is ready to start yet.' : 'No open leads right now.') + '</div>';
     return;
   }
-  const arrow = (asc, desc) => _ldSort === asc ? ' &#9650;' : _ldSort === desc ? ' &#9660;' : '';
-  const head = '<div class="ld-row ld-headrow" role="row">' +
-    '<span>Name</span>' +
-    '<button type="button" class="ld-colbtn' + (_ldSort === 'new' || _ldSort === 'old' ? ' on' : '') + '" onclick="ldSortCol(\'came\')">Came in' + arrow('old', 'new') + '</button>' +
-    '<button type="button" class="ld-colbtn' + (_ldSort === 'quiet' || _ldSort === 'recent' ? ' on' : '') + '" onclick="ldSortCol(\'last\')">Last contact' + arrow('quiet', 'recent') + '</button>' +
-    '<span>When</span><span>About them and next step</span><span></span></div>';
-  cardsEl.innerHTML = head + shown.map(({ p, c, last }) => {
+  // Pages (50 at a time by default, like GoHighLevel's page size).
+  const pages = Math.max(1, Math.ceil(shown.length / _ldPer));
+  if (_ldPage >= pages) _ldPage = pages - 1;
+  const page = shown.slice(_ldPage * _ldPer, (_ldPage + 1) * _ldPer);
+  if (pager) pager.innerHTML = '<span>Page ' + (_ldPage + 1) + ' of ' + pages + '</span>' +
+    '<span class="ld-pagebtns"><label class="ld-sr" for="ldPer">Leads per page</label><select id="ldPer" onchange="ldPer(this.value)">' +
+      [20, 50, 100].map(n => '<option value="' + n + '"' + (n === _ldPer ? ' selected' : '') + '>' + n + ' a page</option>').join('') + '</select>' +
+    '<button type="button" onclick="ldPage(' + (_ldPage - 1) + ')"' + (_ldPage ? '' : ' disabled') + '>Prev</button>' +
+    '<button type="button" onclick="ldPage(' + (_ldPage + 1) + ')"' + (_ldPage + 1 < pages ? '' : ' disabled') + '>Next</button></span>';
+
+  const th = (key, label) => {
+    const on = key === 'need' ? _ldSort === 'need' : col === key;
+    const arrow = !on ? LD_ICON.sort : key === 'need' ? '&#9650;' : dir === 'asc' ? '&#9650;' : '&#9660;';
+    return '<button type="button" class="ld-colbtn' + (on ? ' on' : '') + '" aria-pressed="' + on + '" onclick="ldSortCol(\'' + key + '\')">' + label + ' <span class="ld-arrow">' + arrow + '</span></button>';
+  };
+  const head = '<div class="ld-row ld-headrow" role="row">' + th('name', 'Name') + '<span>Phone</span>' + th('came', 'Came in') + th('last', 'Last activity') +
+    th('need', 'When') + '<span>About them and next step</span><span></span></div>';
+  cardsEl.innerHTML = head + page.map(({ p, c, last, lastKind, lastAt }) => {
     const id = esc(p.id);
     const tel = String(p.phone || '').replace(/\D/g, '');
     const caller = !p.phone && CDSRules.relatedPeople(p).find(r => r.phone);
-    const phone = p.phone ? '<a class="ld-tel" href="tel:' + tel + '">' + esc(p.phone) + '</a>'
-      : caller ? '<a class="ld-tel" href="tel:' + String(caller.phone).replace(/\D/g, '') + '">' + esc(caller.phone) + ' <small style="font-weight:600;color:#55677a">' + esc(String(caller.name).split(' ')[0] + (caller.relation ? ', ' + caller.relation : '')) + '</small></a>'
+    const phone = p.phone ? '<a class="ld-tel" href="tel:' + tel + '">' + LD_ICON.call + esc(p.phone) + '</a>'
+      : caller ? '<a class="ld-tel" href="tel:' + String(caller.phone).replace(/\D/g, '') + '">' + LD_ICON.call + esc(caller.phone) + ' <small>' + esc(String(caller.name).split(' ')[0] + (caller.relation ? ', ' + caller.relation : '')) + '</small></a>'
       : '<span class="ld-tel none">No phone yet</span>';
     const main = c.step === 'ready'
       ? '<button type="button" class="ld-move" onclick="convertToConsumer(\'' + id + '\')">Move to Consumers</button>'
@@ -8260,13 +8328,18 @@ function renderPipeline() {
     const shut = c.step !== 'closed'
       ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + ': inactive or spam" title="Close: inactive or spam">Close</button>' : '';
     const extra = ldWhoPicker(p, c) + ldPoolConfirm(p);
+    // Came in: the day, and the time when we know it (website leads).
+    const addedMs = Date.parse(p.addedAt || '');
+    const cameTime = c.cameIso && !isNaN(addedMs) && CDSRules.isoLocal(new Date(addedMs)) === c.cameIso ? new Date(addedMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
     return '<article class="ld-row' + (c.step === 'closed' ? ' closed' : '') + '" role="row">' +
-      '<div class="ld-c-name"><button type="button" class="ld-namebtn" onclick="openLeadProfile(\'' + id + '\')">' + esc(p.name || 'No name') + '</button>' +
-        '<span class="ld-kind ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '">' + esc(c.kind) + '</span>' +
-        (c.whoLabel ? '<span class="wc wc-' + c.whoCalled + '">' + esc(c.whoLabel) + '</span>' : '') +
-        phone + '</div>' +
-      '<div class="ld-c-date"><span class="ld-lbl">Came in</span>' + (c.cameIso ? esc(_ldDay(c.cameIso)) + (p.fromWebsite ? '<small>Website</small>' : '') : '<small>Not known</small>') + '</div>' +
-      '<div class="ld-c-date"><span class="ld-lbl">Last contact</span>' + (last ? esc(_ldDay(last)) + '<small>' + esc(_ldAgo(last)) + '</small>' : '<small>Not yet</small>') + '</div>' +
+      '<div class="ld-c-name"><span class="ld-av ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '" aria-hidden="true">' + esc(_ldInitials(p.name)) + '</span>' +
+        '<span class="ld-nm"><button type="button" class="ld-namebtn" onclick="openLeadProfile(\'' + id + '\')">' + esc(p.name || 'No name') + '</button>' +
+        '<span class="ld-tags"><span class="ld-kind ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '">' + esc(c.kind) + '</span>' +
+        (c.whoLabel ? '<span class="wc wc-' + c.whoCalled + '">' + esc(c.whoLabel) + '</span>' : '') + (p.fromWebsite ? '<span class="ld-web">Website</span>' : '') + '</span></span></div>' +
+      '<div class="ld-c-phone">' + phone + '</div>' +
+      '<div class="ld-c-date"><span class="ld-lbl">Came in</span>' + (c.cameIso ? esc(_ldDay(c.cameIso)) + (cameTime ? '<small>' + esc(cameTime) + '</small>' : '') : '<small>Not known</small>') + '</div>' +
+      '<div class="ld-c-date"><span class="ld-lbl">Last activity</span>' + (last ? '<span class="ld-act" title="' + (lastKind === 'call' ? 'Call or text on the office line' : 'Call note') + ' ' + esc(_ldDay(last)) + '">' +
+        LD_ICON[lastKind] + esc(lastAt ? _ldAgoAt(lastAt) : _ldAgo(last)) + '</span>' : '<small>Not yet</small>') + '</div>' +
       '<div class="ld-c-due"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span></div>' +
       '<div class="ld-c-about" title="' + esc(c.who + '\nNext: ' + c.next) + '"><span class="ld-who">' + esc(c.who) + '</span>' +
         '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span>' +
