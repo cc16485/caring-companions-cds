@@ -75,6 +75,8 @@ await pg.exec(strip(readFileSync(ROOT + '/caregiver_match_phase1.sql', 'utf8')))
 await pg.exec(`create table agency_data (id uuid primary key default gen_random_uuid(), agency_id text, data_key text, data_value jsonb, unique (agency_id, data_key));`);
 const SQL = strip(readFileSync(ROOT + '/comm_center.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
+// call notes (2026-10-29): Calls and texts joins the notes table
+await pg.exec(strip(readFileSync(ROOT + '/call_notes.sql', 'utf8')));
 ok(true, 'comm_center.sql runs twice');
 // step 2 (2026-10-22): run twice too; a changed owner survives a second run
 const SQL2 = strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8'));
