@@ -772,7 +772,7 @@
   // The last day we talked to them: a call note (not the form, not a Who called tap) or a call
   // logged from the lead link page. The hub adds office-line calls and texts on top.
   function lastContactIso(p, calls) {
-    const notes = (Array.isArray(p && p.notes) ? p.notes : []).filter(n => n && n.date && !isFormNote(n) && !n.whoCalled)
+    const notes = (Array.isArray(p && p.notes) ? p.notes : []).filter(n => n && n.date && !isFormNote(n) && !n.whoCalled && !n.linkNote)
       .map(n => String(n.date).slice(0, 10));
     const logged = p && p.siteLeadId ? (calls || []).filter(c => c && c.site_lead_id === p.siteLeadId && c.at)
       .map(c => isoLocal(new Date(c.at))) : [];
@@ -851,8 +851,39 @@
     lead.closedAt = now;
     lead.followup = '';
     lead.notes = (Array.isArray(lead.notes) ? lead.notes : []).concat({ date: isoLocal(new Date(now)),
-      text: 'Linked to ' + (owner.name || 'someone') + ' as ' + (opts.relation ? opts.relation + ', ' : '') + CONTACT_ROLES[role].toLowerCase() + ' (by ' + by + ').' });
+      linkNote: true, text: 'Linked to ' + (owner.name || 'someone') + ' as ' + (opts.relation ? opts.relation + ', ' : '') + CONTACT_ROLES[role].toLowerCase() + ' (by ' + by + ').' });
     return { ok: true, owner };
+  }
+  // The son or daughter called first (her ask 2026-10-29): the lead came in under the caller's name.
+  // Turn it into the lead of the person who needs care, keeping everything (notes, call back date,
+  // website answers, calls), and put the caller on Contacts. careFor = { name, phone, relation, role }.
+  function careFor(lead, cf, opts) {
+    opts = opts || {};
+    const name = String(cf && cf.name || '').trim();
+    if (!lead) return { error: 'That lead is gone.' };
+    if (!name) return { error: 'Add the name of the person who needs care.' };
+    if (name.toLowerCase() === String(lead.name || '').trim().toLowerCase()) return { error: 'That is the same name as the caller. Type the name of the person who needs care.' };
+    const role = CONTACT_ROLES[cf.role] ? cf.role : 'family';
+    const now = opts.now || new Date().toISOString(), by = opts.by || 'office';
+    const caller = { id: 'rp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: lead.name || 'Caller', phone: lead.phone || '',
+      role, relation: String(cf.relation || '').trim(), caller: true, at: now, by };
+    lead.relatedPeople = [caller].concat(relatedPeople(lead));
+    lead.callerWas = { name: caller.name, phone: caller.phone, at: now, by };
+    lead.name = name;
+    lead.phone = String(cf.phone || '').trim();   // never the caller's: that number is theirs, on Contacts
+    lead.notes = (Array.isArray(lead.notes) ? lead.notes : []).concat({ date: isoLocal(new Date(now)),
+      linkNote: true, text: caller.name + (caller.relation ? ' (' + caller.relation + ')' : '') + ' called for ' + name + '. The lead is now ' + name + '; ' + caller.name + ' is on Contacts (by ' + by + ').' });
+    return { ok: true, caller };
+  }
+  // Notes from leads linked to this record, newest last: what the son or daughter told us stays with the client.
+  function linkedNotes(owner, pipeline) {
+    const out = [];
+    relatedPeople(owner).forEach(x => {
+      const L = x.fromLead && (pipeline || []).find(p => p && p.id === x.fromLead);
+      (L && Array.isArray(L.notes) ? L.notes : []).filter(n => n && n.text && !n.linkNote)
+        .forEach(n => out.push(Object.assign({}, n, { from: x.name + (x.relation ? ' (' + x.relation + ')' : '') })));
+    });
+    return out.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   }
   // A contact typed in by hand (no lead behind it).
   function addContact(owner, c, opts) {
@@ -875,7 +906,7 @@
       lead.status = c.prevStatus && !CLOSED.includes(c.prevStatus) ? c.prevStatus : 'nurturing';
       delete lead.linkedTo; delete lead.closedAt;
       lead.notes = (Array.isArray(lead.notes) ? lead.notes : []).concat({ date: isoLocal(new Date(opts.now || Date.now())),
-        text: 'Unlinked from ' + (owner.name || 'someone') + ' (by ' + (opts.by || 'office') + '). Open again.' });
+        linkNote: true, text: 'Unlinked from ' + (owner.name || 'someone') + ' (by ' + (opts.by || 'office') + '). Open again.' });
     }
     return { ok: true, lead };
   }
@@ -888,7 +919,7 @@
     const notes = (Array.isArray(p.notes) ? p.notes : []).filter(Boolean);
     const form = notes.find(n => isFormNote(n));
     const real = notes.filter(n => !isFormNote(n));
-    const talk = real.filter(n => !n.whoCalled);   // a Who called tap is not a call note to show
+    const talk = real.filter(n => !n.whoCalled && !n.linkNote);   // a Who called tap or a link note is not a call note to show
     const last = talk.length ? talk[talk.length - 1] : null;
     const kind = LEAD_KINDS[p.type] || 'Still deciding';
     const closed = CLOSED.includes(p.status);
@@ -1070,7 +1101,7 @@
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
-                    leadCard, formWho, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
+                    leadCard, formWho, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

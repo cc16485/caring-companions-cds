@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=27"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=28"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -659,6 +659,7 @@ input, select, textarea { border-radius:10px; }
 .rp-tag.family { background:var(--cute-honey-pale); color:#7A4E0B; }
 .rp-tag.attendant { background:#EAF0FA; color:#2B4C7E; }
 .rp-tag.other { background:#F1EFE8; color:#3c4a58; }
+.rp-from { color:#7A4E0B; font-weight:700; }
 .rp-linkbtn { border:0; background:none; padding:0; color:#14606F; font:inherit; font-size:13px; font-weight:600; text-decoration:underline; cursor:pointer; }
 .ch-filter { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
 .ch-filter button { min-height:36px; padding:0 12px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
@@ -3969,7 +3970,7 @@ button.fu-tile.check span { color:#14606F; }
     <button type="button" class="ld-choice" onclick="closeLeadAs('closed_ni')"><b>Not interested</b><span>Told us they do not want CDS right now.</span></button>
     <button type="button" class="ld-choice" onclick="closeLeadAs('closed_other')"><b>Went with another agency</b><span>Chose someone else.</span></button>
     <button type="button" class="ld-choice" onclick="closeLeadAs('closed_spam')"><b>Spam</b><span>Not a real person, a sales pitch, or a fake form.</span></button>
-    <button type="button" class="ld-choice" onclick="closeModal('closeLeadModal');openLinkLead(document.getElementById('cl_id').value)"><b>They called about someone else</b><span>Family or the attendant of a consumer or another lead. Link them.</span></button>
+    <button type="button" class="ld-choice" onclick="closeModal('closeLeadModal');openLinkLead(document.getElementById('cl_id').value)"><b>They called for someone else</b><span>Family or an attendant. Link them to that person, or make this lead theirs.</span></button>
     <div class="form-group" style="margin-top:6px"><label for="cl_note">Note (optional)</label>
       <textarea id="cl_note" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:10px;font-family:inherit;font-size:13px" placeholder="For example: no answer after 3 calls"></textarea>
     </div>
@@ -3985,7 +3986,7 @@ button.fu-tile.check span { color:#14606F; }
     </div>
     <input type="hidden" id="lk_id">
     <p style="margin:0 0 14px;font-size:14.5px;color:#55677a" id="lk_intro"></p>
-    <div class="form-group"><label for="lk_q">They called about</label>
+    <div class="form-group"><label for="lk_q">They called about (the person who needs care)</label>
       <input type="search" id="lk_q" placeholder="Start typing a consumer or lead name" oninput="lkRender()" autocomplete="off">
     </div>
     <div id="lk_list" class="rp-pick" role="listbox" aria-label="People"></div>
@@ -3998,7 +3999,7 @@ button.fu-tile.check span { color:#14606F; }
     </div>
     <div class="form-row">
       <div class="form-group"><label for="lk_rel">In a word (optional)</label><input type="text" id="lk_rel" placeholder="For example: daughter, granddaughter, case manager"></div>
-      <div class="form-group"><label for="lk_phone">Their phone</label><input type="tel" id="lk_phone"></div>
+      <div class="form-group"><label for="lk_phone" id="lk_phone_lbl">Their phone</label><input type="tel" id="lk_phone"></div>
     </div>
     <div class="field-note" id="lk_what" style="margin-bottom:10px"></div>
     <div class="field-note" id="lk_err" style="color:var(--danger);font-weight:600"></div>
@@ -7351,9 +7352,10 @@ function openLinkLead(id) {
   if (!p) return;
   _lkPick = null;
   document.getElementById('lk_id').value = id;
-  document.getElementById('lk_title').textContent = 'Who is ' + (p.name || 'this') + '?';
-  document.getElementById('lk_intro').textContent = (p.name || 'They') + ' came in as a lead, but called about someone else. Link them to that person.';
+  document.getElementById('lk_title').textContent = 'Who did ' + (p.name || 'they') + ' call for?';
+  document.getElementById('lk_intro').textContent = (p.name || 'They') + ' came in as a lead, but called for someone else. Type that person\u2019s name. If they are already in the hub, pick them; if not, this lead becomes theirs.';
   document.getElementById('lk_q').value = '';
+  document.getElementById('lk_role_lbl').textContent = (p.name || 'The caller') + ' is their';
   document.getElementById('lk_rel').value = '';
   document.getElementById('lk_phone').value = p.phone || '';
   document.querySelectorAll('input[name="lk_role"]').forEach(r => { r.checked = r.value === (p.whoCalled === 'pair' ? 'attendant' : p.whoCalled === 'family' ? 'family' : ''); });
@@ -7374,9 +7376,19 @@ function lkRender() {
     : people.filter(x => x.name.toLowerCase().includes(q)).slice(0, 12);
   list.innerHTML = shown.map(x => '<button type="button" role="option" aria-selected="' + !!(_lkPick && _lkPick.kind === x.kind && _lkPick.id === x.id) + '"' +
     ' class="' + (_lkPick && _lkPick.kind === x.kind && _lkPick.id === x.id ? 'on' : '') + '" onclick="lkChoose(\'' + x.kind + '\',\'' + esc(x.id) + '\')"><b>' + esc(x.name) + '</b><span>' + esc(x.sub) + '</span></button>').join('') +
-    (q.length >= 2 && !shown.length ? '<div class="field-note" style="padding:10px 14px">Nobody by that name. Check the spelling, or add them as a lead first.</div>' : '');
+    // Not in the hub yet (her ask 10-29: the son or daughter calls first): this lead becomes theirs.
+    (q.length >= 2 ? '<button type="button" role="option" aria-selected="' + !!(_lkPick && _lkPick.kind === 'new') + '" class="' + (_lkPick && _lkPick.kind === 'new' ? 'on' : '') + '" onclick="lkChooseNew()">' +
+      '<b>+ ' + esc(document.getElementById('lk_q').value.trim()) + ' is not in the hub yet</b><span>Make this lead theirs</span></button>' : '');
   const p = getData('pipeline').find(x => x.id === id) || {};
   const who = p.name || 'They';
+  const isNew = !!(_lkPick && _lkPick.kind === 'new');
+  document.getElementById('lk_phone_lbl').textContent = isNew ? (_lkPick.name || 'Their') + '\u2019s phone, if they have one' : 'Their phone';
+  if (isNew) {
+    document.getElementById('lk_what').innerHTML = 'This lead becomes <b>' + esc(_lkPick.name) + '</b>\u2019s lead. Everything stays: notes, the call back date, form answers and calls. ' +
+      esc(who) + ' goes on Contacts, and their calls and texts keep showing here. Nothing is sent to anyone.';
+    document.getElementById('lk_go').textContent = 'Make it ' + String(_lkPick.name).split(' ')[0] + '\u2019s lead';
+    return;
+  }
   const t = _lkPick && _rpOwner(_lkPick.kind, _lkPick.id);
   document.getElementById('lk_what').innerHTML = !t ? 'Pick the person they called about.'
     : _lkPick.kind === 'consumer'
@@ -7384,7 +7396,15 @@ function lkRender() {
       : 'The two leads become one: ' + esc(who) + ' goes on <b>' + esc(t.name) + '</b>’s lead as a contact, and comes along when ' + esc(t.name) + ' becomes a consumer. Nothing is sent to anyone.';
   document.getElementById('lk_go').textContent = t ? 'Link ' + String(who).split(' ')[0] + ' to ' + String(t.name).split(' ')[0] : 'Link them';
 }
+function lkChooseNew() {
+  const name = document.getElementById('lk_q').value.trim();
+  if (!name) return;
+  _lkPick = { kind: 'new', name };
+  document.getElementById('lk_phone').value = '';
+  lkRender();
+}
 function lkChoose(kind, id) {
+  if (_lkPick && _lkPick.kind === 'new') { const p = getData('pipeline').find(x => x.id === document.getElementById('lk_id').value); document.getElementById('lk_phone').value = (p && p.phone) || ''; }
   _lkPick = { kind, id };
   const t = _rpOwner(kind, id);
   if (t) document.getElementById('lk_q').value = t.name;
@@ -7395,6 +7415,16 @@ async function saveLinkLead() {
   const role = (document.querySelector('input[name="lk_role"]:checked') || {}).value || '';
   const err = document.getElementById('lk_err');
   if (!_lkPick) { err.textContent = 'Pick who they called about from the list.'; return; }
+  if (_lkPick.kind === 'new') {
+    if (!role) { err.textContent = 'Pick family, attendant or someone else.'; return; }
+    const lead = getData('pipeline').find(x => x.id === id);
+    const r = CDSRules.careFor(lead, { name: _lkPick.name, phone: document.getElementById('lk_phone').value.trim(), relation: document.getElementById('lk_rel').value, role }, { by: _ldWhoBy() });
+    if (r.error) { err.textContent = r.error; return; }
+    await _rpSave('lead');
+    closeModal('linkLeadModal');
+    _rpRefresh();
+    return;
+  }
   const kind = _lkPick.kind;
   const r = CDSRules.linkLead({ pipeline: getData('pipeline'), consumers: getData('consumers') }, id, _lkPick,
     { role, relation: document.getElementById('lk_rel').value, phone: document.getElementById('lk_phone').value.trim(), by: _ldWhoBy() });
@@ -7484,7 +7514,10 @@ function renderLeadProfile(){
       '<span class="badge" style="background:var(--gray-100)">' + esc(TYPE[p.type] || p.type) + '</span>' +
       (p.status ? '<span class="badge" style="background:var(--gray-100)">' + esc(PIPELINE_STATUS_LABELS[p.status] || p.status) + '</span>' : '') +
     '</div>' +
-    row('Phone', p.phone) + row('Email', p.email) + row('County', p.county) +
+    row('Phone', p.phone) +
+    // No phone of their own yet: whoever called for them (2026-10-29).
+    (!p.phone ? (CDSRules.relatedPeople(p).filter(r => r.phone).slice(0, 1).map(r => row('Reach them through', r.name + (r.relation ? ' (' + r.relation + ')' : '') + ', ' + r.phone))[0] || '') : '') +
+    row('Email', p.email) + row('County', p.county) +
     row('Date of birth', lpDate(p.dob || (R && R.dob))) + row('DCN', p.dcn || (R && R.dcn)) +
     row('First contact', p.firstContact) + row('Heard about us', p.source) +
     row('Leaving', p.leavingAgency) + row('Why switching', p.whySwitching) +
@@ -7511,7 +7544,7 @@ function renderLeadProfile(){
       '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(card.next) + '</span></div>' : '') +
     '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
       '<button class="btn btn-primary" onclick="openPipelineEdit(\'' + pid + '\')">Log a call</button>' +
-      (p.status !== 'closed_linked' ? '<button class="btn btn-outline" onclick="openLinkLead(\'' + pid + '\')">Called about someone else? Link them</button>' : '') +
+      (p.status !== 'closed_linked' ? '<button class="btn btn-outline" onclick="openLinkLead(\'' + pid + '\')">Called for someone else?</button>' : '') +
       (card && card.step === 'ready' ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
       (PIPELINE_CLOSED_STATUSES.includes(p.status)
         ? '<button class="btn btn-outline" onclick="reopenLead(\'' + pid + '\')">Reopen</button>'
@@ -7658,13 +7691,14 @@ function renderLeadProfile(){
       '</div>';
   }
 
-  // ---- notes ----
-  const notes = Array.isArray(p.notes) ? p.notes : [];
+  // ---- notes (plus what linked family and attendants told us, 2026-10-29) ----
+  const notes = (Array.isArray(p.notes) ? p.notes : []).concat(CDSRules.linkedNotes(p, getData('pipeline')))
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   html += '<div class="card" style="padding:18px 20px">' +
     '<b style="color:var(--primary)">Notes</b>' +
     (notes.length
       ? notes.map(n => '<div style="padding:6px 0;font-size:13px;border-bottom:1px solid var(--gray-200)">' +
-          '<span style="color:var(--gray-600)">' + esc(n.date || '') + '</span> ' + esc(n.text || '') + '</div>').join('')
+          '<span style="color:var(--gray-600)">' + esc(n.date || '') + '</span> ' + (n.from ? '<b class="rp-from">From ' + esc(n.from) + ':</b> ' : '') + esc(n.text || '') + '</div>').join('')
       : '<div class="field-note">No notes yet.</div>') +
     '</div>';
 
@@ -8169,15 +8203,19 @@ function renderPipeline() {
   // Searching looks across every step, so nobody hides behind the wrong tab.
   const q = (document.getElementById('ldSearch')?.value || '').trim().toLowerCase();
   const qDigits = q.replace(/\D/g, '');
-  const match = x => !q || String(x.p.name || '').toLowerCase().includes(q) || (qDigits.length >= 3 && String(x.p.phone || '').replace(/\D/g, '').includes(qDigits));
+  // Contacts count too: search finds Kim on Walter's lead, by name or number.
+  const match = x => !q || [x.p].concat(CDSRules.relatedPeople(x.p)).some(r => String(r.name || '').toLowerCase().includes(q) ||
+    (qDigits.length >= 3 && String(r.phone || '').replace(/\D/g, '').includes(qDigits)));
   let shown = q ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
   try { renderLdWho(shown, wcOn); } catch (e) { console.error('who called:', e); }
   if (wcOn && _ldWhoFilter !== 'all') shown = shown.filter(x => x.c.whoCalled === _ldWhoFilter);
   // Last contact also counts office-line calls and texts (the same list that marks a website lead called).
+  // A call with their family or attendant (Contacts) counts as contact too.
   shown.forEach(x => {
-    const ph = String(x.p.phone || '').replace(/\D/g, '').slice(-10), line = ph && _commReachedAt[ph];
-    const lineIso = line && !isNaN(Date.parse(line)) ? R.isoLocal ? R.isoLocal(new Date(line)) : String(line).slice(0, 10) : '';
-    x.last = [x.c.lastIso, lineIso].filter(Boolean).sort().pop() || '';
+    const lines = [x.p.phone].concat(CDSRules.relatedPeople(x.p).map(r => r.phone)).map(ph => String(ph || '').replace(/\D/g, '').slice(-10))
+      .filter(Boolean).map(ph => _commReachedAt[ph]).filter(l => l && !isNaN(Date.parse(l))).map(l => R.isoLocal ? R.isoLocal(new Date(l)) : String(l).slice(0, 10));
+    const noteDays = CDSRules.linkedNotes(x.p, pipeline).filter(n => !CDSRules.isFormNote(n)).map(n => String(n.date || '').slice(0, 10));
+    x.last = [x.c.lastIso].concat(lines, noteDays).filter(Boolean).sort().pop() || '';
   });
   const need = (a, b) => a.c.sort - b.c.sort || String(a.c.followup).localeCompare(String(b.c.followup));
   // Never talked to sorts as the longest ago; an unknown came-in day goes last either way.
@@ -8210,7 +8248,10 @@ function renderPipeline() {
   cardsEl.innerHTML = head + shown.map(({ p, c, last }) => {
     const id = esc(p.id);
     const tel = String(p.phone || '').replace(/\D/g, '');
-    const phone = p.phone ? '<a class="ld-tel" href="tel:' + tel + '">' + esc(p.phone) + '</a>' : '<span class="ld-tel none">No phone yet</span>';
+    const caller = !p.phone && CDSRules.relatedPeople(p).find(r => r.phone);
+    const phone = p.phone ? '<a class="ld-tel" href="tel:' + tel + '">' + esc(p.phone) + '</a>'
+      : caller ? '<a class="ld-tel" href="tel:' + String(caller.phone).replace(/\D/g, '') + '">' + esc(caller.phone) + ' <small style="font-weight:600;color:#55677a">' + esc(String(caller.name).split(' ')[0] + (caller.relation ? ', ' + caller.relation : '')) + '</small></a>'
+      : '<span class="ld-tel none">No phone yet</span>';
     const main = c.step === 'ready'
       ? '<button type="button" class="ld-move" onclick="convertToConsumer(\'' + id + '\')">Move to Consumers</button>'
       : c.step === 'closed' ? (PIPELINE_CLOSED_STATUSES.includes(p.status) ? '<button type="button" class="ld-open" onclick="reopenLead(\'' + id + '\')">Reopen</button>' : '')
@@ -10450,7 +10491,11 @@ function renderProfile() {
   else if (tab === 'docs') body = consumerDocsHtml(c);
   else if (tab === 'calls') body =
     '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"></div>';
-  else body = c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>';
+  else body = (c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>') +
+    // What linked family and attendants told us before (2026-10-29), from their leads.
+    (function () { const ln = CDSRules.linkedNotes(c, getData('pipeline'));
+      return ln.length ? '<div style="margin-top:16px"><b style="color:var(--primary);font-size:14px">From calls with their family and attendants</b>' +
+        ln.map(n => '<div style="padding:6px 0;font-size:13px;border-bottom:1px solid var(--gray-200)"><span style="color:var(--gray-600)">' + esc(n.date || '') + '</span> <b class="rp-from">From ' + esc(n.from) + ':</b> ' + esc(n.text || '') + '</div>').join('') + '</div>' : ''; })();
 
   host.innerHTML =
     '<div class="card" style="padding:26px">' +

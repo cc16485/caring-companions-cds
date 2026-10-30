@@ -89,13 +89,44 @@ const fresh = () => ({
   ok(before && before.ref === 'lead:k1', 'before linking, Kim was her own lead');
 }
 
+// ── the son or daughter called first (her ask 10-29): the lead becomes the parent's ──
+{
+  const d = fresh();
+  const k = d.pipeline[0];
+  ok(/same name/.test(R.careFor(k, { name: 'kim tran' }).error), 'not the caller\'s own name');
+  ok(/Add the name/.test(R.careFor(k, { name: ' ' }).error), 'a name is needed');
+  const r = R.careFor(k, { name: 'Rosa Tran', phone: '', relation: 'daughter', role: 'family' }, { by: 'krystal', now: NOW });
+  ok(r.ok && k.name === 'Rosa Tran' && k.phone === '', 'the lead is now the mother\'s, with no phone of hers yet');
+  ok(k.followup === '2026-10-30' && k.status === 'nurturing' && k.notes[0].text === 'Asked about hours', 'everything else stays: call back date, step, notes');
+  const c = R.relatedPeople(k)[0];
+  ok(c.name === 'Kim Tran' && c.phone === '417-555-0177' && c.relation === 'daughter' && c.role === 'family' && c.caller, 'Kim is on Contacts with her number');
+  ok(/Kim Tran \(daughter\) called for Rosa Tran/.test(k.notes[k.notes.length - 1].text), 'a note says what happened');
+  ok(k.callerWas.name === 'Kim Tran', 'who the caller was is kept');
+  ok(R.leadCard(k, [], '2026-10-29').who === 'Last note: "Asked about hours"', 'the Leads row shows the real call note, not the link note');
+  const rows = phoneBookRows(d).filter(x => x.phone10 === '4175550177');
+  ok(rows.length === 1 && rows[0].ref === 'family:lead:k1' && /daughter, family for Rosa Tran/.test(rows[0].detail), 'Kim\'s number points at Rosa\'s lead as family: ' + (rows[0] || {}).detail);
+  ok(resolve(rows).state === 'known', 'one person, so no Who is this card');
+}
+
+// ── what a linked caller told us shows on the client ──
+{
+  const d = fresh();
+  d.pipeline[0].notes.push({ date: '2026-10-27', text: 'Mom fell twice this month, needs help bathing', fromForm: false });
+  R.linkLead(d, 'k1', { kind: 'consumer', id: '100' }, { role: 'family', relation: 'son', now: NOW });
+  const ln = R.linkedNotes(d.consumers[0], d.pipeline);
+  ok(ln.length === 2 && ln[0].date === '2026-10-27' && ln[0].from === 'Kim Tran (son)', 'Kim\'s notes show on Walter, oldest first');
+  ok(!ln.some(n => /^Linked to /.test(n.text)), 'not the "Linked to" note itself');
+}
+
 // ── the page ──
 {
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   ok(html.includes('id="linkLeadModal"') && html.includes('id="contactModal"'), 'the two windows are on the page');
   ok(/'closed_linked'\]/.test(html), 'the hub counts linked as closed');
   ok(html.includes("rpCardHtml('consumer', c)") && html.includes("rpCardHtml('lead', p)"), 'Contacts card on both profiles');
-  ok(html.includes("openLinkLead(document.getElementById('cl_id').value)"), 'Close offers: they called about someone else');
+  ok(html.includes("openLinkLead(document.getElementById('cl_id').value)"), 'Close offers: they called for someone else');
+  ok(html.includes('function lkChooseNew()') && html.includes('CDSRules.careFor(lead,'), 'the window can make this lead the parent\'s');
+  ok(html.includes("CDSRules.linkedNotes(p, getData('pipeline'))") && html.includes("CDSRules.linkedNotes(c, getData('pipeline'))"), 'linked notes on the lead and consumer');
   ok(html.includes('consumers[consumers.length - 1].relatedPeople = CDSRules.relatedPeople(L)') && html.includes("x.linkedTo, { kind: 'consumer', id: id }"), 'Move to Consumers moves the contacts and repoints linked leads');
   ok(html.includes('data-names="') && html.includes('function chFilter('), 'Calls and texts names contacts and filters by person');
   ok(!/\u2014/.test(html.slice(html.indexOf('CONTACTS AND LINKING'), html.indexOf('function renderLeadProfile()'))), 'no em dashes in the new copy');
