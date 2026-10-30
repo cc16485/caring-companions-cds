@@ -137,12 +137,23 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(R.cameIn({ firstContact: '2025-12-30' }, T) === 'Came in Dec 30, 2025', 'last year shows the year');
   ok(R.cameIn({}, T) === '', 'no date, no line');
   ok(R.leadCard({ type: 'lead', status: 'new', firstContact: '2026-10-18' }, [], T).came === 'Came in Oct 18', 'the card carries it');
+  ok(R.leadCard({ type: 'lead', status: 'new', firstContact: '2026-10-18' }, [], T).cameIso === '2026-10-18', 'came in as a date for sorting');
+  // last contact: the newest call note or logged call; never the form or a Who called tap
+  const lc = { siteLeadId: 's9', notes: [form('Who needs care: Yes'), { date: '2026-10-12', text: 'Left a message' }, { date: '2026-10-20', text: 'Who called: For themself', whoCalled: true }] };
+  ok(R.lastContactIso(lc, []) === '2026-10-12', 'last contact from the call note: ' + R.lastContactIso(lc, []));
+  ok(R.lastContactIso(lc, [{ site_lead_id: 's9', at: '2026-10-16T15:00:00Z' }, { site_lead_id: 'other', at: '2026-10-19T15:00:00Z' }]) === '2026-10-16', 'a logged call counts, only for this lead');
+  ok(R.lastContactIso({ notes: [form('x')] }, []) === '', 'never talked to: empty');
+  ok(R.leadCard(lc, [], T).lastIso === '2026-10-12', 'the card carries last contact');
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   const m = html.slice(html.indexOf('id="closeLeadModal"'), html.indexOf('id="addPipelineModal"'));
   ['closed_inactive', 'closed_ni', 'closed_other', 'closed_spam'].forEach(st => ok(m.includes("closeLeadAs('" + st + "')"), 'Close offers ' + st));
   ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam'(,'closed_pool')?\]/.test(html), 'the hub knows all four (and closed_pool from Who called)');
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
-  ok(r.includes('openCloseLead(') && r.includes('reopenLead(') && r.includes('ld-came'), 'cards have Close, Reopen and the came-in date');
+  ok(r.includes('openCloseLead(') && r.includes('reopenLead(') && r.includes('c.cameIso'), 'rows have Close, Reopen and the came-in date');
+  // 10-29: one row per person, sortable by came in and last contact
+  ok(r.includes('ld-headrow') && r.includes("ldSortCol(\\'came\\')") && r.includes("ldSortCol(\\'last\\')"), 'column headings sort');
+  ['need', 'new', 'old', 'quiet', 'recent'].forEach(k => ok(html.includes('<option value="' + k + '"'), 'Sort menu has ' + k));
+  ok(r.includes('_commReachedAt[ph]'), 'last contact counts office-line calls and texts');
   const f = html.slice(html.indexOf('function closeLeadAs('), html.indexOf('function reopenLead('));
   ok(f.includes("p.followup = ''"), 'closing clears the call back date');
   ok(!/fetch|ghl|sendMessage/i.test(f), 'closing sends nothing');
