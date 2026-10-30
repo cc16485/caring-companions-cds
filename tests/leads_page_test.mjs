@@ -165,5 +165,25 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(!/—/.test(m), 'no em dashes in the Close box');
 }
 
+// ── calmer Leads list (2026-10-30, her approved mockup 9ReTBpXJ7PwkbreCVSb8te): colour only means "this needs you" ──
+{
+  const html = readFileSync(ROOT + '/index.html', 'utf8');
+  const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
+  const tone = eval(html.match(/const ldCalmTone = (c => [^;]+);/)[1]);
+  ok(tone({ tone: 'late' }) === 'now' && tone({ tone: 'today' }) === 'today', 'late is red, today is gold');
+  ok(['later', 'none', 'ready', 'closed'].every(t => tone({ tone: t }) === 'wait'), 'everything else can wait (gray)');
+  ok(/const ldCalmLive = \(\) => getObj\('leadsCalm'\)\.live === true;/.test(html), 'her switch is agency_data leadsCalm');
+  ok(/const ldCalmOn = \(\) => ldCalmLive\(\) \|\| \(ldWhoOwner\(\) && ldCalmPreview\(\)\);/.test(html), 'off for everyone; only an owner can preview');
+  ok(/let h = ldCalmSwitchHtml\(\);/.test(html) && /if \(!ldWhoOwner\(\)\) return '';/.test(html.slice(html.indexOf('function ldCalmSwitchHtml'))), 'the switch shows only to owners');
+  ok(r.includes("cardsEl.classList.toggle('ld-calm', calm)"), 'the list wears the calm look only while it is on');
+  ok(r.includes("(calm ? nameCell :") && r.includes('<span class="ld-av '), 'calm rows have no initials circle; the colourful rows keep theirs');
+  ok(r.includes("[c.kind, c.whoLabel, p.fromWebsite ? 'Website' : ''].filter(Boolean).join(' · ')"), 'tags become one gray line of words');
+  ok(r.includes("' ldr-' + ct") && r.includes('ldw ldw-'), 'a coloured edge and coloured When words on rows that need you');
+  ok(r.includes("(calm ? ' hidden' : '')") && r.includes('class="ld-dots"'), 'Close waits behind ···');
+  ok(r.includes('(calm ? calmLine :'), 'the summary line counts need you now, today, can wait');
+  ok(['ldCalmSwitch', 'ldCalmPreviewSet'].every(f => !/fetch|ghl|sendMessage/i.test(html.slice(html.indexOf('function ' + f), html.indexOf('function ' + f) + 400))), 'the switch sends nothing');
+  ok(!/—/.test(html.slice(html.indexOf('// CALMER LEADS LIST'), html.indexOf('function ldCalmSwitchHtml') + 900)), 'no em dashes');
+}
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

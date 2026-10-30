@@ -651,6 +651,16 @@ input, select, textarea { border-radius:10px; }
 .ld-filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:4px 0 14px; }
 .ld-filters button { padding:8px 14px; border-radius:999px; border:1.5px solid #d9d2c4; background:#fff; color:#14304d; font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; min-height:40px; }
 .ld-filters button.on { background:#14304d; border-color:#14304d; color:#fff; }
+.ld-calm .ldr-now { box-shadow:inset 4px 0 0 #B42318; }
+.ld-calm .ldr-today { box-shadow:inset 4px 0 0 #C98A0E; }
+.ld-facts { font-size:12.5px; color:#6b7884; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ldw { font-size:13.5px; font-weight:700; line-height:1.3; color:#6b7884; }
+.ldw-wait { font-weight:400; } .ldw-now { color:#9B2C1A; } .ldw-today { color:#8A5A08; }
+.ldw-note { display:block; margin-top:2px; font-size:12px; font-weight:700; color:#8A5A08; }
+.ld-sum .ldw-today { font-weight:700; }
+.ld-calm .ld-tel { color:#0D365F; } .ld-calm .ld-tel svg { color:#8a96a3; }
+.ld-calm .ld-btns button { background:#fff !important; border:1.5px solid #0D365F !important; color:#0D365F !important; border-radius:10px; }
+.ld-calm .ld-btns .ld-dots, .ld-calm .ld-btns .ld-shut { border-color:#e4e1d8 !important; color:#55677a !important; }
 .ld-switch { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:13px; color:#55677a; margin:0 0 10px; }
 .ld-came { font-weight:700; color:#0D365F; }
 .ld-move { flex:1.4 !important; border:0; background:var(--cute-honey); color:var(--cute-ink); }
@@ -8246,10 +8256,15 @@ function renderPipeline() {
   const firstNames = urgent.map(x => esc(String(x.p.name || '').split(' ')[0]));
   const sum = document.getElementById('ldSummary');
   const cnLeads = open.filter(x => cnFor('lead', x.p.id).length).length;
+  const calm = ldCalmOn();
+  cardsEl.classList.toggle('ld-calm', calm);
+  const cn = { now: 0, today: 0, wait: 0 }; open.forEach(x => { cn[ldCalmTone(x.c)]++; });
+  const calmLine = [cn.now ? '<strong>' + cn.now + (cn.now === 1 ? ' needs' : ' need') + ' you now</strong>' : '',
+    cn.today ? '<strong class="ldw-today">' + cn.today + ' today</strong>' : '', cn.wait ? cn.wait + ' can wait' : ''].filter(Boolean).join(' · ');
   if (sum) sum.innerHTML = (cnLeads ? '<strong style="color:#7A4E0B">' + cnLeads + (cnLeads === 1 ? ' call note is' : ' call notes are') + ' waiting for your OK.</strong> ' : '') +
     (_cnError ? '<span style="color:var(--danger)">Call notes could not be loaded: ' + esc(_cnError) + '</span> ' : '') +
     open.length + (open.length === 1 ? ' person' : ' people') + ' right now. ' +
-    (!urgent.length ? 'Nobody needs a call today.'
+    (calm ? calmLine : !urgent.length ? 'Nobody needs a call today.'
       : urgent.length <= 3 ? '<strong>' + (firstNames.length > 1 ? firstNames.slice(0, -1).join(', ') + ' and ' + firstNames.slice(-1) : firstNames[0]) + '</strong> ' + (urgent.length === 1 ? 'needs' : 'need') + ' you today.'
       : '<strong>' + urgent.length + ' people</strong> need you today.');
 
@@ -8347,27 +8362,35 @@ function renderPipeline() {
       : c.whoCalled === 'solo' ? '<button type="button" class="ld-pool" onclick="ldPoolAsk(\'' + id + '\')">Move to Caregiver Pool</button>'
       : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
     const shut = c.step !== 'closed'
-      ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + ': inactive or spam" title="Close: inactive or spam">Close</button>' : '';
+      ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + ': inactive or spam" title="Close: inactive or spam"' + (calm ? ' hidden' : '') + '>Close</button>' : '';
+    // The calm look: Close waits behind ···, like Caring Companions.
+    const dots = calm && shut ? '<button type="button" class="ld-dots" aria-label="More for ' + esc(p.name || 'this lead') + '" onclick="this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.focus()">···</button>' : '';
+    const ct = ldCalmTone(c);
     const notes = cnFor('lead', p.id);
     const extra = ldWhoPicker(p, c) + ldPoolConfirm(p) +
       (notes.length ? cnPanelHtml(notes[0], 'lead', p) + (notes.length > 1 ? '<div class="field-note" style="margin-top:6px">' + (notes.length - 1) + ' more on their profile. <button type="button" class="rp-linkbtn" onclick="openLeadProfile(\'' + id + '\')">Open</button></div>' : '') : '');
     // Came in: the day, and the time when we know it (website leads).
     const addedMs = Date.parse(p.addedAt || '');
     const cameTime = c.cameIso && !isNaN(addedMs) && CDSRules.isoLocal(new Date(addedMs)) === c.cameIso ? new Date(addedMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-    return '<article class="ld-row' + (c.step === 'closed' ? ' closed' : '') + '" role="row">' +
+    const nameCell = calm
+      ? '<div class="ld-c-name"><span class="ld-nm"><button type="button" class="ld-namebtn" onclick="openLeadProfile(\'' + id + '\')">' + esc(p.name || 'No name') + '</button>' +
+        '<span class="ld-facts">' + esc([c.kind, c.whoLabel, p.fromWebsite ? 'Website' : ''].filter(Boolean).join(' · ')) + '</span></span></div>' : '';
+    const dueCell = calm
+      ? '<div class="ld-c-due"><span class="ldw ldw-' + ct + '">' + esc(c.due) + '</span>' + (notes.length ? '<span class="ldw-note">Note to check</span>' : '') + '</div>' : '';
+    return '<article class="ld-row' + (c.step === 'closed' ? ' closed' : '') + (calm && ct !== 'wait' ? ' ldr-' + ct : '') + '" role="row">' + (calm ? nameCell :
       '<div class="ld-c-name"><span class="ld-av ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '" aria-hidden="true">' + esc(_ldInitials(p.name)) + '</span>' +
         '<span class="ld-nm"><button type="button" class="ld-namebtn" onclick="openLeadProfile(\'' + id + '\')">' + esc(p.name || 'No name') + '</button>' +
         '<span class="ld-tags"><span class="ld-kind ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '">' + esc(c.kind) + '</span>' +
-        (c.whoLabel ? '<span class="wc wc-' + c.whoCalled + '">' + esc(c.whoLabel) + '</span>' : '') + (p.fromWebsite ? '<span class="ld-web">Website</span>' : '') + '</span></span></div>' +
+        (c.whoLabel ? '<span class="wc wc-' + c.whoCalled + '">' + esc(c.whoLabel) + '</span>' : '') + (p.fromWebsite ? '<span class="ld-web">Website</span>' : '') + '</span></span></div>') +
       '<div class="ld-c-phone">' + phone + '</div>' +
       '<div class="ld-c-date"><span class="ld-lbl">Came in</span>' + (c.cameIso ? esc(_ldDay(c.cameIso)) + (cameTime ? '<small>' + esc(cameTime) + '</small>' : '') : '<small>Not known</small>') + '</div>' +
       '<div class="ld-c-date"><span class="ld-lbl">Last activity</span>' + (last ? '<span class="ld-act" title="' + (lastKind === 'call' ? 'Call or text on the office line' : 'Call note') + ' ' + esc(_ldDay(last)) + '">' +
         LD_ICON[lastKind] + esc(lastAt ? _ldAgoAt(lastAt) : _ldAgo(last)) + '</span>' : '<small>Not yet</small>') + '</div>' +
-      '<div class="ld-c-due"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span>' + (notes.length ? '<span class="ld-due cn-pill">Note to check</span>' : '') + '</div>' +
+      (calm ? dueCell : '<div class="ld-c-due"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span>' + (notes.length ? '<span class="ld-due cn-pill">Note to check</span>' : '') + '</div>') +
       '<div class="ld-c-about" title="' + esc(c.who + '\nNext: ' + c.next) + '"><span class="ld-who">' + esc(c.who) + '</span>' +
         '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span>' +
         (c.whoLabel && c.whoCalled !== 'unsure' && c.step === 'call' && _ldWhoEdit !== p.id ? '<button type="button" class="ld-wc-change" onclick="ldWhoChange(\'' + id + '\')">Change who called</button>' : '') + '</div>' +
-      '<div class="ld-btns">' + main + shut + '</div>' +
+      '<div class="ld-btns">' + main + dots + shut + '</div>' +
       (extra ? '<div class="ld-extra">' + extra + '</div>' : '') +
     '</article>';
   }).join('');
@@ -8393,7 +8416,7 @@ function renderLdWho(shown, on) {
   const host = document.getElementById('ldWho');
   if (!host) return;
   const sw = getObj('leadsWhoCalled');
-  let h = '';
+  let h = ldCalmSwitchHtml();
   if (ldWhoOwner()) h += '<div class="ld-switch"><span><strong>Who called labels:</strong> ' + (on ? 'On' : 'Off') +
     (sw.by ? ' (changed by ' + esc(sw.by) + ')' : '') + '. Only you see this switch.</span>' +
     '<button type="button" class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" onclick="ldWhoSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button></div>';
@@ -8407,6 +8430,32 @@ function renderLdWho(shown, on) {
   host.innerHTML = h;
 }
 function ldWhoFilter(k) { _ldWhoFilter = k; renderPipeline(); }
+
+// ============================================================================
+// CALMER LEADS LIST (2026-10-30, her "so busy and colorful ... still a lot to the eye"; approved mockup
+// https://claude.ai/artifact/9ReTBpXJ7PwkbreCVSb8te). Colour only means "this needs you": a red edge and words for late,
+// gold for today, everyone else gray. Tags become one gray line, no initials circles, one button style, Close behind ···.
+// Her switch: agency_data 'leadsCalm' {live}. Off = the colourful list; an owner can preview it in this browser (ldCalm).
+// Same rows, order, tabs, sorting and buttons. Nothing is sent to anyone.
+// ============================================================================
+const ldCalmLive = () => getObj('leadsCalm').live === true;
+const ldCalmPreview = () => { try { return localStorage.getItem('ldCalm') === '1'; } catch (e) { return false; } };
+const ldCalmOn = () => ldCalmLive() || (ldWhoOwner() && ldCalmPreview());
+const ldCalmTone = c => c.tone === 'late' ? 'now' : c.tone === 'today' ? 'today' : 'wait';
+function ldCalmPreviewSet(on) { try { if (on) localStorage.setItem('ldCalm', '1'); else localStorage.removeItem('ldCalm'); } catch (e) {} renderPipeline(); }
+async function ldCalmSwitch(on) {
+  if (!ldWhoOwner()) return;
+  await setObj('leadsCalm', { live: !!on, by: _ldWhoBy(), at: new Date().toISOString() });
+  renderPipeline();
+}
+function ldCalmSwitchHtml() {
+  if (!ldWhoOwner()) return '';
+  const on = ldCalmLive(), sw = getObj('leadsCalm'), pv = !on && ldCalmPreview();
+  return '<div class="ld-switch"><span><strong>Calmer Leads list:</strong> ' + (on ? 'On' : pv ? 'Off (you are previewing it, only in this browser)' : 'Off') +
+    (sw.by ? ' (changed by ' + esc(sw.by) + ')' : '') + '. Only you see this switch.</span>' +
+    (on ? '' : '<button type="button" class="btn btn-sm btn-outline" onclick="ldCalmPreviewSet(' + !pv + ')">' + (pv ? 'Back to the colourful list' : 'Preview it (only me)') + '</button>') +
+    '<button type="button" class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" onclick="ldCalmSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on for everyone') + '</button></div>';
+}
 async function ldWhoSwitch(on) {
   if (!ldWhoOwner()) return;
   await setObj('leadsWhoCalled', { live: !!on, by: _ldWhoBy(), at: new Date().toISOString() });
