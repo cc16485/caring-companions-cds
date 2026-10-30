@@ -96,6 +96,70 @@ export function plainMessage(m, conv) {
   };
 }
 
+// ---------- call notes (2026-10-29, her approved mockup 6CxaqzDSJABjRYnGxc6tZg) ----------
+// After an answered call on a CDS line, GoHighLevel's transcript becomes a short note and a suggested
+// call back date for the person, saved as WAITING in cds_call_notes. Nothing reaches the person's record
+// until someone in the office presses OK on the hub (her rule: draft first). Never sent to anyone.
+// Behind the switch call_notes.live (off until she turns it on). BAAs cover CDS (her words 2026-10-29).
+export const NOTE_MODEL = 'claude-opus-5-5';
+export const NOTE_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['about_person', 'note', 'call_back', 'people'],
+  properties: {
+    about_person: { type: 'boolean' },
+    note: { type: 'string' },
+    call_back: { type: 'string' },
+    people: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'relation', 'phone'],
+      properties: { name: { type: 'string' }, relation: { type: 'string' }, phone: { type: 'string' } } } }
+  }
+};
+const NOTE_SYSTEM = [
+  'You write call notes for the office of Caring Companions Direct Services (CDS), a Missouri home care agency for consumer directed services paid by Medicaid.',
+  'You get the transcript of one phone call on the office line, who the hub thinks the caller is, and the call date.',
+  'Write the note for the office staff: 2 to 4 short, plain sentences. Say what the caller needed and the facts the office will want later: who needs care, Medicaid and DCN, the care or hours needed, who would be the attendant, their current agency, anything the office promised, and when to call back. Use first names. Only write what was said; leave out anything that was not.',
+  'Never use em dashes. Do not mention the transcript, the recording or yourself.',
+  'call_back: a date as YYYY-MM-DD only when a call back day was agreed or is clearly needed (count from the call date; "Friday" means the next Friday after the call date). Otherwise an empty string.',
+  'people: everyone named on the call other than the office staff and the person the hub thinks this is, who matters to their care (family, an attendant, a case manager): their name, how they relate to the client in one or two words, and a phone number only if it was said aloud (digits only, else empty).',
+  'about_person: false only when the call is clearly not about that person (a wrong number, or a call about a different client). Otherwise true.'
+].join('\n');
+// GoHighLevel's transcription: pieces with a speaker channel and the words (the same reading as the Staffing hub's call reader).
+export function transcriptText(t) {
+  if (typeof t === 'string') return t.trim();
+  const arr = Array.isArray(t) ? t : (t && (t.transcription || t.data || t.sentences)) || [];
+  if (!Array.isArray(arr)) return '';
+  return arr.slice().sort((a, b) => Number(a?.sentenceIndex ?? a?.startTime ?? 0) - Number(b?.sentenceIndex ?? b?.startTime ?? 0))
+    .map(p => { const w = String(p?.transcript ?? p?.sentence ?? p?.text ?? '').trim(); if (!w) return '';
+      const ch = p?.mediaChannel ?? p?.channel ?? p?.speaker; return (ch != null && ch !== '' ? 'Speaker ' + ch + ': ' : '') + w; })
+    .filter(Boolean).join('\n');
+}
+// ctx = { who, role, detail, day (YYYY-MM-DD, Missouri), weekday, direction, staff, minutes, transcript }
+export function noteRequest(ctx) {
+  const lines = [
+    'Call date: ' + ctx.weekday + ', ' + ctx.day + '.',
+    (ctx.direction === 'outbound' ? 'The office called them' : 'They called the office') + (ctx.staff ? ' (' + ctx.staff + ' for the office)' : '') + '. ' + ctx.minutes + ' minutes.',
+    'The hub thinks this is: ' + (ctx.who ? ctx.who + (ctx.role ? ', ' + ctx.role : '') + (ctx.detail ? ' (' + ctx.detail + ')' : '') : 'an unknown number') + '.',
+    '<transcript>\n' + ctx.transcript + '\n</transcript>'
+  ];
+  return { model: NOTE_MODEL, max_tokens: 4000, fallbacks: 'default',
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: NOTE_SCHEMA } },
+    system: NOTE_SYSTEM, messages: [{ role: 'user', content: lines.join('\n') }] };
+}
+const noDash = t => String(t || '').replace(/\s*[—–]\s*/g, ', ').replace(/\s+/g, ' ').trim();
+// The model's answer, held in code: plain text, a real date not before the call, at most 6 people.
+export function cleanNote(resp, day) {
+  if (!resp) return { error: 'no answer from the model' };
+  if (resp.stop_reason === 'refusal') return { error: 'the model declined this call' };
+  if (resp.stop_reason === 'max_tokens') return { error: 'the note ran too long' };
+  const text = (resp.content || []).filter(b => b && b.type === 'text').map(b => b.text).join('');
+  let j; try { j = JSON.parse(text); } catch { return { error: 'the note could not be read' }; }
+  const note = noDash(j && j.note).slice(0, 1200);
+  if (!note) return { error: 'the note came back empty' };
+  const cb = /^\d{4}-\d{2}-\d{2}$/.test(String(j.call_back || '')) && !isNaN(Date.parse(j.call_back)) && j.call_back >= day ? j.call_back : '';
+  const people = (Array.isArray(j.people) ? j.people : []).slice(0, 6).map(x => ({ name: noDash(x && x.name).slice(0, 80), relation: noDash(x && x.relation).slice(0, 40),
+    phone: ten(x && x.phone) })).filter(x => x.name);
+  return { note, followup: cb, people, about: j.about_person !== false };
+}
+
 // ---------- the phone book ----------
 // agency = { pipeline, consumers, attendants } (agency_data), pool = attendant_pool rows, staff = [{name, phone}].
 export function phoneBookRows({ pipeline = [], consumers = [], attendants = [], pool = [], staff = [] }) {
@@ -397,6 +461,95 @@ export function createComms(deps) {
   }
 
   // The 5-minute job. Errors are saved so the page and the 8am email can say the job stopped.
+  // ---------- call notes ----------
+  async function noteSettings() {
+    const r = await one(`select value from cds_match_settings where key='call_notes'`);
+    return r && r.value && typeof r.value === 'object' ? r.value : null;
+  }
+  const chicago = ms => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  const weekdayOf = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'long' });
+  // A few calls per run, oldest first. A call too new for a transcript waits for the next run; after
+  // 30 minutes with none it is saved as no_transcript so it is never quietly missing (her rule).
+  async function makeNotes(ns) {
+    if (!deps.ghl.transcript || !deps.ai) return { notes: 0, noteError: 'not set up on the server' };
+    const min = Math.max(30, Number(ns.min_seconds) || 60);
+    const from = Math.max(Date.parse(ns.since || 0) || 0, nowMs() - 2 * 86400000);
+    const todo = await q(`select c.*, n.attempts from cds_comms c left join cds_call_notes n on n.comm_id = c.id
+      where c.channel='call' and c.answered and c.seconds >= $1 and c.at >= $2 and c.at <= $3
+        and (n.comm_id is null or (n.status = 'failed' and n.attempts < 3)) order by c.at limit $4`,
+      [min, iso(from), iso(nowMs() - 2 * 60000), Math.max(1, Math.min(8, Number(ns.per_run) || 4))]);
+    let made = 0, waiting = 0, failed = 0, none = 0;
+    for (const c of todo) {
+      const at = Date.parse(c.at);
+      const who = c.phone10 ? resolve(await bookFor(c.phone10)) : { state: 'unknown', person: null };
+      const save = async (status, f = {}) => q(`insert into cds_call_notes (comm_id, phone10, person_ref, status, note, followup, people, transcript, model, error, attempts, made_at)
+          values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11, now())
+          on conflict (comm_id) do update set person_ref=excluded.person_ref, status=excluded.status, note=excluded.note, followup=excluded.followup, people=excluded.people,
+            transcript=coalesce(excluded.transcript, cds_call_notes.transcript), model=excluded.model, error=excluded.error, attempts=excluded.attempts, made_at=now()`,
+        [c.id, c.phone10 || null, who.person ? who.person.ref : null, status, f.note || null, f.followup || null, JSON.stringify(f.people || []),
+         f.transcript || null, f.model || null, f.error || null, (Number(c.attempts) || 0) + 1]);
+      if (who.state === 'staff' || who.state === 'ignore') { await save('skipped', { error: who.state === 'staff' ? 'a call with our own team' : 'marked Not for CDS' }); continue; }
+      let text = '';
+      try { text = transcriptText(await deps.ghl.transcript(c.id)); }
+      catch (e) { const m = String(e && e.message || e); if (!/GoHighLevel 404/.test(m)) { failed++; await save('failed', { error: 'reading the transcript failed: ' + m.slice(0, 200) }); continue; } }
+      if (!text) {
+        if (nowMs() - at < 30 * 60000) { waiting++; continue; }
+        none++; await save('no_transcript', { error: 'GoHighLevel has no transcript for this call. Listen to the recording.' }); continue;
+      }
+      if (text.length > 200000) text = text.slice(0, 200000) + '\n(the rest of this very long call was left out)';
+      const p = who.person;
+      const req = noteRequest({ who: p ? p.name : '', role: p ? (KIND_LABEL[p.kind] || p.kind) : '', detail: p ? p.detail : '',
+        day: chicago(at), weekday: weekdayOf(at), direction: c.direction, staff: c.staff_name || '', minutes: Math.max(1, Math.round(c.seconds / 60)), transcript: text });
+      let r;
+      try { r = cleanNote(await deps.ai(req), chicago(at)); } catch (e) { r = { error: 'the note could not be written: ' + String(e && e.message || e).slice(0, 200) }; }
+      if (r.error) { failed++; await save('failed', { error: r.error, transcript: text, model: NOTE_MODEL }); continue; }
+      made++;
+      await save(r.about ? 'waiting' : 'not_about', { note: r.note, followup: r.followup, people: r.people, transcript: text, model: NOTE_MODEL });
+    }
+    await q(`update cds_match_settings set value = value || jsonb_build_object('state', $1::jsonb), updated_at=now() where key='call_notes'`,
+      [JSON.stringify({ last_run: iso(nowMs()), last_made: made, last_failed: failed, last_no_transcript: none, last_waiting_for_transcript: waiting })]);
+    return { notes: made, notesFailed: failed, notesNoTranscript: none };
+  }
+  // Desktop step proof: a made-up call (no client details) through the real request and the real key.
+  // Saves nothing.
+  async function noteSelfTest() {
+    if (!deps.ai) return { ok: false, error: 'not set up on the server' };
+    const req = noteRequest({ who: 'Test Person', role: 'Lead', detail: '', day: chicago(nowMs()), weekday: weekdayOf(nowMs()), direction: 'inbound', staff: 'Test Staff', minutes: 2,
+      transcript: 'Speaker 1: Caring Companions CDS, this is Test Staff.\nSpeaker 2: Hi, this is Test Person. This is only a test call for the office system. Please call me back next Monday.\nSpeaker 1: Will do, talk Monday.' });
+    try { const r = cleanNote(await deps.ai(req), chicago(nowMs())); return r.error ? { ok: false, error: r.error } : { ok: true, note: r.note, followup: r.followup }; }
+    catch (e) { return { ok: false, error: String(e && e.message || e).slice(0, 300) }; }
+  }
+  const NOTE_COLS = `n.comm_id, n.status, n.note, n.followup, n.people, n.final_note, n.decided_by, n.decided_at, n.error`;
+  // Waiting notes with who they are about now (the phone book can change after the call: a link, a pick).
+  async function notesWaiting() {
+    const rows = await q(`select ${NOTE_COLS}, c.at, c.seconds, c.direction, c.staff_name, c.phone10 from cds_call_notes n join cds_comms c on c.id = n.comm_id
+      where n.status = 'waiting' order by c.at desc limit 200`);
+    const out = [];
+    for (const r of rows) {
+      const who = r.phone10 ? resolve(await bookFor(r.phone10)) : { person: null };
+      out.push({ ...r, ref: who.person ? who.person.ref : null, who: who.person ? who.person.name : '', detail: who.person ? who.person.detail : '' });
+    }
+    return { notes: out };
+  }
+  async function noteTranscript(id) {
+    const r = await one(`select transcript from cds_call_notes where comm_id=$1`, [String(id || '')]);
+    if (!r || !r.transcript) throw new CommsError('There is no transcript for that call.', 404);
+    return { transcript: r.transcript };
+  }
+  // OK (with the office's own words, if they fixed it) or "Not about them". The hub has already saved
+  // the note to the person's record when this says ok; this only closes the waiting note.
+  async function noteDecide(email, { id, decision, note, followup }) {
+    const by = String(email || '').toLowerCase();
+    if (!['ok', 'not_about'].includes(decision)) throw new CommsError('Unknown choice.');
+    const r = await one(`update cds_call_notes set status=$2, final_note=$3, final_followup=$4, decided_by=$5, decided_at=now()
+      where comm_id=$1 and status='waiting' returning comm_id`,
+      [String(id || ''), decision === 'ok' ? 'ok' : 'not_about', decision === 'ok' ? noDash(note).slice(0, 2000) || null : null,
+       decision === 'ok' && /^\d{4}-\d{2}-\d{2}$/.test(String(followup || '')) ? followup : null, by]);
+    if (!r) throw new CommsError('Someone already answered that note.', 409);
+    await audit(by, 'call_note_' + decision, String(id), {});
+    return { ok: true };
+  }
+
   async function run(opts = {}) {
     const s = await settings();
     if (!s) return { ok: false, error: 'comm_center setting missing (run comm_center.sql)' };
@@ -404,7 +557,11 @@ export function createComms(deps) {
       const book = await rebuildBook();
       const read = await pull(s, { rescan: opts.rescan === true });
       const c = await cards(await settings());
-      return { ok: true, phoneBook: book, ...read, ...c };
+      // Call notes: their own switch, and a failure here never stops the follow-ups above.
+      let n = {};
+      const ns = await noteSettings();
+      if (ns && ns.live === true) n = await makeNotes(ns).catch(e => ({ noteError: String(e && e.message || e).slice(0, 300) }));
+      return { ok: true, phoneBook: book, ...read, ...c, ...n };
     } catch (e) {
       await saveState({ last_error: String(e && e.message || e).slice(0, 300), last_error_at: iso(nowMs()) }).catch(() => {});
       throw e;
@@ -467,8 +624,11 @@ export function createComms(deps) {
     const phones = (await q(`select distinct phone10, ref, kind, name, detail from cds_phone_book where ref = any($1) or ref = any($2)`, [refs, fam]));
     for (const p of own) if (!phones.some(x => x.phone10 === p)) phones.push({ phone10: p, ref: '', kind: '', name: '' });
     if (!phones.length) return { items: [], phones: [] };
-    const items = await q(`select id, channel, direction, at, phone10, status, seconds, answered, voicemail, staff_name, body from cds_comms
-      where phone10 = any($1) order by at desc limit 60`, [[...new Set(phones.map(p => p.phone10))]]);
+    const items = await q(`select c.id, c.channel, c.direction, c.at, c.phone10, c.status, c.seconds, c.answered, c.voicemail, c.staff_name, c.body,
+        n.status note_status, coalesce(n.final_note, n.note) note, coalesce(n.final_followup, n.followup) note_followup, n.people note_people, n.decided_by note_by,
+        (n.transcript is not null) has_transcript
+      from cds_comms c left join cds_call_notes n on n.comm_id = c.id
+      where c.phone10 = any($1) order by c.at desc limit 60`, [[...new Set(phones.map(p => p.phone10))]]);
     const whoByPhone = new Map(phones.map(p => [p.phone10, p]));
     const viaContact = p => String(p.ref || '').startsWith('family:');
     return { items: items.map(i => { const w = whoByPhone.get(i.phone10) || {};
@@ -614,9 +774,12 @@ export function createComms(deps) {
     if (a === 'urgent') return setUrgent(email, body);
     if (a === 'later') return setLater(email, body);
     if (a === 'checkins') return checkins();
+    if (a === 'notes_waiting') return notesWaiting();
+    if (a === 'note_transcript') return noteTranscript(body.id);
+    if (a === 'note_decide') return noteDecide(email, body);
     throw new CommsError('Unknown request');
   }
-  return { run, rebuildBook, pull, cards, sortAll, queue, history, reached, people, pick, done, setNeed, setOwner, setUrgent, setLater, checkins, handle, settings };
+  return { run, rebuildBook, pull, cards, sortAll, queue, history, reached, people, pick, done, setNeed, setOwner, setUrgent, setLater, checkins, handle, settings, makeNotes, notesWaiting, noteDecide, noteTranscript, noteSelfTest };
 }
 
 export class CommsError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }

@@ -75,6 +75,8 @@ await pg.exec(strip(readFileSync(ROOT + '/caregiver_match_phase1.sql', 'utf8')))
 await pg.exec(`create table agency_data (id uuid primary key default gen_random_uuid(), agency_id text, data_key text, data_value jsonb, unique (agency_id, data_key));`);
 const SQL = strip(readFileSync(ROOT + '/comm_center.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
+// call notes (2026-10-29): Calls and texts joins the notes table
+await pg.exec(strip(readFileSync(ROOT + '/call_notes.sql', 'utf8')));
 ok(true, 'comm_center.sql runs twice');
 // step 2 (2026-10-22): run twice too; a changed owner survives a second run
 const SQL2 = strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8'));
@@ -496,7 +498,8 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   ok(/openContactLog\(c\.id, ongoingRequirements\(c\)\.monthly\.thisMonth\)/.test(html) && !/contacts\[[^\]]*\] *=/.test(html.slice(a2, b2)), 'the check-in tap opens the existing form and never saves a check-in itself');
   ok(/action: 'set_need_owner'/.test(html), 'Who owns each need on the Switches page');
   ok(!/sendMessage|\/conversations\/messages'/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8')), 'the server function never sends');
-  ok(!/method: 'POST'|method: "POST"/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8').split('Deno.serve')[0]), 'it only reads GoHighLevel (no POST to it)');
+  // The one POST before Deno.serve is the call note request to Claude (2026-10-29), not GoHighLevel.
+  ok(!/method: 'POST'|method: "POST"/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8').split('Deno.serve')[0].replace(/async function ai\([\s\S]*?\n}\n/, '')), 'it only reads GoHighLevel (no POST to it)');
 }
 
 console.log(pass + ' passed, ' + failN + ' failed');

@@ -71,6 +71,9 @@ export const SWITCHES = [
   { key: 'comm_center', field: 'live', label: 'Follow-ups on Today and the 8am email',
     does: () => 'Missed calls and texts nobody answered, read from GoHighLevel every 5 minutes, show on Today and in the 8am email. The Follow-ups page shows them either way. Nothing is ever sent to anyone.',
     on: 'Today and the 8am email will list calls and texts to follow up.', off: 'Today and the 8am email will leave them out. The Follow-ups page still shows them.' },
+  { key: 'call_notes', field: 'live', label: 'Call notes from recorded calls',
+    does: v => 'After each answered call on the CDS lines of ' + (v.min_seconds || 60) + ' seconds or more, reads GoHighLevel\u2019s transcript and writes a short note and a suggested call back date for the person. The note waits on their profile and on Leads until someone presses OK; nothing is saved to the person or sent to anyone before that.',
+    on: 'New recorded calls will get a note to check within about 10 minutes.', off: 'No new call notes. Notes already made stay where they are.' },
 ];
 function hour(h) { h = +h; return (h % 12 || 12) + (h < 12 ? 'am' : 'pm'); }
 
