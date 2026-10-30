@@ -14,10 +14,12 @@
   'use strict';
   const DAY = 864e5;
   // closed_inactive and closed_spam added 2026-10-22 (her ask: a way to make a lead inactive or mark it spam).
-  const CLOSED = ['closed_ni', 'closed_other', 'closed_inactive', 'closed_spam', 'closed_pool'];
+  // closed_linked (2026-10-29): the caller is family or the attendant of someone we serve or a lead; see linkLead.
+  const CLOSED = ['closed_ni', 'closed_other', 'closed_inactive', 'closed_spam', 'closed_pool', 'closed_linked'];
   const CLOSED_LABELS = { closed_ni: 'Not interested', closed_other: 'Went with another agency',
                           closed_inactive: 'Inactive, stopped answering', closed_spam: 'Spam, not a real lead',
-                          closed_pool: 'Moved to the Caregiver Pool' };  // closed_pool: Who called, 2026-10-22
+                          closed_pool: 'Moved to the Caregiver Pool',  // closed_pool: Who called, 2026-10-22
+                          closed_linked: 'Linked to the person they called about' };
   // One rule for "active" (2026-10-22): the hub saves "inactive" lowercase and old
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
   const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
@@ -812,6 +814,72 @@
     return 'unsure';
   }
 
+  // ---------- Contacts: family and attendants who call about someone (her ask 2026-10-29) ----------
+  // Mockup 6CxaqzDSJABjRYnGxc6tZg. The consumer is the boss, so callers hang under the person who needs
+  // care: record.relatedPeople = [{ id, name, phone, role, relation, fromLead, prevStatus, at, by }].
+  // (Not "contacts": on a consumer that key already holds the monthly contact logs.)
+  // role: family | attendant | other. Linking closes the caller's own lead as closed_linked with
+  // p.linkedTo = { kind, id, name }; unlinking reopens it as it was.
+  const CONTACT_ROLES = { family: 'Family', attendant: 'Attendant', other: 'Someone else' };
+  function relatedPeople(r) { return Array.isArray(r && r.relatedPeople) ? r.relatedPeople.filter(x => x && x.id) : []; }
+  // data = { pipeline, consumers } (mutated). target = { kind: 'consumer' | 'lead', id }.
+  // opts = { role, relation, phone, by, now (ISO) }. Returns { ok, owner } or { error }.
+  function linkLead(data, leadId, target, opts) {
+    opts = opts || {};
+    const pipeline = data.pipeline || [], consumers = data.consumers || [];
+    const lead = pipeline.find(p => p && p.id === leadId);
+    if (!lead) return { error: 'That lead is gone.' };
+    if (lead.status === 'closed_linked') return { error: (lead.name || 'This lead') + ' is already linked to ' + ((lead.linkedTo || {}).name || 'someone') + '.' };
+    if (!target || !target.id) return { error: 'Pick who they called about.' };
+    if (target.kind === 'lead' && target.id === leadId) return { error: 'Pick someone else, not the same lead.' };
+    const owner = target.kind === 'consumer' ? consumers.find(c => c && String(c.id) === String(target.id))
+      : target.kind === 'lead' ? pipeline.find(p => p && p.id === target.id) : null;
+    if (!owner) return { error: 'That person is not in the hub.' };
+    if (target.kind === 'lead' && CLOSED.includes(owner.status)) return { error: (owner.name || 'That lead') + ' is closed. Reopen them first, or pick someone else.' };
+    const role = CONTACT_ROLES[opts.role] ? opts.role : '';
+    if (!role) return { error: 'Pick family, attendant or someone else.' };
+    const now = opts.now || new Date().toISOString(), by = opts.by || 'office';
+    const list = relatedPeople(owner);
+    list.push({ id: 'rp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: lead.name || '', phone: opts.phone != null ? String(opts.phone) : (lead.phone || ''),
+      role, relation: String(opts.relation || '').trim(), fromLead: lead.id, prevStatus: lead.status || 'new', at: now, by });
+    // Anyone already hanging under the caller's lead comes along.
+    relatedPeople(lead).forEach(x => list.push(Object.assign({}, x)));
+    owner.relatedPeople = list;
+    lead.relatedPeople = [];
+    lead.linkedTo = { kind: target.kind, id: String(target.id), name: owner.name || '', role };
+    lead.status = 'closed_linked';
+    lead.closedAt = now;
+    lead.followup = '';
+    lead.notes = (Array.isArray(lead.notes) ? lead.notes : []).concat({ date: isoLocal(new Date(now)),
+      text: 'Linked to ' + (owner.name || 'someone') + ' as ' + (opts.relation ? opts.relation + ', ' : '') + CONTACT_ROLES[role].toLowerCase() + ' (by ' + by + ').' });
+    return { ok: true, owner };
+  }
+  // A contact typed in by hand (no lead behind it).
+  function addContact(owner, c, opts) {
+    opts = opts || {};
+    const name = String(c && c.name || '').trim();
+    if (!name) return { error: 'Add their name.' };
+    if (!CONTACT_ROLES[c.role]) return { error: 'Pick family, attendant or someone else.' };
+    owner.relatedPeople = relatedPeople(owner).concat({ id: 'rp' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name,
+      phone: String(c.phone || '').trim(), role: c.role, relation: String(c.relation || '').trim(), at: opts.now || new Date().toISOString(), by: opts.by || 'office' });
+    return { ok: true };
+  }
+  // Take a contact off. If they came from a lead, that lead opens again as it was.
+  function unlinkContact(data, owner, contactId, opts) {
+    opts = opts || {};
+    const list = relatedPeople(owner), c = list.find(x => x.id === contactId);
+    if (!c) return { error: 'That contact is already gone.' };
+    owner.relatedPeople = list.filter(x => x.id !== contactId);
+    const lead = c.fromLead ? (data.pipeline || []).find(p => p && p.id === c.fromLead) : null;
+    if (lead && lead.status === 'closed_linked') {
+      lead.status = c.prevStatus && !CLOSED.includes(c.prevStatus) ? c.prevStatus : 'nurturing';
+      delete lead.linkedTo; delete lead.closedAt;
+      lead.notes = (Array.isArray(lead.notes) ? lead.notes : []).concat({ date: isoLocal(new Date(opts.now || Date.now())),
+        text: 'Unlinked from ' + (owner.name || 'someone') + ' (by ' + (opts.by || 'office') + '). Open again.' });
+    }
+    return { ok: true, lead };
+  }
+
   // p = a pipeline record, calls = cds_lead_calls rows, todayIso = yyyy-mm-dd,
   // moved = true when this person is already on the Consumers list.
   // tone: late (red), today (honey), later, none, ready.
@@ -874,7 +942,8 @@
       due = 'Approved'; tone = 'ready'; sort = 1;
       next = 'Move them to Consumers to start the first shift checklist.';
     } else {
-      due = done ? 'On the Consumers list' : 'Closed: ' + (CLOSED_LABELS[p.status] || 'closed'); tone = 'none'; sort = 5;
+      due = done ? 'On the Consumers list' : p.status === 'closed_linked' && p.linkedTo ? 'Linked to ' + (p.linkedTo.name || 'someone')
+        : 'Closed: ' + (CLOSED_LABELS[p.status] || 'closed'); tone = 'none'; sort = 5;
       next = done ? 'Nothing to do here.' : 'Nothing to do. Press Reopen if they come back.';
     }
     // needsToday: a call that should happen today (the Leads summary line).
@@ -1001,7 +1070,7 @@
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
-                    leadCard, formWho, LEAD_KINDS, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
+                    leadCard, formWho, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
