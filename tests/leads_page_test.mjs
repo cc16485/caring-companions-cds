@@ -151,8 +151,13 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(r.includes('openCloseLead(') && r.includes('reopenLead(') && r.includes('c.cameIso'), 'rows have Close, Reopen and the came-in date');
   // 10-29: one row per person, sortable by came in and last contact
-  ok(r.includes('ld-headrow') && r.includes("ldSortCol(\\'came\\')") && r.includes("ldSortCol(\\'last\\')"), 'column headings sort');
-  ['need', 'new', 'old', 'quiet', 'recent'].forEach(k => ok(html.includes('<option value="' + k + '"'), 'Sort menu has ' + k));
+  // 10-29 later, "match the GHL way, but make better": every heading sorts (a second click flips it),
+  // Smart List style tabs with All, a count, pages.
+  ok(r.includes('ld-headrow') && ["name", "came", "last", "need"].every(k => r.includes("th('" + k + "'")) && r.includes("onclick=\"ldSortCol(\\'' + key + '\\')\""), 'column headings sort');
+  ['need', 'came:desc', 'came:asc', 'last:asc', 'last:desc', 'name:asc'].forEach(k => ok(html.includes('<option value="' + k + '"'), 'Sort menu has ' + k));
+  ok(/OLD = \{ new: 'came:desc', old: 'came:asc', quiet: 'last:asc', recent: 'last:desc' \}/.test(html), 'a sort saved with the first menu still works');
+  ok(r.includes("{ id: 'all', label: 'All'") && /let _ldStep = 'all';/.test(html), 'an All tab, open by default');
+  ok(r.includes("id=\"ldPer\"") && /id="ldPager"/.test(html) && /id="ldCount"/.test(html), 'pages, page size and a count');
   ok(r.includes('_commReachedAt[ph]'), 'last contact counts office-line calls and texts');
   const f = html.slice(html.indexOf('function closeLeadAs('), html.indexOf('function reopenLead('));
   ok(f.includes("p.followup = ''"), 'closing clears the call back date');
