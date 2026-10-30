@@ -3,8 +3,10 @@
 //     from GoHighLevel and keeps follow-ups up to date.
 //   - The hub page (a signed-in CDS hub user) asks for the queue, a person's calls and texts,
 //     "Who is this?" answers and Done.
-// It only READS GoHighLevel (conversations, messages, users) in the CDS sub-account. It never
-// sends, calls, or changes a contact.
+// It only READS GoHighLevel (conversations, messages, users, call transcripts and recordings) in the
+// CDS sub-account. It never sends, calls, or changes a contact.
+// Call notes (2026-10-29, switch call_notes): a call's transcript goes to Claude (ANTHROPIC_API_KEY,
+// from the BAA-covered account) for a short note that waits for the office to press OK.
 import postgres from 'npm:postgres@3.4.4';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { createComms, CommsError } from '../_shared/office/comms.js';
@@ -33,7 +35,21 @@ async function get(path: string, version = '2021-04-15') {
   throw new Error('GoHighLevel kept saying slow down (429)');
 }
 
+// One request to Claude for a call note (comms.js noteRequest builds it; the beta header turns on the
+// server-side stand-in model when a request is declined).
+async function ai(req: Record<string, unknown>) {
+  const key = env('ANTHROPIC_API_KEY');
+  if (!key) throw new Error('ANTHROPIC_API_KEY is not set on the CDS server');
+  const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'content-type': 'application/json' },
+    body: JSON.stringify(req), signal: AbortSignal.timeout(90000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('Claude ' + r.status + ': ' + String(j?.error?.message || '').slice(0, 160));
+  return j;
+}
+
 const comms = createComms({
+  ai,
   db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
   ghl: {
     async users() {
@@ -66,6 +82,10 @@ const comms = createComms({
     async contact(id: string) {
       const j = await get('/contacts/' + encodeURIComponent(id), '2021-07-28');
       return (j.contact ?? {}) as Record<string, unknown>;
+    },
+    // A call's transcript (pieces with a speaker channel). 404 = none (yet).
+    async transcript(messageId: string) {
+      return await get('/conversations/locations/' + CDS_LOCATION + '/messages/' + encodeURIComponent(messageId) + '/transcription');
     },
     // A conversation's messages newer than sinceMs.
     async messages(conversationId: string, sinceMs: number) {
@@ -114,7 +134,19 @@ Deno.serve(async (req) => {
   const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   const u = await admin.auth.getUser(jwt);
   if (u.error || !u.data.user?.email) return json({ error: 'Please sign in to the CDS hub.' }, 401);
-  try { return json(await comms.handle(u.data.user.email, await req.json().catch(() => ({})))); }
+  const body = await req.json().catch(() => ({}));
+  // A call's recording, for "Listen" on a call note (signed-in staff only; only calls already saved here).
+  if (body?.action === 'recording') {
+    const id = String(body.id || '');
+    const known = await sql`select 1 from cds_comms where id = ${id} and channel = 'call' limit 1`;
+    if (!known.length) return json({ error: 'That call is not in the hub.' }, 404);
+    cdsOnly();
+    const r = await fetch(GHL + '/conversations/messages/' + encodeURIComponent(id) + '/locations/' + CDS_LOCATION + '/recording',
+      { headers: { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-04-15', Accept: '*/*', 'User-Agent': 'CaringCompanionsCDSHub/1.0 (+https://hub.caringcds.com)' } });
+    if (!r.ok) return json({ error: r.status === 404 ? 'GoHighLevel has no recording for this call.' : 'The recording could not be read (' + r.status + ').' }, r.status === 404 ? 404 : 502);
+    return new Response(r.body, { headers: { ...h, 'Content-Type': r.headers.get('content-type') || 'audio/x-wav', 'Cache-Control': 'private, no-store' } });
+  }
+  try { return json(await comms.handle(u.data.user.email, body)); }
   catch (e) {
     if (e instanceof CommsError) return json({ error: e.message }, e.status);
     console.error(e);

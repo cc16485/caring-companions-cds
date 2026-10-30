@@ -496,7 +496,8 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   ok(/openContactLog\(c\.id, ongoingRequirements\(c\)\.monthly\.thisMonth\)/.test(html) && !/contacts\[[^\]]*\] *=/.test(html.slice(a2, b2)), 'the check-in tap opens the existing form and never saves a check-in itself');
   ok(/action: 'set_need_owner'/.test(html), 'Who owns each need on the Switches page');
   ok(!/sendMessage|\/conversations\/messages'/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8')), 'the server function never sends');
-  ok(!/method: 'POST'|method: "POST"/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8').split('Deno.serve')[0]), 'it only reads GoHighLevel (no POST to it)');
+  // The one POST before Deno.serve is the call note request to Claude (2026-10-29), not GoHighLevel.
+  ok(!/method: 'POST'|method: "POST"/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8').split('Deno.serve')[0].replace(/async function ai\([\s\S]*?\n}\n/, '')), 'it only reads GoHighLevel (no POST to it)');
 }
 
 console.log(pass + ' passed, ' + failN + ' failed');

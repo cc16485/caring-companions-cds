@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=28"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=29"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -679,6 +679,19 @@ input, select, textarea { border-radius:10px; }
 .rp-tag.attendant { background:#EAF0FA; color:#2B4C7E; }
 .rp-tag.other { background:#F1EFE8; color:#3c4a58; }
 .rp-from { color:#7A4E0B; font-weight:700; }
+/* Call notes (2026-10-29) */
+.cn-panel { margin-top:10px; padding:14px 16px; border-radius:14px; background:#FFFBF1; border:1.5px solid #F0D9A8; display:flex; flex-direction:column; gap:10px; }
+.cn-head { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; font-size:14px; color:#0D365F; }
+.cn-grid { display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:14px; }
+.cn-grid textarea { width:100%; box-sizing:border-box; padding:9px 11px; border:1.5px solid #e4e1d8; border-radius:10px; font:inherit; font-size:14px; line-height:1.5; background:#fff; }
+.cn-grid input[type=date] { width:100%; box-sizing:border-box; min-height:40px; padding:0 10px; border:1.5px solid #e4e1d8; border-radius:10px; font:inherit; background:#fff; }
+.cn-heard { font-size:13px; margin-top:4px; }
+.cn-btns { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.cn-transcript { max-height:260px; overflow:auto; white-space:pre-wrap; background:#fff; border-radius:10px; padding:10px 12px; font:inherit; font-size:13px; line-height:1.55; margin:0; }
+.cn-pill { display:inline-block; margin-top:4px; background:var(--cute-honey-pale) !important; color:#7A4E0B !important; }
+.ch-note { margin-top:4px; font-size:13px; line-height:1.5; color:var(--cute-ink); background:#f6f5f0; border-radius:8px; padding:6px 10px; }
+.ch-note.wait { background:#FFFBF1; color:#7A4E0B; }
+@media (max-width: 700px) { .cn-grid { grid-template-columns:1fr; } }
 .rp-linkbtn { border:0; background:none; padding:0; color:#14606F; font:inherit; font-size:13px; font-weight:600; text-decoration:underline; cursor:pointer; }
 .ch-filter { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
 .ch-filter button { min-height:36px; padding:0 12px; border-radius:999px; border:1.5px solid #e4e1d8; background:#fff; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
@@ -7712,6 +7725,10 @@ function renderLeadProfile(){
       '</div>';
   }
 
+  // ---- call notes waiting for an OK (2026-10-29) ----
+  const cnw = cnFor('lead', p.id);
+  if (cnw.length) html += '<div class="card" style="padding:18px 20px;margin-bottom:14px"><b style="color:var(--primary)">Call notes to check (' + cnw.length + ')</b>' + cnw.map(n => cnPanelHtml(n, 'lead', p)).join('') + '</div>';
+
   // ---- notes (plus what linked family and attendants told us, 2026-10-29) ----
   const notes = (Array.isArray(p.notes) ? p.notes : []).concat(CDSRules.linkedNotes(p, getData('pipeline')))
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
@@ -8227,7 +8244,10 @@ function renderPipeline() {
   const urgent = open.filter(x => x.c.needsToday);
   const firstNames = urgent.map(x => esc(String(x.p.name || '').split(' ')[0]));
   const sum = document.getElementById('ldSummary');
-  if (sum) sum.innerHTML = open.length + (open.length === 1 ? ' person' : ' people') + ' right now. ' +
+  const cnLeads = open.filter(x => cnFor('lead', x.p.id).length).length;
+  if (sum) sum.innerHTML = (cnLeads ? '<strong style="color:#7A4E0B">' + cnLeads + (cnLeads === 1 ? ' call note is' : ' call notes are') + ' waiting for your OK.</strong> ' : '') +
+    (_cnError ? '<span style="color:var(--danger)">Call notes could not be loaded: ' + esc(_cnError) + '</span> ' : '') +
+    open.length + (open.length === 1 ? ' person' : ' people') + ' right now. ' +
     (!urgent.length ? 'Nobody needs a call today.'
       : urgent.length <= 3 ? '<strong>' + (firstNames.length > 1 ? firstNames.slice(0, -1).join(', ') + ' and ' + firstNames.slice(-1) : firstNames[0]) + '</strong> ' + (urgent.length === 1 ? 'needs' : 'need') + ' you today.'
       : '<strong>' + urgent.length + ' people</strong> need you today.');
@@ -8327,7 +8347,9 @@ function renderPipeline() {
       : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
     const shut = c.step !== 'closed'
       ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + ': inactive or spam" title="Close: inactive or spam">Close</button>' : '';
-    const extra = ldWhoPicker(p, c) + ldPoolConfirm(p);
+    const notes = cnFor('lead', p.id);
+    const extra = ldWhoPicker(p, c) + ldPoolConfirm(p) +
+      (notes.length ? cnPanelHtml(notes[0], 'lead', p) + (notes.length > 1 ? '<div class="field-note" style="margin-top:6px">' + (notes.length - 1) + ' more on their profile. <button type="button" class="rp-linkbtn" onclick="openLeadProfile(\'' + id + '\')">Open</button></div>' : '') : '');
     // Came in: the day, and the time when we know it (website leads).
     const addedMs = Date.parse(p.addedAt || '');
     const cameTime = c.cameIso && !isNaN(addedMs) && CDSRules.isoLocal(new Date(addedMs)) === c.cameIso ? new Date(addedMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
@@ -8340,7 +8362,7 @@ function renderPipeline() {
       '<div class="ld-c-date"><span class="ld-lbl">Came in</span>' + (c.cameIso ? esc(_ldDay(c.cameIso)) + (cameTime ? '<small>' + esc(cameTime) + '</small>' : '') : '<small>Not known</small>') + '</div>' +
       '<div class="ld-c-date"><span class="ld-lbl">Last activity</span>' + (last ? '<span class="ld-act" title="' + (lastKind === 'call' ? 'Call or text on the office line' : 'Call note') + ' ' + esc(_ldDay(last)) + '">' +
         LD_ICON[lastKind] + esc(lastAt ? _ldAgoAt(lastAt) : _ldAgo(last)) + '</span>' : '<small>Not yet</small>') + '</div>' +
-      '<div class="ld-c-due"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span></div>' +
+      '<div class="ld-c-due"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span>' + (notes.length ? '<span class="ld-due cn-pill">Note to check</span>' : '') + '</div>' +
       '<div class="ld-c-about" title="' + esc(c.who + '\nNext: ' + c.next) + '"><span class="ld-who">' + esc(c.who) + '</span>' +
         '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span>' +
         (c.whoLabel && c.whoCalled !== 'unsure' && c.step === 'call' && _ldWhoEdit !== p.id ? '<button type="button" class="ld-wc-change" onclick="ldWhoChange(\'' + id + '\')">Change who called</button>' : '') + '</div>' +
@@ -8473,11 +8495,99 @@ async function _commCall(body) {
 }
 
 // Called at sign-in and every 5 minutes after.
+// ============================================================================
+// CALL NOTES (2026-10-29, her approved mockup 6CxaqzDSJABjRYnGxc6tZg). After an answered call on a CDS
+// line, the server drafts a short note and a call back date from GoHighLevel's transcript (switch
+// "Call notes from recorded calls"). It waits here until someone presses OK: then, for a lead, the note
+// goes on the lead's Notes and the call back date is set. "Not about them" drops it. Nothing is sent.
+// ============================================================================
+let _cnWaiting = [], _cnError = '', _cnBusy = '';
+const _cnRefOf = ref => { const m = String(ref || '').match(/^(?:family:)?(lead|consumer):(.+)$/); return m ? { kind: m[1], id: m[2] } : null; };
+// Waiting notes for one lead or consumer, newest first.
+function cnFor(kind, id) { return _cnWaiting.filter(n => { const r = _cnRefOf(n.ref); return r && r.kind === kind && String(r.id) === String(id); }); }
+function _cnDay(iso) { return iso ? (CDSRules.isoLocal ? CDSRules.isoLocal(new Date(iso)) : String(iso).slice(0, 10)) : _todayIso(); }
+// The panel: the note to fix, the call back date, people heard on the call, OK / Not about them.
+function cnPanelHtml(n, kind, owner) {
+  const id = esc(n.comm_id), first = esc(String(owner.name || 'them').split(' ')[0]);
+  const known = CDSRules.relatedPeople(owner).map(x => String(x.name || '').toLowerCase());
+  const heard = (Array.isArray(n.people) ? n.people : []).filter(x => x && x.name && !known.includes(String(x.name).toLowerCase()) && String(x.name).toLowerCase() !== String(owner.name || '').toLowerCase());
+  const mins = Math.max(1, Math.round((n.seconds || 0) / 60));
+  return '<div class="cn-panel" id="cn_' + id + '">' +
+    '<div class="cn-head"><b>From the call ' + esc(_commWhen(n.at)) + ' (' + mins + ' min' + (n.staff_name ? ', ' + esc(n.staff_name) : '') + ')</b>' +
+      '<span><button type="button" class="rp-linkbtn" onclick="cnTranscript(\'' + id + '\')">Read the whole call</button> &middot; <button type="button" class="rp-linkbtn" onclick="cnListen(\'' + id + '\')">Listen</button></span></div>' +
+    '<div class="cn-grid"><div><label class="rp-lbl" for="cnt_' + id + '">Note</label><textarea id="cnt_' + id + '" rows="3">' + esc(n.note || '') + '</textarea></div>' +
+      '<div>' + (kind === 'lead' ? '<label class="rp-lbl" for="cnd_' + id + '">Call back</label><input type="date" id="cnd_' + id + '" value="' + esc(n.followup || '') + '">' : '') +
+        (heard.length ? '<div class="rp-lbl" style="margin-top:8px">Heard on the call</div>' + heard.map((x, i) => '<div class="cn-heard">' + esc(x.name) + (x.relation ? ', ' + esc(x.relation) : '') + (x.phone ? ', ' + esc(x.phone) : '') +
+          ' <button type="button" class="rp-linkbtn" onclick="cnAddPerson(\'' + id + '\',' + i + ',\'' + kind + '\',\'' + esc(String(owner.id)) + '\')">Add as a contact</button></div>').join('') : '') +
+      '</div></div>' +
+    '<div class="cn-media" id="cnm_' + id + '"></div>' +
+    '<div class="cn-btns"><button type="button" class="btn btn-primary btn-sm"' + (_cnBusy === n.comm_id ? ' disabled' : '') + ' onclick="cnDecide(\'' + id + '\',\'ok\',\'' + kind + '\',\'' + esc(String(owner.id)) + '\')">OK, save it</button>' +
+      '<button type="button" class="btn btn-outline btn-sm"' + (_cnBusy === n.comm_id ? ' disabled' : '') + ' onclick="cnDecide(\'' + id + '\',\'not_about\',\'' + kind + '\',\'' + esc(String(owner.id)) + '\')">Not about ' + first + '</button>' +
+      '<span class="field-note" id="cne_' + id + '">Nothing is saved until someone presses OK.</span></div></div>';
+}
+async function cnDecide(commId, decision, kind, ownerId) {
+  const n = _cnWaiting.find(x => x.comm_id === commId) || {};
+  const note = (document.getElementById('cnt_' + commId) || {}).value || n.note || '';
+  const followup = (document.getElementById('cnd_' + commId) || {}).value || '';
+  const err = document.getElementById('cne_' + commId);
+  if (decision === 'ok' && !note.trim()) { if (err) err.textContent = 'Write the note first, or press Not about.'; return; }
+  _cnBusy = commId;
+  try { await _commCall({ action: 'note_decide', id: commId, decision, note, followup }); }
+  catch (e) { _cnBusy = ''; if (err) { err.textContent = e.message; err.style.color = 'var(--danger)'; } return; }
+  // Answered: for a lead, the note and call back date go on the lead.
+  if (decision === 'ok' && kind === 'lead') {
+    const pipeline = getData('pipeline'), p = pipeline.find(x => x.id === ownerId);
+    if (p) {
+      p.notes = (Array.isArray(p.notes) ? p.notes : []).concat({ date: _cnDay(n.at), text: note.trim(), fromCall: commId, by: _ldWhoBy() });
+      if (followup) p.followup = followup;
+      await setData('pipeline', pipeline);
+    }
+  }
+  _cnWaiting = _cnWaiting.filter(x => x.comm_id !== commId);
+  _cnBusy = '';
+  _rpRefresh();
+}
+async function cnAddPerson(commId, i, kind, ownerId) {
+  const n = _cnWaiting.find(x => x.comm_id === commId);
+  const x = n && (n.people || [])[i], o = _rpOwner(kind, ownerId);
+  if (!x || !o) return;
+  const rel = String(x.relation || '').toLowerCase();
+  const role = /attendant|caregiver|aide/.test(rel) ? 'attendant' : /case manager|nurse|doctor|social worker|neighbor|friend/.test(rel) ? 'other' : 'family';
+  const r = CDSRules.addContact(o, { name: x.name, phone: x.phone || '', role, relation: x.relation || '' }, { by: _ldWhoBy() });
+  if (r.error) { alert(r.error); return; }
+  await _rpSave(kind);
+  _rpRefresh();
+}
+async function cnTranscript(commId) {
+  const box = document.getElementById('cnm_' + commId);
+  if (!box) return;
+  if (box.dataset.open === 't') { box.innerHTML = ''; box.dataset.open = ''; return; }
+  box.innerHTML = '<div class="field-note">Loading…</div>';
+  try { const r = await _commCall({ action: 'note_transcript', id: commId }); box.innerHTML = '<pre class="cn-transcript">' + esc(r.transcript) + '</pre>'; box.dataset.open = 't'; }
+  catch (e) { box.innerHTML = '<div class="field-note" style="color:var(--danger)">' + esc(e.message) + '</div>'; }
+}
+// The recording plays from the CDS server, never a public link.
+async function cnListen(commId) {
+  const box = document.getElementById('cnm_' + commId);
+  if (!box) return;
+  box.innerHTML = '<div class="field-note">Loading the recording…</div>';
+  try {
+    const { data } = await _db.auth.getSession();
+    const r = await fetch(SUPABASE_URL + '/functions/v1/cds-comms', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY,
+      Authorization: 'Bearer ' + (data && data.session ? data.session.access_token : '') }, body: JSON.stringify({ action: 'recording', id: commId }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || 'The recording could not be played.'); }
+    const url = URL.createObjectURL(await r.blob());
+    box.innerHTML = '<audio controls autoplay src="' + url + '" style="width:100%"></audio>'; box.dataset.open = '';
+  } catch (e) { box.innerHTML = '<div class="field-note" style="color:var(--danger)">' + esc(e.message) + '</div>'; }
+}
 async function commLoad() {
   if (!_db) return;
   try { _comm = await _commCall({ action: 'queue' }); } catch (e) { _comm = { error: e.message }; }
   try { const r = await _commCall({ action: 'reached' }); _commReached = r.phones || []; _commReachedAt = r.last || {}; _commTalkAt = r.talk || {}; } catch (e) { /* the Leads page still works */ }
   commMergeReached();
+  // Call notes waiting for an OK (2026-10-29). A failure says so on Leads instead of hiding notes.
+  try { _cnWaiting = (await _commCall({ action: 'notes_waiting' })).notes || []; _cnError = ''; } catch (e) { _cnError = e.message; }
+  if (document.getElementById('page-pipeline')?.classList.contains('active') || document.getElementById('csub-pipeline')?.offsetParent) { try { renderPipeline(); } catch (e) {} }
   // keep the "Follow-ups (n)" tab count current while Today is open
   const onPage = (document.querySelector('.page.active') || {}).id || '';
   if (onPage === 'page-dashboard' || onPage === 'page-followups' || onPage === 'page-numbers') renderSectionNav('today', onPage.replace('page-', ''));
@@ -8746,7 +8856,11 @@ async function commHistoryFill(el, refs, phones, names) {
     if (i.channel === 'sms') t = i.direction === 'inbound' ? 'Text from ' + who + ': "' + (i.body || '') + '"' : we + ' texted ' + who + ': "' + (i.body || '') + '"';
     else if (i.direction === 'inbound') { if (i.answered) t = who + ' called. ' + we + ' answered. ' + mins + '.'; else { missed = true; t = 'Missed call from ' + who + '.' + (i.voicemail ? ' Voicemail.' : ''); } }
     else t = i.answered ? we + ' called ' + who + '. Talked ' + mins + '.' : we + ' called ' + who + '. ' + (i.voicemail ? 'Went to their voicemail.' : 'No answer.');
-    return '<div class="ch-row" data-who="' + esc(i._who) + '"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small></div></div>';
+    // The call note (2026-10-29): what was saved, or that one is waiting.
+    const cn = i.note && i.note_status === 'ok' ? '<div class="ch-note">' + esc(i.note) + (i.note_by ? ' <small>OK by ' + esc(String(i.note_by).split('@')[0]) + '</small>' : '') + '</div>'
+      : i.note_status === 'waiting' ? '<div class="ch-note wait">A note from this call is waiting for an OK.</div>'
+      : i.note_status === 'no_transcript' ? '<div class="ch-note wait">No transcript from GoHighLevel. <button type="button" class="rp-linkbtn" onclick="cnListen(\'' + esc(i.id) + '\')">Listen</button><span id="cnm_' + esc(i.id) + '"></span></div>' : '';
+    return '<div class="ch-row" data-who="' + esc(i._who) + '"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small>' + cn + '</div></div>';
   }).join('');
   el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b>' +
     '<div class="field-note" style="margin:2px 0 8px">From GoHighLevel, both CDS lines. A call never counts as a monthly check-in unless you record it.</div>' +
@@ -10540,7 +10654,9 @@ function renderProfile() {
       [['no', 'Needed'], ['partial', 'Partly done'], ['yes', 'Done']].map(([v, l]) => '<option value="' + v + '"' + ((c.trained || 'no') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>') +
     (function () { const t = consumerToFinish(c);
       return t.length ? line('Still to finish', '<span style="color:#9C6410">' + t.map(esc).join(', ') + '</span>') : line('Still to finish', 'nothing'); })() +
-    rpCardHtml('consumer', c);
+    rpCardHtml('consumer', c) +
+    (function () { const w = cnFor('consumer', c.id);
+      return w.length ? '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Call notes to check (' + w.length + ')</b>' + w.map(n => cnPanelHtml(n, 'consumer', c)).join('') + '</div>' : ''; })();
   else if (tab === 'hours') body =
     (auth
       ? line('Prior authorization', esc(auth.priorAuth || 'none')) + line('Code', esc(auth.procedureCode || 'none')) +
