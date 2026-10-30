@@ -10,7 +10,9 @@
 <link rel="apple-touch-icon" href="../cds-apple-touch-icon.png">
 <!-- The CDS lead link page (2026-10-19). Opened from a new-lead text or email; the
      private link (?k=) is the key, for one lead and one person, 7 days. Everything it
-     shows comes from the server function cds-lead-link. No em dashes (her rule). -->
+     shows comes from the server function cds-lead-link. No em dashes (her rule).
+     2026-10-29: a link can also be for a voicemail that sounds like a new lead (kind 'voicemail'):
+     what they said, Listen, and call them back. -->
 <style>
   :root{ --navy:#0D365F; --teal:#54bdb8; --teal-dark:#2f8f8a; --red:#b42318; --green:#1f7a4d; --gray:#57606a; --line:#e3e8ee; --bg:#f6f8fa; }
   *{ box-sizing:border-box; }
@@ -70,6 +72,7 @@ function render(msg, good) {
     return;
   }
   document.getElementById('who').textContent = 'For ' + D.me + ' · Caring Companions CDS';
+  if (D.kind === 'voicemail') return renderVoicemail();
   let h = '<div class="card"><div class="big">' + esc(D.name) + '</div>' +
     '<div class="note">Came in ' + esc(D.came_in) + ' from ' + esc(D.source) + '</div>' +
     (D.last
@@ -122,6 +125,46 @@ function render(msg, good) {
   document.getElementById('bCalled').onclick = logCall;
   const br = document.getElementById('bRing');
   if (br) br.onclick = ring;
+}
+
+function renderVoicemail() {
+  const app = document.getElementById('app');
+  const last = (D.back || [])[0];
+  let h = '<div class="card"><div class="big">' + esc(D.name) + '</div>' +
+    '<div class="note">Left a voicemail ' + esc(D.came_in) + '</div>' +
+    (last ? '<span class="ok">' + esc(last.what) + ': ' + esc(last.by) + ', ' + esc(last.at) + '</span>'
+          : '<span class="late">' + esc(D.open_minutes) + ' min, nobody has called back</span>');
+  if (D.note) h += '<div class="k">What they said</div><div class="said">' + esc(D.note) + '</div>';
+  if (D.unread) h += '<div class="err">' + esc(D.unread) + '</div>';
+  if (D.can_listen) h += '<button class="quiet" id="bListen">Listen to the voicemail</button><div id="audio"></div>';
+  if (D.transcript) h += '<details style="margin-top:10px"><summary class="note" style="cursor:pointer">Read their words</summary><div class="said">' + esc(D.transcript) + '</div></details>';
+  h += '</div>';
+  h += '<div class="card"><h2>Call back</h2>' +
+    (D.can_ring
+      ? '<button class="teal" id="bRing">Ring my phone, then connect</button>' +
+        '<div class="note">Your phone rings first. Answer, press any key, and you are connected. It goes out on the CDS line, (417) 218-2888.</div>' +
+        '<div class="err" id="ringMsg"></div>' +
+        (D.contact_url ? '<a class="btn quiet" href="' + esc(D.contact_url) + '">Or call them in GoHighLevel</a>' : '')
+      : D.contact_url
+        ? '<a class="btn teal" href="' + esc(D.contact_url) + '">Call them in GoHighLevel</a>' +
+          '<div class="note">Call from there so it goes out on the CDS line, (417) 218-2888.</div>'
+        : '<div class="note">Call ' + esc(D.name) + ' from the CDS line, (417) 218-2888.</div>') +
+    '<div class="note">Calling back from GoHighLevel closes the follow-up for everyone.</div>' +
+    '<a class="btn quiet" href="' + esc(D.followups_url) + '">Open Follow-ups in the CDS hub</a></div>';
+  app.innerHTML = h;
+  const br = document.getElementById('bRing'); if (br) br.onclick = ring;
+  const bl = document.getElementById('bListen'); if (bl) bl.onclick = listen;
+}
+
+async function listen() {
+  const b = document.getElementById('bListen'), box = document.getElementById('audio');
+  b.disabled = true; box.innerHTML = '<div class="note">Getting the voicemail…</div>';
+  try {
+    const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ k: K, action: 'recording' }) });
+    if (!r.ok) { let j = null; try { j = await r.json(); } catch (e) {} throw new Error((j && j.error) || 'The voicemail could not be played.'); }
+    box.innerHTML = '<audio controls autoplay style="width:100%;margin-top:10px" src="' + URL.createObjectURL(await r.blob()) + '"></audio>';
+    b.style.display = 'none';
+  } catch (e) { box.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; b.disabled = false; }
 }
 
 async function ring() {

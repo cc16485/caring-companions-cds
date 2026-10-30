@@ -94,6 +94,12 @@ export function reminderText(r, nowMs, link) {
   return noDash('Still waiting: ' + R.siteLeadName(r) + ' (CDS lead) came in ' + ago + ' and nobody has called yet.') +
     ' Tap to call: ' + (link || 'hub.caringcds.com/#pipeline');
 }
+// A voicemail that sounds like a new lead (2026-10-29, her approved wording). No name, number or
+// details: the private link has them.
+export function voicemailText(atMs, nowMs, link) {
+  const sameDay = chi(atMs).date === chi(nowMs).date;
+  return 'New CDS lead left a voicemail at ' + (sameDay ? time12(atMs) : whenShort(atMs, nowMs)) + '. Open to hear it and call back: ' + (link || 'hub.caringcds.com/#followups');
+}
 export function leadEmail(r, link) {
   const name = R.siteLeadName(r), county = countyOf(r);
   const at = Date.parse(r.submitted_at);
@@ -129,6 +135,7 @@ export function morningEmail(steps, extra, nowMs) {
                                      people: extra.alertFailures.map(f => ({ name: f.name, why: f.why })) },
     extra.ghlFailures?.length && { t: extra.ghlFailures.length + ' lead' + (extra.ghlFailures.length !== 1 ? 's' : '') + ' could not be added to GoHighLevel', go: 'pipeline', bad: true,
                                    people: extra.ghlFailures.map(f => ({ name: f.name, why: f.why })) },
+    extra.voicemails && { t: extra.voicemails + ' voicemail' + (extra.voicemails !== 1 ? 's' : '') + ' could not be read or its text did not send. Listen to ' + (extra.voicemails !== 1 ? 'them' : 'it'), go: 'followups', bad: true },
     ...(extra.attendantItems || []),   // the daily attendant check against WellSky, once live (2026-10-20)
     extra.evv        && { t: extra.evv + ' EVV correction form' + (extra.evv !== 1 ? 's' : '') + ' to review', go: 'evvcorrections' },
     extra.signups    && { t: extra.signups + ' caregiver sign-up' + (extra.signups !== 1 ? 's' : '') + ' to call', go: 'caregivermatch' },
@@ -214,6 +221,15 @@ export function createLeadAlerts(deps) {
              new Date(now() + LINK_DAYS * 864e5).toISOString()]);
     return LINK + t;
   }
+  // The same private link for a voicemail (cds_lead_links.comm_id).
+  async function voicemailLinkFor(commId, p) {
+    if (!p || !p.email) return null;
+    const t = newToken();
+    await q(`insert into cds_lead_links (token_hash, comm_id, person_name, person_email, expires_at)
+             values ($1,$2,$3,$4,$5)`, [await tokenHash(t), commId, p.name || p.email, String(p.email).toLowerCase(),
+             new Date(now() + LINK_DAYS * 864e5).toISOString()]);
+    return LINK + t;
+  }
   const callsFor = async ids => ids.length ? q('select site_lead_id, outcome, at from cds_lead_calls where site_lead_id = any($1)', [ids]) : [];
   // Calls and texts read from GoHighLevel by the Communication Center (cds_comms, 2026-10-22). Her
   // point: a lead somebody already called, or texted, or who called in and was answered, is not
@@ -249,17 +265,55 @@ export function createLeadAlerts(deps) {
     return out;
   }
 
+  // Voicemails the call notes marked as a new lead (comms.js, 2026-10-29): one text each to the people in
+  // voicemail_leads.emails, in text hours, unless someone already called or texted them back. Practice
+  // until voicemail_leads.live. Phones come from lead_alerts.recipients (the repo never holds them).
+  async function voicemailLeads(cfg, t) {
+    const vs = await setting('voicemail_leads', null);
+    if (!vs) return { voicemailTexted: 0 };
+    if (!inTextHours(t, cfg)) return { voicemailTexted: 0, voicemailWaitingForHours: true };
+    const emails = (Array.isArray(vs.emails) ? vs.emails : []).map(e => String(e).toLowerCase());
+    const people = emails.map(e => (cfg.recipients || []).find(p => String(p.email || '').toLowerCase() === e) || { email: e, name: e.split('@')[0].replace(/^./, c => c.toUpperCase()) });
+    let todo;
+    try {
+      todo = await q(`select n.comm_id, c.at, c.phone10 from cds_call_notes n join cds_comms c on c.id = n.comm_id
+        where n.voicemail and n.new_lead and n.lead_texted_at is null and c.at > $1 order by c.at`, [new Date(t - 3 * 864e5).toISOString()]);
+    } catch (e) { return { voicemailTexted: 0, voicemailError: 'run voicemail_leads.sql first' }; }
+    let texted = 0, skipped = 0;
+    for (const v of todo) {
+      const back = v.phone10 ? await one(`select 1 from cds_comms where phone10=$1 and at > $2 and (direction='outbound' or (channel='call' and answered)) limit 1`, [v.phone10, v.at]) : null;
+      const mine = await one(`update cds_call_notes set lead_texted_at=$2, lead_text_skipped=$3 where comm_id=$1 and lead_texted_at is null returning comm_id`,
+        [v.comm_id, new Date(t).toISOString(), back ? 'called back before the text' : null]);
+      if (!mine) continue;
+      if (back) { skipped++; continue; }
+      const results = [];
+      for (const p of people) {
+        try {
+          results.push(await deliver({ live: vs.live === true, lead: null, channel: 'sms', to: p.phone, toName: p.name, template: 'voicemail_lead_text',
+            text: voicemailText(Date.parse(v.at), t, await voicemailLinkFor(v.comm_id, p)) }));
+        } catch (e) { results.push({ status: 'failed', toName: p.name, error: String((e && e.message) || e).slice(0, 200) }); }
+      }
+      const bad = results.filter(r => r.status === 'failed');
+      if (bad.length) await q(`update cds_call_notes set lead_alert_failed = left($2, 1000) where comm_id=$1`,
+        [v.comm_id, bad.map(r => 'text to ' + r.toName + (r.error ? ' (' + r.error + ')' : '')).join('; ')]);
+      texted++;
+    }
+    return { voicemailTexted: texted, voicemailCalledBack: skipped, voicemailLive: vs.live === true };
+  }
+
   // Every 2 minutes.
   async function run() {
     const cfg = await setting('lead_alerts', null);
     if (!cfg) return { ok: false, error: 'lead_alerts is not set up' };
     const t = now(), live = !!cfg.live, open = inTextHours(t, cfg);
+    let vm;
+    try { vm = await voicemailLeads(cfg, t); } catch (e) { vm = { voicemailError: String((e && e.message) || e).slice(0, 300) }; }
     const since = new Date(Math.max(t - 5 * 864e5, Date.parse(cfg.started_at || 0) || 0)).toISOString();
     const leads = await q(`select * from site_leads where agency_id=$1 and not coalesce(archived,false) and submitted_at >= $2 order by submitted_at`, [AGENCY_ID, since]);
-    if (!leads.length) return { ok: true, live, leads: 0, emailed: 0, texted: 0, reminded: 0 };
+    if (!leads.length) return { ok: true, live, leads: 0, emailed: 0, texted: 0, reminded: 0, ...vm };
     const pipeline = ((await store(['pipeline'])).pipeline) || [];
     const calls = (await callsFor(leads.map(l => l.id))).concat(await commsCallsFor(leads));
-    const sum = { ok: true, live, leads: leads.length, emailed: 0, texted: 0, reminded: 0 };
+    const sum = { ok: true, live, leads: leads.length, emailed: 0, texted: 0, reminded: 0, ...vm };
     for (const lead of leads) {
       const waiting = R.siteLeadWaiting(lead, pipeline, calls);
       const results = [];
@@ -379,6 +433,10 @@ export function createLeadAlerts(deps) {
       attendantItems,
       evv: (await one(`select count(*)::int n from evv_submissions where agency_id=$1 and not coalesce(processed,false)`, [AGENCY_ID])).n,
       signups: (await one(`select count(*)::int n from cds_tasks where kind='cg_signup' and done_at is null`)).n,
+      // Same rule as the red line on Today (comms.js voicemailProblems).
+      voicemails: await one(`select count(*)::int n from cds_call_notes n join cds_comms c on c.id = n.comm_id
+        where n.voicemail and c.at > now() - interval '7 days' and (n.status = 'no_transcript' or (n.status = 'failed' and n.attempts >= 3) or n.lead_alert_failed is not null)
+          and (c.phone10 is null or exists (select 1 from cds_tasks t where t.area='followup' and t.done_at is null and t.phone10 = c.phone10))`).then(r => r.n, () => 0),
       heldFailed: (await one(`select count(*)::int n from cds_outbox where status in ('held','failed') and created_at > now() - interval '1 day'`)).n,
       alertFailures: siteLeads.filter(r => r.alert_failed && R.siteLeadWaiting(r, pipeline, calls)).map(r => ({ name: R.siteLeadName(r), why: r.alert_failed })),
       // website leads that could not be added to GoHighLevel (lead-ghl.js), once it is trying

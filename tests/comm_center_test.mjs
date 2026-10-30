@@ -77,6 +77,10 @@ const SQL = strip(readFileSync(ROOT + '/comm_center.sql', 'utf8'));
 await pg.exec(SQL); await pg.exec(SQL);
 // call notes (2026-10-29): Calls and texts joins the notes table
 await pg.exec(strip(readFileSync(ROOT + '/call_notes.sql', 'utf8')));
+// voicemail leads (2026-10-29): voicemails get notes too; links can point at a voicemail
+await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
+await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/voicemail_leads.sql', 'utf8')));
 ok(true, 'comm_center.sql runs twice');
 // step 2 (2026-10-22): run twice too; a changed owner survives a second run
 const SQL2 = strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8'));
