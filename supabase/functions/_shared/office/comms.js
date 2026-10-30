@@ -510,6 +510,15 @@ export function createComms(deps) {
       [JSON.stringify({ last_run: iso(nowMs()), last_made: made, last_failed: failed, last_no_transcript: none, last_waiting_for_transcript: waiting })]);
     return { notes: made, notesFailed: failed, notesNoTranscript: none };
   }
+  // Desktop step proof: a made-up call (no client details) through the real request and the real key.
+  // Saves nothing.
+  async function noteSelfTest() {
+    if (!deps.ai) return { ok: false, error: 'not set up on the server' };
+    const req = noteRequest({ who: 'Test Person', role: 'Lead', detail: '', day: chicago(nowMs()), weekday: weekdayOf(nowMs()), direction: 'inbound', staff: 'Test Staff', minutes: 2,
+      transcript: 'Speaker 1: Caring Companions CDS, this is Test Staff.\nSpeaker 2: Hi, this is Test Person. This is only a test call for the office system. Please call me back next Monday.\nSpeaker 1: Will do, talk Monday.' });
+    try { const r = cleanNote(await deps.ai(req), chicago(nowMs())); return r.error ? { ok: false, error: r.error } : { ok: true, note: r.note, followup: r.followup }; }
+    catch (e) { return { ok: false, error: String(e && e.message || e).slice(0, 300) }; }
+  }
   const NOTE_COLS = `n.comm_id, n.status, n.note, n.followup, n.people, n.final_note, n.decided_by, n.decided_at, n.error`;
   // Waiting notes with who they are about now (the phone book can change after the call: a link, a pick).
   async function notesWaiting() {
@@ -770,7 +779,7 @@ export function createComms(deps) {
     if (a === 'note_decide') return noteDecide(email, body);
     throw new CommsError('Unknown request');
   }
-  return { run, rebuildBook, pull, cards, sortAll, queue, history, reached, people, pick, done, setNeed, setOwner, setUrgent, setLater, checkins, handle, settings, makeNotes, notesWaiting, noteDecide, noteTranscript };
+  return { run, rebuildBook, pull, cards, sortAll, queue, history, reached, people, pick, done, setNeed, setOwner, setUrgent, setLater, checkins, handle, settings, makeNotes, notesWaiting, noteDecide, noteTranscript, noteSelfTest };
 }
 
 export class CommsError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }

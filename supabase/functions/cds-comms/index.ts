@@ -126,6 +126,8 @@ Deno.serve(async (req) => {
     if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'not allowed' }, 401);
     // body { rescan: true } (Desktop steps only) reads the whole history window again; ids keep it safe.
     const body = await req.json().catch(() => ({}));
+    // body { selftest: true } (Desktop step 1196): a made-up call through Claude; saves nothing.
+    if (body?.selftest === true) return json(await comms.noteSelfTest());
     try { return json(await comms.run({ rescan: body?.rescan === true })); }
     catch (e) { console.error(e); return json({ ok: false, error: String((e as Error)?.message || e) }, 500); }
   }

@@ -8502,6 +8502,7 @@ async function _commCall(body) {
 // goes on the lead's Notes and the call back date is set. "Not about them" drops it. Nothing is sent.
 // ============================================================================
 let _cnWaiting = [], _cnError = '', _cnBusy = '';
+const _cnPhone = d => { d = String(d || '').replace(/\D/g, '').slice(-10); return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : ''; };
 const _cnRefOf = ref => { const m = String(ref || '').match(/^(?:family:)?(lead|consumer):(.+)$/); return m ? { kind: m[1], id: m[2] } : null; };
 // Waiting notes for one lead or consumer, newest first.
 function cnFor(kind, id) { return _cnWaiting.filter(n => { const r = _cnRefOf(n.ref); return r && r.kind === kind && String(r.id) === String(id); }); }
@@ -8517,7 +8518,7 @@ function cnPanelHtml(n, kind, owner) {
       '<span><button type="button" class="rp-linkbtn" onclick="cnTranscript(\'' + id + '\')">Read the whole call</button> &middot; <button type="button" class="rp-linkbtn" onclick="cnListen(\'' + id + '\')">Listen</button></span></div>' +
     '<div class="cn-grid"><div><label class="rp-lbl" for="cnt_' + id + '">Note</label><textarea id="cnt_' + id + '" rows="3">' + esc(n.note || '') + '</textarea></div>' +
       '<div>' + (kind === 'lead' ? '<label class="rp-lbl" for="cnd_' + id + '">Call back</label><input type="date" id="cnd_' + id + '" value="' + esc(n.followup || '') + '">' : '') +
-        (heard.length ? '<div class="rp-lbl" style="margin-top:8px">Heard on the call</div>' + heard.map((x, i) => '<div class="cn-heard">' + esc(x.name) + (x.relation ? ', ' + esc(x.relation) : '') + (x.phone ? ', ' + esc(x.phone) : '') +
+        (heard.length ? '<div class="rp-lbl" style="margin-top:8px">Heard on the call</div>' + heard.map((x, i) => '<div class="cn-heard">' + esc(x.name) + (x.relation ? ', ' + esc(x.relation) : '') + (x.phone ? ', ' + esc(_cnPhone(x.phone)) : '') +
           ' <button type="button" class="rp-linkbtn" onclick="cnAddPerson(\'' + id + '\',' + i + ',\'' + kind + '\',\'' + esc(String(owner.id)) + '\')">Add as a contact</button></div>').join('') : '') +
       '</div></div>' +
     '<div class="cn-media" id="cnm_' + id + '"></div>' +
@@ -8553,7 +8554,7 @@ async function cnAddPerson(commId, i, kind, ownerId) {
   if (!x || !o) return;
   const rel = String(x.relation || '').toLowerCase();
   const role = /attendant|caregiver|aide/.test(rel) ? 'attendant' : /case manager|nurse|doctor|social worker|neighbor|friend/.test(rel) ? 'other' : 'family';
-  const r = CDSRules.addContact(o, { name: x.name, phone: x.phone || '', role, relation: x.relation || '' }, { by: _ldWhoBy() });
+  const r = CDSRules.addContact(o, { name: x.name, phone: _cnPhone(x.phone), role, relation: x.relation || '' }, { by: _ldWhoBy() });
   if (r.error) { alert(r.error); return; }
   await _rpSave(kind);
   _rpRefresh();

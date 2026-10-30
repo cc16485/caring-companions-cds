@@ -155,6 +155,11 @@ ok(h2.note === 'Mark called for Ruth, fell twice.' && h2.note_by === 'krystal@mo
 ok((await pg.query(`select count(*)::int n from cds_audit where action='call_note_ok'`)).rows[0].n === 1, 'the OK is in the audit log');
 ok((await comms.notesWaiting()).notes.length === 0, 'nothing left waiting');
 
+{
+  const st = await comms.noteSelfTest();
+  ok(st.ok && /Mark called/.test(st.note) && /Test Person/.test(aiCalls[aiCalls.length - 1].messages[0].content), 'the self test runs a made-up call through Claude');
+  ok((await pg.query(`select count(*)::int n from cds_call_notes`)).rows[0].n === (await rows()).length, 'and saves nothing');
+}
 // ---------- the server function and the page ----------
 {
   const fn = readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8');
