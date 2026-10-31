@@ -177,7 +177,7 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(/let h = ldCalmSwitchHtml\(\);/.test(html) && /if \(!ldWhoOwner\(\)\) return '';/.test(html.slice(html.indexOf('function ldCalmSwitchHtml'))), 'the switch shows only to owners');
   ok(r.includes("cardsEl.classList.toggle('ld-calm', calm)"), 'the list wears the calm look only while it is on');
   ok(r.includes("(calm ? nameCell :") && r.includes('<span class="ld-av '), 'calm rows have no initials circle; the colourful rows keep theirs');
-  ok(r.includes("[c.kind, c.whoLabel, p.fromWebsite ? 'Website' : ''].filter(Boolean).join(' · ')"), 'tags become one gray line of words');
+  ok(r.includes("[c.kind, c.whoLabel, p.fromWebsite ? CDSRules.formLabel(p, true) : ''].filter(Boolean).join(' · ')"), 'tags become one gray line of words');
   ok(r.includes("' ldr-' + ct") && r.includes('ldw ldw-'), 'a coloured edge and coloured When words on rows that need you');
   ok(r.includes("(calm ? ' hidden' : '')") && r.includes('class="ld-dots"'), 'Close waits behind ···');
   ok(r.includes('(calm ? calmLine :'), 'the summary line counts need you now, today, can wait');
@@ -185,5 +185,12 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   ok(!/—/.test(html.slice(html.indexOf('// CALMER LEADS LIST'), html.indexOf('function ldCalmSwitchHtml') + 900)), 'no em dashes');
 }
 
+// 2026-10-31: which form and what they answered
+{
+  const html2 = readFileSync(ROOT + '/index.html', 'utf8');
+  ok(html2.includes("Form they filled out") && html2.includes('p.form.answers.map(([k, v]) => row(k, v))'), 'lead profile lists every form answer');
+  ok(html2.includes("form: formOf(r) || undefined"), 'import keeps the form on the lead');
+  ok(html2.includes("if (f && JSON.stringify(f) !== JSON.stringify(p.form || null)) { p.form = f; changed = true; }"), 'leads already on the list get their form too');
+}
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

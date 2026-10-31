@@ -757,6 +757,26 @@
     return parts.join(' ');
   }
 
+  // Which form a website lead filled out (2026-10-31): p.form = { name, at, answers: [[question, answer]] },
+  // written by the lead job (lead-forms.js). Older leads without it say "Website form".
+  // short: the list's small tag, without the site ("Home page", "Family asking for a caregiver").
+  function formLabel(p, short) {
+    const name = (p && p.form && p.form.name) || '';
+    if (!name) return 'Website form';
+    if (!short) return name;
+    const tail = name.replace(/^[^:]*:\s*/, '');
+    return tail.charAt(0).toUpperCase() + tail.slice(1);
+  }
+  // Who they are, from the form's answers, when the older form note says nothing (findcdscaregivers
+  // families and caregivers). "Who they are" first, then up to three more answers.
+  function formAbout(p) {
+    const a = p && p.form && Array.isArray(p.form.answers) ? p.form.answers.filter(x => Array.isArray(x) && x[1]) : [];
+    if (!a.length) return '';
+    const first = a.find(x => x[0] === 'Who they are');
+    const rest = a.filter(x => x !== first && !/^(They wrote|Town|Counties|Heard about us)$/.test(x[0])).slice(0, 3);
+    return [first ? first[1] + '.' : ''].concat(rest.map(x => x[0] + ': ' + x[1] + '.')).filter(Boolean).join(' ');
+  }
+
   // The day a lead came in, for the card (2026-10-22). A website lead has the exact time
   // (addedAt, shown as the Central day); someone the office added uses the first contact date they typed.
   // The day a lead came in (yyyy-mm-dd), for the Leads sort.
@@ -928,6 +948,7 @@
     const step = closed || (done && moved) ? 'closed' : done ? 'ready' : sent ? 'state' : 'call';
 
     let who = form ? formWho(form.text) : '';
+    if (!who) who = formAbout(p);
     if (!who && p.type === 'pccp') who = 'Has CDS now' + (p.leavingAgency || p.currentAgency ? ' with ' + (p.leavingAgency || p.currentAgency) : ' with another agency') + '.';
     if (!who && p.hours) who = p.hours + ' hours a week.';
     // Nothing else known: the last call note says who they are best.
@@ -1101,7 +1122,7 @@
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
-                    leadCard, formWho, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
+                    leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
