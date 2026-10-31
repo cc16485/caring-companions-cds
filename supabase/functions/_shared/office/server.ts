@@ -3,6 +3,7 @@
 import postgres from 'npm:postgres@3.4.4';
 import { createLeadAlerts } from './lead-alerts.js';
 import { createLeadGhl, checkBody } from './lead-ghl.js';
+import { createLeadForms } from './lead-forms.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const GHL = 'https://services.leadconnectorhq.com';
@@ -39,9 +40,7 @@ export const jobs = createLeadAlerts({
 function cdsOnly() {
   if (!env('CDS_GHL_TOKEN') || env('CDS_GHL_LOCATION_ID') !== CDS_LOCATION) throw new Error('GoHighLevel is not set to the CDS sub-account on the server');
 }
-export const leadGhl = createLeadGhl({
-  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
-  ghl: {
+const leadGhlDeps = {
     async search(query: string) {
       cdsOnly();
       const r = await fetch(GHL + '/contacts/?' + new URLSearchParams({ locationId: CDS_LOCATION, query, limit: '20' }),
@@ -61,6 +60,36 @@ export const leadGhl = createLeadGhl({
       const err = new Error('GoHighLevel create ' + r.status + ': ' + (j.message || '')) as Error & { contactId?: string };
       if (dup) err.contactId = String(dup);
       throw err;
+    },
+};
+export const leadGhl = createLeadGhl({
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
+  ghl: leadGhlDeps,
+});
+
+// Every website form (2026-10-31): caregiver sign-ups use the same search and create as above, plus
+// reading one contact (a findcdscaregivers family's phone and email) and adding one note. Writing
+// to GoHighLevel is reached only when setting lead_forms.live is true.
+const ghlHeaders = () => ({ Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'), Version: '2021-07-28', 'Content-Type': 'application/json', Accept: 'application/json' });
+export const leadForms = createLeadForms({
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
+  ghl: {
+    search: (query: string) => leadGhlDeps.search(query),
+    create: (body: Record<string, unknown>) => leadGhlDeps.create(body),
+    async get(id: string) {
+      cdsOnly();
+      const r = await fetch(GHL + '/contacts/' + encodeURIComponent(id), { headers: ghlHeaders() });
+      if (r.status === 404) return null;
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error('GoHighLevel contact ' + r.status);
+      return j.contact ?? null;
+    },
+    // A note only: the body is the one key sent.
+    async note(id: string, { body }: { body: string }) {
+      cdsOnly();
+      const r = await fetch(GHL + '/contacts/' + encodeURIComponent(id) + '/notes', { method: 'POST', body: JSON.stringify({ body: String(body).slice(0, 4000) }), headers: ghlHeaders() });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error('GoHighLevel note ' + r.status + ': ' + (j.message || ''));
     },
   },
 });

@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=29"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=30"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -7261,19 +7261,33 @@ async function _importWebsiteLeads() {
   if (error || !data || !data.length) return 0;
   _leadAlertFailures = data.filter(r => r.alert_failed);
 
+  // Which form and what they answered (site_leads.form_name / form_answers, filled in by the lead
+  // job, 2026-10-31). Leads already here get it too, the first time the job has written it.
+  const formOf = r => r.form_name ? { name: r.form_name, at: r.submitted_at || '', answers: Array.isArray(r.form_answers) ? r.form_answers : [] } : null;
+  const byId = new Map(data.map(r => [r.id, r]));
+  let changed = false;
+  pipeline.forEach(p => {
+    const r = p.siteLeadId && byId.get(p.siteLeadId), f = r && formOf(r);
+    if (f && JSON.stringify(f) !== JSON.stringify(p.form || null)) { p.form = f; changed = true; }
+  });
+
   const fresh = data.filter(r => !already.has(r.id));
-  if (!fresh.length) return 0;
+  if (!fresh.length) { if (changed) await setData('pipeline', pipeline); return 0; }
 
   fresh.forEach(r => {
     const name = [r.first_name, r.last_name].filter(Boolean).join(' ').trim()
               || (r.full_name || '').trim() || 'Website enquiry';
 
-    // Everything they told us, kept as the opening note so whoever calls has it.
-    const detail = [
+    // Everything they told us, kept as the opening note so whoever calls has it. A findcdscaregivers
+    // family or caregiver (from_kind) brings its answers already written as "Question: answer" lines.
+    const detail = r.from_kind ? String(r.message || '') : [
       r.who_needs_care ? 'Who needs care: ' + r.who_needs_care : '',
       r.has_medicaid   ? 'Medicaid: ' + r.has_medicaid : '',
       r.message        ? 'They said: ' + r.message : ''
     ].filter(Boolean).join('\n');
+    // Who called, known from the form: a caregiver who has someone to care for, or a family.
+    const rel = r.from_kind === 'prospect' ? ((formOf(r) || { answers: [] }).answers.find(a => a[0] === 'Care is for') || [])[1] || '' : '';
+    const whoCalled = r.from_kind === 'caregiver' ? 'pair' : r.from_kind === 'prospect' ? (/^myself$/i.test(rel) ? 'self' : rel ? 'family' : '') : '';
 
     pipeline.unshift({
       id: 'web-' + r.id,
@@ -7284,13 +7298,15 @@ async function _importWebsiteLeads() {
       phone: r.phone || '',
       email: r.email || '',
       firstContact: (r.submitted_at || '').split('T')[0],
-      source: r.source ? 'Website — ' + r.source : 'Website',
+      source: r.source ? 'Website: ' + r.source : 'Website',
       status: 'new',
       followup: '', stateSubmit: '', currentAgency: '', dcn: '', hours: '',
       // fromForm: this note is the family's own words, not a call (cds-rules.js leadWaiting).
       notes: detail ? [{ date: (r.submitted_at || '').split('T')[0], text: detail, fromForm: true }] : [],
       addedAt: r.submitted_at || new Date().toISOString(),
       fromWebsite: true,
+      form: formOf(r) || undefined,
+      ...(whoCalled ? { whoCalled, whoCalledBy: 'the website form' } : {}),
       onboardingSent: false, welcomeSent: false
     });
   });
@@ -7564,10 +7580,22 @@ function renderLeadProfile(){
     (!p.phone ? (CDSRules.relatedPeople(p).filter(r => r.phone).slice(0, 1).map(r => row('Reach them through', r.name + (r.relation ? ' (' + r.relation + ')' : '') + ', ' + r.phone))[0] || '') : '') +
     row('Email', p.email) + row('County', p.county) +
     row('Date of birth', lpDate(p.dob || (R && R.dob))) + row('DCN', p.dcn || (R && R.dcn)) +
-    row('First contact', p.firstContact) + row('Heard about us', p.source) +
+    row('First contact', p.firstContact) + (p.form ? '' : row('Heard about us', p.source)) +
     row('Leaving', p.leavingAgency) + row('Why switching', p.whySwitching) +
     row('Where they are', ({ready:'Wants to switch now', shopping:'Calling around', unsure:'Unsure'})[p.readiness]) +
     '</div>';
+
+  // ---- the form they filled out, every answer (2026-10-31, her ask: "a more clear view of what form
+  // they filled out and who they are") ----
+  if (p.form && p.form.name) {
+    const at = Date.parse(p.form.at || '');
+    html += '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
+      '<b style="color:var(--primary)">Form they filled out</b>' +
+      '<div style="font-size:14px;margin:4px 0 8px"><b>' + esc(p.form.name) + '</b>' +
+        (!isNaN(at) ? '<span style="color:var(--gray-600)">, ' + esc(new Date(at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })) + '</span>' : '') + '</div>' +
+      (p.form.answers.length ? p.form.answers.map(([k, v]) => row(k, v)).join('') : '<div class="field-note">They gave only their name and how to reach them.</div>') +
+    '</div>';
+  }
 
   // ---- linked to the person they called about (2026-10-29) ----
   if (p.status === 'closed_linked' && p.linkedTo) {
@@ -8374,14 +8402,14 @@ function renderPipeline() {
     const cameTime = c.cameIso && !isNaN(addedMs) && CDSRules.isoLocal(new Date(addedMs)) === c.cameIso ? new Date(addedMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
     const nameCell = calm
       ? '<div class="ld-c-name"><span class="ld-nm"><button type="button" class="ld-namebtn" onclick="openLeadProfile(\'' + id + '\')">' + esc(p.name || 'No name') + '</button>' +
-        '<span class="ld-facts">' + esc([c.kind, c.whoLabel, p.fromWebsite ? 'Website' : ''].filter(Boolean).join(' · ')) + '</span></span></div>' : '';
+        '<span class="ld-facts">' + esc([c.kind, c.whoLabel, p.fromWebsite ? CDSRules.formLabel(p, true) : ''].filter(Boolean).join(' · ')) + '</span></span></div>' : '';
     const dueCell = calm
       ? '<div class="ld-c-due"><span class="ldw ldw-' + ct + '">' + esc(c.due) + '</span>' + (notes.length ? '<span class="ldw-note">Note to check</span>' : '') + '</div>' : '';
     return '<article class="ld-row' + (c.step === 'closed' ? ' closed' : '') + (calm && ct !== 'wait' ? ' ldr-' + ct : '') + '" role="row">' + (calm ? nameCell :
       '<div class="ld-c-name"><span class="ld-av ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '" aria-hidden="true">' + esc(_ldInitials(p.name)) + '</span>' +
         '<span class="ld-nm"><button type="button" class="ld-namebtn" onclick="openLeadProfile(\'' + id + '\')">' + esc(p.name || 'No name') + '</button>' +
         '<span class="ld-tags"><span class="ld-kind ' + (LD_KIND_CLASS[p.type] || 'k-lead') + '">' + esc(c.kind) + '</span>' +
-        (c.whoLabel ? '<span class="wc wc-' + c.whoCalled + '">' + esc(c.whoLabel) + '</span>' : '') + (p.fromWebsite ? '<span class="ld-web">Website</span>' : '') + '</span></span></div>') +
+        (c.whoLabel ? '<span class="wc wc-' + c.whoCalled + '">' + esc(c.whoLabel) + '</span>' : '') + (p.fromWebsite ? '<span class="ld-web" title="' + esc('Form: ' + CDSRules.formLabel(p)) + '">' + esc(CDSRules.formLabel(p, true)) + '</span>' : '') + '</span></span></div>') +
       '<div class="ld-c-phone">' + phone + '</div>' +
       '<div class="ld-c-date"><span class="ld-lbl">Came in</span>' + (c.cameIso ? esc(_ldDay(c.cameIso)) + (cameTime ? '<small>' + esc(cameTime) + '</small>' : '') : '<small>Not known</small>') + '</div>' +
       '<div class="ld-c-date"><span class="ld-lbl">Last activity</span>' + (last ? '<span class="ld-act" title="' + (lastKind === 'call' ? 'Call or text on the office line' : 'Call note') + ' ' + esc(_ldDay(last)) + '">' +

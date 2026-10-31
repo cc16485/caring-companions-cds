@@ -440,7 +440,13 @@ export function createLeadAlerts(deps) {
       heldFailed: (await one(`select count(*)::int n from cds_outbox where status in ('held','failed') and created_at > now() - interval '1 day'`)).n,
       alertFailures: siteLeads.filter(r => r.alert_failed && R.siteLeadWaiting(r, pipeline, calls)).map(r => ({ name: R.siteLeadName(r), why: r.alert_failed })),
       // website leads that could not be added to GoHighLevel (lead-ghl.js), once it is trying
-      ghlFailures: siteLeads.filter(r => String(r.ghl_status || '').startsWith('failed')).map(r => ({ name: R.siteLeadName(r), why: String(r.ghl_status).replace(/^failed: /, '') })),
+      ghlFailures: siteLeads.filter(r => String(r.ghl_status || '').startsWith('failed')).map(r => ({ name: R.siteLeadName(r), why: String(r.ghl_status).replace(/^failed: /, '') }))
+        // and (lead-forms.js, 2026-10-31) caregiver sign-ups, and the form note on a contact
+        .concat((await q(`select first_name, last_name, ghl_status from attendant_pool where not coalesce(archived,false) and ghl_status like 'failed%'`).catch(() => []))
+          .map(r => ({ name: [r.first_name, r.last_name].filter(Boolean).join(' ') + ' (caregiver)', why: String(r.ghl_status).replace(/^failed: /, '') })))
+        .concat(siteLeads.filter(r => String(r.ghl_note_status || '').startsWith('failed')).map(r => ({ name: R.siteLeadName(r), why: 'form note: ' + String(r.ghl_note_status).replace(/^failed: /, '') })))
+        .concat((await q(`select first_name, last_name, ghl_note_status from attendant_pool where not coalesce(archived,false) and ghl_note_status like 'failed%'`).catch(() => []))
+          .map(r => ({ name: [r.first_name, r.last_name].filter(Boolean).join(' ') + ' (caregiver)', why: 'form note: ' + String(r.ghl_note_status).replace(/^failed: /, '') }))),
     };
     const ownersRow = await setting('switch_owners', []);
     const owners = (Array.isArray(ownersRow) ? ownersRow : []).map(e => String(e).toLowerCase());
