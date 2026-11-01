@@ -5,7 +5,8 @@
 //
 // Office   : enrollSend (the button on the lead), enrollStatus, enrollGet,
 //            enrollOfficeSign (2643A + agent parts of 2678 and 2827), enrollPdfData
-//            (everything the PDFs need, SSN included, audited), enrollList, enrollLinkConsumer
+//            (everything the PDFs need, SSN included, audited), enrollList, enrollLinkConsumer,
+//            enrollProfile (address, birthday, back-up plan for the consumer's profile, no SSN)
 // Consumer : (their private link) enroll, enrollSave, enrollEsign, enrollIdentity, enrollSign
 // Job      : enrollJob (the 2 reminders), run from the attendant packet's 15-minute job
 //
@@ -308,6 +309,25 @@ export function createEnroll(h) {
       if (!r) fail('Not found', 404);
       await audit('staff:' + staff, 'enroll_linked', 'lead:' + lead_id, { consumer_id });
       return { ok: true };
+    },
+    // What the packet says, for the consumer's profile Overview (2026-11-01, her ask: address, date of
+    // birth, back-up plan). Found by the linked consumer, else by name. Never the SSN. Each showing is logged.
+    async enrollProfile({ staff, consumer_id, name }) {
+      who(staff);
+      const cid = String(consumer_id || '').slice(0, 80), nm = normName(name);
+      let p = cid ? await one('select * from cds_enroll_packets where consumer_id=$1 order by signed_at desc nulls last, created_at desc limit 1', [cid]) : null;
+      if (!p && nm) p = (await q('select * from cds_enroll_packets where consumer_id is null and sent_at is not null order by signed_at desc nulls last, created_at desc'))
+        .find(r => normName(fullName(r.answers || {})) === nm) || null;
+      if (!p) return { packet: null };
+      const x = await load('id', p.id), a = p.answers || {};
+      const b = (x.forms.backup && x.forms.backup.answers) || a;   // the back-up plan as signed, when it is
+      const pick = (o, ks) => Object.fromEntries(ks.filter(k => o[k]).map(k => [k, o[k]]));
+      await audit('staff:' + staff, 'enroll_profile_shown', 'lead:' + p.lead_id, { consumer_id: cid || null });
+      return { packet: { lead_id: p.lead_id, kind: p.kind, sent_at: p.sent_at, signed_at: p.signed_at, status: x.st.label,
+        who: a.who === 'rep' ? { name: a.rep_name, rel: a.rep_rel } : null,
+        answers: pick(a, ['street', 'apt', 'city', 'state', 'zip', 'county', 'phone', 'email', 'mail_same', 'mail_street', 'mail_city', 'mail_state', 'mail_zip', 'dob', 'first_pay', 'evv', 'v1', 'v1_phone', 'v2', 'v2_phone']),
+        evv: EVV_CHOICES[a.evv] || null,
+        backup: { ...pick(b, ['b1_name', 'b1_rel', 'b1_phone', 'b2_name', 'b2_rel', 'b2_phone']), signed_at: (x.forms.backup && x.forms.backup.signed_at) || null } } };
     },
   };
 

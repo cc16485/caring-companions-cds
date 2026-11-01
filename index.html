@@ -4056,6 +4056,42 @@ button.fu-tile.check span { color:#14606F; }
 </div>
 
 <!-- Add a contact by hand (family, attendant or someone else) -->
+<div class="modal-overlay" id="factsModal">
+  <div class="modal" style="width:560px;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:24px" id="cf_title">Address and back-up plan</div>
+      <button class="modal-close" onclick="closeModal('factsModal')" aria-label="Close">×</button>
+    </div>
+    <input type="hidden" id="cf_id">
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label for="cf_street">Street</label><input type="text" id="cf_street"></div>
+      <div class="form-group"><label for="cf_apt">Apt</label><input type="text" id="cf_apt"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label for="cf_city">City</label><input type="text" id="cf_city"></div>
+      <div class="form-group"><label for="cf_zip">Zip</label><input type="text" id="cf_zip" inputmode="numeric"></div>
+      <div class="form-group"><label for="cf_dob">Date of birth</label><input type="date" id="cf_dob"></div>
+    </div>
+    <b style="color:var(--primary);font-size:14px">Back-up person (if the attendant cannot come)</b>
+    <div class="form-row">
+      <div class="form-group"><label for="cf_b1_name">Name</label><input type="text" id="cf_b1_name"></div>
+      <div class="form-group"><label for="cf_b1_rel">They are their</label><input type="text" id="cf_b1_rel" placeholder="son, neighbor"></div>
+      <div class="form-group"><label for="cf_b1_phone">Phone</label><input type="tel" id="cf_b1_phone"></div>
+    </div>
+    <b style="color:var(--primary);font-size:14px">Emergency contact (optional)</b>
+    <div class="form-row">
+      <div class="form-group"><label for="cf_b2_name">Name</label><input type="text" id="cf_b2_name"></div>
+      <div class="form-group"><label for="cf_b2_rel">They are their</label><input type="text" id="cf_b2_rel"></div>
+      <div class="form-group"><label for="cf_b2_phone">Phone</label><input type="tel" id="cf_b2_phone"></div>
+    </div>
+    <div class="field-note">Saved on this profile only. Their signed packet is never changed. Nothing is sent to anyone.</div>
+    <div class="field-note" id="cf_err" style="color:var(--danger);font-weight:600"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-primary" onclick="saveFacts()">Save</button>
+      <button class="btn btn-outline" onclick="closeModal('factsModal')">Cancel</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="contactModal">
   <div class="modal" style="width:520px;background:var(--cute-cream)">
     <div class="modal-header">
@@ -10711,8 +10747,10 @@ function renderProfile() {
     .map(([k, l]) => '<button type="button" class="' + (tab === k ? 'on' : '') + '" onclick="_profTab=\'' + k + '\';renderProfile()">' + l + '</button>').join('');
   const line = (k, v) => '<div class="cp-line"><span>' + k + '</span><span>' + v + '</span></div>';
   let body = '';
+  if (tab === 'overview') profPacketFetch(c);
   if (tab === 'overview') body =
     line('Phone', esc(c.phone || 'none on file')) +
+    factsLines(c, line) +
     line('Attendant' + (attendants.length === 1 ? '' : 's'), attendants.length ? attendants.map(esc).join(', ') : 'none in payroll yet') +
     line('Start date', c.cdsStartDate ? esc(_niceDay(c.cdsStartDate)) : 'not on file') +
     (fs ? line('First shift (WellSky)', esc(_niceDay(fs))) : '') +
@@ -10723,7 +10761,8 @@ function renderProfile() {
           : (auth ? 'hub care plan ended ' + esc(_niceDay(auth.planEnd)) : 'no care plan in the hub') + '; ' + esc(_wsLabelEnd(wsA)) + '. Upload the new DSDS care plan.') + '</span>'
       : !auth ? '<span style="color:var(--danger)">nothing on file</span>' : (daysLeft < 0 ? 'expired ' + Math.abs(daysLeft) + ' days ago' : 'ends ' + esc(_niceDay(auth.planEnd)) + ' (' + daysLeft + ' days)')) +
     line('Tax and EIN', outstanding.length ? '<span style="color:#9C6410">' + outstanding.length + ' thing' + (outstanding.length === 1 ? '' : 's') + ' still needed</span>' : 'all set') +
-    line('Backup plan', (c.backupPlan ? 'yes' + (c.backupReviewed ? ', reviewed ' + esc(_niceDay(c.backupReviewed)) + ', next by ' + esc(_niceDay(_plusYear(c.backupReviewed))) : '') : '<span style="color:var(--danger)">missing</span>') +
+    line('Backup plan', (c.backupPlan ? 'yes' + (c.backupReviewed ? ', reviewed ' + esc(_niceDay(c.backupReviewed)) + ', next by ' + esc(_niceDay(_plusYear(c.backupReviewed))) : '')
+      : (((_profPacket[c.id] || {}).packet || {}).backup || {}).signed_at ? '<span style="color:#9C6410">signed in their Hub packet, not marked done yet</span>' : '<span style="color:var(--danger)">missing</span>') +
       ' <a href="#" onclick="toggleBackup(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">' + (c.backupPlan ? 'undo' : 'mark done') + '</a>' +
       (c.backupPlan ? ' <a href="#" onclick="markBackupReviewed(\'' + c.id + '\');return false" style="font-size:12px;margin-left:8px">mark reviewed today</a>' : '')) +
     line('Consumer training', c.training && c.training.date
@@ -10796,6 +10835,91 @@ function renderProfile() {
 }
 
 let _profTab = 'overview';
+
+// Address, date of birth and back-up plan on Overview (2026-11-01, her ask). What the office typed on the
+// profile wins; else the Hub enrollment packet (read from the server, never the SSN); else their lead.
+const _profPacket = {};   // consumer id -> { at, packet } or { at, err }
+function profPacketFetch(c) {
+  const hit = _profPacket[c.id];
+  if (hit && (hit.busy || Date.now() - hit.at < 5 * 60000)) return;
+  _profPacket[c.id] = { busy: true, at: Date.now() };
+  cdsMatchApi('enrollProfile', { consumer_id: c.id, name: c.name })
+    .then(r => { _profPacket[c.id] = { at: Date.now(), packet: r.packet }; })
+    .catch(e => { _profPacket[c.id] = { at: Date.now(), err: String(e && e.message || e) }; })
+    .then(() => { if (_profileId === c.id && _profTab === 'overview') renderProfile(); });
+}
+function consumerFacts(c) {
+  const P = (_profPacket[c.id] || {}).packet || null, A = (P && P.answers) || {}, B = (P && P.backup) || {};
+  const L = getData('pipeline').find(p => p.movedToConsumers && prNorm(p.name || '') === prNorm(c.name)) || null;
+  const R = (L && L.referral) || {};
+  const own = c.facts || {};
+  const addr = o => [[o.street, o.apt].filter(Boolean).join(' '), o.city, [o.state || (o.street ? 'MO' : ''), o.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const signed = P && P.signed_at ? 'Hub packet, signed ' + _niceDay(String(P.signed_at).slice(0, 10)) : 'Hub packet, not signed yet';
+  const pickOne = list => list.find(x => x.v) || { v: '', from: '' };
+  const person = (n, r, ph) => n ? n + (r ? ' (' + r + ')' : '') + (ph ? ', ' + ph : '') : '';
+  return {
+    P, L,
+    address: pickOne([{ v: addr(own), from: 'typed on this profile' }, { v: addr(A), from: signed },
+      { v: L ? addr({ street: L.street || R.street, apt: L.apt || R.apt, city: L.city || R.city, zip: L.zip || R.zip }) : '', from: 'their lead' }]),
+    mailing: A.mail_same === 'no' ? addr({ street: A.mail_street, city: A.mail_city, state: A.mail_state, zip: A.mail_zip }) : '',
+    dob: pickOne([{ v: own.dob, from: 'typed on this profile' }, { v: A.dob, from: signed }, { v: L ? lpDate(L.dob || R.dob) : '', from: 'their lead' }]),
+    backup1: pickOne([{ v: person(own.b1_name, own.b1_rel, own.b1_phone), from: 'typed on this profile' },
+      { v: person(B.b1_name, B.b1_rel, B.b1_phone), from: B.signed_at ? 'Back-up plan form, signed ' + _niceDay(String(B.signed_at).slice(0, 10)) : signed }]),
+    backup2: pickOne([{ v: person(own.b2_name, own.b2_rel, own.b2_phone), from: 'typed on this profile' },
+      { v: person(B.b2_name, B.b2_rel, B.b2_phone), from: B.signed_at ? 'Back-up plan form, signed ' + _niceDay(String(B.signed_at).slice(0, 10)) : signed }]),
+    raw: { own, A, B, L, R }
+  };
+}
+function _ageOn(dob) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob || ''); if (!m) return null;
+  const t = _todayIso(); let age = +t.slice(0, 4) - +m[1];
+  if (t.slice(5) < m[2] + '-' + m[3]) age--;
+  return age >= 0 && age < 130 ? age : null;
+}
+function factsLines(c, line) {
+  const F = consumerFacts(c), hit = _profPacket[c.id] || {};
+  const from = x => x.v && x.from ? ' <span style="font-size:12px;color:#55677a">(' + esc(x.from) + ')</span>' : '';
+  const none = t => '<span style="color:#9C6410">' + t + '</span>';
+  const age = _ageOn(F.dob.v);
+  return line('Address', F.address.v ? esc(F.address.v) + from(F.address) : none('not on file')) +
+    (F.mailing ? line('Mail goes to', esc(F.mailing)) : '') +
+    line('Date of birth', F.dob.v ? esc(_niceDay(F.dob.v)) + (age !== null ? ', age ' + age : '') + from(F.dob) : none('not on file')) +
+    line('Back-up person', F.backup1.v ? esc(F.backup1.v) + from(F.backup1) : none('none on file')) +
+    (F.backup2.v ? line('Emergency contact', esc(F.backup2.v) + from(F.backup2)) : '') +
+    '<div style="font-size:12px;margin:4px 0 6px;text-align:right">' +
+      (hit.busy ? '<span style="color:#55677a">Checking their Hub packet… </span>' : '') +
+      (hit.err ? '<span style="color:var(--danger)">Could not read their Hub packet: ' + esc(hit.err) + '. </span>' : '') +
+      '<a href="#" onclick="openFacts(\'' + c.id + '\');return false">Change address, birthday or back-up plan</a></div>';
+}
+const FACT_KEYS = ['street', 'apt', 'city', 'zip', 'dob', 'b1_name', 'b1_rel', 'b1_phone', 'b2_name', 'b2_rel', 'b2_phone'];
+function openFacts(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c) return;
+  const { own, A, B, L, R } = consumerFacts(c).raw;
+  // Start from what Overview shows now, so a small fix is one change.
+  const fromLead = L ? { street: L.street || R.street, apt: L.apt || R.apt, city: L.city || R.city, zip: L.zip || R.zip } : {};
+  const addr = (own.street || own.city) ? own : A.street ? A : fromLead;
+  const back = own.b1_name ? own : B;
+  const src = { street: addr.street, apt: addr.apt, city: addr.city, zip: addr.zip, dob: own.dob || A.dob || (L ? lpDate(L.dob || R.dob) : ''),
+    b1_name: back.b1_name, b1_rel: back.b1_rel, b1_phone: back.b1_phone, b2_name: back.b2_name, b2_rel: back.b2_rel, b2_phone: back.b2_phone };
+  document.getElementById('cf_id').value = cid;
+  document.getElementById('cf_title').textContent = c.name;
+  FACT_KEYS.forEach(k => { document.getElementById('cf_' + k).value = src[k] || ''; });
+  document.getElementById('cf_err').textContent = '';
+  openModal('factsModal');
+}
+function saveFacts() {
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === document.getElementById('cf_id').value);
+  if (!c) return;
+  const v = Object.fromEntries(FACT_KEYS.map(k => [k, document.getElementById('cf_' + k).value.trim()]));
+  if (v.zip && !/^\d{5}(-\d{4})?$/.test(v.zip)) { document.getElementById('cf_err').textContent = 'The zip code should be 5 numbers.'; return; }
+  if (v.b1_name && !v.b1_phone) { document.getElementById('cf_err').textContent = 'Add a phone number for the back-up person.'; return; }
+  c.facts = Object.assign(Object.fromEntries(Object.entries(v).filter(([, x]) => x)), { at: new Date().toISOString(), by: _acWho() });
+  setData('consumers', consumers);
+  closeModal('factsModal');
+  renderProfile();
+}
+
 // Her first-shift checklist (2026-10-21). Saved on the consumer record.
 function _prepSave(cid, fn) {
   const list = getData('consumers');
