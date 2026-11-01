@@ -21,7 +21,11 @@ const ctx = {
   _niceDay: iso => 'D' + iso, _todayIso: () => '2026-11-01', _acWho: () => 'samantha@mo-care.com',
   esc: s => String(s).replace(/</g, '&lt;'), renderProfile: () => {}, openModal: () => {}, closeModal: () => {},
   _profileId: 'c1', _profTab: 'overview', calls: [],
-  document: { getElementById: id => (els[id] = els[id] || { value: '', textContent: '' }) },
+  secs: {}, focused: null,
+  document: { getElementById: id => (els[id] = els[id] || { value: '', textContent: '' }),
+    querySelectorAll: () => ['address', 'dob', 'backup', 'signer', 'evv', 'agency'].map(k => (ctx.secs[k] = ctx.secs[k] || { dataset: { sec: k }, style: {} })),
+    querySelector: q => ({ focus: () => { ctx.focused = q; } }) },
+  setTimeout: (f) => f(),
 };
 ctx.cdsMatchApi = (act, inp) => { ctx.calls.push([act, inp]); return Promise.resolve({ packet: ctx.next }); };
 vm.createContext(ctx);
@@ -33,7 +37,14 @@ const c = { id: 'c1', name: 'Margaret Sample' };
 data.consumers = [c];
 let html = ctx.factsLines(c, line);
 ok(/Address: .*not on file/.test(html) && /Date of birth: .*not on file/.test(html) && /Back-up person: .*none on file/.test(html), 'nothing on file says so');
-ok(/Change these/.test(html), 'office can type them');
+ok((html.match(/\+ Add/g) || []).length === 4 && !/Edit/.test(html), 'each empty line has its own Add link');
+ok(/openFacts\('c1','dob'\)/.test(html) && /openFacts\('c1','signer'\)/.test(html), 'each link opens its own part');
+ok(/openFacts\('c1','evv'\)/.test(ctx.evvLine(c, line)), 'clock-in has its own link');
+ctx.openFacts('c1', 'dob');
+ok(ctx.secs.dob.style.display === '' && ctx.secs.address.style.display === 'none' && ctx.secs.backup.style.display === 'none', 'the box shows only date of birth');
+ok(els.cf_title.textContent === 'Margaret Sample: Date of birth' && /dob/.test(ctx.focused), 'titled and ready to type');
+ctx.openFacts('c1');
+ok(Object.values(ctx.secs).every(d => d.style.display === ''), 'without a part, the whole box shows');
 ok(/Who signs for them: .*not on file/.test(html), 'who signs: not on file');
 ok(/Clock-in method: .*not on file/.test(ctx.evvLine(c, line)), 'clock-in: not on file');
 ok(ctx.oldAgencyLine(c, line) === '', 'old agency hidden for someone not moving');
@@ -65,6 +76,7 @@ ok(/Old CDS agency: Old Agency CDS, 417-555-0111/.test(ctx.oldAgencyLine(c, line
 ctx.next.answers.who = 'me'; ok(ctx.consumerFacts(c).signer.v === 'They sign for themselves', 'signs for themselves'); ctx.next.answers.who = 'rep';
 html = ctx.factsLines(c, line);
 ok(/Mail goes to/.test(html) && !/Emergency contact/.test(html), 'Overview lines');
+ok(/✎ Edit/.test(html) && /openFacts\('c1','address'\)/.test(html), 'filled lines say Edit');
 
 // Office types a correction: it wins, and the signed packet is untouched
 ctx.openFacts('c1');
