@@ -34,13 +34,13 @@ eq(C.checkHandoff({ cc_id: 'lead_1234', first_name: 'Ann' }).error, 'no phone or
 eq(C.checkHandoff({ cc_id: "x'; drop table", phone: '4175551234' }).error, 'missing the Caring Companions lead or call id', 'odd id refused');
 
 const body = { cc_id: 'lead_ann1', first_name: 'Ann', last_name: 'Lee', phone: '(417) 555-1234', email: 'Kim@Example.com ',
-  caller_name: 'Kim Lee', relationship: 'Daughter', who_needs_care: 'Her mother', county: 'Greene',
+  caller_name: 'Kim Lee', relationship: 'Daughter', who_needs_care: 'Her mother', county: 'Greene', town: 'Nixa',
   call_at: '2026-11-01T15:30:00Z', summary: 'Mother has Medicaid and wants her daughter to be paid as her caregiver — asked about CDS.',
   notes: 'Prefers calls after 3pm.', sent_by: 'Krystal' };
 const { row } = C.checkHandoff(body);
 eq([row.phone, row.email, row.full_name, row.source, row.form_name, row.from_kind, row.from_id],
   ['+14175551234', 'kim@example.com', 'Ann Lee', 'the Caring Companions line', 'Called the Caring Companions line', 'cc_lead', 'lead_ann1'], 'row fields');
-eq(row.form_answers.map(a => a[0]), ['Who they are', 'Who called', 'Who needs care', 'County', 'Call was on', 'What the call was about', 'Caring Companions notes', 'Sent over by'], 'answers in order');
+eq(row.form_answers.map(a => a[0]), ['Who they are', 'Who called', 'Who needs care', 'County', 'Town', 'Call was on', 'What the call was about', 'Caring Companions notes', 'Sent over by'], 'answers in order');
 ok(!/[—–]/.test(row.message), 'no em dashes in what the office reads');
 ok(/Call was on: Sun, Nov 1, 2026/.test(row.message), 'call day in Central time');
 

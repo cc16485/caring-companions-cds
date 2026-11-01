@@ -42,6 +42,7 @@ export function checkHandoff(b) {
     caller && (caller.toLowerCase() !== [first, last].filter(Boolean).join(' ').toLowerCase() || rel) ? ['Who called', caller + (rel ? ' (' + rel + ')' : '')] : null,
     b.who_needs_care ? ['Who needs care', clean(b.who_needs_care, 80)] : null,
     b.county ? ['County', clean(b.county, 60)] : null,
+    b.town ? ['Town', clean(b.town, 60)] : null,
     callDay(b.call_at) ? ['Call was on', callDay(b.call_at)] : null,
     b.summary ? ['What the call was about', clean(b.summary, 1500)] : null,
     b.notes ? ['Caring Companions notes', clean(b.notes, 1500)] : null,
