@@ -86,7 +86,7 @@ export function leadText(r, nowMs, link) {
   const late = nowMs && r.submitted_at && (nowMs - Date.parse(r.submitted_at)) > 60 * 60000;
   return noDash('New CDS lead: ' + name + (county ? ', ' + county : '') + '.' +
     (late ? ' Came in ' + whenShort(Date.parse(r.submitted_at)) + '.' : '')) +
-    ' Tap to see what they wrote and call: ' + (link || 'hub.caringcds.com/#pipeline');
+    (r.from_kind === 'cc_lead' ? ' Sent over from the Caring Companions line. Tap to see the call notes and call: ' : ' Tap to see what they wrote and call: ') + (link || 'hub.caringcds.com/#pipeline');
 }
 export function reminderText(r, nowMs, link) {
   const at = Date.parse(r.submitted_at);

@@ -98,7 +98,11 @@ export function prospectAnswers(p) {
 // The note on the GoHighLevel contact.
 export function noteText(name, at, answers) {
   const day = at ? new Date(at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  return ['Filled out: ' + name + (day ? ' on ' + day : '') + '.']
+  // A caller sent over by the Caring Companions office (lead-from-cc.js) did not fill out a form.
+  const first = name === 'Called the Caring Companions line'
+    ? 'Called the Caring Companions line, (417) 234-8494. Sent to CDS' + (day ? ' on ' + day : '') + '.'
+    : 'Filled out: ' + name + (day ? ' on ' + day : '') + '.';
+  return [first]
     .concat(answers.map(([k, v]) => k + ': ' + v)).join('\n').slice(0, 4000);
 }
 
