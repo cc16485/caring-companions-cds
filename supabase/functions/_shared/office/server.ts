@@ -108,3 +108,7 @@ export function scheduled(handler: (body: Record<string, unknown>) => Promise<un
     catch (e) { console.error(e); return json({ ok: false, error: String((e as Error)?.message || e) }, 500); }
   };
 }
+
+// A caller the Caring Companions office sends over (2026-11-01): one site_leads row, nothing else.
+import { createFromCc } from './lead-from-cc.js';
+export const fromCc = createFromCc({ db });
