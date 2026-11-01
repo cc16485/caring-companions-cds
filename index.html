@@ -4063,6 +4063,7 @@ button.fu-tile.check span { color:#14606F; }
       <button class="modal-close" onclick="closeModal('factsModal')" aria-label="Close">×</button>
     </div>
     <input type="hidden" id="cf_id">
+    <div data-sec="address">
     <div class="form-row">
       <div class="form-group" style="flex:2"><label for="cf_street">Street</label><input type="text" id="cf_street"></div>
       <div class="form-group"><label for="cf_apt">Apt</label><input type="text" id="cf_apt"></div>
@@ -4070,8 +4071,10 @@ button.fu-tile.check span { color:#14606F; }
     <div class="form-row">
       <div class="form-group" style="flex:2"><label for="cf_city">City</label><input type="text" id="cf_city"></div>
       <div class="form-group"><label for="cf_zip">Zip</label><input type="text" id="cf_zip" inputmode="numeric"></div>
-      <div class="form-group"><label for="cf_dob">Date of birth</label><input type="date" id="cf_dob"></div>
     </div>
+    </div>
+    <div data-sec="dob" class="form-group"><label for="cf_dob">Date of birth</label><input type="date" id="cf_dob"></div>
+    <div data-sec="backup">
     <b style="color:var(--primary);font-size:14px">Back-up person (if the attendant cannot come)</b>
     <div class="form-row">
       <div class="form-group"><label for="cf_b1_name">Name</label><input type="text" id="cf_b1_name"></div>
@@ -4084,17 +4087,22 @@ button.fu-tile.check span { color:#14606F; }
       <div class="form-group"><label for="cf_b2_rel">They are their</label><input type="text" id="cf_b2_rel"></div>
       <div class="form-group"><label for="cf_b2_phone">Phone</label><input type="tel" id="cf_b2_phone"></div>
     </div>
+    </div>
+    <div data-sec="signer">
     <b style="color:var(--primary);font-size:14px">Who signs for them (leave blank if they sign for themselves)</b>
     <div class="form-row">
       <div class="form-group" style="flex:2"><label for="cf_rep_name">Name</label><input type="text" id="cf_rep_name"></div>
       <div class="form-group"><label for="cf_rep_rel">They are their</label><input type="text" id="cf_rep_rel" placeholder="daughter, POA"></div>
     </div>
-    <div class="form-group"><label for="cf_evv">How the attendant clocks in</label>
+    </div>
+    <div data-sec="evv" class="form-group"><label for="cf_evv">How the attendant clocks in</label>
       <select id="cf_evv"><option value="">Not known</option><option value="app">WellSky app on the attendant's phone</option><option value="phone">Home phone (calls the toll-free number)</option><option value="none">WellSky app (no home phone)</option></select></div>
+    <div data-sec="agency">
     <b style="color:var(--primary);font-size:14px">Old CDS agency (if they moved to us)</b>
     <div class="form-row">
       <div class="form-group" style="flex:2"><label for="cf_v1">Agency</label><input type="text" id="cf_v1"></div>
       <div class="form-group"><label for="cf_v1_phone">Phone</label><input type="tel" id="cf_v1_phone"></div>
+    </div>
     </div>
     <div class="field-note">Saved on this profile only. Their signed packet is never changed. Nothing is sent to anyone.</div>
     <div class="field-note" id="cf_err" style="color:var(--danger);font-weight:600"></div>
@@ -10902,34 +10910,40 @@ function _ageOn(dob) {
 }
 const _factFrom = x => x.v && x.from ? ' <span style="font-size:12px;color:#55677a">(' + esc(x.from) + ')</span>' : '';
 const _factNone = t => '<span style="color:#9C6410">' + t + '</span>';
-const _factEdit = c => '<div style="font-size:12px;margin:4px 0 6px;text-align:right">' +
-  ((_profPacket[c.id] || {}).busy ? '<span style="color:#55677a">Checking their Hub packet… </span>' : '') +
-  ((_profPacket[c.id] || {}).err ? '<span style="color:var(--danger)">Could not read their Hub packet: ' + esc(_profPacket[c.id].err) + '. </span>' : '') +
-  '<a href="#" onclick="openFacts(\'' + c.id + '\');return false">Change these</a></div>';
+// Each line has its own Add or Edit link, which opens just that part of the box (2026-11-01, her ask:
+// "how can we easily click to edit").
+const _factLink = (c, sec, has) => ' <a href="#" class="cf-edit" onclick="openFacts(\'' + c.id + '\',\'' + sec + '\');return false" style="font-size:12px;margin-left:8px;white-space:nowrap">' + (has ? '✎ Edit' : '+ Add') + '</a>';
+const _factEdit = c => {
+  const h = _profPacket[c.id] || {};
+  return h.busy ? '<div style="font-size:12px;margin:4px 0 6px;color:#55677a;text-align:right">Checking their Hub packet…</div>'
+    : h.err ? '<div style="font-size:12px;margin:4px 0 6px;color:var(--danger);text-align:right">Could not read their Hub packet: ' + esc(h.err) + '.</div>' : '';
+};
 // Hours tab: how the attendant clocks in. Tax tab: their old CDS agency.
 function evvLine(c, line) {
   const F = consumerFacts(c);
-  return line('Clock-in method', F.evv.v ? esc(F.evv.v) + _factFrom(F.evv) : _factNone('not on file')) + _factEdit(c);
+  return line('Clock-in method', (F.evv.v ? esc(F.evv.v) + _factFrom(F.evv) : _factNone('not on file')) + _factLink(c, 'evv', F.evv.v)) + _factEdit(c);
 }
 function oldAgencyLine(c, line) {
   const F = consumerFacts(c), moving = F.P ? F.P.kind === 'move' : !!(F.L && (F.L.type === 'pccp' || F.L.leavingAgency));
   if (!F.oldAgency.v && !moving) return '';
-  return line('Old CDS agency', F.oldAgency.v ? esc(F.oldAgency.v) + _factFrom(F.oldAgency) : _factNone('not on file')) + _factEdit(c);
+  return line('Old CDS agency', (F.oldAgency.v ? esc(F.oldAgency.v) + _factFrom(F.oldAgency) : _factNone('not on file')) + _factLink(c, 'agency', F.oldAgency.v)) + _factEdit(c);
 }
 function factsLines(c, line) {
   const F = consumerFacts(c);
   const from = _factFrom, none = _factNone;
   const age = _ageOn(F.dob.v);
-  return line('Address', F.address.v ? esc(F.address.v) + from(F.address) : none('not on file')) +
+  const ed = (sec, x) => _factLink(c, sec, x.v);
+  return line('Address', (F.address.v ? esc(F.address.v) + from(F.address) : none('not on file')) + ed('address', F.address)) +
     (F.mailing ? line('Mail goes to', esc(F.mailing)) : '') +
-    line('Date of birth', F.dob.v ? esc(_niceDay(F.dob.v)) + (age !== null ? ', age ' + age : '') + from(F.dob) : none('not on file')) +
-    line('Back-up person', F.backup1.v ? esc(F.backup1.v) + from(F.backup1) : none('none on file')) +
-    (F.backup2.v ? line('Emergency contact', esc(F.backup2.v) + from(F.backup2)) : '') +
-    line('Who signs for them', F.signer.v ? esc(F.signer.v) + from(F.signer) : none('not on file')) +
+    line('Date of birth', (F.dob.v ? esc(_niceDay(F.dob.v)) + (age !== null ? ', age ' + age : '') + from(F.dob) : none('not on file')) + ed('dob', F.dob)) +
+    line('Back-up person', (F.backup1.v ? esc(F.backup1.v) + from(F.backup1) : none('none on file')) + ed('backup', F.backup1)) +
+    (F.backup2.v ? line('Emergency contact', esc(F.backup2.v) + from(F.backup2) + ed('backup', F.backup2)) : '') +
+    line('Who signs for them', (F.signer.v ? esc(F.signer.v) + from(F.signer) : none('not on file')) + ed('signer', F.signer)) +
     _factEdit(c);
 }
 const FACT_KEYS = ['street', 'apt', 'city', 'zip', 'dob', 'b1_name', 'b1_rel', 'b1_phone', 'b2_name', 'b2_rel', 'b2_phone', 'rep_name', 'rep_rel', 'evv', 'v1', 'v1_phone'];
-function openFacts(cid) {
+const FACT_SECS = { address: 'Address', dob: 'Date of birth', backup: 'Back-up plan', signer: 'Who signs for them', evv: 'Clock-in method', agency: 'Old CDS agency' };
+function openFacts(cid, sec) {
   const c = getData('consumers').find(x => x.id === cid);
   if (!c) return;
   const CF = consumerFacts(c), { own, A, B, L, R } = CF.raw, pw = (CF.P && CF.P.who) || {};
@@ -10942,10 +10956,14 @@ function openFacts(cid) {
     rep_name: own.rep_name || (A.who === 'rep' ? pw.name : ''), rep_rel: own.rep_name ? own.rep_rel : (A.who === 'rep' ? pw.rel : ''),
     evv: own.evv || A.evv || '', v1: own.v1 || A.v1 || (L && L.leavingAgency) || '', v1_phone: own.v1 ? own.v1_phone : A.v1_phone };
   document.getElementById('cf_id').value = cid;
-  document.getElementById('cf_title').textContent = c.name;
+  document.getElementById('cf_title').textContent = c.name + (FACT_SECS[sec] ? ': ' + FACT_SECS[sec] : '');
   FACT_KEYS.forEach(k => { document.getElementById('cf_' + k).value = src[k] || ''; });
   document.getElementById('cf_err').textContent = '';
+  // Only the part they clicked; the rest keeps what it had.
+  document.querySelectorAll('#factsModal [data-sec]').forEach(d => { d.style.display = !FACT_SECS[sec] || d.dataset.sec === sec ? '' : 'none'; });
   openModal('factsModal');
+  const first = FACT_SECS[sec] && document.querySelector('#factsModal [data-sec="' + sec + '"] input, #factsModal [data-sec="' + sec + '"] select');
+  if (first) setTimeout(() => first.focus(), 50);
 }
 function saveFacts() {
   const consumers = getData('consumers'), c = consumers.find(x => x.id === document.getElementById('cf_id').value);
