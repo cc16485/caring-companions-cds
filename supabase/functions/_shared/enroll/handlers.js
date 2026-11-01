@@ -325,7 +325,7 @@ export function createEnroll(h) {
       await audit('staff:' + staff, 'enroll_profile_shown', 'lead:' + p.lead_id, { consumer_id: cid || null });
       return { packet: { lead_id: p.lead_id, kind: p.kind, sent_at: p.sent_at, signed_at: p.signed_at, status: x.st.label,
         who: a.who === 'rep' ? { name: a.rep_name, rel: a.rep_rel } : null,
-        answers: pick(a, ['street', 'apt', 'city', 'state', 'zip', 'county', 'phone', 'email', 'mail_same', 'mail_street', 'mail_city', 'mail_state', 'mail_zip', 'dob', 'first_pay', 'evv', 'v1', 'v1_phone', 'v2', 'v2_phone']),
+        answers: pick(a, ['who', 'street', 'apt', 'city', 'state', 'zip', 'county', 'phone', 'email', 'mail_same', 'mail_street', 'mail_city', 'mail_state', 'mail_zip', 'dob', 'first_pay', 'evv', 'v1', 'v1_phone', 'v2', 'v2_phone']),
         evv: EVV_CHOICES[a.evv] || null,
         backup: { ...pick(b, ['b1_name', 'b1_rel', 'b1_phone', 'b2_name', 'b2_rel', 'b2_phone']), signed_at: (x.forms.backup && x.forms.backup.signed_at) || null } } };
     },

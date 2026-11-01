@@ -149,7 +149,7 @@ await refuses(() => S('enrollSend', { lead }), /already signed/, 'a signed packe
 let pr = await S('enrollProfile', { consumer_id: 'c-123', name: 'Someone Else' });
 ok(pr.packet && pr.packet.answers.street === '1200 E Example St' && pr.packet.answers.dob === '1941-03-02' && pr.packet.answers.city === 'Springfield', 'profile gets the address and date of birth from the linked packet');
 ok(pr.packet.backup.b1_name === 'Tom Sample' && pr.packet.backup.b1_rel === 'Son' && pr.packet.backup.signed_at, 'profile gets the back-up plan as signed');
-ok(pr.packet.who.name === 'Linda Sample' && pr.packet.evv && /WellSky app/.test(pr.packet.evv), 'who signed and how the attendant clocks in');
+ok(pr.packet.answers.who === 'rep' && pr.packet.who.name === 'Linda Sample' && pr.packet.evv && /WellSky app/.test(pr.packet.evv), 'who signed and how the attendant clocks in');
 ok(!/900|3456|ssn/i.test(JSON.stringify(pr)), 'never the SSN, not even the last 4');
 ok((await pg.query(`select count(*)::int n from cds_audit where action='enroll_profile_shown'`)).rows[0].n === 1, 'each showing is in the audit log');
 ok((await S('enrollProfile', { consumer_id: 'c-999', name: 'Margaret Sample' })).packet === null, 'a packet linked to another consumer is not found by name');
