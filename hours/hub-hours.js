@@ -251,7 +251,7 @@ export function mountHours(el, opts) {
     const endPill = { ended: ['r', 'Ended'], soon: ['y', 'Ends soon'], unknown: ['b', dsdsEnd ? 'End date unknown: upload the authorization' : 'End date not in WellSky name'], ok: ['g', 'Current'] };
     // The money line at the top of the hours (her pick 2026-11-01): approved hours not used.
     function useSummary(u) {
-      const pct = x => Math.round(x * 100) + '%', goal = pct(u.goal), rate = u.billing ? ' at ' + money(u.billing) + ' an hour' : '';
+      const pct = x => Math.round(x * 100) + '%', goal = pct(u.goal), rate = u.billing ? ' at $' + (Number.isInteger(u.billing) ? u.billing : u.billing.toFixed(2)) + ' an hour' : '';
       const now = !u.month.authorized ? '' : !u.paceOk
         ? `<div class="row"><b>This month</b><span class="pill b">Too early to tell</span><span class="meta">The pace shows from the ${PACE_FROM_DAY}th. ${esc(hrs(u.month.authorized))} approved in all.</span></div>`
         : `<div class="row${u.month.share < u.goal ? ' hot' : ''}"><b>This month: on pace for ${esc(pct(u.month.share))} of approved hours</b><span class="pill ${u.month.share < u.goal ? 'y' : 'g'}">Goal ${esc(goal)} or more</span>
