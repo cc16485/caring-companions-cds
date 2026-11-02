@@ -63,5 +63,22 @@ ok(!/[—]/.test(Object.values(R.WHO_NEXT).join(' ') + Object.values(R.WHO_CALLE
 ok(!/\b_user[.)]|!!_user/.test(html.slice(html.indexOf('const LD_WHO_OWNERS'), html.indexOf('function renderLdWho'))), 'who called reads the header email, not _user');
 ok(/try \{ renderLdWho\(shown, wcOn\); \} catch/.test(html), 'the switch row can never stop the cards');
 
+// ---------- has a caregiver, or needs one found (her ask 2026-11-01) ----------
+const CG = t => R.caregiverPlan(form(t));
+ok(CG('Who needs care: self\nThey said: person: has someone in mind') === 'has', 'check: self with someone in mind');
+ok(CG('Who needs care: family member\nThey said: person: would be the caregiver') === 'has', 'check: the caller would be the caregiver');
+ok(CG('Who needs care: family member\nThey said: person: needs a caregiver match') === 'find', 'check: needs a match');
+ok(CG('Who they are: A family asking for a caregiver\nCare is for: Myself') === 'find', 'caregiver directory: a family asking for a caregiver');
+ok(CG('Who they are: A caregiver signing up to work\nHas someone to care for: Yes\nThat person is their: Parent') === 'has', 'caregiver sign-up with someone to care for');
+ok(CG('Who needs care: Yes, I need the care\nMedicaid: Yes, active Medicaid') === '', 'home form: not known yet');
+ok(CG('Who needs care: wants to be the caregiver') === '', 'a caregiver with nobody named: not known');
+ok(R.caregiverPlan({ ...form('Who needs care: self'), attendant: { name: 'Jo Ann' } }) === 'has', 'an attendant already on the lead');
+const cgOff = { ...form('They said: person: has someone in mind'), caregiverPlan: 'find' };
+ok(R.caregiverPlan(cgOff) === 'find' && R.caregiverPlan({ ...cgOff, caregiverPlan: 'ask' }) === '', 'the office answer wins, and ask clears it');
+ok(R.leadCard(form('They said: person: has someone in mind'), [], '2026-10-23', false, {}).cg === 'has', 'the lead card carries it');
+const lp = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
+ok(/LD_CG_RANK\[a\.c\.cg \|\| ''\] - LD_CG_RANK\[b\.c\.cg \|\| ''\]/.test(lp) && /cg: \(a, b\)/.test(lp), 'Who to call first breaks ties by caregiver, and a Has a caregiver first sort');
+ok(/<option value="cg">Has a caregiver first<\/option>/.test(html) && /function ldSetCg/.test(html), 'sort option and the one-tap change');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

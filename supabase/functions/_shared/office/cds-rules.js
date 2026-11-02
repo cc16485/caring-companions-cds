@@ -834,6 +834,25 @@
     return 'unsure';
   }
 
+  // ---------- Has a caregiver, or needs one found (her ask 2026-11-01) ----------
+  // A consumer who brings their own caregiver starts with little office work; one who needs a
+  // caregiver found takes much more. So the Leads page puts the ones who have someone first.
+  // The office's answer (p.caregiverPlan, set on the Leads page) always wins; then an attendant
+  // already on the lead; then the website answers. '' = not known yet (ask on the call).
+  const CAREGIVER_PLAN = { has: 'Has a caregiver', find: 'Needs a caregiver found' };
+  function caregiverPlan(p) {
+    if (!p) return '';
+    if (CAREGIVER_PLAN[p.caregiverPlan]) return p.caregiverPlan;
+    if (p.caregiverPlan === 'ask') return '';
+    if (p.attendant && p.attendant.name) return 'has';
+    if (whoCalled(p) === 'pair') return 'has';
+    const form = (Array.isArray(p.notes) ? p.notes : []).find(n => isFormNote(n));
+    const text = form ? String(form.text || '') : '';
+    if (/has someone in mind|already helping|would be the caregiver|is the caregiver|has someone to care for: *yes/i.test(text)) return 'has';
+    if (/needs a caregiver match|asking for a caregiver|help (me |us )?find(ing)? a caregiver|needs? a caregiver/i.test(text)) return 'find';
+    return '';
+  }
+
   // ---------- Contacts: family and attendants who call about someone (her ask 2026-10-29) ----------
   // Mockup 6CxaqzDSJABjRYnGxc6tZg. The consumer is the boss, so callers hang under the person who needs
   // care: record.relatedPeople = [{ id, name, phone, role, relation, fromLead, prevStatus, at, by }].
@@ -1002,7 +1021,7 @@
     const needsToday = (step === 'call' && (tone === 'late' || tone === 'today')) || (step === 'state' && tone === 'late');
     return { step, kind, who, due, tone, next, sort, needsToday, followup: p.followup || '', came: cameIn(p, todayIso),
              cameIso: cameInIso(p), lastIso: lastContactIso(p, calls),
-             whoCalled: wc, whoLabel: wc ? WHO_CALLED[wc] : '' };
+             whoCalled: wc, whoLabel: wc ? WHO_CALLED[wc] : '', cg: caregiverPlan(p) };
   }
 
   // State reports and tax filings with a due date (2026-10-22, her yes; on Today's step 1 since 2026-10-23) from 30 days
@@ -1123,6 +1142,6 @@
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
-                    whoCalled, WHO_CALLED, WHO_NEXT,
+                    whoCalled, WHO_CALLED, WHO_NEXT, caregiverPlan, CAREGIVER_PLAN,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
