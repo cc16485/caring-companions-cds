@@ -3307,8 +3307,8 @@ button.fu-tile.check span { color:#14606F; }
     <div class="form-row">
       <div class="form-group">
         <label>MMAC Reimbursement Rate ($/hr)</label>
-        <input type="number" id="rs_billing" step="0.01" min="0" placeholder="20.21">
-        <span style="font-size:11px;color:var(--gray-600)">What MMAC pays you per hour</span>
+        <input type="number" id="rs_billing" step="0.01" min="0" placeholder="20.92">
+        <span style="font-size:11px;color:var(--gray-600)">What MMAC pays you per hour: $5.23 a unit x 4 = $20.92</span>
       </div>
       <div class="form-group">
         <label>Attendant Pay Rate ($/hr)</label>
@@ -15527,7 +15527,7 @@ function confirmWellskyImport() {
 function getRates() {
   const r = getObj('rateSettings');
   return {
-    billing: parseFloat(r.billing) || 20.21,  // MMAC reimburses per hour
+    billing: parseFloat(r.billing) || 20.92,  // MMAC: $5.23 per 15-minute unit (T1019U2, Consumer Directed personal care, DHSS HCBS manual 300)
     pay:     parseFloat(r.pay)     || 15.00,  // attendant hourly pay (the low end; pay is $15 to $16 since 2026-10-16)
     // Hours & EVV > This month flags a consumer on pace to use less than this share of their approved hours (her pick 2026-11-01)
     useGoal: parseFloat(r.useGoal) || 80
