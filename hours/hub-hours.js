@@ -137,17 +137,18 @@ export function shiftsThisMonth(shifts, now = new Date()) {
 // CDS pays only for hours worked, so approved hours left unused are income lost. A consumer on
 // pace to use less than the goal (80% unless changed under Settings, Edit rates) is flagged. The pace is
 // not read in the first week of the month: too few days to tell. Last month, when the WellSky
-// report still has it, shows what was really left unused. billing = the hourly rate (Settings, Edit rates).
+// report still has it, shows what was really left unused. perHour = what an hour nets after attendant
+// pay and payroll costs (her ask 2026-11-01: show the net, not the billing), from Settings, Edit rates.
 export const USE_GOAL = 0.8;
 export const PACE_FROM_DAY = 8;
 const prevMonth = ym => { const y = +ym.slice(0, 4), m = +ym.slice(5, 7); return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0'); };
 const q = n => Math.round(n * 4) / 4;   // to the quarter hour, the CDS unit
-export function unusedHours(hours, auths, W, pulledOn, billing = 0, goal = USE_GOAL) {
+export function unusedHours(hours, auths, W, pulledOn, perHour = 0, goal = USE_GOAL) {
   const paceOk = +pulledOn.slice(8, 10) >= PACE_FROM_DAY;
   const rows = (hours || []).map(h => {
     const expected = Math.min(h.authorized, Math.max(h.projected || 0, h.completed + h.scheduled));
     const share = h.authorized > 0 ? expected / h.authorized : 1, unused = q(Math.max(0, h.authorized - expected));
-    return { expected: q(expected), share, unused, dollars: unused * billing, under: paceOk && h.authorized > 0 && share < goal };
+    return { expected: q(expected), share, unused, dollars: unused * perHour, under: paceOk && h.authorized > 0 && share < goal };
   });
   const sum = (list, k) => list.reduce((s, r) => s + (r[k] || 0), 0);
   const authorized = sum(hours || [], 'authorized'), expected = sum(rows, 'expected'), unused = sum(rows, 'unused');
@@ -158,15 +159,23 @@ export function unusedHours(hours, auths, W, pulledOn, billing = 0, goal = USE_G
       unused: q(Math.max(0, m.authorized - m.completed)) });
   }
   const lAuth = sum(last, 'authorized'), lUsed = sum(last, 'used'), lUnused = sum(last, 'unused');
-  return { paceOk, goal, billing, rows,
-    month: { authorized, expected, unused, dollars: unused * billing, share: authorized > 0 ? expected / authorized : null, under: rows.filter(r => r.under).length },
-    last: last.length ? { month: lm, name: new Date(Date.UTC(+lm.slice(0, 4), +lm.slice(5, 7) - 1, 15)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }), authorized: lAuth, used: lUsed, unused: lUnused, dollars: lUnused * billing,
+  return { paceOk, goal, perHour, rows,
+    month: { authorized, expected, unused, dollars: unused * perHour, share: authorized > 0 ? expected / authorized : null, under: rows.filter(r => r.under).length },
+    last: last.length ? { month: lm, name: new Date(Date.UTC(+lm.slice(0, 4), +lm.slice(5, 7) - 1, 15)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }), authorized: lAuth, used: lUsed, unused: lUnused, dollars: lUnused * perHour,
       share: lAuth > 0 ? lUsed / lAuth : null,
       most: last.filter(r => r.unused > 0 && r.used / r.authorized < goal).sort((x, y) => y.unused - x.unused).slice(0, 3) } : null };
 }
 
+// What one worked hour nets: the billing rate less attendant pay and the payroll costs on that pay
+// (employer taxes, workers' comp), as a percent she sets in Settings, Edit rates. Never below 0.
+export function netPerHour(r) {
+  const b = +(r && r.billing) || 0, p = +(r && r.pay) || 0, c = +(r && r.payCosts) || 0;
+  return b > 0 ? Math.max(0, Math.round((b - p * (1 + c / 100)) * 100) / 100) : 0;
+}
+const netHow = r => '$' + (+r.billing).toFixed(2) + ' billed less $' + (+r.pay).toFixed(2) + ' pay' + (+r.payCosts > 0 ? ' and ' + (+r.payCosts) + '% payroll costs' : '');
+
 // ---------- the page, all together ----------
-export function monthView({ W, check, reviewed, corrections, submissions, dsdsEnd = null, billing = 0, goal = USE_GOAL, now = new Date() }) {
+export function monthView({ W, check, reviewed, corrections, submissions, dsdsEnd = null, perHour = 0, goal = USE_GOAL, now = new Date() }) {
   check = check || {};
   const today = isoLocal(now);
   const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
@@ -177,7 +186,7 @@ export function monthView({ W, check, reviewed, corrections, submissions, dsdsEn
   const over = overlaps(shifts, now).filter(o => !(reviewed && reviewed[o.key]));
   const ends = authEnds(check.auths, W, now, dsdsEnd);
   const evv = evvStatus(corrections, submissions, shiftsThisMonth(shifts, now), now);
-  const use = unusedHours(hours, check.auths, W, pulledOn, billing, goal);
+  const use = unusedHours(hours, check.auths, W, pulledOn, perHour, goal);
   hours.forEach((h, i) => { h.use = use.rows[i]; });
   // Under the goal comes after "barely used" and before on track, the most hours unused first.
   const rank = h => ({ over: 0, 'booked-over': 0, 'pace-over': 1, low: 2 })[h.status] ?? (h.use.under ? 2.5 : 3);
@@ -229,14 +238,14 @@ export function mountHours(el, opts) {
     const dsdsEnd = opts.dsdsEnd ? opts.dsdsEnd() : null;
     const rates = opts.rates ? opts.rates() : {};
     const v = monthView({ W: opts.W, check: opts.check(), reviewed: opts.reviewed(), corrections: opts.corrections(), submissions: subs, dsdsEnd,
-      billing: rates.billing || 0, goal: rates.useGoal ? rates.useGoal / 100 : USE_GOAL });
+      perHour: netPerHour(rates), goal: rates.useGoal ? rates.useGoal / 100 : USE_GOAL });
     const phone = name => { const c = (opts.consumers ? opts.consumers() : []).find(x => String(x.name || '').toLowerCase() === name.toLowerCase()); return c && c.phone ? c.phone : ''; };
     const tile = (n, label, tone) => `<div class="tile${n && tone ? ' ' + tone : ''}"><div class="n">${n}</div><div class="t">${esc(label)}</div></div>`;
     const asOf = v.asOf ? new Date(v.asOf).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) : '';
     const stale = v.asOf && Date.now() - Date.parse(v.asOf) > 26 * 36e5;
     const pill = { over: ['r', 'Over'], 'booked-over': ['r', 'Booked over'], 'pace-over': ['y', 'On pace to go over'], low: ['y', 'Barely used'], ok: ['g', 'On track'] };
     const money = n => '$' + Math.round(n).toLocaleString('en-US');
-    const unusedText = (n, d) => hrs(n) + (d > 0 ? ' (about ' + money(d) + ')' : '');
+    const unusedText = (n, d) => hrs(n) + (d > 0 ? ' (about ' + money(d) + ' net)' : '');
     const hourRow = h => {
       const name = firstLast(h.consumer), pct = h.authorized > 0 ? Math.min(100, h.completed / h.authorized * 100) : 0;
       const under = h.status === 'ok' && h.use.under, flag = h.status !== 'ok' || under;
@@ -251,7 +260,7 @@ export function mountHours(el, opts) {
     const endPill = { ended: ['r', 'Ended'], soon: ['y', 'Ends soon'], unknown: ['b', dsdsEnd ? 'End date unknown: upload the authorization' : 'End date not in WellSky name'], ok: ['g', 'Current'] };
     // The money line at the top of the hours (her pick 2026-11-01): approved hours not used.
     function useSummary(u) {
-      const pct = x => Math.round(x * 100) + '%', goal = pct(u.goal), rate = u.billing ? ' at $' + (Number.isInteger(u.billing) ? u.billing : u.billing.toFixed(2)) + ' an hour' : '';
+      const pct = x => Math.round(x * 100) + '%', goal = pct(u.goal), rate = u.perHour ? ' at $' + u.perHour.toFixed(2) + ' net an hour (' + netHow(rates) + ')' : '';
       const now = !u.month.authorized ? '' : !u.paceOk
         ? `<div class="row"><b>This month</b><span class="pill b">Too early to tell</span><span class="meta">The pace shows from the ${PACE_FROM_DAY}th. ${esc(hrs(u.month.authorized))} approved in all.</span></div>`
         : `<div class="row${u.month.share < u.goal ? ' hot' : ''}"><b>This month: on pace for ${esc(pct(u.month.share))} of approved hours</b><span class="pill ${u.month.share < u.goal ? 'y' : 'g'}">Goal ${esc(goal)} or more</span>
@@ -259,7 +268,7 @@ export function mountHours(el, opts) {
       const L = u.last;
       const last = !L ? '' : `<div class="row"><b>${esc(L.name)}: ${esc(pct(L.share))} of approved hours used</b><span class="pill ${L.share < u.goal ? 'y' : 'g'}">${L.share < u.goal ? 'Under the goal' : 'Met the goal'}</span>
           <span class="meta">${esc(hrs(L.used))} of ${esc(hrs(L.authorized))}.${L.unused > 0 ? ' ' + esc(unusedText(L.unused, L.dollars)) + ' not used.' : ''}${L.most.length ? ' Most unused: ' + esc(L.most.map(r => r.consumer + ' ' + hrs(r.unused)).join(', ')) + '.' : ''}</span></div>`;
-      return now + last + (u.billing ? '' : '<p class="small">Set the hourly rate under Settings, Rates and forms, to see the dollars.</p>');
+      return now + last + (u.perHour ? '' : '<p class="small">Set the rates under Settings, Rates and forms, to see the dollars.</p>');
     }
     const e = v.evv;
     el.innerHTML = `<div class="ghead"><h2>This month</h2><span>${v.have ? 'From WellSky, ' + esc(asOf) : ''} <button class="link" data-act="reload">Refresh</button></span></div>

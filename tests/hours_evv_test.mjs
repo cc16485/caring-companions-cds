@@ -103,7 +103,7 @@ const ua = { at: '2026-11-20T11:00:00Z', from: '2026-10-01', to: '2026-11-30', c
   { name: 'Reed, Shasta', auths: [{ label: 'Shasta Reed Authorization', service: 'DSDS - CDS Personal Care', months: [
     { month: '2026-10', authorized: 60, completed: 70, scheduled: 0 }, { month: '2026-11', authorized: 60, completed: 5, scheduled: 0 }] }] } ] };
 const NOV = new Date('2026-11-20T15:00:00');
-const uv = H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], billing: 21, now: NOV });
+const uv = H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], perHour: 21, now: NOV });
 const by = Object.fromEntries(uv.hours.map(h => [h.consumer, h]));
 // Susan: 60 in 19 days, about 3.16 a day, 11 days left -> about 94.7 of 100, on track
 eq([by['Barnwell, Susan'].status, by['Barnwell, Susan'].use.under], ['ok', false], 'on pace for 95%: not flagged');
@@ -114,12 +114,17 @@ eq(uv.hours.map(h => h.consumer), ['Reed, Shasta', 'Bell, Pamela', 'Barnwell, Su
 eq(uv.tiles.under, 2, 'tile counts barely used and under the goal');
 eq([uv.use.last.name, uv.use.last.authorized, uv.use.last.used, uv.use.last.unused], ['October', 240, 195, 45], 'October: over-use does not cancel out unused hours');
 eq(uv.use.last.most.map(r => [r.consumer, r.unused]), [['Pamela Bell', 40]], 'most unused last month: only those under the goal');
-eq(Math.round(uv.use.last.dollars), 945, '45 hrs at $21');
-const early = H.monthView({ W, check: { auths: { ...ua, at: '2026-11-03T11:00:00Z' } }, reviewed: {}, corrections: [], submissions: [], billing: 21, now: new Date('2026-11-03T15:00:00') });
+eq(Math.round(uv.use.last.dollars), 945, '45 hrs at $21 net');
+const early = H.monthView({ W, check: { auths: { ...ua, at: '2026-11-03T11:00:00Z' } }, reviewed: {}, corrections: [], submissions: [], perHour: 21, now: new Date('2026-11-03T15:00:00') });
 ok(!early.use.paceOk && early.hours.every(h => !h.use.under), 'first week: too early, nobody flagged for pace');
-const g60 = H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], billing: 21, goal: 0.5, now: NOV });
+const g60 = H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], perHour: 21, goal: 0.5, now: NOV });
 eq(g60.hours.find(h => h.consumer === 'Bell, Pamela').use.under, false, 'the goal comes from Settings');
 eq(H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], now: NOV }).use.month.dollars, 0, 'no rate: hours only');
+
+// net per hour (her ask 2026-11-01): billing less pay and payroll costs
+eq(H.netPerHour({ billing: 20.92, pay: 15 }), 5.92, '$20.92 less $15 pay');
+eq(H.netPerHour({ billing: 20.92, pay: 15, payCosts: 10 }), 4.42, 'and 10% payroll costs on the pay');
+eq([H.netPerHour({ billing: 0, pay: 15 }), H.netPerHour({ billing: 10, pay: 15 })], [0, 0], 'no rate, or pay above the rate: 0');
 
 const src = readFileSync(ROOT + '/hours/hub-hours.js', 'utf8');
 ok(!/—/.test(src), 'no em dashes');

@@ -3317,19 +3317,26 @@ button.fu-tile.check span { color:#14606F; }
       </div>
     </div>
     <div class="form-group">
+      <label>Payroll costs (% of attendant pay)</label>
+      <input type="number" id="rs_costs" step="0.01" min="0" max="100" placeholder="0">
+      <span style="font-size:11px;color:var(--gray-600)">Employer taxes and workers' comp on each dollar of pay. Used for the net per hour.</span>
+    </div>
+    <div class="form-group">
       <label>Hours goal (% of approved hours used)</label>
       <input type="number" id="rs_use" step="1" min="1" max="100" placeholder="80">
       <span style="font-size:11px;color:var(--gray-600)">This month on Hours &amp; EVV flags anyone on pace to use less than this</span>
     </div>
     <div style="background:var(--gray-100);border-radius:6px;padding:12px;font-size:13px;margin-top:4px">
-      <strong>Gross margin per hour:</strong> <span id="rs_margin_preview" style="color:var(--success);font-weight:700"></span>
+      <strong>Net per hour:</strong> <span id="rs_margin_preview" style="color:var(--success);font-weight:700"></span>
       <script>
         document.getElementById('rs_billing').addEventListener('input', updateMarginPreview);
         document.getElementById('rs_pay').addEventListener('input', updateMarginPreview);
+        document.getElementById('rs_costs').addEventListener('input', updateMarginPreview);
         function updateMarginPreview() {
           const b = parseFloat(document.getElementById('rs_billing').value) || 0;
           const p = parseFloat(document.getElementById('rs_pay').value) || 0;
-          const m = b - p;
+          const c = parseFloat(document.getElementById('rs_costs').value) || 0;
+          const m = b - p * (1 + c / 100);
           const el = document.getElementById('rs_margin_preview');
           el.textContent = m >= 0 ? `$${m.toFixed(2)}/hr (${b > 0 ? Math.round(m/b*100) : 0}%)` : '—';
           el.style.color = m > 0 ? 'var(--success)' : 'var(--danger)';
@@ -5385,7 +5392,7 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=6');
+    const { mountHours } = await import('./hours/hub-hours.js?v=7');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
@@ -15530,7 +15537,10 @@ function getRates() {
     billing: parseFloat(r.billing) || 20.21,  // MMAC reimburses per hour
     pay:     parseFloat(r.pay)     || 15.00,  // attendant hourly pay (the low end; pay is $15 to $16 since 2026-10-16)
     // Hours & EVV > This month flags a consumer on pace to use less than this share of their approved hours (her pick 2026-11-01)
-    useGoal: parseFloat(r.useGoal) || 80
+    useGoal: parseFloat(r.useGoal) || 80,
+    // Employer payroll taxes and workers' comp, as a percent of attendant pay (her ask 2026-11-01:
+    // This month shows unused hours at their net). 0 until she enters it.
+    payCosts: parseFloat(r.payCosts) || 0
   };
 }
 
@@ -15539,6 +15549,8 @@ function openRateSettings() {
   document.getElementById('rs_billing').value = r.billing;
   document.getElementById('rs_pay').value = r.pay;
   document.getElementById('rs_use').value = r.useGoal;
+  document.getElementById('rs_costs').value = r.payCosts || '';
+  updateMarginPreview();
   openModal('rateSettingsModal');
 }
 
@@ -15546,9 +15558,11 @@ function saveRateSettings() {
   const billing = parseFloat(document.getElementById('rs_billing').value);
   const pay = parseFloat(document.getElementById('rs_pay').value);
   const useGoal = parseFloat(document.getElementById('rs_use').value);
+  const payCosts = parseFloat(document.getElementById('rs_costs').value) || 0;
+  if (payCosts < 0 || payCosts > 100) { alert('Payroll costs are a percent from 0 to 100.'); return; }
   if (!billing || billing <= 0 || !pay || pay <= 0) { alert('Please enter valid rates.'); return; }
   if (!(useGoal >= 1 && useGoal <= 100)) { alert('The hours goal is a percent from 1 to 100.'); return; }
-  setObj('rateSettings', { billing, pay, useGoal });
+  setObj('rateSettings', { billing, pay, useGoal, payCosts });
   closeModal('rateSettingsModal');
   updateDashboard();
   if (document.getElementById('page-quarterly').classList.contains('active')) renderQuarterlyReport();
