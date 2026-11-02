@@ -186,6 +186,7 @@ export function monthView({ W, check, reviewed, corrections, submissions, dsdsEn
   const long = W && shifts ? W.longShifts(shifts, reviewed, today) : [];
   const open = W && (eo || check.open) ? W.openShifts(eo || check.open, reviewed) : [];
   const over = overlaps(shifts, now).filter(o => !(reviewed && reviewed[o.key]));
+  const week = W && W.over40 ? W.over40(shifts, reviewed, now) : [];   // 40 hours a week for one consumer (2026-11-01)
   const ends = authEnds(auths, W, now, dsdsEnd);
   const evv = evvStatus(corrections, submissions, shiftsThisMonth(shifts, now), now);
   const use = unusedHours(hours, auths, W, pulledOn, perHour, goal);
@@ -194,11 +195,11 @@ export function monthView({ W, check, reviewed, corrections, submissions, dsdsEn
   const rank = h => ({ over: 0, 'booked-over': 0, 'pace-over': 1, low: 2 })[h.status] ?? (h.use.under ? 2.5 : 3);
   hours.sort((a, b) => rank(a) - rank(b) || (rank(a) === 2.5 ? b.use.unused - a.use.unused : 0) || a.consumer.localeCompare(b.consumer));
   const dayOfMonth = +pulledOn.slice(8, 10), dim = new Date(+pulledOn.slice(0, 4), +pulledOn.slice(5, 7), 0).getDate();
-  return { hours, use, long, open, overlaps: over, ends, evv, have: !!(auths || check.shifts), hoursFromEmail: !!(auths && auths.email),
+  return { hours, use, long, open, overlaps: over, week, ends, evv, have: !!(auths || check.shifts), hoursFromEmail: !!(auths && auths.email),
     expectedShare: Math.max(0, Math.min(1, (dayOfMonth - 1) / dim)),
     asOf: [auths && auths.at, shifts && shifts.at].filter(Boolean).sort()[0] || null, fromEmail: !!(shifts && shifts.email),
     tiles: { over: hours.filter(h => ['over', 'booked-over', 'pace-over'].includes(h.status)).length, low: hours.filter(h => h.status === 'low').length,
-      under: hours.filter(h => h.status === 'low' || h.use.under).length, ending: ends.filter(e => e.status === 'ended' || e.status === 'soon').length, checks: long.length + open.length + over.length, evv: evv.open } };
+      under: hours.filter(h => h.status === 'low' || h.use.under).length, ending: ends.filter(e => e.status === 'ended' || e.status === 'soon').length, checks: long.length + open.length + over.length, week: week.filter(x => x.over).length, evv: evv.open } };
 }
 
 const CSS = `
@@ -275,11 +276,16 @@ export function mountHours(el, opts) {
     const e = v.evv;
     el.innerHTML = `<div class="ghead"><h2>This month</h2><span>${v.have ? (v.hoursFromEmail ? 'From the WellSky email, ' : 'From WellSky, ') + esc(asOf) : ''} <button class="link" data-act="reload">Refresh</button></span></div>
       ${!v.have ? '<div class="warn">WellSky has not sent its reports yet, so there is nothing to show.</div>' : stale ? `<div class="warn">The WellSky reports were last updated ${esc(asOf)}, so this may be out of date.</div>` : ''}
-      <div class="tiles">${tile(v.tiles.over, 'Over or on pace to go over', 'r')}${tile(v.tiles.under, 'Using under ' + Math.round(v.use.goal * 100) + '% of their hours', 'y')}${tile(v.tiles.ending, 'Authorizations ended or ending in 30 days', 'y')}${tile(v.tiles.checks, 'Shifts to check', 'r')}${tile(v.tiles.evv, 'EVV corrections to finish', 'y')}</div>
+      <div class="tiles">${tile(v.tiles.over, 'Over or on pace to go over', 'r')}${tile(v.tiles.under, 'Using under ' + Math.round(v.use.goal * 100) + '% of their hours', 'y')}${tile(v.tiles.week, 'Over 40 hours a week for one consumer', 'r')}${tile(v.tiles.ending, 'Authorizations ended or ending in 30 days', 'y')}${tile(v.tiles.checks, 'Shifts to check', 'r')}${tile(v.tiles.evv, 'EVV corrections to finish', 'y')}</div>
 
       <section class="grp"><div class="ghead"><h3>Hours against the authorization</h3><span>Bar = hours used. Line = where they would be at an even pace today.</span></div>
       ${useSummary(v.use)}
       ${v.hours.length ? v.hours.map(hourRow).join('') : '<p class="small">No personal care authorizations in the WellSky report this month.</p>'}</section>
+
+      <section class="grp"><div class="ghead"><h3>40 hours a week for one consumer</h3><span>Sunday to Saturday. Hours for different consumers are not added together.</span></div>
+      ${v.week.map(x => `<div class="row${x.over ? ' hot' : ''}"><b>${esc(x.attendant)} for ${esc(x.consumer)}</b><span class="pill ${x.over ? 'r' : 'y'}">${esc(x.over ? 'Over 40: ' + hrs(x.hours) : 'Close: ' + hrs(x.hours))}</span>
+        <span class="meta">${esc(x.why)} ${x.over ? 'Talk with ' + esc(x.consumer) + ' before payroll.' : 'Let ' + esc(x.consumer) + ' know before the week fills up.'}${opts.markChecked ? ` <button class="link" data-check="${esc(x.key)}">Checked</button>` : ''}</span></div>`).join('')}
+      ${v.week.length ? '' : '<p class="small">No attendant is over or close to 40 hours a week for one consumer.</p>'}</section>
 
       <section class="grp"><div class="ghead"><h3>Shifts to check</h3><span>Tap Checked once it is sorted out (it saves who and when)</span></div>
       ${v.open.map(s => checkRow(firstLast(s.consumer) + ': never clocked out', firstLast(s.attendant) + ', ' + s.why + '. The consumer and attendant both sign a correction form.', 'r', s.key)).join('')}

@@ -152,6 +152,24 @@ const ev = H.monthView({ W, check: ck, reviewed: {}, corrections: [], submission
 eq([ev.hoursFromEmail, ev.hours.length, ev.use.last && ev.use.last.name], [true, 2, 'October'], 'This month reads the email, with last month');
 eq(ev.hours.find(h => h.consumer === 'Bell, Pamela').use.under, true, 'Pamela 6 of 80 by the 20th: under the goal');
 
+// ---------- 40 hours a week for one consumer (her rule 2026-11-01, attendant packet) ----------
+const wkNow = new Date('2026-11-05T15:00:00');   // a Thursday; this week Nov 1 to 7, last week Oct 25 to 31
+const sh = (date, hours, attendant = 'Wise, Jeana') => ({ attendant, date, start: '8:00 AM', endDate: date, end: '5:00 PM', hours });
+const wkShifts = { consumers: [
+  { name: 'Reed, Shasta', shifts: [sh('2026-10-25', 9), sh('2026-10-26', 9), sh('2026-10-27', 9), sh('2026-10-28', 9), sh('2026-10-29', 7.5), sh('2026-11-01', 9), sh('2026-11-02', 9), sh('2026-11-03', 9), sh('2026-11-04', 9.5), sh('2026-10-18', 50)] },
+  { name: 'Dodd, Crystal', shifts: [sh('2026-11-02', 20, 'Ackerman, Kiersten'), sh('2026-11-03', 10, 'Ackerman, Kiersten')] },
+  { name: 'Tran, Huan', shifts: [sh('2026-11-02', 10, 'Ackerman, Kiersten'), sh('2026-11-03', 0, 'Ackerman, Kiersten')] } ] };
+const w40 = W.over40(wkShifts, {}, wkNow);
+eq(w40.map(x => [x.attendant, x.consumer, x.hours, x.over, x.thisWeek]), [['Jeana Wise', 'Shasta Reed', 43.5, true, false], ['Jeana Wise', 'Shasta Reed', 36.5, false, true]],
+   'last week over 40 (red), this week close (36.5); older weeks skipped; two consumers are not added together');
+ok(/time over 40 is not paid/.test(w40[0].why) && /3.5 hrs left before 40/.test(w40[1].why), 'says why, and how many hours are left');
+eq(W.over40(wkShifts, { [w40[0].key]: { at: 'x' } }, wkNow).length, 1, 'Checked hides it');
+const its40 = W.items({ lastRun: { at: '2026-11-05T07:00:00Z', ok: true }, shifts: { ...wkShifts, at: '2026-11-05T07:00:00Z' }, auths: { at: '2026-11-05T07:00:00Z', consumers: [] } }, {}, wkNow);
+ok(its40.some(i => /1 attendant over 40 hours a week for one consumer/.test(i.t) && i.bad) && its40.some(i => /close to 40 hours this week/.test(i.t)), 'on Today too');
+const mv40 = H.monthView({ W, check: { shifts: wkShifts }, reviewed: {}, corrections: [], submissions: [], now: wkNow });
+eq([mv40.week.length, mv40.tiles.week], [2, 1], 'This month lists both, the tile counts the one over');
+eq(JSON.stringify(W.shiftsNow(emailCheck)), JSON.stringify(H.mergedShifts(emailCheck)), 'Today and This month read the same shifts');
+
 const src = readFileSync(ROOT + '/hours/hub-hours.js', 'utf8');
 ok(!/—/.test(src), 'no em dashes');
 ok(!/tel:|sms:/.test(src), 'no call or text buttons for attendants');
