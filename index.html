@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=30"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=31"></script>
 <script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -641,6 +641,8 @@ input, select, textarea { border-radius:10px; }
 /* Who called (2026-10-22) */
 .ld-wc { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .ld-wc-lbl { font-size:11.5px; font-weight:700; color:#55677a; text-transform:uppercase; letter-spacing:.04em; }
+.ld-cg { display:inline-block; margin:0 6px 4px 0; padding:3px 8px; border-radius:999px; border:0; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+.ld-cg-has { background:#e7f5ee; color:#1f7a4d; } .ld-cg-find { background:#f6e7b8; color:#6b4e00; } .ld-cg-ask { background:#eef1f4; color:#4a5866; }
 .wc { display:inline-block; padding:4px 12px; border-radius:999px; font-size:12.5px; font-weight:700; white-space:nowrap; }
 .wc-pair { background:#ece6f7; color:#4b2e83; } .wc-family { background:#e3eefb; color:#164a7d; }
 .wc-self { background:#e2f2e8; color:#1e5c3a; } .wc-unsure { background:#fff1d6; color:#7a4b00; } .wc-solo { background:#ececec; color:#3d3d3d; }
@@ -1064,6 +1066,7 @@ button.fu-tile.check span { color:#14606F; }
           <option value="last:asc">Last activity: longest ago</option>
           <option value="last:desc">Last activity: most recent</option>
           <option value="name:asc">Name: A to Z</option>
+          <option value="cg">Has a caregiver first</option>
         </select>
       </label>
       <label class="ld-closed">
@@ -8404,14 +8407,17 @@ function renderPipeline() {
     x.lastKind = !x.last ? '' : lineDay && lineDay >= noteDay ? 'call' : 'note';
     x.lastAt = x.lastKind === 'call' ? at : '';
   });
-  const need = (a, b) => a.c.sort - b.c.sort || String(a.c.followup).localeCompare(String(b.c.followup));
+  // Who to call first: how urgent, then (her ask 2026-11-01) whoever already has a caregiver, since
+  // they start with little office work, then the call back date.
+  const need = (a, b) => a.c.sort - b.c.sort || LD_CG_RANK[a.c.cg || ''] - LD_CG_RANK[b.c.cg || ''] || String(a.c.followup).localeCompare(String(b.c.followup));
   const [col, dir] = _ldSort.split(':');
   const sgn = dir === 'desc' ? -1 : 1;
   // Never talked to sorts as the longest ago; an unknown came-in day goes last either way; ties: who to call first.
   const by = {
     name: (a, b) => sgn * String(a.p.name || '').localeCompare(String(b.p.name || ''), 'en', { sensitivity: 'base' }) || need(a, b),
     came: (a, b) => (!a.c.cameIso - !b.c.cameIso) || sgn * String(a.c.cameIso).localeCompare(String(b.c.cameIso)) || need(a, b),
-    last: (a, b) => sgn * (String(a.lastAt || a.last || '').localeCompare(String(b.lastAt || b.last || ''))) || need(a, b)
+    last: (a, b) => sgn * (String(a.lastAt || a.last || '').localeCompare(String(b.lastAt || b.last || ''))) || need(a, b),
+    cg: (a, b) => LD_CG_RANK[a.c.cg || ''] - LD_CG_RANK[b.c.cg || ''] || need(a, b)
   };
   if (col !== 'need' && !by[col]) _ldSort = 'need';
   shown.sort(_ldSort === 'need' ? need : by[col]);
@@ -8484,7 +8490,7 @@ function renderPipeline() {
       '<div class="ld-c-date"><span class="ld-lbl">Last activity</span>' + (last ? '<span class="ld-act" title="' + (lastKind === 'call' ? 'Call or text on the office line' : 'Call note') + ' ' + esc(_ldDay(last)) + '">' +
         LD_ICON[lastKind] + esc(lastAt ? _ldAgoAt(lastAt) : _ldAgo(last)) + '</span>' : '<small>Not yet</small>') + '</div>' +
       (calm ? dueCell : '<div class="ld-c-due"><span class="ld-due t-' + c.tone + '">' + esc(c.due) + '</span>' + (notes.length ? '<span class="ld-due cn-pill">Note to check</span>' : '') + '</div>') +
-      '<div class="ld-c-about" title="' + esc(c.who + '\nNext: ' + c.next) + '"><span class="ld-who">' + esc(c.who) + '</span>' +
+      '<div class="ld-c-about" title="' + esc(c.who + '\nNext: ' + c.next) + '">' + (c.step !== 'closed' && c.whoCalled !== 'solo' ? ldCgTag(p, c) : '') + '<span class="ld-who">' + esc(c.who) + '</span>' +
         '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(c.next) + '</span>' +
         (c.whoLabel && c.whoCalled !== 'unsure' && c.step === 'call' && _ldWhoEdit !== p.id ? '<button type="button" class="ld-wc-change" onclick="ldWhoChange(\'' + id + '\')">Change who called</button>' : '') + '</div>' +
       '<div class="ld-btns">' + main + dots + shut + '</div>' +
@@ -8568,6 +8574,23 @@ function ldWhoPicker(p, c) {
     (_ldWhoEdit === p.id ? '<button type="button" onclick="ldWhoChange(\'\')">Cancel</button>' : '');
   return '<div style="margin-top:8px"><span style="font-size:12.5px;font-weight:600;color:#55677a">' + (c.whoCalled === 'unsure' ? 'After the call, tap who it was:' : 'Who was it?') + '</span>' +
     '<div class="ld-wc-pick">' + pick + '</div></div>';
+}
+// Has a caregiver, or needs one found (her ask 2026-11-01). The website answers fill it in; the
+// office can change it on the lead in one tap, and that always wins (CDSRules.caregiverPlan).
+const LD_CG_RANK = { has: 0, '': 1, find: 2 };
+function ldCgTag(p, c) {
+  const k = c.cg || '';
+  const opt = (v, t) => '<option value="' + v + '"' + ((v === 'ask' ? '' : v) === k ? ' selected' : '') + '>' + t + '</option>';
+  return '<select class="ld-cg ld-cg-' + (k || 'ask') + '" aria-label="Caregiver for ' + esc(p.name || 'this lead') + '" onchange="ldSetCg(\'' + esc(p.id) + '\', this.value)">' +
+    opt('has', 'Has a caregiver') + opt('find', 'Needs a caregiver found') + opt('ask', 'Caregiver: ask') + '</select>';
+}
+async function ldSetCg(id, v) {
+  const pipeline = getData('pipeline');
+  const p = pipeline.find(x => x.id === id);
+  if (!p || !['has', 'find', 'ask'].includes(v)) return;
+  p.caregiverPlan = v; p.caregiverPlanBy = _ldWhoBy(); p.caregiverPlanAt = new Date().toISOString();
+  await setData('pipeline', pipeline);
+  renderPipeline();
 }
 function ldWhoChange(id) { _ldWhoEdit = id; renderPipeline(); }
 async function ldSetWho(id, kind) {
