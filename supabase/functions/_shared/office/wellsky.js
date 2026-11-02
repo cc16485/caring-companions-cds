@@ -326,6 +326,10 @@
     const both = overlaps(check.shifts, now).filter(o => !(reviewed && reviewed[o.key]));
     if (both.length) out.push({ t: tag + plural(both.length, 'time', 'times') + ' two attendants were on at once', go: 'hoursmonth', bad: true,
                                 people: both.map(o => ({ name: o.consumer, why: short(o.date) + ', ' + o.why, key: o.key, act: 'shift', due: payWeekEnd(o.date) })) });
+    const wk = over40(shiftsNow(check), reviewed, now), wkOver = wk.filter(x => x.over), wkNear = wk.filter(x => !x.over);
+    const wkPpl = list => list.map(x => ({ name: x.consumer, why: x.why, key: x.key, act: 'shift', due: payWeekEnd(x.week) }));
+    if (wkOver.length) out.push({ t: tag + plural(wkOver.length, 'attendant', 'attendants') + ' over 40 hours a week for one consumer', go: 'hoursmonth', bad: true, people: wkPpl(wkOver) });
+    if (wkNear.length) out.push({ t: tag + plural(wkNear.length, 'attendant', 'attendants') + ' close to 40 hours this week for one consumer', go: 'hoursmonth', people: wkPpl(wkNear) });
     const HA = hoursAuths(check);
     const pulledOn = HA && HA.at ? isoLocal(new Date(HA.at)) : today;
     const h = hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn);
@@ -463,6 +467,53 @@
     const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + (6 - d.getDay()));
     return isoLocal(d);
   }
+
+  // ---------- 40 hours a week for one consumer (her rule 2026-11-01) ----------
+  // The attendant packet: "You can work at most 40 hours a week for one consumer", and time over
+  // 40 is not paid. Each consumer is a separate employer, so hours for different consumers are NOT
+  // added together. Week = the pay week, Sunday to Saturday, by the day the shift started. Only
+  // this week and last week (last week's payroll has not run yet). Over 40 is red; this week at
+  // WEEK_NEAR or more is a heads-up while there is still time to change the schedule.
+  const WEEK_LIMIT = 40, WEEK_NEAR = 36;
+  function over40(shifts, reviewed, now) {
+    now = now || new Date();
+    const thisWk = addDays(payWeekEnd(isoLocal(now)), -6), lastWk = addDays(thisWk, -7);
+    const by = new Map();
+    ((shifts && shifts.consumers) || []).forEach(c => (c.shifts || []).forEach(s => {
+      if (!s.attendant || !(s.hours > 0)) return;
+      const wk = addDays(payWeekEnd(s.date), -6);
+      if (wk !== thisWk && wk !== lastWk) return;
+      const k = wk + '|' + nameKey(s.attendant) + '|' + nameKey(c.name);
+      if (!by.has(k)) by.set(k, { week: wk, end: addDays(wk, 6), attendant: firstLast(s.attendant), consumer: firstLast(c.name), hours: 0, shifts: 0 });
+      const x = by.get(k); x.hours = r2(x.hours + s.hours); x.shifts++;
+    }));
+    const out = [];
+    by.forEach(x => {
+      const key = 'over40|' + x.week + '|' + nameKey(x.attendant) + '|' + nameKey(x.consumer);
+      const over = x.hours > WEEK_LIMIT + 0.01, near = !over && x.week === thisWk && x.hours >= WEEK_NEAR;
+      if ((!over && !near) || (reviewed && reviewed[key])) return;
+      const span = short(x.week) + ' to ' + short(x.end);
+      out.push(Object.assign(x, { key, over, thisWeek: x.week === thisWk,
+        why: over ? x.attendant + ' worked ' + hrs(x.hours) + ' for ' + x.consumer + ' (' + span + '). The limit is 40 a week for one consumer, and time over 40 is not paid.'
+                  : x.attendant + ' has ' + hrs(x.hours) + ' for ' + x.consumer + ' so far this week (' + span + '). ' + hrs(r2(WEEK_LIMIT - x.hours)) + ' left before 40.' }));
+    });
+    return out.sort((a, b) => (b.over - a.over) || b.hours - a.hours);
+  }
+  // The shifts to check: the daily email's when it has the attendant (her own dashboard), for the
+  // days it covers, and the Chrome schedule report for days before. Same rule as mergedShifts in
+  // hours/hub-hours.js (tested to agree).
+  function shiftsNow(check) {
+    const sh = check && check.shifts, al = check && check.analytics && check.analytics.authLogs;
+    const email = ((al && al.shifts) || []).filter(s => s.attendant && s.clockIn);
+    if (!email.length) return sh || null;
+    const t12 = n => { const h = +n.slice(11, 13); return ((h % 12) || 12) + ':' + n.slice(14, 16) + ' ' + (h < 12 ? 'AM' : 'PM'); };
+    const from = email.map(s => s.clockIn.slice(0, 10)).sort()[0], by = new Map();
+    const add = (name, x) => { if (!by.has(name)) by.set(name, []); by.get(name).push(x); };
+    ((sh && sh.consumers) || []).forEach(c => (c.shifts || []).forEach(x => { if (x.date < from) add(c.name, x); }));
+    email.forEach(x => add(x.consumer, { attendant: x.attendant, date: x.clockIn.slice(0, 10), start: t12(x.clockIn),
+      endDate: x.clockOut ? x.clockOut.slice(0, 10) : x.clockIn.slice(0, 10), end: x.clockOut ? t12(x.clockOut) : '', hours: x.hours == null ? 0 : x.hours }));
+    return { at: al.at, email: true, emailFrom: from, consumers: [...by].map(([name, list]) => ({ name, shifts: list.sort((a, b) => a.date.localeCompare(b.date)) })) };
+  }
   // DHSS: one CDS attendant per consumer at a time. Same rule and keys as the Hours page
   // (hours/hub-hours.js overlaps, tested to agree), so Checked on either clears both.
   const OVERLAP_DAYS = 31;
@@ -548,7 +599,7 @@
     return { state, hubEnd, ws: ws || null, differs: !!(ws && ws.end && hubEnd && ws.end !== hubEnd) };
   }
 
-  root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, authsFromLogs, hoursAuths, emailCovers, items, shiftKey, isPersonalCare, isoLocal,
+  root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, authsFromLogs, hoursAuths, emailCovers, over40, shiftsNow, WEEK_LIMIT, WEEK_NEAR, items, shiftKey, isPersonalCare, isoLocal,
                       mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL, noShifts, NO_SHIFT_DAYS, wsActiveAuths, authView, labelEnd, WS_AUTH_FRESH_DAYS,
                       LONG_HOURS, LONG_FACTOR, payWeekEnd, overlaps, shiftsThisMonth, EVV_GOAL, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

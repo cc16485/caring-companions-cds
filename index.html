@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=30"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=12"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Tax Setup in stages (2026-10-25, her switch 'taxStages'). -->
@@ -5392,7 +5392,7 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=8');
+    const { mountHours } = await import('./hours/hub-hours.js?v=9');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
