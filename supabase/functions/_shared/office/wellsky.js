@@ -40,6 +40,7 @@
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
   const short = isoDate => MON[+isoDate.slice(5, 7) - 1] + ' ' + (+isoDate.slice(8, 10));
   const daysInMonth = ym => new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 0)).getUTCDate();
+  const prevMonth = ym => { const y = +ym.slice(0, 4), m = +ym.slice(5, 7); return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0'); };
   const nextMonth = ym => { const y = +ym.slice(0, 4), m = +ym.slice(5, 7); return m === 12 ? (y + 1) + '-01' : y + '-' + String(m + 1).padStart(2, '0'); };
   const addDays = (isoDate, n) => new Date(Date.parse(isoDate + 'T12:00:00Z') + n * DAY).toISOString().slice(0, 10);
   // yyyy-mm-dd in the runtime's own clock (the hub runs in Central; the server passes Central noon).
@@ -199,6 +200,49 @@
     return out.sort((a, b) => b.date.localeCompare(a.date) || b.hours - a.hours);
   }
 
+  // ---------- approved and used hours from the daily email (her yes 2026-11-01) ----------
+  // Her own copy of the "Authorization Care Logs" dashboard (2026-10-21) emails one row per care
+  // log with Initial Hours (the approved hours a month) and the authorization end date. From it we
+  // build the same shape as the Chrome authorizations report, so This month and Today no longer
+  // need Chrome. Used hours = clocked out care logs, by the month they were clocked in. The email
+  // has no future schedule, so booked hours are 0. Last month only when the email reaches back to
+  // its first days (her dashboard filter: Clock In in the last 62 days). A consumer with no care
+  // log at all in that window is not in the email. null = this email has no Initial Hours.
+  function authsFromLogs(logs) {
+    const rows = (logs && logs.shifts) || [];
+    if (!logs || !logs.at || !rows.some(x => x.authHours > 0)) return null;
+    const ym = isoLocal(new Date(logs.at)).slice(0, 7), lm = prevMonth(ym);
+    const first = rows.map(x => x.clockIn.slice(0, 10)).sort()[0];
+    const months = first <= lm + '-03' ? [lm, ym] : [ym];
+    const by = new Map();
+    rows.forEach(x => {
+      if (!x.auth || !(x.authHours > 0)) return;
+      const k = x.consumer + '|' + x.auth;
+      if (!by.has(k)) by.set(k, { name: x.consumer, label: x.auth, perMonth: x.authHours, end: x.authEnd || '', used: {} });
+      const a = by.get(k), m = x.clockIn.slice(0, 7);
+      if (x.clockOut && x.hours > 0) a.used[m] = r2((a.used[m] || 0) + x.hours);
+    });
+    const consumers = new Map();
+    by.forEach(a => {
+      if (!consumers.has(a.name)) consumers.set(a.name, { name: a.name, auths: [] });
+      consumers.get(a.name).auths.push({ label: a.label, perMonth: a.perMonth, service: '', status: 'Active', fromEmail: true, endDate: a.end,
+        months: months.filter(m => !a.end || a.end >= m + '-01').map(m => ({ month: m, authorized: a.perMonth, completed: a.used[m] || 0, scheduled: 0 })) });
+    });
+    return { at: logs.at, from: months[0] + '-01', to: ym + '-' + String(daysInMonth(ym)).padStart(2, '0'), email: true, consumers: [...consumers.values()] };
+  }
+  // The authorizations to read hours from: the email when it has Initial Hours and is newer than
+  // the Chrome report, otherwise the Chrome report as before.
+  function hoursAuths(check) {
+    const rep = check && check.auths, em = authsFromLogs(check && check.analytics && check.analytics.authLogs);
+    return em && (!rep || !rep.at || Date.parse(em.at) > Date.parse(rep.at)) ? em : rep || null;
+  }
+  // The email alone covers what the Chrome check read: hours (Initial Hours), shifts with the
+  // attendant, and shifts never clocked out. Then a stopped Chrome check is nothing to fix.
+  function emailCovers(check, now) {
+    const L = check && check.analytics && check.analytics.authLogs;
+    return !!(L && L.at && (now || new Date()) - Date.parse(L.at) <= STALE_HOURS * 36e5 && authsFromLogs(L) && (L.shifts || []).some(x => x.attendant));
+  }
+
   // Each consumer's personal care hours this month. pulledOn = the date of the pull
   // (yyyy-mm-dd): the pull runs early, so that day itself has not been worked yet.
   function hoursThisMonth(auths, shifts, pulledOn) {
@@ -260,9 +304,11 @@
         out.push({ t: tag + 'The WellSky email reports have not all arrived ' + (got ? 'since ' + short(isoLocal(new Date(got))) : 'yet') + '. Check Reports > Analytics > Schedules in WellSky.', go: 'authorizations', bad: true, system: true });
     }
     if (!check.lastRun) return out;
+    const covered = emailCovers(check, now);
     const okAt = Math.min(Date.parse((check.shifts && check.shifts.at) || 0) || 0, Date.parse((check.auths && check.auths.at) || 0) || 0,
                           check.open ? (Date.parse(check.open.at || 0) || 0) : Infinity);
-    if (!okAt || now - okAt > STALE_HOURS * 36e5) {
+    if (covered) { /* the daily email has it all (2026-11-01): the Chrome check is not needed */ }
+    else if (!okAt || now - okAt > STALE_HOURS * 36e5) {
       out.push({ t: tag + 'The WellSky check has not run ' + (okAt ? 'since ' + short(isoLocal(new Date(okAt))) : 'yet') +
                     '. Log in to WellSky in Chrome and leave the Mac on.' + (check.lastRun.ok ? '' : ' Last try: ' + check.lastRun.why),
                  go: 'authorizations', bad: true, system: true, since: okAt ? isoLocal(new Date(okAt)) : '' });
@@ -280,8 +326,9 @@
     const both = overlaps(check.shifts, now).filter(o => !(reviewed && reviewed[o.key]));
     if (both.length) out.push({ t: tag + plural(both.length, 'time', 'times') + ' two attendants were on at once', go: 'hoursmonth', bad: true,
                                 people: both.map(o => ({ name: o.consumer, why: short(o.date) + ', ' + o.why, key: o.key, act: 'shift', due: payWeekEnd(o.date) })) });
-    const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
-    const h = hoursThisMonth(check.auths, check.shifts, pulledOn);
+    const HA = hoursAuths(check);
+    const pulledOn = HA && HA.at ? isoLocal(new Date(HA.at)) : today;
+    const h = hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn);
     const over = h.filter(x => x.status === 'over' || x.status === 'booked-over');
     const pace = h.filter(x => x.status === 'pace-over');
     const low = h.filter(x => x.status === 'low');
@@ -501,7 +548,7 @@
     return { state, hubEnd, ws: ws || null, differs: !!(ws && ws.end && hubEnd && ws.end !== hubEnd) };
   }
 
-  root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, items, shiftKey, isPersonalCare, isoLocal,
+  root.CDSWellSky = { parseShiftReport, parseAuthReport, parseOpenReport, longShifts, openShifts, hoursThisMonth, authsFromLogs, hoursAuths, emailCovers, items, shiftKey, isPersonalCare, isoLocal,
                       mergeFirstShifts, newConsumers, consumersNow, ACTIVE_DAYS, nameKey, firstLast, GOAL, noShifts, NO_SHIFT_DAYS, wsActiveAuths, authView, labelEnd, WS_AUTH_FRESH_DAYS,
                       LONG_HOURS, LONG_FACTOR, payWeekEnd, overlaps, shiftsThisMonth, EVV_GOAL, MIN_HISTORY, LOOKBACK_DAYS, STALE_HOURS, OPEN_HOURS, OPEN_REPORT };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

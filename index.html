@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=30"></script>
-<script src="supabase/functions/_shared/office/wellsky.js?v=11"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=12"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
 <!-- Tax Setup in stages (2026-10-25, her switch 'taxStages'). -->
@@ -5392,7 +5392,7 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=7');
+    const { mountHours } = await import('./hours/hub-hours.js?v=8');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
@@ -11336,8 +11336,9 @@ function renderWellSky() {
   const problems = W.items(check, reviewed, now).filter(i => /has not run|did not finish/.test(i.t));
   const longs = W.longShifts(check.shifts, reviewed, today);
   const opens = W.openShifts(check.open, reviewed);
-  const pulledOn = check.auths && check.auths.at ? W.isoLocal(new Date(check.auths.at)) : today;
-  const hours = W.hoursThisMonth(check.auths, check.shifts, pulledOn);
+  const HA = W.hoursAuths(check);   // the daily email when it has the approved hours (2026-11-01)
+  const pulledOn = HA && HA.at ? W.isoLocal(new Date(HA.at)) : today;
+  const hours = W.hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn);
   const unread = ((check.shifts && check.shifts.unread) || []).length + ((check.auths && check.auths.unread) || []).length;
   const statusColor = { over: 'var(--danger)', 'booked-over': 'var(--danger)', 'pace-over': '#b54708', low: '#b54708', ok: 'var(--success)' };
 
@@ -15154,13 +15155,14 @@ function updateDashboard() {
   // 2026-10-22 (her "keep it and fix"): every number reads live data. The rule is
   // CDSRules.dashboardNumbers in cds-rules.js; this only gathers the inputs and fills the page.
   const check = getObj('wellskyCheck');
-  const authOn = check.auths && check.auths.at ? CDSWellSky.isoLocal(new Date(check.auths.at)) : '';
+  const HA = CDSWellSky.hoursAuths(check);   // the daily email when it has the approved hours (2026-11-01)
+  const authOn = HA && HA.at ? CDSWellSky.isoLocal(new Date(HA.at)) : '';
   const checklistIds = [...document.querySelectorAll('#page-guides input[type=checkbox][onchange^="saveCheck"]')].map(i => i.id);
   const D = _dashLast = CDSRules.dashboardNumbers({
     consumers: getData('consumers'), attendants: getData('attendants'), now: new Date(),
     wsPeople: _activePeople(), nameKey: CDSWellSky.nameKey,
     oigPeople: _dashOig, checks: getObj('complianceChecks'), checklistIds, checklistTotal: checklistIds.length,
-    hours: authOn ? CDSWellSky.hoursThisMonth(check.auths, check.shifts, authOn) : [], rates: getRates(), payRange: [15, 16] });
+    hours: authOn ? CDSWellSky.hoursThisMonth(HA, HA.email ? null : check.shifts, authOn) : [], rates: getRates(), payRange: [15, 16] });
   _loadDashOig();
   const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
   const bar = (id, n, of) => { const el = document.getElementById(id); if (el) el.style.width = (of ? Math.min(100, Math.round(n / of * 100)) : 0) + '%'; };
