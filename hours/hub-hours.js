@@ -71,7 +71,7 @@ export function authEnds(auths, W, now = new Date(), dsds = null) {
   for (const c of (auths && auths.consumers) || []) {
     const pc = (c.auths || []).filter(a => !W || W.isPersonalCare(a));
     if (!pc.length) continue;
-    const ends = pc.map(a => ({ label: a.label, end: authEnd(a.label) }));
+    const ends = pc.map(a => ({ label: a.label, end: a.endDate || authEnd(a.label) }));
     const known = ends.filter(e => e.end).sort((x, y) => y.end.localeCompare(x.end))[0];
     let end = known ? known.end : null, label = (known || ends[0]).label, from = 'wellsky';
     const d = dsds ? dsds(firstLast(c.name)) || dsds(c.name) : null;
@@ -178,23 +178,25 @@ const netHow = r => '$' + (+r.billing).toFixed(2) + ' billed less $' + (+r.pay).
 export function monthView({ W, check, reviewed, corrections, submissions, dsdsEnd = null, perHour = 0, goal = USE_GOAL, now = new Date() }) {
   check = check || {};
   const today = isoLocal(now);
-  const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
-  const hours = W && check.auths ? W.hoursThisMonth(check.auths, check.shifts, pulledOn) : [];
+  // Hours from the daily WellSky email when it has the approved hours, else the Chrome report (2026-11-01).
+  const auths = W && W.hoursAuths ? W.hoursAuths(check) : check.auths;
+  const pulledOn = auths && auths.at ? isoLocal(new Date(auths.at)) : today;
+  const hours = W && auths ? W.hoursThisMonth(auths, auths.email ? null : check.shifts, pulledOn) : [];
   const shifts = mergedShifts(check), eo = emailOpen(check);
   const long = W && shifts ? W.longShifts(shifts, reviewed, today) : [];
   const open = W && (eo || check.open) ? W.openShifts(eo || check.open, reviewed) : [];
   const over = overlaps(shifts, now).filter(o => !(reviewed && reviewed[o.key]));
-  const ends = authEnds(check.auths, W, now, dsdsEnd);
+  const ends = authEnds(auths, W, now, dsdsEnd);
   const evv = evvStatus(corrections, submissions, shiftsThisMonth(shifts, now), now);
-  const use = unusedHours(hours, check.auths, W, pulledOn, perHour, goal);
+  const use = unusedHours(hours, auths, W, pulledOn, perHour, goal);
   hours.forEach((h, i) => { h.use = use.rows[i]; });
   // Under the goal comes after "barely used" and before on track, the most hours unused first.
   const rank = h => ({ over: 0, 'booked-over': 0, 'pace-over': 1, low: 2 })[h.status] ?? (h.use.under ? 2.5 : 3);
   hours.sort((a, b) => rank(a) - rank(b) || (rank(a) === 2.5 ? b.use.unused - a.use.unused : 0) || a.consumer.localeCompare(b.consumer));
   const dayOfMonth = +pulledOn.slice(8, 10), dim = new Date(+pulledOn.slice(0, 4), +pulledOn.slice(5, 7), 0).getDate();
-  return { hours, use, long, open, overlaps: over, ends, evv, have: !!(check.auths || check.shifts),
+  return { hours, use, long, open, overlaps: over, ends, evv, have: !!(auths || check.shifts), hoursFromEmail: !!(auths && auths.email),
     expectedShare: Math.max(0, Math.min(1, (dayOfMonth - 1) / dim)),
-    asOf: [check.auths && check.auths.at, shifts && shifts.at].filter(Boolean).sort()[0] || null, fromEmail: !!(shifts && shifts.email),
+    asOf: [auths && auths.at, shifts && shifts.at].filter(Boolean).sort()[0] || null, fromEmail: !!(shifts && shifts.email),
     tiles: { over: hours.filter(h => ['over', 'booked-over', 'pace-over'].includes(h.status)).length, low: hours.filter(h => h.status === 'low').length,
       under: hours.filter(h => h.status === 'low' || h.use.under).length, ending: ends.filter(e => e.status === 'ended' || e.status === 'soon').length, checks: long.length + open.length + over.length, evv: evv.open } };
 }
@@ -271,7 +273,7 @@ export function mountHours(el, opts) {
       return now + last + (u.perHour ? '' : '<p class="small">Set the rates under Settings, Rates and forms, to see the dollars.</p>');
     }
     const e = v.evv;
-    el.innerHTML = `<div class="ghead"><h2>This month</h2><span>${v.have ? 'From WellSky, ' + esc(asOf) : ''} <button class="link" data-act="reload">Refresh</button></span></div>
+    el.innerHTML = `<div class="ghead"><h2>This month</h2><span>${v.have ? (v.hoursFromEmail ? 'From the WellSky email, ' : 'From WellSky, ') + esc(asOf) : ''} <button class="link" data-act="reload">Refresh</button></span></div>
       ${!v.have ? '<div class="warn">WellSky has not sent its reports yet, so there is nothing to show.</div>' : stale ? `<div class="warn">The WellSky reports were last updated ${esc(asOf)}, so this may be out of date.</div>` : ''}
       <div class="tiles">${tile(v.tiles.over, 'Over or on pace to go over', 'r')}${tile(v.tiles.under, 'Using under ' + Math.round(v.use.goal * 100) + '% of their hours', 'y')}${tile(v.tiles.ending, 'Authorizations ended or ending in 30 days', 'y')}${tile(v.tiles.checks, 'Shifts to check', 'r')}${tile(v.tiles.evv, 'EVV corrections to finish', 'y')}</div>
 

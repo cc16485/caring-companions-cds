@@ -126,6 +126,32 @@ eq(H.netPerHour({ billing: 20.92, pay: 15 }), 5.92, '$20.92 less $15 pay');
 eq(H.netPerHour({ billing: 20.92, pay: 15, payCosts: 10 }), 4.42, 'and 10% payroll costs on the pay');
 eq([H.netPerHour({ billing: 0, pay: 15 }), H.netPerHour({ billing: 10, pay: 15 })], [0, 0], 'no rate, or pay above the rate: 0');
 
+// ---------- hours from the daily WellSky email (her yes 2026-11-01) ----------
+const PB = 'Pamela Bell CDS Authorized Hours', SB = 'Susan Barnwell PC - CDS 4/01/2026-2/28/2027';
+const log = (consumer, auth, inn, out, h, extra = {}) => ({ consumer, auth, clockIn: inn, clockOut: out, hours: h, attendant: 'A B', authHours: auth === PB ? 80 : auth === SB ? 100 : undefined, ...extra });
+const mail = { at: '2026-11-20T12:00:00Z', shifts: [
+  log('Bell, Pamela', PB, '2026-10-02T09:00:00', '2026-10-02T13:00:00', 4), log('Bell, Pamela', PB, '2026-11-03T09:00:00', '2026-11-03T15:00:00', 6),
+  log('Bell, Pamela', PB, '2026-11-18T09:00:00', '', null),
+  log('Barnwell, Susan', SB, '2026-11-10T09:00:00', '2026-11-10T17:00:00', 8, { authEnd: '2027-02-28' }),
+  log('Barnwell, Susan', 'Susan Barnwell CDS ILW - FMS 4/01/2026-2/28/2027', '2026-11-10T09:00:00', '2026-11-10T09:15:00', 0.25)] };
+const EA = W.authsFromLogs(mail);
+eq(EA.consumers.map(c => [c.name, c.auths.map(a => a.months.map(m => m.month + ':' + m.authorized + '/' + m.completed).join(','))]),
+   [['Bell, Pamela', ['2026-10:80/4,2026-11:80/6']], ['Barnwell, Susan', ['2026-10:100/0,2026-11:100/8']]], 'approved and used per month; never clocked out not counted; FMS line dropped');
+eq(EA.consumers[1].auths[0].endDate, '2027-02-28', 'end date from the email');
+eq(W.authsFromLogs({ at: mail.at, shifts: mail.shifts.slice(1).map(x => ({ ...x })) }).consumers[0].auths[0].months.map(m => m.month), ['2026-11'], 'email not reaching back to the 1st of last month: this month only');
+eq(W.authsFromLogs({ at: mail.at, shifts: mail.shifts.map(x => ({ ...x, authHours: undefined })) }), null, 'the old email with no Initial Hours: nothing');
+const oldRep = { at: '2026-10-20T07:00:00Z', consumers: [] };
+eq(W.hoursAuths({ auths: oldRep, analytics: { authLogs: mail } }).email, true, 'a newer email wins over the Chrome report');
+eq(W.hoursAuths({ auths: oldRep, analytics: { authLogs: { ...mail, shifts: mail.shifts.map(x => ({ ...x, authHours: undefined })) } } }), oldRep, 'old email: the Chrome report as before');
+ok(W.emailCovers({ analytics: { authLogs: mail } }, new Date('2026-11-20T18:00:00Z')) && !W.emailCovers({ analytics: { authLogs: mail } }, new Date('2026-11-22T18:00:00Z')), 'the email covers it while fresh');
+const ck = { lastRun: { at: '2026-10-20T07:00:00Z', ok: false, why: 'Chrome not connected' }, auths: oldRep, analyticsRun: { ok: true }, analytics: { firstLast: { at: mail.at }, authLogs: mail } };
+const its = W.items(ck, {}, new Date('2026-11-20T18:00:00Z'));
+ok(!its.some(i => /WellSky check has not run|did not finish/.test(i.t)), 'no "Chrome check stopped" line when the email has it all');
+ok(its.some(i => /on pace to go over|barely using/.test(i.t)) || its.every(i => !/over the authorization/.test(i.t)), 'no over-the-authorization line from the stale Chrome report');
+const ev = H.monthView({ W, check: ck, reviewed: {}, corrections: [], submissions: [], perHour: 5.92, now: new Date('2026-11-20T18:00:00Z') });
+eq([ev.hoursFromEmail, ev.hours.length, ev.use.last && ev.use.last.name], [true, 2, 'October'], 'This month reads the email, with last month');
+eq(ev.hours.find(h => h.consumer === 'Bell, Pamela').use.under, true, 'Pamela 6 of 80 by the 20th: under the goal');
+
 const src = readFileSync(ROOT + '/hours/hub-hours.js', 'utf8');
 ok(!/—/.test(src), 'no em dashes');
 ok(!/tel:|sms:/.test(src), 'no call or text buttons for attendants');
