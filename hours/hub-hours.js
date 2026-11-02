@@ -133,8 +133,40 @@ export function shiftsThisMonth(shifts, now = new Date()) {
   return ((shifts && shifts.consumers) || []).reduce((n, c) => n + (c.shifts || []).filter(s => s.date.slice(0, 7) === ym && s.date <= today).length, 0);
 }
 
+// ---------- 4. approved hours not used (her pick 2026-11-01) ----------
+// CDS pays only for hours worked, so approved hours left unused are income lost. A consumer on
+// pace to use less than the goal (80% unless changed under Settings, Edit rates) is flagged. The pace is
+// not read in the first week of the month: too few days to tell. Last month, when the WellSky
+// report still has it, shows what was really left unused. billing = the hourly rate (Settings, Edit rates).
+export const USE_GOAL = 0.8;
+export const PACE_FROM_DAY = 8;
+const prevMonth = ym => { const y = +ym.slice(0, 4), m = +ym.slice(5, 7); return m === 1 ? (y - 1) + '-12' : y + '-' + String(m - 1).padStart(2, '0'); };
+const q = n => Math.round(n * 4) / 4;   // to the quarter hour, the CDS unit
+export function unusedHours(hours, auths, W, pulledOn, billing = 0, goal = USE_GOAL) {
+  const paceOk = +pulledOn.slice(8, 10) >= PACE_FROM_DAY;
+  const rows = (hours || []).map(h => {
+    const expected = Math.min(h.authorized, Math.max(h.projected || 0, h.completed + h.scheduled));
+    const share = h.authorized > 0 ? expected / h.authorized : 1, unused = q(Math.max(0, h.authorized - expected));
+    return { expected: q(expected), share, unused, dollars: unused * billing, under: paceOk && h.authorized > 0 && share < goal };
+  });
+  const sum = (list, k) => list.reduce((s, r) => s + (r[k] || 0), 0);
+  const authorized = sum(hours || [], 'authorized'), expected = sum(rows, 'expected'), unused = sum(rows, 'unused');
+  const lm = prevMonth(pulledOn.slice(0, 7)), last = [];
+  for (const c of (auths && auths.consumers) || []) for (const a of (c.auths || []).filter(a => !W || W.isPersonalCare(a))) {
+    const m = (a.months || []).find(x => x.month === lm);
+    if (m && m.authorized > 0) last.push({ consumer: firstLast(c.name), authorized: m.authorized, used: Math.min(m.authorized, m.completed),
+      unused: q(Math.max(0, m.authorized - m.completed)) });
+  }
+  const lAuth = sum(last, 'authorized'), lUsed = sum(last, 'used'), lUnused = sum(last, 'unused');
+  return { paceOk, goal, billing, rows,
+    month: { authorized, expected, unused, dollars: unused * billing, share: authorized > 0 ? expected / authorized : null, under: rows.filter(r => r.under).length },
+    last: last.length ? { month: lm, name: new Date(Date.UTC(+lm.slice(0, 4), +lm.slice(5, 7) - 1, 15)).toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }), authorized: lAuth, used: lUsed, unused: lUnused, dollars: lUnused * billing,
+      share: lAuth > 0 ? lUsed / lAuth : null,
+      most: last.filter(r => r.unused > 0 && r.used / r.authorized < goal).sort((x, y) => y.unused - x.unused).slice(0, 3) } : null };
+}
+
 // ---------- the page, all together ----------
-export function monthView({ W, check, reviewed, corrections, submissions, dsdsEnd = null, now = new Date() }) {
+export function monthView({ W, check, reviewed, corrections, submissions, dsdsEnd = null, billing = 0, goal = USE_GOAL, now = new Date() }) {
   check = check || {};
   const today = isoLocal(now);
   const pulledOn = check.auths && check.auths.at ? isoLocal(new Date(check.auths.at)) : today;
@@ -145,14 +177,17 @@ export function monthView({ W, check, reviewed, corrections, submissions, dsdsEn
   const over = overlaps(shifts, now).filter(o => !(reviewed && reviewed[o.key]));
   const ends = authEnds(check.auths, W, now, dsdsEnd);
   const evv = evvStatus(corrections, submissions, shiftsThisMonth(shifts, now), now);
-  const rank = { over: 0, 'booked-over': 0, 'pace-over': 1, low: 2, ok: 3 };
-  hours.sort((a, b) => rank[a.status] - rank[b.status] || a.consumer.localeCompare(b.consumer));
+  const use = unusedHours(hours, check.auths, W, pulledOn, billing, goal);
+  hours.forEach((h, i) => { h.use = use.rows[i]; });
+  // Under the goal comes after "barely used" and before on track, the most hours unused first.
+  const rank = h => ({ over: 0, 'booked-over': 0, 'pace-over': 1, low: 2 })[h.status] ?? (h.use.under ? 2.5 : 3);
+  hours.sort((a, b) => rank(a) - rank(b) || (rank(a) === 2.5 ? b.use.unused - a.use.unused : 0) || a.consumer.localeCompare(b.consumer));
   const dayOfMonth = +pulledOn.slice(8, 10), dim = new Date(+pulledOn.slice(0, 4), +pulledOn.slice(5, 7), 0).getDate();
-  return { hours, long, open, overlaps: over, ends, evv, have: !!(check.auths || check.shifts),
+  return { hours, use, long, open, overlaps: over, ends, evv, have: !!(check.auths || check.shifts),
     expectedShare: Math.max(0, Math.min(1, (dayOfMonth - 1) / dim)),
     asOf: [check.auths && check.auths.at, shifts && shifts.at].filter(Boolean).sort()[0] || null, fromEmail: !!(shifts && shifts.email),
     tiles: { over: hours.filter(h => ['over', 'booked-over', 'pace-over'].includes(h.status)).length, low: hours.filter(h => h.status === 'low').length,
-      ending: ends.filter(e => e.status === 'ended' || e.status === 'soon').length, checks: long.length + open.length + over.length, evv: evv.open } };
+      under: hours.filter(h => h.status === 'low' || h.use.under).length, ending: ends.filter(e => e.status === 'ended' || e.status === 'soon').length, checks: long.length + open.length + over.length, evv: evv.open } };
 }
 
 const CSS = `
@@ -192,28 +227,47 @@ export function mountHours(el, opts) {
     let subs = [], subsErr = '';
     try { subs = opts.submissions ? await opts.submissions() : []; } catch (e) { subsErr = e.message || String(e); }
     const dsdsEnd = opts.dsdsEnd ? opts.dsdsEnd() : null;
-    const v = monthView({ W: opts.W, check: opts.check(), reviewed: opts.reviewed(), corrections: opts.corrections(), submissions: subs, dsdsEnd });
+    const rates = opts.rates ? opts.rates() : {};
+    const v = monthView({ W: opts.W, check: opts.check(), reviewed: opts.reviewed(), corrections: opts.corrections(), submissions: subs, dsdsEnd,
+      billing: rates.billing || 0, goal: rates.useGoal ? rates.useGoal / 100 : USE_GOAL });
     const phone = name => { const c = (opts.consumers ? opts.consumers() : []).find(x => String(x.name || '').toLowerCase() === name.toLowerCase()); return c && c.phone ? c.phone : ''; };
     const tile = (n, label, tone) => `<div class="tile${n && tone ? ' ' + tone : ''}"><div class="n">${n}</div><div class="t">${esc(label)}</div></div>`;
     const asOf = v.asOf ? new Date(v.asOf).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) : '';
     const stale = v.asOf && Date.now() - Date.parse(v.asOf) > 26 * 36e5;
     const pill = { over: ['r', 'Over'], 'booked-over': ['r', 'Booked over'], 'pace-over': ['y', 'On pace to go over'], low: ['y', 'Barely used'], ok: ['g', 'On track'] };
+    const money = n => '$' + Math.round(n).toLocaleString('en-US');
+    const unusedText = (n, d) => hrs(n) + (d > 0 ? ' (about ' + money(d) + ')' : '');
     const hourRow = h => {
       const name = firstLast(h.consumer), pct = h.authorized > 0 ? Math.min(100, h.completed / h.authorized * 100) : 0;
-      const [tone, label] = pill[h.status] || pill.ok, ph = phone(name);
+      const under = h.status === 'ok' && h.use.under, flag = h.status !== 'ok' || under;
+      const [tone, label] = under ? ['y', 'On pace for ' + Math.round(h.use.share * 100) + '%'] : pill[h.status] || pill.ok, ph = phone(name);
+      const lost = (h.status === 'low' || under) && h.use.unused > 0 ? ' · ' + unusedText(h.use.unused, h.use.dollars) + ' of approved care would go unused' : '';
       return `<div class="row${tone === 'r' ? ' hot' : ''}"><b>${esc(name)}</b><span class="pill ${tone}">${esc(label)}</span>
         <div class="bar${tone === 'r' ? ' over' : h.status === 'low' ? ' low' : ''}"><span style="width:${pct.toFixed(1)}%"></span><em style="left:${(v.expectedShare * 100).toFixed(1)}%"></em></div>
-        <span class="meta">${esc(hrs(h.completed))} of ${esc(hrs(h.authorized))}${h.scheduled ? ' (+' + esc(hrs(h.scheduled)) + ' booked)' : ''}${h.note ? ' · ' + esc(h.note) : ''}${h.status !== 'ok' ? ' · Check in with ' + esc(name) + (ph ? ' at ' + esc(ph) : '') : ''}</span></div>`;
+        <span class="meta">${esc(hrs(h.completed))} of ${esc(hrs(h.authorized))}${h.scheduled ? ' (+' + esc(hrs(h.scheduled)) + ' booked)' : ''}${h.note ? ' · ' + esc(h.note) : ''}${esc(lost)}${flag ? ' · Check in with ' + esc(name) + (ph ? ' at ' + esc(ph) : '') : ''}</span></div>`;
     };
     // A Checked button on every row (2026-10-22): two attendants at once had no way to be cleared.
     const checkRow = (title, meta, tone, key) => `<div class="row${tone === 'r' ? ' hot' : ''}"><b>${esc(title)}</b><span class="pill ${tone}">${tone === 'r' ? 'Needs a correction form' : 'Check with the consumer'}</span><span class="meta">${esc(meta)}${key && opts.markChecked ? ` <button class="link" data-check="${esc(key)}">Checked</button>` : ''}</span></div>`;
     const endPill = { ended: ['r', 'Ended'], soon: ['y', 'Ends soon'], unknown: ['b', dsdsEnd ? 'End date unknown: upload the authorization' : 'End date not in WellSky name'], ok: ['g', 'Current'] };
+    // The money line at the top of the hours (her pick 2026-11-01): approved hours not used.
+    function useSummary(u) {
+      const pct = x => Math.round(x * 100) + '%', goal = pct(u.goal), rate = u.billing ? ' at ' + money(u.billing) + ' an hour' : '';
+      const now = !u.month.authorized ? '' : !u.paceOk
+        ? `<div class="row"><b>This month</b><span class="pill b">Too early to tell</span><span class="meta">The pace shows from the ${PACE_FROM_DAY}th. ${esc(hrs(u.month.authorized))} approved in all.</span></div>`
+        : `<div class="row${u.month.share < u.goal ? ' hot' : ''}"><b>This month: on pace for ${esc(pct(u.month.share))} of approved hours</b><span class="pill ${u.month.share < u.goal ? 'y' : 'g'}">Goal ${esc(goal)} or more</span>
+          <span class="meta">About ${esc(hrs(u.month.expected))} of ${esc(hrs(u.month.authorized))}.${u.month.unused > 0 ? ' ' + esc(unusedText(u.month.unused, u.month.dollars)) + ' would go unused' + esc(rate) + '.' : ''}</span></div>`;
+      const L = u.last;
+      const last = !L ? '' : `<div class="row"><b>${esc(L.name)}: ${esc(pct(L.share))} of approved hours used</b><span class="pill ${L.share < u.goal ? 'y' : 'g'}">${L.share < u.goal ? 'Under the goal' : 'Met the goal'}</span>
+          <span class="meta">${esc(hrs(L.used))} of ${esc(hrs(L.authorized))}.${L.unused > 0 ? ' ' + esc(unusedText(L.unused, L.dollars)) + ' not used.' : ''}${L.most.length ? ' Most unused: ' + esc(L.most.map(r => r.consumer + ' ' + hrs(r.unused)).join(', ')) + '.' : ''}</span></div>`;
+      return now + last + (u.billing ? '' : '<p class="small">Set the hourly rate under Settings, Rates and forms, to see the dollars.</p>');
+    }
     const e = v.evv;
     el.innerHTML = `<div class="ghead"><h2>This month</h2><span>${v.have ? 'From WellSky, ' + esc(asOf) : ''} <button class="link" data-act="reload">Refresh</button></span></div>
       ${!v.have ? '<div class="warn">WellSky has not sent its reports yet, so there is nothing to show.</div>' : stale ? `<div class="warn">The WellSky reports were last updated ${esc(asOf)}, so this may be out of date.</div>` : ''}
-      <div class="tiles">${tile(v.tiles.over, 'Over or on pace to go over', 'r')}${tile(v.tiles.low, 'Barely using their hours', 'y')}${tile(v.tiles.ending, 'Authorizations ended or ending in 30 days', 'y')}${tile(v.tiles.checks, 'Shifts to check', 'r')}${tile(v.tiles.evv, 'EVV corrections to finish', 'y')}</div>
+      <div class="tiles">${tile(v.tiles.over, 'Over or on pace to go over', 'r')}${tile(v.tiles.under, 'Using under ' + Math.round(v.use.goal * 100) + '% of their hours', 'y')}${tile(v.tiles.ending, 'Authorizations ended or ending in 30 days', 'y')}${tile(v.tiles.checks, 'Shifts to check', 'r')}${tile(v.tiles.evv, 'EVV corrections to finish', 'y')}</div>
 
       <section class="grp"><div class="ghead"><h3>Hours against the authorization</h3><span>Bar = hours used. Line = where they would be at an even pace today.</span></div>
+      ${useSummary(v.use)}
       ${v.hours.length ? v.hours.map(hourRow).join('') : '<p class="small">No personal care authorizations in the WellSky report this month.</p>'}</section>
 
       <section class="grp"><div class="ghead"><h3>Shifts to check</h3><span>Tap Checked once it is sorted out (it saves who and when)</span></div>

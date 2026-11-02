@@ -94,6 +94,33 @@ const eo = H.emailOpen(emailCheck);
 eq([eo.pulledLocal, eo.rows.length, eo.rows[0].attendant], ['2026-10-22T07:00:00', 1, 'Anita Smith'], 'never clocked out, from the email, in Central time');
 eq(W.openShifts(eo, {}).length, 1, 'and the shared rule flags it (over 12 hours)');
 
+// ---------- approved hours not used (her pick 2026-11-01) ----------
+const ua = { at: '2026-11-20T11:00:00Z', from: '2026-10-01', to: '2026-11-30', consumers: [
+  { name: 'Barnwell, Susan', auths: [{ label: 'Susan Barnwell PC - CDS 4/01/2026-2/28/2027', service: 'DSDS - CDS Personal Care', months: [
+    { month: '2026-10', authorized: 100, completed: 95, scheduled: 0 }, { month: '2026-11', authorized: 100, completed: 60, scheduled: 0 }] }] },
+  { name: 'Bell, Pamela', auths: [{ label: 'Pamela Bell CDS Authorized Hours', service: 'DSDS - CDS Personal Care', months: [
+    { month: '2026-10', authorized: 80, completed: 40, scheduled: 0 }, { month: '2026-11', authorized: 80, completed: 30, scheduled: 0 }] }] },
+  { name: 'Reed, Shasta', auths: [{ label: 'Shasta Reed Authorization', service: 'DSDS - CDS Personal Care', months: [
+    { month: '2026-10', authorized: 60, completed: 70, scheduled: 0 }, { month: '2026-11', authorized: 60, completed: 5, scheduled: 0 }] }] } ] };
+const NOV = new Date('2026-11-20T15:00:00');
+const uv = H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], billing: 21, now: NOV });
+const by = Object.fromEntries(uv.hours.map(h => [h.consumer, h]));
+// Susan: 60 in 19 days, about 3.16 a day, 11 days left -> about 94.7 of 100, on track
+eq([by['Barnwell, Susan'].status, by['Barnwell, Susan'].use.under], ['ok', false], 'on pace for 95%: not flagged');
+// Pamela: 30 in 19 days -> about 47.4 of 80 (59%), under 80%
+eq([by['Bell, Pamela'].status, by['Bell, Pamela'].use.under, by['Bell, Pamela'].use.unused, Math.round(by['Bell, Pamela'].use.dollars)], ['ok', true, 32.75, 688], 'on pace for 59%: flagged, 32.75 hrs about $688 unused');
+eq(by['Reed, Shasta'].status, 'low', 'under a quarter after the 15th is still "barely used"');
+eq(uv.hours.map(h => h.consumer), ['Reed, Shasta', 'Bell, Pamela', 'Barnwell, Susan'], 'barely used, then under the goal, then on track');
+eq(uv.tiles.under, 2, 'tile counts barely used and under the goal');
+eq([uv.use.last.name, uv.use.last.authorized, uv.use.last.used, uv.use.last.unused], ['October', 240, 195, 45], 'October: over-use does not cancel out unused hours');
+eq(uv.use.last.most.map(r => [r.consumer, r.unused]), [['Pamela Bell', 40]], 'most unused last month: only those under the goal');
+eq(Math.round(uv.use.last.dollars), 945, '45 hrs at $21');
+const early = H.monthView({ W, check: { auths: { ...ua, at: '2026-11-03T11:00:00Z' } }, reviewed: {}, corrections: [], submissions: [], billing: 21, now: new Date('2026-11-03T15:00:00') });
+ok(!early.use.paceOk && early.hours.every(h => !h.use.under), 'first week: too early, nobody flagged for pace');
+const g60 = H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], billing: 21, goal: 0.5, now: NOV });
+eq(g60.hours.find(h => h.consumer === 'Bell, Pamela').use.under, false, 'the goal comes from Settings');
+eq(H.monthView({ W, check: { auths: ua }, reviewed: {}, corrections: [], submissions: [], now: NOV }).use.month.dollars, 0, 'no rate: hours only');
+
 const src = readFileSync(ROOT + '/hours/hub-hours.js', 'utf8');
 ok(!/—/.test(src), 'no em dashes');
 ok(!/tel:|sms:/.test(src), 'no call or text buttons for attendants');

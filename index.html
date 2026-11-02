@@ -3316,6 +3316,11 @@ button.fu-tile.check span { color:#14606F; }
         <span style="font-size:11px;color:var(--gray-600)">What you pay attendants per hour</span>
       </div>
     </div>
+    <div class="form-group">
+      <label>Hours goal (% of approved hours used)</label>
+      <input type="number" id="rs_use" step="1" min="1" max="100" placeholder="80">
+      <span style="font-size:11px;color:var(--gray-600)">This month on Hours &amp; EVV flags anyone on pace to use less than this</span>
+    </div>
     <div style="background:var(--gray-100);border-radius:6px;padding:12px;font-size:13px;margin-top:4px">
       <strong>Gross margin per hour:</strong> <span id="rs_margin_preview" style="color:var(--success);font-weight:700"></span>
       <script>
@@ -5380,12 +5385,12 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=4');
+    const { mountHours } = await import('./hours/hub-hours.js?v=5');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
       consumers: () => getData('consumers'), go: page => showPage(page), markChecked: key => markShiftChecked(key),
-      dsdsEnd: () => authSlimOn() ? dsdsAuthEnd : null,
+      dsdsEnd: () => authSlimOn() ? dsdsAuthEnd : null, rates: () => getRates(),
       submissions: async () => {
         if (!_db) return [];
         const { data, error } = await _db.from('evv_submissions').select('consumer, attendant, visitdate, sig_attendant, sig_consumer, processed')
@@ -15523,7 +15528,9 @@ function getRates() {
   const r = getObj('rateSettings');
   return {
     billing: parseFloat(r.billing) || 20.21,  // MMAC reimburses per hour
-    pay:     parseFloat(r.pay)     || 15.00   // attendant hourly pay (the low end; pay is $15 to $16 since 2026-10-16)
+    pay:     parseFloat(r.pay)     || 15.00,  // attendant hourly pay (the low end; pay is $15 to $16 since 2026-10-16)
+    // Hours & EVV > This month flags a consumer on pace to use less than this share of their approved hours (her pick 2026-11-01)
+    useGoal: parseFloat(r.useGoal) || 80
   };
 }
 
@@ -15531,14 +15538,17 @@ function openRateSettings() {
   const r = getRates();
   document.getElementById('rs_billing').value = r.billing;
   document.getElementById('rs_pay').value = r.pay;
+  document.getElementById('rs_use').value = r.useGoal;
   openModal('rateSettingsModal');
 }
 
 function saveRateSettings() {
   const billing = parseFloat(document.getElementById('rs_billing').value);
   const pay = parseFloat(document.getElementById('rs_pay').value);
+  const useGoal = parseFloat(document.getElementById('rs_use').value);
   if (!billing || billing <= 0 || !pay || pay <= 0) { alert('Please enter valid rates.'); return; }
-  setObj('rateSettings', { billing, pay });
+  if (!(useGoal >= 1 && useGoal <= 100)) { alert('The hours goal is a percent from 1 to 100.'); return; }
+  setObj('rateSettings', { billing, pay, useGoal });
   closeModal('rateSettingsModal');
   updateDashboard();
   if (document.getElementById('page-quarterly').classList.contains('active')) renderQuarterlyReport();
