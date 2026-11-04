@@ -16,7 +16,7 @@ const MSG = { practice: ['Practice', 'b'], held: ['Waiting (switch off)', 'y'], 
 export function leadForPacket(p) {
   const R = p.referral || {};
   return { id: p.id, type: p.type, name: p.name, phone: p.phone, email: p.email, county: p.county, leavingAgency: p.leavingAgency,
-    street: R.street, apt: R.apt, city: R.city, zip: R.zip };
+    street: p.street || R.street, apt: p.apt || R.apt, city: p.city || R.city, zip: p.zip || R.zip };
 }
 
 // All the signed forms as one PDF, for the office to keep or print.

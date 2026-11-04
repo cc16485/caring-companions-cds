@@ -26,7 +26,7 @@ const ctx = {
 vm.createContext(ctx);
 vm.runInContext(code + '\nthis.profPacketLine = profPacketLine; this.mountProfileEnroll = mountProfileEnroll;', ctx);
 // Stand in for the dynamic import of the lead card.
-vm.runInContext('mountProfileEnroll = ' + ctx.mountProfileEnroll.toString().replace("await import('./enroll/hub-enroll.js?v=2')", 'HUB') + '; this.mountProfileEnroll = mountProfileEnroll;', ctx);
+vm.runInContext('mountProfileEnroll = ' + ctx.mountProfileEnroll.toString().replace("await import('./enroll/hub-enroll.js?v=3')", 'HUB') + '; this.mountProfileEnroll = mountProfileEnroll;', ctx);
 ctx.HUB = { mountLeadEnroll: (e, o) => mounted.push(o) };
 
 const line = (l, v) => '[' + l + ': ' + v + ']';
