@@ -316,6 +316,39 @@ await S('packetFcsr', { pool_id: epool, result: 'clear', proof: PDF });
 ok((await S('packetGet', { pool_id: epool })).screening.screened, 'clear recorded right on the profile');
 ok(P.FINDING.gcw_needed && P.FINDING.edl && !JSON.stringify(P.FINDING).includes('—'), 'finding wording, no em dashes');
 
+// ---------- fingerprints, only for someone who lived outside Missouri (2026-11-04) ----------
+await H('public', 'applyStart', { consumer_name: 'Lou Park', first_name: 'Fay', last_name: 'Hale', phone: '4175550155', email: 'f@x.test' });
+const fpool = (await pg.query(`select id from attendant_pool where first_name='Fay'`)).rows[0].id;
+await pg.query(`update cds_packets set answers = answers || '{"mo_only":"more"}'::jsonb where pool_id=$1`, [fpool]);
+await sign1(fpool);
+await S('packetFcsr', { pool_id: fpool, result: 'clear', proof: PDF });
+for (const k of ['edl', 'edr', 'oig', 'mo_medicaid', 'age18'])
+  await pg.query(`insert into cds_screening_checks (pool_id, check_key, result, checked_on, recorded_by) values ($1,$2,'clear',$3,'t')`, [fpool, k, now]);
+let fg = await S('packetGet', { pool_id: fpool });
+ok(fg.screening.checks.some(c => c.key === 'fingerprints') && !fg.status.checksClear && fg.status.label === 'Send for fingerprints', 'lived outside Missouri: fingerprints needed, checks not clear without them');
+ok(/fingerprints/.test(fg.status.steps.find(s => s.key === 'checks').label), 'the checks step names fingerprints for them');
+ok(!(await S('packetGet', { pool_id: epool })).screening.checks.some(c => c.key === 'fingerprints'), 'lived only in Missouri: no fingerprint check');
+let frow = (await S('packetList', {})).attendants.find(a => a.pool_id === fpool);
+ok(frow.table.cells.fp.s === 'todo' && frow.table.cells.fp.act === 'fingerprints_sent' && frow.table.hold === 'office' && frow.table.job === 'fp', 'table: Fingerprints sent button, waiting on the office');
+ok(frow.table.cells.fcsr.s === 'done' && frow.table.cells.edl.s === 'done' && frow.table.cells.oig.s === 'done' && frow.table.cells.invite.s === 'off', 'table: FCSR, EDL (with DMH), OIG (with MO Medicaid) done; Empeon waits for the checks');
+ok((await S('packetList', {})).attendants.find(a => a.pool_id === epool).table.cells.fp.s === 'na', 'table: Not needed for someone who lived only in Missouri');
+await refuses(() => S('packetMark', { pool_id: epool, what: 'fingerprints_sent' }), /do not need fingerprints/, 'fingerprints cannot be marked for someone who does not need them');
+await refuses(() => S('recordCheck', { id: epool, check_key: 'fingerprints', result: 'clear', proof: { mime: 'application/pdf', data: PDF.data } }), /required list/, 'nor recorded');
+await S('packetMark', { pool_id: fpool, what: 'fingerprints_sent' });
+fg = await S('packetGet', { pool_id: fpool });
+ok(!!fg.packet.fingerprints_sent_at && fg.status.label === 'Waiting on fingerprints' && !fg.status.checksClear, 'marked sent: waiting on fingerprints');
+frow = (await S('packetList', {})).attendants.find(a => a.pool_id === fpool);
+ok(frow.table.cells.fp.s === 'wait' && frow.table.cells.fp.btn === 'Clear: add the result' && frow.table.hold === 'fingerprints', 'table: Sent, waiting on Fingerprints, with Clear: add the result');
+await refuses(() => S('recordCheck', { id: fpool, check_key: 'fingerprints', result: 'clear' }), /Add proof/, 'a clear fingerprint result needs its proof');
+await S('recordCheck', { id: fpool, check_key: 'fingerprints', result: 'clear', checked_on: now, proof: { mime: 'application/pdf', data: PDF.data } });
+fg = await S('packetGet', { pool_id: fpool });
+ok(fg.status.checksClear && fg.status.label === 'Send Empeon invite', 'fingerprints clear: checks clear, Empeon invite next');
+frow = (await S('packetList', {})).attendants.find(a => a.pool_id === fpool);
+ok(frow.table.cells.fp.s === 'done' && frow.table.cells.invite.act === 'empeon_invited' && frow.table.cells.counter.s === 'off' && frow.table.job === 'invite', 'table: fingerprints done, Empeon invite button (no contract signed here, so no countersign)');
+ok(frow.table.moved && frow.updated_at && 'late_since' in frow, 'list carries when anything last moved and any late to-do');
+await pg.query(`insert into cds_tasks (kind, title, pool_id, dedupe_key, due_at) values ('packet_empeon','Send the Empeon invite',$1,'late-test',now() - interval '1 day')`, [fpool]);
+ok(!!(await S('packetList', {})).attendants.find(a => a.pool_id === fpool).late_since, 'a to-do past due shows on the list');
+
 // ---------- rules ----------
 ok(P.applicationMissing({}).length > 3, 'empty application lists what is missing');
 ok(P.callSlots('2026-10-23T15:00:00Z').every(sl => !/Sat|Sun/.test(sl.label)), 'no weekend call times');

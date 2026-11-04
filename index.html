@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=32"></script>
-<script src="leads-table.js?v=4"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="leads-table.js?v=5"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -5492,7 +5492,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=20');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=21');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5505,7 +5505,10 @@ async function renderActiveAttendants() {
       corrections: () => getData('evvCorrections'),   // for the attendant file's shifts fixed by hand
       who: () => ((document.getElementById('header_user') || {}).textContent || '').trim(),
       oigPeople: () => { const d = oig && oig.data(); return d && d.live ? d.people : {}; },
-      openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch') });
+      openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch'),
+      // 2026-11-04 Onboarding as one table: her switch agency_data 'attendantsTable' {live}; only the owners flip it or preview it.
+      tableSwitch: { live: () => getObj('attendantsTable').live === true, owner: () => ldWhoOwner(), at: () => getObj('attendantsTable'),
+        set: v => setObj('attendantsTable', { live: !!v, by: _ldWhoBy(), at: new Date().toISOString() }) } });
     _hpMounted = true;
   } catch (e) {
     root.innerHTML = '<div style="padding:24px;color:#a8342a">Active Attendants could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
@@ -7580,6 +7583,31 @@ const ATT_STEPS = [
   ['wellskyReady',    'Has WellSky and can clock in and out'],
 ];
 
+// 2026-11-04 One attendant record (her yes to the Onboarding table mockup): when a lead's attendant applied at
+// caringcds.com/apply, the lead shows their packet's real step instead of the hand-typed list above. Matched by the
+// attendant's name, or, with no attendant on the lead yet, by the consumer name they gave. Same switch as the table.
+let _attPk = { at: 0, list: null, busy: false };
+const _attKey = s => String(s || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z\s-]/g, ' ').split(/\s+/).filter(w => w.length > 1).sort().join(' ');
+function attPacketsOn() {
+  let pv = false; try { pv = localStorage.getItem('hpTable') === '1'; } catch (e) { /* storage blocked */ }
+  return getObj('attendantsTable').live === true || (ldWhoOwner() && pv);
+}
+function attPacketFor(p) {
+  if (!p || !attPacketsOn() || typeof cdsMatchApi !== 'function') return null;
+  if (!_attPk.busy && Date.now() - _attPk.at > 5 * 60e3) {
+    _attPk.busy = true;
+    Promise.resolve().then(() => cdsMatchApi('packetList', {})).then(r => { _attPk.list = (r && r.attendants) || []; }).catch(() => {})
+      .finally(() => { _attPk.at = Date.now(); _attPk.busy = false;
+        if (document.getElementById('page-pipeline')?.classList.contains('active') || document.getElementById('csub-pipeline')?.offsetParent) { try { renderPipeline(); } catch (e) { /* the Leads page is not drawn */ } }
+        const lp = document.getElementById('page-leadprofile');
+        if (lp && lp.classList.contains('active') && !lp.contains(document.activeElement)) renderLeadProfile(); });
+  }
+  const list = _attPk.list || [], a = p.attendant;
+  if (a && a.name) return list.find(x => _attKey(x.name) === _attKey(a.name)) || null;
+  const mine = list.filter(x => x.consumer && _attKey(x.consumer) === _attKey(p.name));
+  return mine.length === 1 ? mine[0] : null;
+}
+
 function lpDate(v){ return v ? String(v).slice(0,10) : ''; }
 function lpWhen(v){
   if(!v) return '';
@@ -7903,7 +7931,17 @@ function renderLeadProfile(){
   }
 
   // ---- their attendant ----
-  if(a){
+  const ak = attPacketFor(p);
+  if (ak) {
+    const red = ak.tone === 'r';
+    html += '<div class="card" style="padding:18px 20px;margin-bottom:14px' + (red ? ';border-left:4px solid var(--danger)' : '') + '">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--primary)">Their attendant</b>' +
+        '<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-primary" onclick="showPage(\'activeattendants\')">Open Attendants</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="openLeadAttendant(\'' + esc(p.id) + '\')">Change</button></span></div>' +
+      row('Name', ak.name) + row('Onboarding', ak.active ? 'Done: every step finished' : ak.label) +
+      (ak.active ? '' : '<div class="field-note" style="margin-top:6px">Next: ' + esc(ak.next || '') + '</div>') +
+      '<div class="field-note" style="margin-top:6px">From their application at caringcds.com/apply. Every step is tracked on Attendants, so nothing is ticked here.</div></div>';
+  } else if(a){
     const failed = a.backgroundResult === 'failed';
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px' +
       (failed ? ';border-left:4px solid var(--danger)' : '') + '">' +

@@ -40,6 +40,11 @@ create table if not exists public.cds_packets (
   updated_at timestamptz not null default now()
 );
 
+-- 2026-11-04: the fingerprint background check, only for an attendant who lived outside Missouri in the last 5 years.
+-- The office marks it sent here; the clear result is a cds_screening_checks row (check_key 'fingerprints') with its proof.
+alter table public.cds_packets add column if not exists fingerprints_sent_at timestamptz;
+alter table public.cds_packets add column if not exists fingerprints_sent_by text;
+
 create table if not exists public.cds_packet_forms (
   id uuid primary key default gen_random_uuid(),
   pool_id uuid not null references public.attendant_pool(id) on delete cascade,

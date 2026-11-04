@@ -114,6 +114,10 @@ export const FINDING = {
 };
 export const FINDING_PICKS = ['gcw_needed', 'edl', 'cleared_no_waiver'];
 
+// Only the fingerprint check is left (everything else for Step 2 is clear).
+const fpOnly = (scr, rows) => !!scr && scr.registered && scr.screened && !scr.findings &&
+  rows.some(c => c.key === 'fingerprints' && !c.clear) && rows.filter(c => c.key !== 'id_match' && c.key !== 'fingerprints').every(c => c.clear);
+
 // Where an attendant is, who moves next, and the 8 to 11 steps the office sees.
 // p = cds_packets row, forms = { key: row }, scr = screeningSummary() result,
 // profile = { approved, review_status } or null.
@@ -129,7 +133,7 @@ export function status(p, forms, scr, profile) {
   const steps = [
     { key: 'step1', label: 'Step 1 application', who: 'Attendant', done: s1 },
     { key: 'orientation', label: 'Orientation video and handbook link', who: 'Sent by itself after Step 1', done: !!p.orientation_done_at },
-    { key: 'checks', label: 'Background checks (FCSR, EDL, OIG)', who: 'Office', done: clear,
+    { key: 'checks', label: 'Background checks (FCSR, EDL, OIG' + (checkRows.some(c => c.key === 'fingerprints') ? ', fingerprints' : '') + ')', who: 'Office', done: clear,
       detail: scr ? (scr.findings ? (FINDING[scr.review] || FINDING.none).label : scr.missing.filter(m => !/^Identity/.test(m)).join(', ')) : '' },
     { key: 'papers', label: 'Contract, pay, units, handbook (signed in Step 1)', who: 'Attendant', done: s2 },
     { key: 'empeon_invite', label: 'Empeon invite', who: 'Office', done: !!p.empeon_invited_at },
@@ -148,6 +152,8 @@ export function status(p, forms, scr, profile) {
   if (active) { label = 'Active'; tone = 'g'; next = p.list_choice === 'join' && !(profile && profile.review_status === 'approved') && clear ? 'Approve their profile for findcdscaregivers.com.' : 'Nothing due.'; }
   else if (!s1) { label = 'Filling out Step 1'; tone = 'b'; next = 'Nothing to do. Reminder texts go out on their own.'; }
   else if (scr && scr.findings) { const f = FINDING[scr.review] || FINDING.none; label = f.label; tone = f.tone; next = f.next; }
+  else if (!clear && fpOnly(scr, checkRows)) { label = p.fingerprints_sent_at ? 'Waiting on fingerprints' : 'Send for fingerprints'; tone = p.fingerprints_sent_at ? 'y' : 'r';
+    next = p.fingerprints_sent_at ? 'Fingerprints were sent. When the result is back and clear, add it (Clear: add the result).' : 'They lived outside Missouri in the last 5 years, so they need a fingerprint background check. Mark it sent once it is.'; }
   else if (!clear) { label = 'Run EDL and FCSR'; tone = 'r'; next = 'Run the checks: ' + ((scr && scr.missing) || []).filter(m => !/^Identity/.test(m)).join(', ') + '.'; }
   else if (!p.empeon_invited_at) { label = 'Send Empeon invite'; tone = 'r'; next = 'Checks are clear. Send the Empeon invite (Copy for Empeon).'; }
   else {
@@ -158,4 +164,71 @@ export function status(p, forms, scr, profile) {
     else { label = 'Finishing onboarding'; tone = 'b'; next = them.length ? 'Waiting on them to ' + them.join(', ') + '.' : 'Waiting on the last steps.'; }
   }
   return { label, tone, next, active, step1: s1, checksClear: clear, step2Open: s1 && clear, step2Signed: s2, steps, now: nextStep ? nextStep.key : null };
+}
+
+// ---------- the Onboarding table (2026-11-04, her yes to the mockup) ----------
+// One row per attendant: a cell per step, who it is waiting on, and when anything last moved.
+// Cell s: 'done' (t = the day, ISO), 'na' (not needed), 'off' (not yet: an earlier step comes first),
+//         'todo' (the office's button, act = what it does), 'wait' (someone else, warn = gold), 'bad' (stopped).
+// act: 'open' opens the packet screen; 'empeon_invited', 'i9_done', 'fingerprints_sent' are one tap.
+export const TABLE_COLS = ['step1', 'orient', 'fcsr', 'edl', 'oig', 'fp', 'invite', 'empeon', 'call', 'i9', 'counter'];
+export const HOLD = { office: 'Office', attendant: 'Attendant', state: 'State', fingerprints: 'Fingerprints', none: 'Nobody' };
+const newest = list => list.filter(Boolean).map(String).sort().pop() || null;
+export function tableRow(p, forms, scr, st) {
+  forms = forms || {};
+  const raw = (scr && scr.raw) || {};
+  const rows = scr && scr.steps ? (scr.steps[6] || {}).checks || [] : [];
+  const by = Object.fromEntries(rows.map(c => [c.key, c]));
+  const D = at => ({ s: 'done', t: at || null });
+  const off = { s: 'off' };
+  const s1 = st.step1, clear = st.checksClear, findings = !!(scr && scr.findings);
+  // A group of checks (EDL with the DMH registry, OIG with the Missouri Medicaid exclusion): done when all are clear.
+  const group = (keys, act) => {
+    const cs = keys.map(k => by[k]).filter(Boolean);
+    if (!cs.length) return { s: 'na', t: 'Not needed' };
+    if (cs.some(c => c.result === 'not_clear')) return { s: 'bad', t: 'Not clear' };
+    if (cs.every(c => c.clear)) return D(newest(cs.map(c => c.at)));
+    return s1 ? { s: 'todo', t: act, act: 'open' } : off;
+  };
+  const c = {};
+  c.step1 = s1 ? D(p.step1_signed_at || (forms.background || {}).signed_at) : { s: 'wait', t: Object.keys(p.answers || {}).length > 4 ? 'Started, not signed' : 'Not started', warn: true };
+  c.orient = p.orientation_done_at ? D(p.orientation_done_at) : s1 ? { s: 'wait', t: 'Not watched yet' } : off;
+  if (findings) c.fcsr = { gcw_needed: { s: 'wait', t: 'Good Cause Waiver', warn: true }, edl: { s: 'bad', t: 'On the EDL' }, not_moving: { s: 'bad', t: 'Not moving forward' } }[scr.review]
+    || { s: 'todo', t: 'Found something: pick', act: 'open' };
+  else if (scr && scr.registered && scr.screened) c.fcsr = D(raw.screen_result_at || raw.finding_reviewed_at);
+  else if (raw.screen_requested_at) c.fcsr = { s: 'wait', t: 'Pending at the state' };
+  else c.fcsr = s1 ? { s: 'todo', t: 'Copy for FCSR', act: 'open' } : off;
+  c.edl = group(['edl', 'edr'], 'Copy for EDL');
+  c.oig = group(['oig', 'mo_medicaid'], 'Add the result');
+  const fp = by.fingerprints;
+  c.fp = !fp ? { s: 'na', t: 'Not needed' } : fp.result === 'not_clear' ? { s: 'bad', t: 'Not clear' } : fp.clear ? D(fp.at)
+    : p.fingerprints_sent_at ? { s: 'wait', t: 'Sent', at: p.fingerprints_sent_at, act: 'open', btn: 'Clear: add the result' }
+    : s1 ? { s: 'todo', t: 'Fingerprints sent', act: 'fingerprints_sent' } : off;
+  c.invite = p.empeon_invited_at ? D(p.empeon_invited_at) : clear ? { s: 'todo', t: 'Empeon invite sent', act: 'empeon_invited' } : off;
+  c.empeon = p.empeon_done_at ? D(p.empeon_done_at) : p.empeon_invited_at ? { s: 'wait', t: 'Attendant doing it' } : off;
+  c.call = p.id_checked_at ? D(p.id_checked_at) : p.call_slot && clear ? { s: 'wait', t: 'Booked ' + p.call_slot, act: 'open', btn: 'ID seen' }
+    : clear ? { s: 'wait', t: 'Attendant books it' } : off;
+  c.i9 = p.i9_done_at ? D(p.i9_done_at) : p.id_checked_at ? { s: 'todo', t: 'I-9 done in Empeon', act: 'i9_done' } : off;
+  const cs = forms.contract;
+  c.counter = cs && cs.countersigned_at ? D(cs.countersigned_at) : cs && clear ? { s: 'todo', t: 'Countersign', act: 'open' } : off;
+  // Who it waits on: the office whenever there is an office button; else the state, fingerprints, or the attendant.
+  const office = Object.values(c).some(x => x.s === 'todo');
+  let hold, note = '';
+  if (st.active) { hold = 'none'; note = 'Ready: waiting on their first shift'; }
+  else if (findings && ['edl', 'not_moving'].includes(scr.review)) { hold = 'none'; note = st.label; }
+  else if (!s1) hold = 'attendant';
+  else if (office) hold = 'office';
+  else if (findings && scr.review === 'gcw_needed') { hold = 'state'; note = 'Waiting on Good Cause Waiver'; }
+  else if (c.fcsr.s === 'wait') { hold = 'state'; note = 'FCSR pending at the state'; }
+  else if (c.fp.s === 'wait') { hold = 'fingerprints'; note = 'Lived outside Missouri: fingerprints sent'; }
+  else if (['empeon', 'call', 'orient'].some(k => c[k].s === 'wait')) { hold = 'attendant';
+    note = [c.empeon.s === 'wait' && 'Empeon', c.call.s === 'wait' && !p.call_slot && 'book the ID check', c.call.s === 'wait' && p.call_slot && 'ID check ' + p.call_slot, c.orient.s === 'wait' && 'orientation'].filter(Boolean).join(', '); }
+  else hold = 'office';
+  // The first step not done, for the Who needs menu.
+  // Orientation never holds anything up, so it is the job only once everything else is done.
+  const job = TABLE_COLS.find(k => k !== 'orient' && !['done', 'na'].includes(c[k].s)) || (c.orient.s === 'done' ? null : 'orient');
+  const moved = newest([p.updated_at, p.step1_signed_at, p.orientation_done_at, p.empeon_invited_at, p.empeon_done_at, p.call_booked_at, p.id_checked_at,
+    p.i9_done_at, p.fingerprints_sent_at, raw.screen_requested_at, raw.screen_result_at, raw.finding_reviewed_at, raw.reg_verified_at,
+    ...Object.values(forms).flatMap(f => [f.signed_at, f.countersigned_at]), ...rows.map(r => r.recorded_at)]);
+  return { cells: c, hold, note, job, moved, fp_needed: !!fp };
 }

@@ -305,7 +305,7 @@ export function createPacket(h) {
     }
     // A consumer is waiting on this attendant: due today by 4pm when signed before 2pm on a
     // weekday, otherwise by noon the next weekday (her call 2026-10-21: these are urgent).
-    await h.task('packet_checks', ((x.p.consumer_name ? 'Consumer waiting: ' : '') + 'Run EDL and FCSR for ' + name + ' (Step 1 signed' + (x.p.consumer_name ? ', for ' + x.p.consumer_name : '') + ').').slice(0, 300),
+    await h.task('packet_checks', ((x.p.consumer_name ? 'Consumer waiting: ' : '') + 'Run EDL and FCSR' + (a.mo_only === 'more' ? ', and send for fingerprints (lived outside Missouri),' : '') + ' for ' + name + ' (Step 1 signed' + (x.p.consumer_name ? ', for ' + x.p.consumer_name : '') + ').').slice(0, 300),
       { pool_id: poolId }, 'packet_checks:' + poolId, x.p.consumer_name ? urgentDue(now) : (await one('select cds_next_business_4pm(now()) as d')).d);
     // OIG runs itself (cds-oig, 2026-10-21): name + birth date against this month's list.
     // A clear result is recorded as the OIG check only when the OIG switch is on; a possible
@@ -348,10 +348,15 @@ export function createPacket(h) {
       who(staff);
       const rows = await q(`select k.pool_id, a.first_name, a.last_name, a.phone, k.consumer_name, k.updated_at from cds_packets k
                             join attendant_pool a on a.id=k.pool_id where coalesce(a.archived,false)=false order by k.created_at desc limit 300`);
+      // An office to-do past its due time makes the row red on the Onboarding table (2026-11-04).
+      const late = Object.fromEntries((await q(`select pool_id, min(due_at) as due from cds_tasks where pool_id is not null and done_at is null
+        and due_at < now() group by pool_id`)).map(r => [r.pool_id, r.due]));
       const out = [];
       for (const r of rows) { const x = await load(r.pool_id); out.push({ pool_id: r.pool_id, name: [r.first_name, r.last_name].join(' '), consumer: r.consumer_name,
         label: x.st.label, tone: x.st.tone, next: x.st.next, active: x.st.active, list_choice: x.p.list_choice,
-        consumer_waiting: !!r.consumer_name && !x.st.active && !['gcw_needed', 'edl', 'not_moving'].includes(x.c.screening.review), started_at: x.p.created_at, step1_at: x.p.step1_signed_at }); }
+        consumer_waiting: !!r.consumer_name && !x.st.active && !['gcw_needed', 'edl', 'not_moving'].includes(x.c.screening.review), started_at: x.p.created_at, step1_at: x.p.step1_signed_at,
+        active_at: x.p.active_at || null, updated_at: x.p.updated_at, late_since: late[r.pool_id] || null,
+        table: x.st.active ? null : P.tableRow(x.p, x.forms, x.c.screening, x.st) }); }
       return { attendants: out };
     },
     // One signed form, as they signed it, for View and Print on the profile (2026-10-22). The
@@ -389,11 +394,13 @@ export function createPacket(h) {
     },
     async packetMark({ staff, pool_id, what }) {
       who(staff);
-      const col = { empeon_invited: ['empeon_invited_at', 'empeon_invited_by'], id_checked: ['id_checked_at', 'id_checked_by'], i9_done: ['i9_done_at', 'i9_done_by'] }[what];
+      const col = { empeon_invited: ['empeon_invited_at', 'empeon_invited_by'], id_checked: ['id_checked_at', 'id_checked_by'], i9_done: ['i9_done_at', 'i9_done_by'],
+        fingerprints_sent: ['fingerprints_sent_at', 'fingerprints_sent_by'] }[what];
       if (!col) fail('Unknown step');
       const x = await load(pool_id);
       if (!x) fail('Not found', 404);
-      if (what !== 'empeon_invited' && !x.st.checksClear) fail('Their background checks are not clear yet.');
+      if (what === 'fingerprints_sent' && !(x.c.screening.steps[6].checks || []).some(c => c.key === 'fingerprints')) fail('They do not need fingerprints: their Step 1 says they lived only in Missouri the last 5 years.');
+      if (!['empeon_invited', 'fingerprints_sent'].includes(what) && !x.st.checksClear) fail('Their background checks are not clear yet.');
       await q(`update cds_packets set ${col[0]}=coalesce(${col[0]}, now()), ${col[1]}=coalesce(${col[1]}, $2), updated_at=now() where pool_id=$1`, [pool_id, staff]);
       if (what === 'id_checked') await q(`insert into cds_screening_checks (pool_id, check_key, result, checked_on, note, recorded_by)
         values ($1,'id_match','clear', (now() at time zone 'America/Chicago')::date, 'Seen on the 5-minute ID video call', $2)`, [pool_id, staff]);

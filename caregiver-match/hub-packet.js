@@ -15,7 +15,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const fmtD = iso => (iso ? new Date(String(iso).length === 10 ? iso + 'T12:00:00' : iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' }) : '');
 const ymd = d => d.toISOString().slice(0, 10);
 const addM = (iso, m) => { const d = new Date(iso + 'T12:00:00'); d.setMonth(d.getMonth() + m); return ymd(d); };
-const CHECK_NAMES = { edl: 'EDL', edr: 'DMH EDR', oig: 'OIG', mo_medicaid: 'MO Medicaid exclusion', age18: 'Age 18+', id_match: 'ID matches (video call)' };
+const CHECK_NAMES = { edl: 'EDL', edr: 'DMH EDR', oig: 'OIG', mo_medicaid: 'MO Medicaid exclusion', age18: 'Age 18+', id_match: 'ID matches (video call)', fingerprints: 'Fingerprints (lived outside Missouri)' };
 
 const CSS = `
 .hp{font-family:inherit;color:#1d2a36}
@@ -74,6 +74,41 @@ const CSS = `
 .hp .pick:has(input:checked){border:2px solid #0f7a7c;background:#f3f9f9}
 .hp .btn.good{background:#1f7a4d;color:#fff}.hp .btn.warn{background:#8a5a00}
 .hp .hp-print p{font-size:14.5px;line-height:1.5}
+/* 2026-11-04 Onboarding as one table (her yes to the mockup): a column per step, menus in one row, cards on a phone */
+.hp .at-menus{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:4px 0 10px}
+.hp .at-menus label{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#5b6977}
+.hp .at-menus select{width:auto;font:inherit;font-size:14px;font-weight:600;text-transform:none;letter-spacing:0;color:#0D365F;border:2px solid #dfe6ec;border-radius:8px;padding:5px 8px;background:#fff}
+.hp .at-menus label.on select{border-color:#0f7a7c;background:#f3f9f9}
+.hp .at-menus .sumr{font-size:13.5px;color:#5b6977;margin-left:auto}.hp .at-menus .sumr b{color:#0D365F}
+.hp .at-scroll{overflow-x:auto;border:1px solid #dfe6ec;border-radius:10px;background:#fff}
+.hp table.at{min-width:1500px;border-collapse:separate;border-spacing:0;font-size:13.5px}
+.hp table.at th,.hp table.at td{background:#fff;padding:8px 9px;white-space:nowrap}
+.hp table.at thead tr.grp th{font-size:10.5px;color:#0f7a7c;border-bottom:0;padding-bottom:0}
+.hp table.at .sticky{position:sticky;left:0;z-index:1;box-shadow:1px 0 0 #dfe6ec;min-width:180px;white-space:normal}
+.hp table.at tr.now td.sticky{box-shadow:inset 4px 0 0 #b42318,1px 0 0 #dfe6ec}
+.hp table.at tr.quiet td.sticky{box-shadow:inset 4px 0 0 #e9a92c,1px 0 0 #dfe6ec}
+.hp table.at .sep{border-left:2px solid #eef2f5}
+.hp table.at td.hold{min-width:230px;white-space:normal}
+.hp .at-name{background:none;border:0;padding:0;font:inherit;font-weight:700;color:#0D365F;cursor:pointer;text-align:left;font-size:14.5px}
+.hp .at-name:hover{text-decoration:underline}
+.hp .at-sub{font-size:12.5px;color:#5b6977;white-space:normal}
+.hp .at-ok{color:#1f7a4d;font-weight:600}.hp .at-ok::before{content:"✓ "}
+.hp .at-na{color:#8a96a3}.hp .at-off{color:#c9d3dc}
+.hp .at-btn{border:2px solid #0f7a7c;color:#0f7a7c;background:#fff;border-radius:8px;padding:3px 9px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.hp .at-btn.late{border-color:#b42318;color:#b42318;background:#fdecea}
+.hp .at-btn.sure{background:#0f7a7c;color:#fff}
+.hp .at-wait{display:inline-block;border-radius:6px;padding:2px 7px;font-size:12.5px;font-weight:600;background:#e4edf6;color:#2b5c8a}
+.hp .at-wait.warn{background:#f6e7b8;color:#6b4e00}
+.hp .at-bad{display:inline-block;border-radius:6px;padding:2px 7px;font-size:12.5px;font-weight:700;background:#fdecea;color:#b42318}
+.hp .at-hold{font-weight:700}.hp .h-office{color:#0f7a7c}.hp .h-attendant{color:#8a5a00}.hp .h-state,.hp .h-fingerprints{color:#2b5c8a}.hp .h-none{color:#5b6977}
+.hp .at-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:#5b6977;margin-top:8px}
+.hp .at-switch{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;background:#f3f7f8;border:1px dashed #c9d3dc;border-radius:10px;padding:8px 12px;margin:6px 0 4px;font-size:13.5px}
+.hp .at-cards{display:none}
+@media (max-width:760px){.hp .at-scroll{display:none}.hp .at-cards{display:grid;gap:8px}
+.hp .at-card{background:#fff;border:1px solid #dfe6ec;border-radius:12px;padding:12px 14px;display:grid;gap:6px}
+.hp .at-card.now{border-left:5px solid #b42318}.hp .at-card.quiet{border-left:5px solid #e9a92c}
+.hp .at-card .ln{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13.5px}
+.hp .at-menus .sumr{margin-left:0}}
 @media print{body *{visibility:hidden!important}.hp .hp-print,.hp .hp-print *{visibility:visible!important}
 .hp .hp-print{position:absolute;left:0;top:0;width:100%;border:0;margin:0;padding:0}.hp .hp-noprint{display:none!important}
 .hp .hp-print h3{break-after:avoid}.hp .hp-print dl{break-inside:avoid}}
@@ -376,6 +411,35 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
 }
 
 
+// ---------- Onboarding as one table (2026-11-04, her yes to the mockup; tested in tests/attendants_page_test.mjs) ----------
+// The same people as the Onboarding tab (buildGroups' starting list), one row each. The cells come from the
+// server (packetList .table, rules.js tableRow). Red: their consumer is waiting and nothing moved in 2 weekdays,
+// or an office to-do is past due. Gold: nothing moved in 10 days. Her switch: agency_data 'attendantsTable'.
+export const AT_COLS = [['step1', 'Step 1'], ['orient', 'Orientation'], ['fcsr', 'FCSR'], ['edl', 'EDL'], ['oig', 'OIG'], ['fp', 'Fingerprints'],
+  ['invite', 'Empeon invite'], ['empeon', 'Empeon'], ['call', 'ID video check'], ['i9', 'I-9 Section 2'], ['counter', 'Countersign']];
+export const AT_JOB = Object.fromEntries(AT_COLS.map(([k, l]) => [k, l === 'Step 1' ? 'Step 1 application' : l]));
+export const AT_HOLD = { office: 'Office', attendant: 'Attendant', state: 'State', fingerprints: 'Fingerprints', none: 'Nobody' };
+export const AT_SHOW = { now: 'Need you now', waiting: 'Consumer waiting', quiet: 'Quiet 10+ days' };
+export function onboardingRows({ starting = [], packets = [], now = new Date() }) {
+  const byId = Object.fromEntries(packets.map(a => [a.pool_id, a]));
+  return starting.filter(x => x.kind === 'packet' && byId[x.id]).map(x => {
+    const a = byId[x.id], tb = a.table;
+    const moved = (tb && tb.moved) || a.updated_at || a.step1_at || a.started_at;
+    const days = Math.max(0, daysSince(moved, now));
+    const late = !!a.late_since && !a.active;
+    const waitingLong = !!a.consumer_waiting && !!a.step1_at && weekdaysSince(moved, now) >= 2;
+    const urg = !a.active && (late || waitingLong) ? 'now' : days >= 10 ? 'quiet' : '';
+    return { id: a.pool_id, name: a.name, consumer: a.consumer || '', waiting: !!a.consumer_waiting && !a.active, ready: !!a.active,
+      cells: tb ? tb.cells : null, hold: tb ? tb.hold : 'none', note: tb ? tb.note : 'Ready: waiting on their first shift (their first clock-in in WellSky moves them to Working)',
+      job: tb ? tb.job : null, days, urg, late, lateSince: a.late_since || null,
+      why: late ? 'To-do late since ' + shortDay(String(a.late_since).slice(0, 10)) : waitingLong ? 'Consumer waiting, no change in ' + plural(weekdaysSince(moved, now), 'weekday', 'weekdays') : '' };
+  });
+}
+export const atShow = { now: r => r.urg === 'now', waiting: r => r.waiting, quiet: r => r.days >= 10 };
+export function atFilter(rows, F, skip) {
+  return rows.filter(r => (skip === 'show' || !F.show || (atShow[F.show] || (() => true))(r)) && (skip === 'job' || !F.job || r.job === F.job) && (skip === 'hold' || !F.hold || r.hold === F.hold));
+}
+
 // ---------- the attendant's audit file (her yes to the mockup, 2026-10-23) ----------
 // One printable file from both views: the application (packetGet: answers, signed forms, I-9,
 // orientation) and the Roster (check dates, proof PDFs, WellSky). Either may be missing: someone
@@ -483,10 +547,18 @@ export function mountHubPacket(el, opts) {
   const ended = () => (opts.roster ? opts.roster() : []).filter(a => a.status === 'inactive');
   // Tabs (her ask 2026-10-22): Onboarding / Working / Inactive. Opens on Onboarding when someone is in it.
   let list = [], open = null, err = '', tab = null, query = '';
+  // Onboarding as one table (2026-11-04): her switch, an owner's preview in this browser, the menus remembered here.
+  const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* storage blocked */ } return null; };
+  const sw = opts.tableSwitch || null;
+  const tableOn = () => !!sw && (sw.live() || (sw.owner() && ls('hpTable') === '1'));
+  let F = { show: '', job: '', hold: '' };
+  try { const s = JSON.parse(ls('hpTableF') || 'null'); if (s && typeof s === 'object') F = Object.assign(F, s); } catch { /* none saved */ }
+  let sure = '';
   if (!document.getElementById('hp_css')) { const s = document.createElement('style'); s.id = 'hp_css'; s.textContent = CSS; document.head.appendChild(s); }
   el.classList.add('hp');
   el.addEventListener('click', onClick);
   // Find by name (her ask 2026-10-23): searches every tab at once.
+  el.addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.atk; if (!k) return; F[k] = e.target.value; ls('hpTableF', JSON.stringify(F)); draw(); });
   el.addEventListener('input', e => { if (e.target.id !== 'hp_find') return; query = e.target.value; const pos = e.target.selectionStart; draw();
     const i = el.querySelector('#hp_find'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch { /* not a text input */ } } });
   load();
@@ -529,7 +601,8 @@ export function mountHubPacket(el, opts) {
         ${found.map(x => rowHtml({ ...x, meta: x.where + (x.meta ? ' · ' + x.meta : '') })).join('')}
         ${gone.map(endedRow).join('')}
         ${found.length + gone.length ? '' : '<p class="small">Nobody matches. Try fewer letters.</p>'}`;
-    } else if (tab === 'onboarding') body = `<div class="ghead"><span>Consumer waiting goes first</span></div>
+    } else if (tab === 'onboarding' && tableOn()) body = switchRow() + tableHtml(g);
+    else if (tab === 'onboarding') body = switchRow() + `<div class="ghead"><span>Consumer waiting goes first</span></div>
       ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is onboarding. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}`;
     else if (tab === 'working') body = `<div class="ghead"><span>${ws.have ? 'Shift in WellSky in the last ' + WORKING_DAYS + ' days. WellSky ' + esc(asOf) + esc(hoursNote) : 'WellSky has not sent anything yet, so everyone shows here'}</span>
         <span>${t.due ? `<span class="pill r">${t.due} check due or overdue</span> ` : ''}${t.dates ? `<span class="pill y">${t.dates} with check dates to add</span>` : ''}</span></div>
@@ -546,6 +619,53 @@ export function mountHubPacket(el, opts) {
       ${err ? `<div class="err">${esc(err)}</div>` : ''}
       ${body}
       <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>`;
+  }
+
+  // Only the owners see the switch: preview it here, then turn it on for everyone.
+  function switchRow() {
+    if (!sw || !sw.owner()) return '';
+    const lv = sw.live(), pv = !lv && ls('hpTable') === '1', at = sw.at ? sw.at() : null;
+    return `<div class="at-switch"><span><b>Onboarding as a table:</b> ${lv ? 'On for everyone' : pv ? 'Off (you are previewing it, only in this browser)' : 'Off'}${at && at.by ? ' (changed by ' + esc(at.by) + ')' : ''}. Only you see this switch.</span>
+      <span class="btns" style="margin:0">${lv ? '' : `<button class="btn o" data-act="at-preview">${pv ? 'Back to the list' : 'Preview it (only me)'}</button>`}<button class="btn ${lv ? 'o' : ''}" data-act="at-flip">${lv ? 'Turn off for everyone' : 'Turn on for everyone'}</button></span></div>`;
+  }
+  function cellHtml(r, k) {
+    const x = r.cells && r.cells[k];
+    if (!x || x.s === 'off') return '<span class="at-off">·</span>';
+    if (x.s === 'na') return `<span class="at-na">${esc(x.t)}</span>`;
+    if (x.s === 'done') return `<span class="at-ok">${esc(x.t ? shortDay(new Date(x.t).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : 'Done')}</span>`;
+    if (x.s === 'bad') return `<span class="at-bad">${esc(x.t)}</span>`;
+    const btn = (label, act, late) => act === 'open'
+      ? `<button class="at-btn${late ? ' late' : ''}" data-open="packet:${esc(r.id)}">${esc(label)}</button>`
+      : `<button class="at-btn${late ? ' late' : ''}${sure === r.id + ':' + act ? ' sure' : ''}" data-atmark="${esc(act)}" data-id="${esc(r.id)}">${esc(sure === r.id + ':' + act ? 'Tap again to save' : label)}</button>`;
+    if (x.s === 'todo') { const late = r.urg === 'now' && r.job === k; return btn(x.t, x.act, late) + (late && r.why ? `<div class="at-sub" style="color:#b42318">${esc(r.why)}</div>` : ''); }
+    const sent = x.at ? ' ' + shortDay(new Date(x.at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : '';
+    return `<span class="at-wait${x.warn ? ' warn' : ''}">${esc(x.t + sent)}</span>${x.btn ? `<div style="margin-top:4px">${btn(x.btn, x.act)}</div>` : ''}`;
+  }
+  function tableHtml(g) {
+    const all = onboardingRows({ starting: g.starting, packets: list });
+    const menu = (label, key, labels) => {
+      const opts = Object.keys(labels).map(k => { const n = atFilter(all, F, key).filter(r => key === 'show' ? atShow[k](r) : r[key] === k).length;
+        return `<option value="${k}"${F[key] === k ? ' selected' : ''}>${esc(labels[k])} (${n})</option>`; }).join('');
+      return `<label class="${F[key] ? 'on' : ''}">${label}<select data-atk="${key}"><option value="">All</option>${opts}</select></label>`;
+    };
+    const rows = atFilter(all, F);
+    const holdHtml = r => `<span class="at-hold h-${esc(r.hold)}">${esc(AT_HOLD[r.hold] || '')}</span>${r.note ? `<div class="at-sub">${esc(r.note)}</div>` : ''}`;
+    const daysTxt = r => r.days ? plural(r.days, 'day', 'days') : 'today';
+    const who = r => `<button class="at-name" data-open="packet:${esc(r.id)}">${esc(r.name)}</button><div class="at-sub">${r.consumer ? 'for ' + esc(r.consumer) : 'no consumer yet'}${r.waiting ? ' · <b style="color:#b42318">consumer waiting</b>' : ''}</div>`;
+    const SEP = ['fcsr', 'invite', 'i9'];
+    const body = rows.map(r => `<tr class="${r.urg}"><td class="sticky">${who(r)}</td>${r.cells ? AT_COLS.map(([k]) => `<td class="${SEP.includes(k) ? 'sep' : ''}">${cellHtml(r, k)}</td>`).join('')
+      : `<td colspan="${AT_COLS.length}"><span class="at-ok">Every step done</span></td>`}<td class="sep hold">${holdHtml(r)}</td><td>${esc(r.consumer)}</td><td>${daysTxt(r)}</td></tr>`).join('');
+    const cards = rows.map(r => { const k = r.job; const lbl = k ? AT_JOB[k] : 'Every step done';
+      return `<div class="at-card ${r.urg}">${who(r)}<div class="ln"><span><b>Now:</b> ${esc(lbl)}</span><span>${k ? cellHtml(r, k) : ''}</span></div>
+        <div class="ln"><span>Waiting on: ${holdHtml(r)}</span><span class="at-sub">quiet ${daysTxt(r)}</span></div></div>`; }).join('');
+    return `<div class="at-menus">${menu('Show', 'show', AT_SHOW)}${menu('Who needs', 'job', AT_JOB)}${menu('Waiting on', 'hold', AT_HOLD)}
+        ${F.show || F.job || F.hold ? '<button class="pill-btn" data-act="at-clear">Clear</button>' : ''}
+        <span class="sumr"><b>${all.length}</b> onboarding · <b style="color:#b42318">${all.filter(r => r.urg === 'now').length}</b> need you now · <b>${all.filter(r => r.waiting).length}</b> with a consumer waiting</span></div>
+      ${rows.length ? `<div class="at-scroll"><table class="at"><thead><tr class="grp"><th class="sticky"></th><th colspan="2">Their forms</th><th colspan="4" class="sep">Background checks</th><th colspan="3" class="sep">Hiring in Empeon</th><th colspan="2" class="sep">Finish</th><th class="sep"></th><th></th><th></th></tr>
+        <tr><th class="sticky">Attendant</th>${AT_COLS.map(([k, l]) => `<th class="${SEP.includes(k) ? 'sep' : ''}">${esc(l)}</th>`).join('')}<th class="sep">Waiting on</th><th>Consumer</th><th>Days quiet</th></tr></thead>
+        <tbody>${body}</tbody></table></div><div class="at-cards">${cards}</div>`
+      : `<p class="small">${all.length ? 'Nobody matches these menus.' : 'Nobody is onboarding. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.'}</p>`}
+      <div class="at-legend"><span><b style="color:#b42318">Red edge</b> needs you now: a consumer is waiting and nothing moved in 2 weekdays, or a to-do is late</span><span><b style="color:#8a5a00">Gold edge</b> quiet 10 days or more</span><span>Click a name for their whole packet</span></div>`;
   }
 
   // Check PDFs from GHL: copied into the hub, dates read from each PDF, the office reviews and saves.
@@ -638,7 +758,8 @@ export function mountHubPacket(el, opts) {
       <table><thead><tr><th>Check</th><th>Result</th><th>Done</th><th></th></tr></thead><tbody>
       <tr><td><b>FCSR</b></td><td>${esc(FCSR_WORDS[fcsrState(g.screening)])}</td><td>${esc(fmtD(g.screening.result_at))}</td><td></td></tr>
       ${checks.map(c => `<tr><td><b>${esc(CHECK_NAMES[c.key] || c.label)}</b></td><td>${c.clear ? 'Clear' : c.result === 'not_clear' ? 'Not clear' : 'To run'}</td><td>${esc(fmtD(c.at))}</td>
-        <td>${c.clear || c.key === 'id_match' || c.key === 'age18' ? '' : `<button class="btn o" data-clear="${c.key}">Clear: add screenshot</button>`}</td></tr>`).join('')}
+        <td>${c.clear || c.key === 'id_match' || c.key === 'age18' ? '' : c.key === 'fingerprints' ? (p.fingerprints_sent_at ? `<span class="small">Sent ${esc(fmtD(p.fingerprints_sent_at))}</span> ` : `<button class="btn o" data-mark="fingerprints_sent">Fingerprints sent</button> `) + `<button class="btn o" data-clear="fingerprints">Clear: add the result</button>`
+          : `<button class="btn o" data-clear="${c.key}">Clear: add screenshot</button>`}</td></tr>`).join('')}
       </tbody></table>
       <div class="fcsr" id="hp_fcsr">${fcsrPanelHtml(g)}</div>
       <input type="file" id="hp_proof" accept="image/*,application/pdf" hidden>
@@ -739,12 +860,24 @@ export function mountHubPacket(el, opts) {
     } catch (e) { box.textContent = 'Proof could not load: ' + e.message; }
   }
 
+  const act0 = b => b.dataset.act;
   async function onClick(e) {
     const b = e.target.closest('button'); if (!b) return;
     const errEl = () => el.querySelector('#hp_err');
     const fail = m => { const x = errEl(); if (x) x.textContent = m; else alert(m); };
     try {
       if (b.dataset.tab) { tab = b.dataset.tab; draw(); return; }
+      if (act0(b) === 'at-preview') { ls('hpTable', ls('hpTable') === '1' ? null : '1'); draw(); return; }
+      if (act0(b) === 'at-flip') { if (!sw || !sw.owner()) return; await sw.set(!sw.live()); draw(); return; }
+      if (act0(b) === 'at-clear') { F = { show: '', job: '', hold: '' }; ls('hpTableF', JSON.stringify(F)); draw(); return; }
+      // A one-tap step from the table: tap twice so a stray click never records it.
+      if (b.dataset.atmark) {
+        const key = b.dataset.id + ':' + b.dataset.atmark;
+        if (sure !== key) { sure = key; draw(); setTimeout(() => { if (sure === key) { sure = ''; if (!open) draw(); } }, 5000); return; }
+        sure = ''; b.disabled = true; b.textContent = 'Saving…';
+        await api('packetMark', { pool_id: b.dataset.id, what: b.dataset.atmark });
+        return load();
+      }
       if (b.dataset.reactivate) {
         // The end record is kept (pastEnds), never thrown away.
         const a = (opts.roster ? opts.roster() : []).find(x => x.id === b.dataset.reactivate) || {};
