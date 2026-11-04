@@ -4678,6 +4678,47 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
 </div>
 
 <!-- Pipeline Edit Modal -->
+<!-- Edit a lead's details and add a note (2026-11-04, her ask: "I need to be able to edit and add information to leads") -->
+<div class="modal-overlay" id="leadDetailsModal">
+  <div class="modal" style="width:560px">
+    <div class="modal-header">
+      <div class="modal-title" id="ldt_title">Edit details</div>
+      <button class="modal-close" onclick="closeModal('leadDetailsModal')">×</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>First name</label><input type="text" id="ldt_first"></div>
+      <div class="form-group"><label>Last name</label><input type="text" id="ldt_last"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Phone</label><input type="tel" id="ldt_phone"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="ldt_email"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Date of birth</label><input type="date" id="ldt_dob"></div>
+      <div class="form-group"><label>DCN</label><input type="text" id="ldt_dcn" placeholder="Dept. Client Number"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Street</label><input type="text" id="ldt_street"></div>
+      <div class="form-group"><label>Apt or unit</label><input type="text" id="ldt_apt"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>City</label><input type="text" id="ldt_city"></div>
+      <div class="form-group"><label>ZIP</label><input type="text" id="ldt_zip" inputmode="numeric"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>County</label><select id="ldt_county" data-counties="all"><option value="">Not known yet</option></select></div>
+      <div class="form-group"><label>Heard about us</label><input type="text" id="ldt_source"></div>
+    </div>
+    <div class="form-group"><label>Add a note</label>
+      <textarea id="ldt_note" rows="3" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:10px;font-family:inherit;font-size:13px" placeholder="Anything you learned, for example: her daughter Amy helps with paperwork"></textarea>
+    </div>
+    <div id="ldt_msg" style="font-size:13px;color:var(--danger)"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('leadDetailsModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLeadDetails()">Save</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="editPipelineModal">
   <div class="modal" style="width:540px">
     <div class="modal-header">
@@ -7788,6 +7829,63 @@ function rpNames(o) {
     encodeURIComponent((x.name || 'Contact') + ', ' + (x.relation || (CDSRules.CONTACT_ROLES[x.role] || '').toLowerCase()))).join('|');
 }
 
+// Edit a lead's details and add a note, right on the lead page (2026-11-04, her ask). The address is kept
+// where the referral answers keep it (p.referral) when there are some, else on the lead itself.
+function leadAddress(p) {
+  const R = p.referral || {}, g = k => p[k] || R[k] || '';
+  return [[g('street'), g('apt')].filter(Boolean).join(' '), g('city'), g('zip')].filter(Boolean).join(', ');
+}
+// A date of birth typed as 3/4/1950 still shows in the date box; one that cannot be read is never wiped.
+function ldtIsoDay(v) {
+  v = String(v || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const m = v.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  return m ? m[3] + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0') : '';
+}
+function openLeadDetails(id) {
+  const p = getData('pipeline').find(x => x.id === id);
+  if (!p) return;
+  if (typeof bpFillCountySelects === 'function') bpFillCountySelects();
+  const R = p.referral || {}, bits = String(p.name || '').trim().split(/\s+/);
+  const vals = {
+    first: p.firstName || bits[0] || '', last: p.lastName || (bits.length > 1 ? bits.slice(1).join(' ') : ''),
+    phone: p.phone, email: p.email, dob: ldtIsoDay(p.dob || R.dob), dcn: p.dcn || R.dcn,
+    street: p.street || R.street, apt: p.apt || R.apt, city: p.city || R.city, zip: p.zip || R.zip,
+    county: p.county, source: p.source, note: '' };
+  Object.entries(vals).forEach(([k, v]) => { const el = document.getElementById('ldt_' + k); if (el) el.value = v || ''; });
+  const cty = document.getElementById('ldt_county');
+  if (p.county && cty && ![...cty.options].some(o => o.value === p.county)) cty.insertAdjacentHTML('beforeend', '<option>' + esc(p.county) + '</option>');
+  if (cty) cty.value = p.county || '';
+  document.getElementById('ldt_title').textContent = 'Edit details: ' + (p.name || 'this lead');
+  document.getElementById('ldt_msg').textContent = '';
+  document.getElementById('leadDetailsModal').dataset.id = id;
+  openModal('leadDetailsModal');
+}
+function saveLeadDetails() {
+  const id = document.getElementById('leadDetailsModal').dataset.id;
+  const pipeline = getData('pipeline'), p = pipeline.find(x => x.id === id);
+  const msg = document.getElementById('ldt_msg');
+  if (!p) { msg.textContent = 'That lead is gone. Close this and reload.'; return; }
+  const v = k => (document.getElementById('ldt_' + k).value || '').trim();
+  const first = v('first'), last = v('last');
+  if (!first) { msg.textContent = 'Add their first name.'; return; }
+  const email = v('email');
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.textContent = 'That email does not look right.'; return; }
+  p.firstName = first; p.lastName = last; p.name = [first, last].filter(Boolean).join(' ');
+  const oldDob = p.dob || (p.referral || {}).dob || '';
+  p.phone = v('phone'); p.email = email; p.dob = v('dob') || (oldDob && !ldtIsoDay(oldDob) ? oldDob : ''); p.dcn = v('dcn');
+  p.county = v('county'); p.source = v('source');
+  const where = p.referral || p;
+  ['street', 'apt', 'city', 'zip'].forEach(k => { where[k] = v(k); if (where !== p) delete p[k]; });
+  if (p.referral) { if (p.dob) p.referral.dob = p.dob; if (p.dcn) p.referral.dcn = p.dcn; }
+  const note = v('note');
+  if (note) { if (!Array.isArray(p.notes)) p.notes = []; p.notes.push({ date: _todayIso(), text: note }); }
+  const saved = setData('pipeline', pipeline);
+  closeModal('leadDetailsModal');
+  renderPipeline();
+  renderLeadProfile();
+  syncOneToGhl('pipeline', p.id, p.name, saved);
+}
 function renderLeadProfile(){
   const host = document.getElementById('lprof_body'); if(!host) return;
   const p = getData('pipeline').find(x => x.id === _lprofId);
@@ -7806,11 +7904,12 @@ function renderLeadProfile(){
       '<h2 style="font-size:20px;color:var(--primary);margin:0">' + esc(p.name || 'Unnamed') + '</h2>' +
       '<span class="badge" style="background:var(--gray-100)">' + esc(TYPE[p.type] || p.type) + '</span>' +
       (p.status ? '<span class="badge" style="background:var(--gray-100)">' + esc(PIPELINE_STATUS_LABELS[p.status] || p.status) + '</span>' : '') +
+      '<button class="btn btn-outline btn-sm" style="margin-left:auto" onclick="openLeadDetails(\'' + esc(p.id) + '\')">Edit details</button>' +
     '</div>' +
     row('Phone', p.phone) +
     // No phone of their own yet: whoever called for them (2026-10-29).
     (!p.phone ? (CDSRules.relatedPeople(p).filter(r => r.phone).slice(0, 1).map(r => row('Reach them through', r.name + (r.relation ? ' (' + r.relation + ')' : '') + ', ' + r.phone))[0] || '') : '') +
-    row('Email', p.email) + row('County', p.county) +
+    row('Email', p.email) + row('Address', leadAddress(p)) + row('County', p.county) +
     row('Date of birth', lpDate(p.dob || (R && R.dob))) + row('DCN', p.dcn || (R && R.dcn)) +
     row('First contact', p.firstContact) + (p.form ? '' : row('Heard about us', p.source)) +
     row('Leaving', p.leavingAgency) + row('Why switching', p.whySwitching) +
@@ -8065,7 +8164,7 @@ async function mountLeadEnrollCard(p) {
   const el = document.getElementById('lpEnroll');
   if (!el || !_db) return;
   try {
-    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=2');
+    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=3');
     mountLeadEnroll(el, { api: cdsMatchApi, lead: p, PDFLib: window.PDFLib, blank: ENROLL_BLANK, afterAgentSigned: fileHubPacketForLead,
       consumer: () => getData('consumers').find(c => (c.name || '').trim().toLowerCase() === (p.name || '').trim().toLowerCase()) || null });
   } catch (e) { el.innerHTML = '<div class="field-note" style="color:var(--danger)">The enrollment packet card did not load: ' + esc(e.message) + '</div>'; }
@@ -11164,7 +11263,7 @@ async function mountProfileEnroll(c) {
   const lead = getData('pipeline').find(p => String(p.id) === String(P.lead_id));
   if (!lead) { el.innerHTML = '<div class="field-note">Their packet\'s lead is no longer in Leads, so the packet card cannot open here.</div>'; return; }
   try {
-    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=2');
+    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=3');
     if (document.getElementById('profEnroll') !== el) return;   // the profile was drawn again meanwhile
     mountLeadEnroll(el, { api: cdsMatchApi, lead, PDFLib: window.PDFLib, blank: ENROLL_BLANK, consumer: () => c,
       afterAgentSigned: l => { delete _profPacket[c.id]; return fileHubPacketForLead(l); } });
