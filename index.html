@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=31"></script>
-<script src="leads-table.js?v=2"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="leads-table.js?v=3"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -809,7 +809,11 @@ button.fu-tile.check span { color:#14606F; }
 /* 2026-11-03 Leads as one table (leads-table.js, switch leadsTable): one row per person, a column per step */
 .ld-list.lt-host { background:transparent; box-shadow:none; border-radius:0; overflow:visible; }
 .lt { display:flex; flex-direction:column; gap:10px; }
-.lt-sum { display:flex; flex-wrap:wrap; gap:6px 18px; font-size:14px; color:#16283a; font-variant-numeric:tabular-nums; }
+.lt-sum { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:13px; color:#55677a; font-variant-numeric:tabular-nums; margin-left:auto; }
+.lt-bar { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; }
+.lt-m { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:#55677a; background:#fff; border:1px solid #d6dfe3; border-radius:999px; padding:3px 4px 3px 11px; }
+.lt-m select { font:inherit; font-size:13px; font-weight:600; color:#0f5f61; border:none; background:transparent; padding:2px 4px; max-width:210px; cursor:pointer; }
+.lt-m.on { background:#0f5f61; border-color:#0f5f61; color:#cfe9e6; } .lt-m.on select { color:#fff; } .lt-m.on select option { color:#16283a; }
 .lt-qs { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .lt-ql { font-size:12.5px; font-weight:700; color:#55677a; min-width:86px; }
 .lt-q { font:inherit; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#0f5f61; border:1px solid #d6dfe3; border-radius:999px; padding:4px 11px; }
@@ -8438,7 +8442,7 @@ function renderPipeline() {
   let shown = q || _ldStep === 'all' ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
   try { renderLdWho(shown, wcOn); } catch (e) { console.error('who called:', e); }
   // 2026-11-03 Leads as one table (leads-table.js, her switch leadsTable): the same people, one row each, instead of the cards.
-  if (window.LDT && LDT.on()) { LDT.draw({ open, closed, showClosed, match, today, calls: _leadCalls, cardsEl, stepsEl, pager: document.getElementById('ldPager'), who: wcOn ? _ldWhoFilter : 'all' }); return; }
+  if (window.LDT && LDT.on()) { LDT.draw({ open, closed, showClosed, match, today, calls: _leadCalls, cardsEl, stepsEl, pager: document.getElementById('ldPager'), who: wcOn ? _ldWhoFilter : 'all', whoOn: wcOn }); return; }
   if (window.LDT) LDT.restore(stepsEl, cardsEl);
   if (wcOn && _ldWhoFilter !== 'all') shown = shown.filter(x => x.c.whoCalled === _ldWhoFilter);
   if (showClosed) shown = shown.concat(closed.filter(match));
@@ -8575,7 +8579,8 @@ function renderLdWho(shown, on) {
     '<button type="button" class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" onclick="ldWhoSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button></div>';
   // 2026-11-03 her "clear that": the owner's switch rows fold into one closed line (they stay one click away)
   if (h) h = '<details class="ld-sws"' + (_ldSwOpen ? ' open' : '') + ' ontoggle="_ldSwOpen=this.open"><summary>Leads switches (only you see these)</summary>' + h + '</details>';
-  if (on) {
+  // 2026-11-04: with the Leads table showing, Who called is one of the table's menus instead of this row of chips
+  if (on && !(window.LDT && LDT.on())) {
     const kinds = Object.keys(CDSRules.WHO_CALLED);
     const n = k => shown.filter(x => x.c.whoCalled === k).length;
     h += '<div class="ld-filters" role="group" aria-label="Who called"><span class="ld-wc-lbl">Who called:</span>' +

@@ -101,6 +101,14 @@ with sync_playwright() as pw:
     i = by.get('Ida Kessler', {})
     ck('Ida (packet done, attendant check not back): packet ticked, attendant waiting, Waiting on Attendant', i.get('cells', [''] * 6)[4].startswith('✓') and 'Sam Helper' in i['cells'][5] and i['wait'].startswith('Attendant'), i)
     ck('the summary adds only what the page line does not say (no second "need you now")', 'with the state' in R['sum'] and 'need you now' not in R['sum'], R['sum'])
+    ck('the filters are one short row of menus (Step, Who needs, Waiting on, Kind), no rows of chips', pg.evaluate("""()=>{ const bar = document.querySelector('#ldCards .lt-bar'); const labels = [...bar.querySelectorAll('.lt-m > span')].map(x => x.textContent);
+      return JSON.stringify(labels) === JSON.stringify(['Step','Who needs','Waiting on','Kind']) && !document.querySelector('#ldCards .lt-qs') && bar.getBoundingClientRect().height < 60; }"""))
+    ck('picking a menu filters the table and is remembered', pg.evaluate("""()=>{ const s = [...document.querySelectorAll('#ldCards .lt-m')].find(l => l.textContent.startsWith('Waiting on')).querySelector('select');
+      s.value = 'state'; s.dispatchEvent(new Event('change')); const n = document.querySelectorAll('#ldCards table.lt-t tbody tr').length;
+      const kept = JSON.parse(localStorage.getItem('ldTableF')).hold === 'state'; LDT.clear(); return n === 2 && kept; }"""))
+    ck('with Who called labels on, Who called is a menu in the same row (no separate chip row)', pg.evaluate("""()=>{ _store.leadsWhoCalled = { live: true }; renderPipeline();
+      const ok = [...document.querySelectorAll('#ldCards .lt-m > span')].some(x => x.textContent === 'Who called') && !document.querySelector('#ldWho .ld-filters');
+      _store.leadsWhoCalled = {}; renderPipeline(); return ok; }"""))
     ck('the owner switch rows fold into one closed line', pg.evaluate("()=>{ const d = document.querySelector('#ldWho details.ld-sws'); return !!d && !d.open && d.textContent.includes('Leads as a table'); }"))
     ck('the Who called chips still pick who shows in the table', pg.evaluate("""()=>{ _store.leadsWhoCalled = { live: true }; _ldWhoFilter = 'self'; renderPipeline();
       const n = document.querySelectorAll('#ldCards table.lt-t tbody tr').length; _ldWhoFilter = 'all'; _store.leadsWhoCalled = {}; renderPipeline(); return n < 10; }"""))

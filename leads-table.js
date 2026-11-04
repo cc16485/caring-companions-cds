@@ -170,16 +170,18 @@
       + (r.closed ? '' : '<div class="lt-pms">' + COLS.map((k, i) => { const y = r.cells[i] || {}; return '<span class="lt-pm' + (y.s && y.s !== 'none' ? ' lt-pm-' + y.s : '') + (i === r.cur ? ' lt-pm-hi' : '') + '">' + E(k.h) + '</span>'; }).join('') + '</div>')
       + '<div class="lt-card-b">' + (r.closed ? '<span class="lt-sub">' + E(r.holdNote) + '</span>' : '<span class="lt-who lt-who-' + r.hold + '">' + HOLD[r.hold] + '</span>' + (r.holdNote ? '<span class="lt-sub">' + E(r.holdNote) + '</span>' : '')) + btn + '</div></div>';
   }
-  function chips(label, key, labels, rows) {
-    return '<div class="lt-qs"><span class="lt-ql">' + label + '</span>' + Object.keys(labels).map(k => {
-      const n = rows.filter(r => (key === 'kind' ? r.type : r[key]) === k && pass(r, key)).length;
-      return '<button type="button" class="lt-q' + (F[key] === k ? ' on' : '') + '" aria-pressed="' + (F[key] === k) + '" onclick="LDT.set(\'' + key + '\',\'' + k + '\')">' + E(labels[k]) + ' <b>' + n + '</b></button>';
-    }).join('') + '</div>';
+  /* 2026-11-04 her "the filters are taking up too much space at top": one row of small menus instead of rows of chips */
+  function menu(label, key, labels, rows, cur, pick) {
+    const v = cur === undefined ? F[key] : cur;
+    return '<label class="lt-m' + (v && v !== 'all' ? ' on' : '') + '"><span>' + label + '</span><select onchange="' + (pick || 'LDT.pick(\'' + key + '\',this.value)') + '">'
+      + '<option value="">All</option>' + Object.keys(labels).map(k => {
+        const n = rows.filter(r => (key === 'kind' ? r.type : key === 'who' ? r.c.whoCalled : r[key]) === k && (key === 'who' || pass(r, key))).length;
+        return '<option value="' + k + '"' + (v === k ? ' selected' : '') + '>' + E(labels[k]) + ' (' + n + ')</option>';
+      }).join('') + '</select></label>';
   }
-
   /* draw the table into the Leads list box (renderPipeline hands over what it already worked out) */
   function draw(o) {
-    const { open, closed, showClosed, match, today, calls, cardsEl, stepsEl, pager, who } = o;
+    const { open, closed, showClosed, match, today, calls, cardsEl, stepsEl, pager, who, whoOn } = o;
     /* the cards' step tabs and sort are the table's Step chips and order now (the CSS display wins over hidden, so set it) */
     if (stepsEl) stepsEl.style.display = 'none';
     const sp = document.getElementById('ldSort'); if (sp && sp.closest('label')) sp.closest('label').style.display = 'none';
@@ -196,12 +198,14 @@
     const cnt = document.getElementById('ldCount'); if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' lead' : ' leads');
     const n = f => rows.filter(f).length;
     const jobs = {}; COLS.forEach(c => { jobs[c.k] = c.job; });
-    const any = F.step || F.job || F.hold || F.kind;
+    const any = F.step || F.job || F.hold || F.kind || (whoOn && who && who !== 'all');
+    const WHO = whoOn && window.CDSRules && CDSRules.WHO_CALLED;
     cardsEl.innerHTML = '<div class="lt">'
+      + '<div class="lt-bar">' + menu('Step', 'step', STEP, rows) + menu('Who needs', 'job', jobs, rows) + menu('Waiting on', 'hold', HOLD, rows) + menu('Kind', 'kind', KIND, rows)
+      + (WHO ? menu('Who called', 'who', WHO, rows, who, 'ldWhoFilter(this.value||\'all\')') : '')
+      + (any ? '<button type="button" class="lt-link" onclick="LDT.clear()">Clear filters</button>' : '')
       /* the page's own line above already says how many people and who needs you now */
-      + '<div class="lt-sum"><span><b>' + n(r => r.hold === 'state') + '</b> with the state</span><span><b>' + n(r => r.hold === 'consumer') + '</b> waiting on the consumer</span><span><b>' + n(r => r.step === 'ready') + '</b> ready to start</span></div>'
-      + chips('Step', 'step', STEP, rows) + chips('Who needs', 'job', jobs, rows) + chips('Waiting on', 'hold', HOLD, rows) + chips('Kind', 'kind', KIND, rows)
-      + (any ? '<div class="lt-qs"><button type="button" class="lt-q" onclick="LDT.clear()">Clear filters</button></div>' : '')
+      + '<span class="lt-sum"><span><b>' + n(r => r.hold === 'state') + '</b> with the state</span><span><b>' + n(r => r.hold === 'consumer') + '</b> waiting on the consumer</span><span><b>' + n(r => r.step === 'ready') + '</b> ready to start</span></span></div>'
       + '<div class="lt-wrap"><table class="lt-t"><thead><tr class="lt-grp"><th class="lt-n"></th><th colspan="2">To call</th><th colspan="2" class="lt-sep">Sent to state</th><th colspan="3" class="lt-sep">Ready to start</th><th colspan="3" class="lt-sep"></th></tr>'
       + '<tr><th class="lt-n">Person</th>' + COLS.map((c, i) => '<th' + (i === 2 || i === 4 ? ' class="lt-sep"' : '') + '>' + E(c.h) + '</th>').join('') + '<th class="lt-sep">Waiting on</th><th>Call back on</th><th>Days on this step</th></tr></thead><tbody>'
       + (list.length ? list.map(rowHTML).join('') : '<tr><td colspan="' + (COLS.length + 4) + '" class="lt-empty">' + (rows.length ? 'Nobody matches these filters.' : 'No open leads right now.') + '</td></tr>') + '</tbody></table></div>'
@@ -228,7 +232,8 @@
   window.LDT = {
     on, live, draw, restore, switchHtml, COLS, _PK: PK, _F: () => F,
     set(k, v) { F[k] = F[k] === v ? null : v; save(); again(); },
-    clear() { F = { step: null, job: null, hold: null, kind: null }; save(); again(); },
+    pick(k, v) { F[k] = v || null; save(); again(); },
+    clear() { F = { step: null, job: null, hold: null, kind: null }; save(); if (typeof _ldWhoFilter !== 'undefined') _ldWhoFilter = 'all'; again(); },
     preview(v) { ls('ldTable', v ? '1' : null); again(); },
     view(v) { ls('ldView', v === 'cards' ? 'cards' : null); again(); },
     async flip(v) { if (!owner()) return; await setObj('leadsTable', { live: !!v, by: typeof _ldWhoBy === 'function' ? _ldWhoBy() : 'office', at: new Date().toISOString() }); again(); },
