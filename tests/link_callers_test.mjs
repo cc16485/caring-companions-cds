@@ -122,7 +122,7 @@ const fresh = () => ({
 {
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   ok(html.includes('id="linkLeadModal"') && html.includes('id="contactModal"'), 'the two windows are on the page');
-  ok(/'closed_linked'\]/.test(html), 'the hub counts linked as closed');
+  ok(html.slice(html.indexOf('const PIPELINE_CLOSED_STATUSES ='), html.indexOf('const PIPELINE_DONE_STATUSES')).includes("'closed_linked'"), 'the hub counts linked as closed');   // 2026-11-04: no longer the last item
   ok(html.includes("rpCardHtml('consumer', c)") && html.includes("rpCardHtml('lead', p)"), 'Contacts card on both profiles');
   ok(html.includes("openLinkLead(document.getElementById('cl_id').value)"), 'Close offers: they called for someone else');
   ok(html.includes('function lkChooseNew()') && html.includes('CDSRules.careFor(lead,'), 'the window can make this lead the parent\'s');

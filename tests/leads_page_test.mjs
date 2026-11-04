@@ -147,7 +147,19 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   const m = html.slice(html.indexOf('id="closeLeadModal"'), html.indexOf('id="addPipelineModal"'));
   ['closed_inactive', 'closed_ni', 'closed_other', 'closed_spam'].forEach(st => ok(m.includes("closeLeadAs('" + st + "')"), 'Close offers ' + st));
-  ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam'(,'closed_pool')?(,'closed_linked')?\]/.test(html), 'the hub knows all four (and closed_pool, closed_linked)');
+  ok(/PIPELINE_CLOSED_STATUSES = \['closed_ni','closed_other','closed_inactive','closed_spam','closed_pool','closed_linked',/.test(html), 'the hub knows all four (and closed_pool, closed_linked)');
+  /* 2026-11-04 her ask: close out a lead with no Medicaid, outside our service area, and the reasons she picked */
+  const NEW8 = ['closed_no_medicaid', 'closed_area', 'closed_state_no', 'closed_more_care', 'closed_no_attendant', 'closed_facility', 'closed_passed', 'closed_no_reach'];
+  const pcs = html.slice(html.indexOf('const PIPELINE_CLOSED_STATUSES ='), html.indexOf('const PIPELINE_DONE_STATUSES'));
+  NEW8.forEach(st => {
+    ok(R.CLOSED.includes(st) && !!R.CLOSED_LABELS[st], st + ': a closed status with words, in the rules the 8am email uses too');
+    ok(pcs.includes("'" + st + "'"), st + ': the hub counts it as closed');
+    ok(R.leadCard({ type: 'referral', status: st, stateSubmit: '2026-01-01', followup: '2026-01-01' }, [], T).step === 'closed', st + ': off the Leads list');
+    ok((html.match(new RegExp('<option value="' + st + '"', 'g')) || []).length === 2, st + ': in both status menus');
+  });
+  ['closed_no_medicaid', 'closed_area', 'closed_more_care', 'closed_no_attendant', 'closed_facility', 'closed_passed', 'closed_no_reach'].forEach(st => ok(m.includes("closeLeadAs('" + st + "')"), 'Close offers ' + st));
+  ['reach', 'level', 'other'].forEach(w => ok(m.includes("closeLeadAs('closed_state_no','" + w + "')"), 'The state said no asks why: ' + w));
+  ok(!/\u2014/.test(m), 'no em dashes in the Close window');
   const r = html.slice(html.indexOf('function renderPipeline()'), html.indexOf('function convertToConsumer('));
   ok(r.includes('openCloseLead(') && r.includes('reopenLead(') && r.includes('c.cameIso'), 'rows have Close, Reopen and the came-in date');
   // 10-29: one row per person, sortable by came in and last contact
