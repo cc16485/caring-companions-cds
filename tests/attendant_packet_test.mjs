@@ -69,7 +69,8 @@ ok(repeat.repeat && !repeat.link, 'same phone again: no link on screen, it goes 
 
 // ---------- Step 1 ----------
 let v = await H('caregiver', 'packet', { link });
-ok(v.step === 1 && v.consumer === 'Ruth Ellis' && v.answers.first === 'Jordan' && v.docs.application && !v.docs.contract, 'packet opens at Step 1; Step 2 documents not shown yet');
+ok(v.step === 1 && v.consumer === 'Ruth Ellis' && v.answers.first === 'Jordan' && v.docs.application && v.docs.contract && v.docs.pay && v.docs.units && v.docs.handbook, 'packet opens at Step 1 with all six forms (2026-11-04: signed at once)');
+ok(/will read it before my first shift/.test(JSON.stringify(v.docs.handbook)) && !/I have read it/.test(JSON.stringify(v.docs.handbook)) && v.docs.handbook.version === '2026-11-04', 'handbook form: received, will read it before the first shift (new version)');
 await refuses(() => H('caregiver', 'packetSign', { link, form: 'application', typed_name: 'Jordan Ellis', agree: true }), /sign electronically/, 'no signing before e-sign consent');
 await H('caregiver', 'packetEsign', { link, ip: '1.2.3.4', agent: 'test' });
 await refuses(() => H('caregiver', 'packetSign', { link, form: 'application', typed_name: 'Jordan Ellis', agree: true }), /please add/, 'application refuses while answers are missing');
@@ -100,7 +101,7 @@ await H('caregiver', 'packetIdentity', { link, dob: '1999-05-02', ssn: '912-34-5
 const scr = (await pg.query(`select * from cds_screening where pool_id=$1`, [pool.id])).rows[0];
 const sec = (await pg.query(`select * from cds_screening_secret where pool_id=$1`, [pool.id])).rows[0];
 ok(scr.ssn_last4 === '5678' && scr.legal_first === 'Jordan' && sec && !String(sec.ssn_ciphertext).includes('912345678'), 'SSN sealed in the screening record, only last 4 visible');
-await refuses(() => H('caregiver', 'packetSign', { link, form: 'contract', typed_name: 'Jordan Ellis', agree: true }), /checks are clear/, 'Step 2 forms refused before checks are clear');
+await refuses(() => H('caregiver', 'packetSign', { link, form: 'contract', typed_name: 'Jordan Ellis', agree: true }), /initials after every part/, 'the contract can be signed in Step 1, before checks (only the initials are asked for)');
 // answers frozen after application? background answers are saved before signing the application in the real page; here use SQL to add them
 await H('caregiver', 'packetSign', { link, form: 'background', typed_name: 'Jordan Ellis', agree: true });
 const pk = (await pg.query(`select * from cds_packets where pool_id=$1`, [pool.id])).rows[0];
@@ -125,7 +126,7 @@ const after = ob1.filter(o => o.template === 'packet_att_after_step1');
 ok(after.length === 2 && after.every(o => /orientation/.test(o.body) && /handbook/.test(o.body)), 'attendant gets orientation + handbook by text and email');
 ok(!JSON.stringify(ob1).includes('—'), 'no em dashes in any message');
 v = await H('caregiver', 'packet', { link });
-ok(v.step === 'checks' && v.signed.application && v.signed.background, 'attendant sees: waiting on checks');
+ok(v.step === 'papers' && v.signed.application && v.signed.background, 'application signed, papers not yet: the link asks for the papers next (checks or not)');
 
 // ---------- office view + copy buttons ----------
 const list = (await S('packetList', {})).attendants;
@@ -153,7 +154,7 @@ ok(t2.length === 1 && /Empeon invite/.test(t2[0].title), 'office to-do: send the
 job = await H('job', 'packetJob', {});
 ok(job.step2_opened === 0, 'Step 2 opening is announced only once');
 v = await H('caregiver', 'packet', { link });
-ok(v.step === 2 && v.docs.contract && v.call_slots.length >= 5, 'Step 2 documents and call times now shown');
+ok(v.step === 'papers' && v.docs.contract && v.call_slots.length >= 5, 'checks clear, papers still unsigned: papers first, and call times are offered');
 ok(!JSON.stringify(v.docs).includes('{consumer}') && JSON.stringify(v.docs.pay).includes('Ruth Ellis'), 'names filled into the documents');
 
 // ---------- Step 2 ----------
@@ -251,6 +252,8 @@ ok(!(await outbox()).some(o => o.audience === 'consumer' || /Gene Porter/.test(o
 let bg = await S('packetGet', { pool_id: bpool });
 ok(!(await S('packetList', {})).attendants.find(a => a.pool_id === bpool).consumer_waiting, 'waiting on a waiver is not marked urgent');
 ok(bg.status.label === 'Waiting on Good Cause Waiver' && bg.status.tone === 'y' && !bg.status.step2Open && bg.screening.review === 'gcw_needed', 'status: waiting on the waiver, Step 2 stays locked');
+await pg.query(`insert into cds_packet_forms (pool_id, form_key, version, fingerprint, signed_name) values ($1,'contract','t','x','Brenda Cole')`, [bpool]);
+await refuses(() => S('packetCountersign', { pool_id: bpool, typed_name: 'Samantha Troutman' }), /checks are clear/, 'the office cannot countersign before the checks are clear (2026-11-04)');   // signed forms are write-once, so Brenda's contract stays signed (her papers are otherwise unsigned)
 await refuses(() => H('caregiver', 'packetSign', { link: 'x', form: 'contract' }), /./, 'no Step 2 signing (no link)');
 await refuses(() => S('packetFcsr', { pool_id: bpool, result: 'clear', proof: PDF }), /already recorded/, 'a recorded finding cannot be overwritten with clear');
 const brem = (await pg.query(`select reminders from cds_packets where pool_id=$1`, [bpool])).rows[0].reminders;

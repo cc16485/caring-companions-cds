@@ -10,7 +10,9 @@ export const COMPANY = 'Troutman Enterprises, LLC DBA Caring Companions In-Home 
 export const HANDBOOK_URL = 'https://www.caringcds.com/handbook/';
 export const ORIENTATION_URL = 'https://www.caringcds.com/attendant-orientation/';
 
-// step 1 = signed right after the application, step 2 = after checks are clear.
+// step 1 = signed in Step 1, all at once (2026-11-04, Samantha: "I would rather they sign that at once in step 1 - the less
+// steps the better"). Before, the contract, pay, units and handbook waited for clear checks ("step 2").
+// The office still countersigns the contract only once the checks are clear.
 // initials: the contract needs the attendant's initials after each numbered part.
 export const FORMS = {
   application: { step: 1, version: '2026-10-21', title: 'CDS Attendant Application', initials: false, doc: [
@@ -59,7 +61,7 @@ export const FORMS = {
     "p": "I have read and understand this policy, and I authorize the company to obtain and rely on the information in these screenings, reports, references and verifications in considering me for employment."
    }
   ] },
-  contract:    { step: 2, version: '2026-10-21', title: 'Attendant Care Contract', initials: true, countersign: true, doc: [
+  contract:    { step: 1, version: '2026-10-21', title: 'Attendant Care Contract', initials: true, countersign: true, doc: [
    {
     "h": "1. Definitions"
    },
@@ -157,7 +159,7 @@ export const FORMS = {
     "p": "State law requires a background screening for every new attendant, and another one when you ask to work for an additional consumer. Depending on the results or your application, you may not be eligible to provide services and be paid under CDS until you obtain a Good Cause Waiver. If any part of this Contract cannot be enforced, the rest still applies, and each part is enforced as fully as the law allows. Headings are for convenience only. This Contract can only be changed in writing, signed and dated by everyone."
    }
   ] },
-  pay:         { step: 2, version: '2026-10-21', title: 'Attendant Pay Rate Information', initials: false, doc: [
+  pay:         { step: 1, version: '2026-10-21', title: 'Attendant Pay Rate Information', initials: false, doc: [
    {
     "h": "Attendant Pay Rate Information"
    },
@@ -177,7 +179,7 @@ export const FORMS = {
     "p": "By signing, I agree to the yearly wage changes required by Missouri, and I agree that my Consumer and I have gone over this form and agree to it."
    }
   ] },
-  units:       { step: 2, version: '2026-10-21', title: 'Unit Utilization and Payroll Agreement', initials: false, doc: [
+  units:       { step: 1, version: '2026-10-21', title: 'Unit Utilization and Payroll Agreement', initials: false, doc: [
    {
     "h": "Unit Utilization and Payroll Agreement"
    },
@@ -197,17 +199,19 @@ export const FORMS = {
     "p": "I understand it is my job to watch my times and remember to clock out. If I forget to clock out, I must contact Caring Companions and complete the EVV correction form. I will not be paid for more than the monthly units in the Plan of Care."
    }
   ] },
-  handbook:    { step: 2, version: '2026-10-21', title: 'Attendant Handbook acknowledgment', initials: false, doc: [
+  handbook:    { step: 1, version: '2026-11-04', title: 'Attendant Handbook acknowledgment', initials: false, doc: [
    {
     "h": "Attendant Handbook acknowledgment"
    },
    {
-    "p": "I received the Caring Companions In-Home Senior Care CDS Attendant Handbook at caringcds.com/handbook. I have read it, and I will follow it while I work as a CDS attendant. I know I can go back to it any time I have a question, and that I can call (417) 218-2888 with anything it does not answer."
+    "p": "I received the Caring Companions In-Home Senior Care CDS Attendant Handbook at caringcds.com/handbook. I will read it before my first shift, and I will follow it while I work as a CDS attendant. I know I can go back to it any time I have a question, and that I can call (417) 218-2888 with anything it does not answer."
    }
   ] },
 };
+// STEP1 = the application (signing these starts the checks). PAPERS = the rest of Step 1. STEP2 keeps its old name for older code.
 export const STEP1 = ['application', 'background'];
-export const STEP2 = ['contract', 'pay', 'units', 'handbook'];
+export const PAPERS = ['contract', 'pay', 'units', 'handbook'];
+export const STEP2 = PAPERS;
 // The numbered parts of the contract, each initialed.
 export const CONTRACT_PARTS = FORMS.contract.doc.filter(b => b.h && /^\d+\./.test(b.h)).map(b => b.h.split('.')[0]);
 

@@ -2028,7 +2028,7 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
     <div class="step"><div class="step-num">!</div><div class="step-content"><div class="step-title">If the FCSR finds something</div>
       <div class="step-desc">Check it against the <a href="https://mmac.mo.gov/wp-content/uploads/Disqaulifying-Factors-FCSR-2023.pdf" target="_blank" rel="noopener">FCSR "cannot hire" list (MMAC)</a>, then tap <strong>Something came up</strong> on their profile and pick one:
         <ul style="margin:6px 0 0 18px">
-          <li><strong>On the list:</strong> they need a Good Cause Waiver. The hub texts and emails them the steps. No shifts and no Step 2 papers while it is pending. Every 2 weeks you get a to-do to check the waiver status on the FCSR site (Good Cause Waiver tab, Waiver Status). When the approval letter comes, add it and pick Clear to continue or Not moving forward.</li>
+          <li><strong>On the list:</strong> they need a Good Cause Waiver. The hub texts and emails them the steps. No shifts, no Empeon invite and no ID check while it is pending. Every 2 weeks you get a to-do to check the waiver status on the FCSR site (Good Cause Waiver tab, Waiver Status). When the approval letter comes, add it and pick Clear to continue or Not moving forward.</li>
           <li><strong>On the EDL:</strong> they cannot work in CDS. A waiver is not possible.</li>
           <li><strong>Not on the list</strong> (for example a misdemeanor): clear after review, nothing is sent.</li>
         </ul>
@@ -2036,7 +2036,7 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Orientation video and handbook (attendant)</div>
       <div class="step-desc">The links are on their last Step 1 screen and sent by text and email. Reminders go out by themselves.</div></div></div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Papers (attendant)</div>
-      <div class="step-desc">Opens when checks are clear: Attendant Care Contract, pay rate, unit agreement, handbook.</div></div></div>
+      <div class="step-desc">Signed in Step 1 with the application (since November 4): Attendant Care Contract, pay rate, unit agreement, handbook. You countersign the contract once their checks are clear.</div></div></div>
     <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Empeon (office, about 3 minutes)</div>
       <div class="step-desc">Copy for Empeon, send the invite, tap <strong>Empeon invite sent</strong>. W-4, I-9, direct deposit and ID photos happen in Empeon.</div></div></div>
     <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">ID call (office, 5 minutes)</div>
@@ -5492,7 +5492,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=19');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=20');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
