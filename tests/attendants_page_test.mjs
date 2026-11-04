@@ -138,5 +138,47 @@ ok(/On the EDL/.test(fp) && !/Clear to continue/.test(fp), 'EDL: no clear button
 ok(/Clear: waiver approved/.test(H.fcsrPanelHtml({ ...base, screening: { result: 'findings', review: 'cleared_waiver' } })), 'cleared with a waiver');
 ok(!/—/.test(src), 'no em dashes in the page');
 
+// ---------- Onboarding as one table (2026-11-04) ----------
+{
+  const P = await import(ROOT + '/supabase/functions/_shared/packet/rules.js');
+  const cells = over => Object.fromEntries(P.TABLE_COLS.map(k => [k, { s: 'done', t: '2026-10-15T15:00:00Z' }]).map(([k, v]) => [k, over[k] || v]));
+  const tb = (over, hold, job, moved) => ({ cells: cells(over), hold, note: '', job, moved });
+  const packets = [
+    { pool_id: 'a', name: 'Jeana Wise', consumer: 'Shasta Reed', consumer_waiting: true, step1_at: '2026-10-13T15:00:00Z', table: tb({ fcsr: { s: 'todo', t: 'Copy for FCSR', act: 'open' } }, 'office', 'fcsr', '2026-10-19T15:00:00Z') },
+    { pool_id: 'b', name: 'Nora Kidd', consumer: 'Opal Henning', consumer_waiting: false, step1_at: '2026-10-01T15:00:00Z', table: tb({ fp: { s: 'wait', t: 'Sent' } }, 'fingerprints', 'fp', '2026-10-08T15:00:00Z') },
+    { pool_id: 'c', name: 'Lena Fry', consumer: 'Leona Marsh', consumer_waiting: false, step1_at: '2026-10-10T15:00:00Z', late_since: '2026-10-21T21:00:00Z', table: tb({ i9: { s: 'todo', t: 'I-9 done in Empeon', act: 'i9_done' } }, 'office', 'i9', '2026-10-21T15:00:00Z') },
+    { pool_id: 'd', name: 'Gail Reyes', consumer: 'Curtis Bell', active: true, step1_at: '2026-10-01T15:00:00Z', updated_at: '2026-10-21T15:00:00Z', table: null },
+    { pool_id: 'e', name: 'Marcus Lane', consumer: 'Hazel Dunn', consumer_waiting: true, step1_at: null, started_at: '2026-10-21T15:00:00Z', table: tb({ step1: { s: 'wait', t: 'Not started' } }, 'attendant', 'step1', '2026-10-21T15:00:00Z') },
+  ];
+  const g = H.buildGroups({ packets, now: NOW });
+  const rows = H.onboardingRows({ starting: g.starting, packets, now: NOW });
+  const R = Object.fromEntries(rows.map(r => [r.name.split(' ')[0], r]));
+  eq(rows.length, 5, 'one row per attendant on the Onboarding tab');
+  ok(R.Jeana.urg === 'now' && /Consumer waiting, no change in 3 weekdays/.test(R.Jeana.why), 'red: consumer waiting and nothing moved in 2+ weekdays');
+  ok(R.Lena.urg === 'now' && /To-do late since Oct 21/.test(R.Lena.why), 'red: an office to-do past due');
+  ok(R.Nora.urg === 'quiet' && R.Nora.days === 14 && R.Nora.hold === 'fingerprints', 'gold: quiet 10+ days; waiting on fingerprints');
+  ok(R.Marcus.urg === '' && R.Marcus.hold === 'attendant', 'consumer waiting but Step 1 not signed yet: not red (the reminders go out)');
+  ok(R.Gail.ready && R.Gail.cells === null && R.Gail.hold === 'none' && R.Gail.urg === '', 'every step done: ready, waiting on a first shift');
+  eq(H.atFilter(rows, { show: 'now' }).map(r => r.id).sort(), ['a', 'c'], 'Show: Need you now');
+  eq(H.atFilter(rows, { show: 'waiting' }).map(r => r.id).sort(), ['a', 'e'], 'Show: Consumer waiting');
+  eq(H.atFilter(rows, { hold: 'office' }).map(r => r.id).sort(), ['a', 'c'], 'Waiting on: Office');
+  eq(H.atFilter(rows, { job: 'fp' }).map(r => r.id), ['b'], 'Who needs: Fingerprints');
+  eq(H.atFilter(rows, { show: 'now', job: 'i9' }).map(r => r.id), ['c'], 'menus combine');
+  ok(H.AT_COLS.map(c => c[1]).join() === 'Step 1,Orientation,FCSR,EDL,OIG,Fingerprints,Empeon invite,Empeon,ID video check,I-9 Section 2,Countersign', 'the columns, in order, as on the mockup');
+  ok(H.AT_COLS.map(c => c[0]).join() === P.TABLE_COLS.join(), 'the page and the server agree on the columns');
+  // the server rules for one row
+  const st0 = { step1: true, checksClear: false, active: false, label: 'Run EDL and FCSR' };
+  const scr0 = { registered: false, screened: false, findings: false, raw: {}, steps: [0, 0, 0, 0, 0, 0, { checks: [{ key: 'edl', clear: false }, { key: 'edr', clear: false }, { key: 'oig', clear: true, at: '2026-10-20' }, { key: 'mo_medicaid', clear: false }] }] };
+  let row = P.tableRow({ answers: {}, step1_signed_at: '2026-10-19T15:00:00Z' }, {}, scr0, st0);
+  ok(row.cells.fcsr.t === 'Copy for FCSR' && row.cells.edl.t === 'Copy for EDL' && row.cells.oig.s === 'todo' && row.cells.fp.s === 'na' && row.hold === 'office' && row.job === 'fcsr', 'server row: checks to run, fingerprints not needed');
+  row = P.tableRow({ answers: {}, step1_signed_at: '2026-10-19T15:00:00Z' }, {}, { ...scr0, raw: { screen_requested_at: '2026-10-20T15:00:00Z' }, steps: [0, 0, 0, 0, 0, 0, { checks: [{ key: 'edl', clear: true }, { key: 'oig', clear: true }] }] }, st0);
+  ok(row.cells.fcsr.t === 'Pending at the state' && row.hold === 'state', 'server row: FCSR pending, waiting on the state');
+  row = P.tableRow({ answers: {}, step1_signed_at: '2026-10-19T15:00:00Z' }, {}, { ...scr0, findings: true, review: 'gcw_needed' }, { ...st0, label: 'Waiting on Good Cause Waiver' });
+  ok(row.cells.fcsr.warn && row.cells.fcsr.t === 'Good Cause Waiver', 'server row: Good Cause Waiver in gold');
+  row = P.tableRow({ answers: {} }, {}, scr0, { ...st0, step1: false });
+  ok(row.cells.step1.t === 'Not started' && row.cells.fcsr.s === 'off' && row.hold === 'attendant' && row.job === 'step1', 'server row: Step 1 not signed, nothing else offered yet');
+  ok(!JSON.stringify(P.tableRow({ answers: {} }, {}, scr0, st0)).includes('—') && !/—/.test(readFileSync(ROOT + '/supabase/functions/_shared/packet/rules.js', 'utf8')), 'no em dashes');
+}
+
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);

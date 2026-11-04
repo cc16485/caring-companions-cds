@@ -39,6 +39,9 @@ export const DEFAULT_REQUIRED_CHECKS = [
   { key: 'age18', label: 'Age 18 or older', source: 'dob' },
   { key: 'id_match', label: 'Identity matches the screening', source: 'office' },
 ];
+// 2026-11-04 (her rule): a fingerprint background check, only for an attendant whose Step 1 says they have not
+// lived only in Missouri the last 5 years (packet answer mo_only 'more'). Added per person, never to the list above.
+export const FINGERPRINT_CHECK = { key: 'fingerprints', label: 'Fingerprint background check (lived outside Missouri)', source: 'office' };
 
 export const SCREENING_STEPS = [
   { n: 1, key: 'reg_needed', label: 'FCSR registration needed' },
@@ -78,7 +81,7 @@ export function screeningSummary(scr, checks, required = DEFAULT_REQUIRED_CHECKS
   const checkRows = required.map(r => {
     const c = byKey[r.key];
     return { key: r.key, label: r.label, result: c ? c.result : null, clear: !!c && c.result === 'clear',
-      at: c ? c.checked_on : null, by: c ? c.recorded_by : null, proof: c ? c.proof_media_id : null };
+      at: c ? c.checked_on : null, by: c ? c.recorded_by : null, proof: c ? c.proof_media_id : null, recorded_at: c ? c.recorded_at : null };
   });
   const checksClear = checkRows.every(c => c.clear);
   const registered = !!scr.reg_verified_at;

@@ -111,7 +111,9 @@
     }
     /* 6 Attendant */
     const a = p.attendant;
-    if (a && a.name) {
+    const ak = typeof attPacketFor === 'function' ? attPacketFor(p) : null;   // 2026-11-04 one attendant record: their packet's real step
+    if (ak) cells[5] = ak.active ? ok(ak.name) : wait(ak.name + ': ' + ak.label, ak.tone === 'y');
+    else if (a && a.name) {
       const steps = typeof ATT_STEPS !== 'undefined' ? ATT_STEPS : [];
       const n = steps.filter(([k]) => a[k]).length;
       if (a.backgroundResult === 'failed') cells[5] = late('Pick another', "openLeadAttendant('" + id + "')", a.name + ': background failed');

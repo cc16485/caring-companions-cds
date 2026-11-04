@@ -51,9 +51,16 @@ export function createMatch(deps) {
     const r = await one('select value from cds_match_settings where key=$1', [key]);
     return r ? (typeof r.value === 'string' ? JSON.parse(r.value) : r.value) : fallback;
   }
-  async function requiredChecks() {
+  // poolId: that attendant's list, with fingerprints added when their Step 1 says they lived outside Missouri.
+  async function requiredChecks(poolId) {
     const keys = await setting('required_checks', R.DEFAULT_REQUIRED_CHECKS.map(c => c.key));
-    return keys.map(k => R.DEFAULT_REQUIRED_CHECKS.find(c => c.key === k) || { key: k, label: k, source: 'office' });
+    const list = keys.map(k => R.DEFAULT_REQUIRED_CHECKS.find(c => c.key === k) || { key: k, label: k, source: 'office' });
+    if (poolId && !list.some(c => c.key === R.FINGERPRINT_CHECK.key)) {
+      let more = false;
+      try { more = !!(await one(`select 1 as y from cds_packets where pool_id=$1 and answers->>'mo_only'='more'`, [poolId])); } catch { /* no packets table: nobody needs it */ }
+      if (more) list.push(R.FINGERPRINT_CHECK);
+    }
+    return list;
   }
   async function task(kind, title, refs, dedupe, dueAt) {
     await q(`insert into cds_tasks (kind, title, pool_id, prospect_id, intro_id, dedupe_key, due_at)
@@ -179,7 +186,7 @@ export function createMatch(deps) {
     const consents = await q('select * from cds_consents where pool_id=$1 order by given_at', [poolId]);
     const scrRow = await one('select * from cds_screening where pool_id=$1', [poolId]);
     const checks = await q('select * from cds_screening_checks where pool_id=$1', [poolId]);
-    const summary = R.screeningSummary(scrRow, checks, await requiredChecks());
+    const summary = R.screeningSummary(scrRow, checks, await requiredChecks(poolId));
     summary.raw = scrRow || {};
     const listing = R.listingState({ pool, profile: profile && { ...profile, approved: !!profile.approved }, consents, screening: summary });
     return { pool, profile, consents, screening: summary, checks, listing };
@@ -959,7 +966,7 @@ export function createMatch(deps) {
     },
     async recordCheck({ staff: s, id, check_key, result, checked_on, proof, note }) {
       who(s);
-      const req = await requiredChecks();
+      const req = await requiredChecks(id);
       if (!req.find(c => c.key === check_key)) fail('That check isn\'t on the required list.');
       if (!['clear', 'not_clear'].includes(result)) fail('Choose clear or not clear.');
       let proofId = null;
