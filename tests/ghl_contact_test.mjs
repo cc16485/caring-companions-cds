@@ -67,5 +67,7 @@ ok(/\/contacts\/\$\{encodeURIComponent\(contactId\)\}\/tags/.test(src), 'tags go
 ok(!/method: 'DELETE'/.test(src), 'nothing is ever deleted in GHL');
 ok(/if \(dry\)[\s\S]{0,200}continue/.test(src), 'dry run sends nothing');
 
+ok(!/SUPABASE_SERVICE_ROLE_KEY'\)\s*\n?\s*const \{ data: u/.test(src) && !/jwt === Deno\.env/.test(src), 'no server-key sign-in any more');
+ok(/\^step-\[a-f0-9\]\{32,\}\$/.test(src) && /Date\.parse\(v\.expires\) < Date\.now\(\)/.test(src) && /SHA-256/.test(src), 'step code: long, hashed, expires');
 console.log(`${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);
