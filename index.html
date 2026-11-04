@@ -5492,7 +5492,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=22');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=23');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5505,10 +5505,7 @@ async function renderActiveAttendants() {
       corrections: () => getData('evvCorrections'),   // for the attendant file's shifts fixed by hand
       who: () => ((document.getElementById('header_user') || {}).textContent || '').trim(),
       oigPeople: () => { const d = oig && oig.data(); return d && d.live ? d.people : {}; },
-      openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch'),
-      // 2026-11-04 Onboarding as one table: her switch agency_data 'attendantsTable' {live}; only the owners flip it or preview it.
-      tableSwitch: { live: () => getObj('attendantsTable').live === true, owner: () => ldWhoOwner(), at: () => getObj('attendantsTable'),
-        set: v => setObj('attendantsTable', { live: !!v, by: _ldWhoBy(), at: new Date().toISOString() }) } });
+      openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch') });
     _hpMounted = true;
   } catch (e) {
     root.innerHTML = '<div style="padding:24px;color:#a8342a">Active Attendants could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
@@ -7585,15 +7582,11 @@ const ATT_STEPS = [
 
 // 2026-11-04 One attendant record (her yes to the Onboarding table mockup): when a lead's attendant applied at
 // caringcds.com/apply, the lead shows their packet's real step instead of the hand-typed list above. Matched by the
-// attendant's name, or, with no attendant on the lead yet, by the consumer name they gave. Same switch as the table.
+// attendant's name, or, with no attendant on the lead yet, by the consumer name they gave. Always on (the table switch was removed 2026-11-04).
 let _attPk = { at: 0, list: null, busy: false };
 const _attKey = s => String(s || '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z\s-]/g, ' ').split(/\s+/).filter(w => w.length > 1).sort().join(' ');
-function attPacketsOn() {
-  let pv = false; try { pv = localStorage.getItem('hpTable') === '1'; } catch (e) { /* storage blocked */ }
-  return getObj('attendantsTable').live === true || (ldWhoOwner() && pv);
-}
 function attPacketFor(p) {
-  if (!p || !attPacketsOn() || typeof cdsMatchApi !== 'function') return null;
+  if (!p || typeof cdsMatchApi !== 'function') return null;
   if (!_attPk.busy && Date.now() - _attPk.at > 5 * 60e3) {
     _attPk.busy = true;
     Promise.resolve().then(() => cdsMatchApi('packetList', {})).then(r => { _attPk.list = (r && r.attendants) || []; }).catch(() => {})

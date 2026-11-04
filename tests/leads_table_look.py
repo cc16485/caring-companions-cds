@@ -38,7 +38,7 @@ async([PIPE, PACK, mode])=>{
   _store.leadsTable = mode === 'live' ? { live: true, by: 'samantha' } : {};
   document.getElementById('header_user').textContent = mode === 'staff' ? 'office@caringcds.com' : 'samantha@caringcds.com';
   window.PKCALLS = [];
-  cdsMatchApi = async (a, b) => { PKCALLS.push([a, b]); return PACK[b.lead_id] || { packet: null, status: { label: 'Not sent' } }; };
+  cdsMatchApi = async (a, b) => { PKCALLS.push([a, b]); if (a === 'packetList') return { attendants: [] }; return PACK[b.lead_id] || { packet: null, status: { label: 'Not sent' } }; };
   try { localStorage.removeItem('ldTable'); localStorage.removeItem('ldView'); localStorage.removeItem('ldTableF'); localStorage.removeItem('ldCalm'); } catch (e) {}
   if (mode === 'preview') localStorage.setItem('ldTable', '1');
   if (window.LDT) LDT.clear();
@@ -112,7 +112,7 @@ with sync_playwright() as pw:
     ck('the owner switch rows fold into one closed line', pg.evaluate("()=>{ const d = document.querySelector('#ldWho details.ld-sws'); return !!d && !d.open && d.textContent.includes('Leads as a table'); }"))
     ck('the Who called chips still pick who shows in the table', pg.evaluate("""()=>{ _store.leadsWhoCalled = { live: true }; _ldWhoFilter = 'self'; renderPipeline();
       const n = document.querySelectorAll('#ldCards table.lt-t tbody tr').length; _ldWhoFilter = 'all'; _store.leadsWhoCalled = {}; renderPipeline(); return n < 10; }"""))
-    ck('each packet is asked once (not on every redraw)', pg.evaluate("()=>{ const n = PKCALLS.length; renderPipeline(); renderPipeline(); return n > 0 && PKCALLS.length === n && PKCALLS.every(c => c[0] === 'enrollGet'); }"))
+    ck('each packet is asked once, and the attendant list once (not on every redraw)', pg.evaluate("()=>{ const n = PKCALLS.length; renderPipeline(); renderPipeline(); return n > 0 && PKCALLS.length === n && PKCALLS.every(c => ['enrollGet', 'packetList'].includes(c[0])) && PKCALLS.filter(c => c[0] === 'packetList').length <= 1; }"))
     pg.evaluate("()=>LDT.set('hold','state')"); pg.wait_for_timeout(150)
     ck('Waiting on: State', sorted(r['name'] for r in pg.evaluate(READ)['rows']) == ['Leona Marsh', 'Vernon Pike'], pg.evaluate(READ)['rows'])
     ck('the chip is remembered', pg.evaluate("()=>JSON.parse(localStorage.getItem('ldTableF')).hold === 'state'"))
