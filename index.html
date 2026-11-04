@@ -10222,6 +10222,8 @@ const HUB_SWITCHES = [
     does: 'On: Hours & EVV > Authorizations shows only the paperwork, one row per active consumer (authorization, end date, state scheduling worksheet), with the uploads in one box. Hours and shifts stay on This month, whose end dates use the DSDS authorization when it is uploaded. "Care plan" is renamed: Care plan days, State scheduling worksheet, Authorization. Off: as before.' },
   { key: 'taxStages', label: 'Tax Setup in stages',
     does: 'On: Tax & Enrollment Setup reads top to bottom in one column, grouped by when each step happens (today, the day the EIN arrives, waiting, Fusion proof, payroll, after the first $1,000 quarter). A Next line at the top says the one thing to do, the 90-day Fusion clock sits beside it, and it asks once whether the consumer is new or transferring. Every card, link and instruction is the same as before. Off: the two-column screen as before.' },
+  { key: 'packetOnProfile', label: 'Enrollment packet on the consumer profile',
+    does: 'On: Overview says where their Hub enrollment packet stands, and Tax and EIN shows the same packet card as their lead (each form signed, Sign as agent, Download the signed forms). Off: the packet shows on their lead only.' },
   { key: 'faxLive', label: 'One-click fax',
     does: 'On: the SS-4, 2643A and 2827 steps on Tax Setup get a Fax it now button (the SS-4 only when there is no EIN yet and, for a transfer, after the existing-EIN check) (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
@@ -11051,8 +11053,10 @@ function renderProfile() {
   const line = (k, v) => '<div class="cp-line"><span>' + k + '</span><span>' + v + '</span></div>';
   let body = '';
   if (FACT_TABS.includes(tab)) profPacketFetch(c);
+  const packetOn = hubSwitchOn('packetOnProfile');
   if (tab === 'overview') body =
     line('Phone', esc(c.phone || 'none on file')) +
+    (packetOn ? profPacketLine(c, line) : '') +
     factsLines(c, line) +
     line('Attendant' + (attendants.length === 1 ? '' : 's'), attendants.length ? attendants.map(esc).join(', ') : 'none in payroll yet') +
     line('Start date', c.cdsStartDate ? esc(_niceDay(c.cdsStartDate)) : 'not on file') +
@@ -11091,6 +11095,7 @@ function renderProfile() {
     evvLine(c, line) +
     '<div style="margin-top:12px">' + btn(slim ? 'Authorized tasks' : 'Care plan', "openCarePlan('" + c.id + "')", true) + '</div>';
   else if (tab === 'tax') body =
+    (packetOn ? '<div id="profEnroll" style="margin-top:12px"></div>' : '') +
     oldAgencyLine(c, line) +
     '<div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));margin-top:10px">' + chips + '</div>' +
     '<div style="margin-top:12px">' + btn('Tax setup', "openTaxSetup('" + c.id + "')", true) + '</div>';
@@ -11137,6 +11142,34 @@ function renderProfile() {
             '<a href="#" onclick="makeConsumerActive(\'' + c.id + '\');if(_profileId)renderProfile();return false">Make active again</a></div>') +
     '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
   if (hubSwitchOn('moForms') && CDSRules.isActive(c)) moFormsFill(c);
+  if (packetOn && tab === 'tax') mountProfileEnroll(c);
+}
+// The Hub enrollment packet on the consumer's profile (2026-11-04, her ask: a signed packet
+// only showed on the lead). Her switch 'packetOnProfile'. Found the way the Overview facts find it.
+function profPacketLine(c, line) {
+  const hit = _profPacket[c.id] || {}, P = hit.packet;
+  if (!('packet' in hit)) return '';   // still checking, or it could not be read
+  const open = ' <a href="#" onclick="_profTab=\'tax\';renderProfile();return false" style="font-size:12px;margin-left:8px">open</a>';
+  if (!P) return line('Enrollment packet', 'not sent from the Hub');
+  const late = P.signed_at && P.status !== 'Done';
+  return line('Enrollment packet', (late ? '<span style="color:#9C6410">' : '<span>') + esc(P.status) + '</span>' +
+    (P.signed_at ? ', ' + esc(_niceDay(String(P.signed_at).slice(0, 10))) : P.sent_at ? ', sent ' + esc(_niceDay(String(P.sent_at).slice(0, 10))) : '') + open);
+}
+// The same card as on their lead: each form, Sign as agent, the one-PDF download.
+async function mountProfileEnroll(c) {
+  const el = document.getElementById('profEnroll');
+  if (!el || !_db) return;
+  const hit = _profPacket[c.id] || {}, P = hit.packet;
+  if (!('packet' in hit)) return;
+  if (!P) { el.innerHTML = '<div class="field-note">No Hub enrollment packet for ' + esc(c.name) + '. Send it from their lead (Leads, open the lead, Send enrollment packet).</div>'; return; }
+  const lead = getData('pipeline').find(p => String(p.id) === String(P.lead_id));
+  if (!lead) { el.innerHTML = '<div class="field-note">Their packet\'s lead is no longer in Leads, so the packet card cannot open here.</div>'; return; }
+  try {
+    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=2');
+    if (document.getElementById('profEnroll') !== el) return;   // the profile was drawn again meanwhile
+    mountLeadEnroll(el, { api: cdsMatchApi, lead, PDFLib: window.PDFLib, blank: ENROLL_BLANK, consumer: () => c,
+      afterAgentSigned: l => { delete _profPacket[c.id]; return fileHubPacketForLead(l); } });
+  } catch (e) { el.innerHTML = '<div class="field-note" style="color:var(--danger)">The enrollment packet card did not load: ' + esc(e.message) + '</div>'; }
 }
 
 let _profTab = 'overview';
