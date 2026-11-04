@@ -2085,15 +2085,15 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
         </div>
       </div>
 
-      <div class="cat-header">STEP 2 — CONSUMER ENROLLMENT PACKET (GoHighLevel)</div>
+      <div class="cat-header">STEP 2 — CONSUMER ENROLLMENT PACKET (Hub)</div>
       <div class="step">
         <div class="step-num">4</div>
         <div class="step-content">
-          <div class="step-title">Send Consumer to caringcds.com/onboarding — Two-Step GoHighLevel Flow</div>
-          <div class="step-desc">Direct the consumer to <a href="https://caringcds.com/onboarding" target="_blank" style="color:var(--primary-light)"><strong>caringcds.com/onboarding</strong></a>. This is a connected two-step GoHighLevel flow — their basic info prefills all documents automatically:
+          <div class="step-title">Send the enrollment packet from their lead</div>
+          <div class="step-desc">Open their lead in Leads and press <strong>Send enrollment packet</strong>. They get a private link by text and email and sign every form on their phone; what we already know is filled in. Then you sign 2678 and 2827 as the agent on the same card.
             <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12px;line-height:1.8">
-              <li><strong>Step 1 (<a href="https://caringcds.com/onboarding" target="_blank" style="color:var(--primary-light)">caringcds.com/onboarding</a>)</strong> — Consumer fills out basic info survey; info prefills all enrollment documents</li>
-              <li><strong>Step 2 (<a href="https://caringcds.com/onboarding-packet" target="_blank" style="color:var(--primary-light)">caringcds.com/onboarding-packet</a>)</strong> — Consumer reviews and e-signs all prefilled enrollment documents, including: Consumer Vendor Acknowledgement, Authorization to Obtain Employment Numbers, Previous CDS Vendor Authorization (PCCP transfers), Telephony/EVV Consent Form, Consumer Emergency Back-Up Plan, Form 8821, Form SS-4, Form 2678, Form 2643A, Form 2827</li>
+              <li><strong>New to CDS</strong>: Consumer Vendor Acknowledgement, Authorization to Obtain Employment Numbers, Telephony/EVV Consent, Emergency Back-Up Plan, Form 8821, Form SS-4, Form 2678, Form 2827, and Form 2643A (you sign)</li>
+              <li><strong>Moving from another agency (PCCP)</strong>: the same, plus the Previous CDS Vendor Authorization, without SS-4 and 2643A</li>
             </ul>
             <div style="margin-top:6px">⚠️ <strong>Do NOT send the Training Acknowledgement Form in this packet</strong> — consumer must complete orientation first (Step 3 below).</div>
           </div>
@@ -7859,7 +7859,6 @@ function renderLeadProfile(){
     '<div class="field-note" style="margin-top:2px">Each one opens the text and email first. Nothing sends until you press Send.</div>' +
     '<div class="lp-msgs">' +
       (p.type === 'lead' ? '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'lead_welcome\')">' + (p.welcomeSent ? 'Welcome sent. Open it again' : 'Text the welcome') + '</button>' : '') +
-      (p.type !== 'lead' ? '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'consumer_onboarding\')">' + (p.onboardingSent ? 'Enrollment link sent. Open it again' : 'Text the enrollment link') + '</button>' : '') +
       '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'app_sent\')">Tell them the packet is on its way</button>' +
     '</div></div>';
   // ---- the enrollment packet: one button, signed on their phone (2026-10-22) ----
@@ -9441,19 +9440,11 @@ function markWelcomeSentManual() {
 let _uomCurrentData = {}; // holds state for the open outreach modal
 
 const OUTREACH_CONFIGS = {
-  consumer_onboarding: {
-    title: 'Send Onboarding Link',
-    infoBar: '✅ Send the consumer their enrollment link. They\'ll complete the two-step GHL flow at caringcds.com/onboarding.',
-    emailSubject: 'Complete Your CDS Enrollment — Caring Companions',
-    buildEmail: (fn) => `Hi ${fn},\n\nWelcome to Caring Companions Consumer Directed Services! We\'re excited to have you with us.\n\nTo get started with your enrollment, please visit the link below. The process takes about 10–15 minutes and can be completed from your phone or computer:\n\n👉 caringcds.com/onboarding\n\nThis link will walk you through your service agreement, required disclosures, and basic information. Please complete it as soon as possible so we can get your services started.\n\nIf you need any help or have questions, don\'t hesitate to reach out — we\'re happy to walk you through it by phone.\n\nThank you,\nSamantha\nCaring Companions In Home Senior Care | CDS Division\nintake@caringcds.com`,
-    buildSMS: (fn) => `Hi ${fn}! Welcome to Caring Companions CDS! 🎉 Please complete your enrollment at caringcds.com/onboarding — it only takes about 10 min and can be done from your phone. Questions? Reply anytime!`,
-    sentField: 'onboardingSent', entityType: 'pipeline'
-  },
   lead_welcome: {
     title: 'Send Lead Welcome',
     infoBar: '📨 Send a warm welcome to this new lead and let them know what to expect next.',
     emailSubject: 'Thank You for Your Interest — Caring Companions CDS',
-    buildEmail: (fn) => `Hi ${fn},\n\nThank you so much for reaching out to Caring Companions Consumer Directed Services! We\'re glad you found us.\n\nThe CDS (Consumer Directed Services) program is a Missouri Medicaid benefit that allows individuals to hire and direct their own in-home care attendant. Our role as the agency is to handle all the administrative requirements — so you can focus on the care.\n\nHere\'s what to expect next:\n• We\'ll reach out shortly to learn more about your needs\n• Once authorized by the state, you\'ll complete your enrollment online at caringcds.com/onboarding\n• Your attendant can begin services once all approvals are in place\n\nIn the meantime, feel free to visit caringcds.com to learn more about the program.\n\nWe look forward to speaking with you!\n\nSamantha\nCaring Companions In Home Senior Care | CDS Division\nintake@caringcds.com`,
+    buildEmail: (fn) => `Hi ${fn},\n\nThank you so much for reaching out to Caring Companions Consumer Directed Services! We\'re glad you found us.\n\nThe CDS (Consumer Directed Services) program is a Missouri Medicaid benefit that allows individuals to hire and direct their own in-home care attendant. Our role as the agency is to handle all the administrative requirements — so you can focus on the care.\n\nHere\'s what to expect next:\n• We\'ll reach out shortly to learn more about your needs\n• Once authorized by the state, we\'ll text and email you a private link to sign your enrollment forms from your phone\n• Your attendant can begin services once all approvals are in place\n\nIn the meantime, feel free to visit caringcds.com to learn more about the program.\n\nWe look forward to speaking with you!\n\nSamantha\nCaring Companions In Home Senior Care | CDS Division\nintake@caringcds.com`,
     buildSMS: (fn) => `Hi ${fn}! Thanks for your interest in Caring Companions CDS! 😊 We\'ll be in touch soon. In the meantime, visit caringcds.com to learn about the Consumer Directed Services program. Questions? Reply anytime!`,
     sentField: 'welcomeSent', entityType: 'pipeline'
   },
@@ -9524,6 +9515,9 @@ const OUTREACH_CONFIGS = {
 };
 
 function openOutreachModal(type, data) {
+  // The old "Send Onboarding Link" sent caringcds.com/onboarding, which is gone (2026-11-04).
+  // The enrollment packet card on their lead sends the real private link.
+  if (type === 'consumer_onboarding') return openLeadEnrollCard(data && data.id);
   const config = OUTREACH_CONFIGS[type];
   if (!config) return;
   _uomCurrentData = { type, data, config };
@@ -9563,6 +9557,11 @@ function openOutreachModal(type, data) {
   openModal('universalOutreachModal');
 }
 
+function openLeadEnrollCard(pid) {
+  if (!pid || !getData('pipeline').some(x => x.id === pid)) return;
+  openLeadProfile(pid);
+  setTimeout(() => { const el = document.getElementById('lpEnroll'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
+}
 function openPipelineOutreach(pid, type) {
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === pid);
@@ -9721,7 +9720,7 @@ function renderPendingOutreaches() {
 
   // Referrals/PCCP without onboarding
   pipeline.filter(p => (p.type === 'referral' || p.type === 'pccp') && !p.onboardingSent && p.status !== 'closed').forEach(p => {
-    items.push({ icon: '📋', label: `Send Onboarding to <strong>${p.name}</strong> (${p.type.toUpperCase()})`, action: `openPipelineOutreach('${p.id}','consumer_onboarding')`, altLabel: 'Send Onboarding' });
+    items.push({ icon: '📋', label: `Send the enrollment packet to <strong>${p.name}</strong> (${p.type.toUpperCase()})`, action: `openLeadEnrollCard('${p.id}')`, altLabel: 'Send enrollment packet' });
   });
 
   // Active consumers not yet trained
@@ -9763,7 +9762,7 @@ function renderQuickSendGrid() {
 
   const cards = [
     { icon: '👋', title: 'Lead Welcome',        desc: 'Welcome a new lead to Caring Companions',          entityType: 'pipeline_lead', outreachType: 'lead_welcome',         items: pipeline.filter(p => p.type === 'lead') },
-    { icon: '📋', title: 'Consumer Onboarding', desc: 'Send onboarding link to referral/PCCP',            entityType: 'pipeline_ref',  outreachType: 'consumer_onboarding',  items: pipeline.filter(p => p.type==='referral'||p.type==='pccp') },
+    { icon: '📋', title: 'Consumer Onboarding', desc: 'Opens their lead to send the enrollment packet',   entityType: 'pipeline_ref',  outreachType: 'consumer_onboarding',  items: pipeline.filter(p => p.type==='referral'||p.type==='pccp') },
     { icon: '📦', title: 'Hiring Packet Sent',  desc: 'Notify attendant their hiring packet was sent',    entityType: 'pipeline_lead', outreachType: 'app_sent',             items: pipeline.filter(p => p.type==='lead') },
     { icon: '✅', title: 'Background Cleared',  desc: 'Notify attendant background check passed',         entityType: 'attendant',     outreachType: 'bg_cleared',           items: attendants },
     { icon: '📺', title: 'Orientation Nudge',   desc: 'Remind attendant to complete orientation',         entityType: 'attendant',     outreachType: 'orientation_nudge',    items: attendants },
