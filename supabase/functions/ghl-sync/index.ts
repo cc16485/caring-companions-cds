@@ -18,13 +18,26 @@
 //     race the hub and clobber a consumer or attendant edit.
 //   * /contacts/upsert is idempotent on phone/email within a location, so
 //     re-running is safe and will not create duplicates.
+//   * Tags go through the add-tags call, never the upsert, so a tag the office
+//     put on in GHL (like 'active consumer') is never taken off by a sync.
+//
+// Address and county (2026-11-04): street, city, state and zip go into GHL's own
+// address fields, county into the location's County custom field. Where they come
+// from is in _shared/office/ghl-contact.js. Only values the hub has are sent.
+//
+// Other modes, both read only:
+//   { dry: true }         what a full sync would send (counts), sends nothing
+//   { audit: 'fields' }   every contact custom field and how many contacts have it
+//                         filled (counts only, never a value)
 //
 // Auth: POST with a CDS-project user's access token (Authorization: Bearer).
 // Any signed-in hub user may sync; the GHL token never leaves the server.
+// The project's own server key is also accepted, for Desktop steps.
 //
 // Secrets required (function returns configured:false until both are set). CDS-only names (2026-10-08) so a
 // Caring Companions (non-CDS) key can't be set here by mistake; any location but the CDS sub-account is refused:
-//   CDS_GHL_TOKEN        - GHL Private Integration token for the CDS sub-account, scope contacts.write
+//   CDS_GHL_TOKEN        - GHL Private Integration token for the CDS sub-account, scopes contacts.write
+//                          and locations/customFields.readonly (cds-match already reads fields with it)
 //   CDS_GHL_LOCATION_ID  - 4EFPkajwe0hHrqxvYkZ9  (Caring Companions CDS)
 //
 // Deploy:
@@ -32,6 +45,7 @@
 // -----------------------------------------------------------------------------
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { placeFor, countyField, countyValue, fieldAudit } from '../_shared/office/ghl-contact.js'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -44,8 +58,9 @@ const json = (b: unknown, s = 200) =>
 const AGENCY_ID = 'caring-companions-cds'
 const GHL_API = 'https://services.leadconnectorhq.com'
 
-type Person = { id?: string; name?: string; phone?: string; email?: string; status?: string; type?: string }
+type Person = { id?: string; name?: string; phone?: string; email?: string; status?: string; type?: string; county?: string }
 type Outcome = { name: string; ok: boolean; skipped?: string; error?: string; contactId?: string }
+type Place = { address: Record<string, string>; county: string }
 
 // The only lists that may be synced, and the tag each one confers. Tags are
 // never taken from the request.
@@ -94,6 +109,8 @@ async function upsertContact(
   tags: string[],
   headers: Record<string, string>,
   locationId: string,
+  place: Place,
+  countyId: string | null,
 ): Promise<Outcome> {
   const name = (person.name || '').trim()
   if (!name) return { name: '(unnamed)', ok: false, skipped: 'no name' }
@@ -115,7 +132,8 @@ async function upsertContact(
         lastName,
         ...(phone ? { phone } : {}),
         ...(email ? { email } : {}),
-        tags,
+        ...place.address,
+        ...(countyId && place.county ? { customFields: [{ id: countyId, field_value: place.county }] } : {}),
         source: 'CDS Hub',
       }),
     })
@@ -123,7 +141,17 @@ async function upsertContact(
     if (!r.ok) {
       return { name, ok: false, error: body?.message || body?.error || `HTTP ${r.status}` }
     }
-    return { name, ok: true, contactId: body?.contact?.id ?? body?.id ?? undefined }
+    const contactId = body?.contact?.id ?? body?.id ?? undefined
+    if (!contactId) return { name, ok: false, error: 'GHL did not say which contact it saved' }
+    // Adds only. The upsert above carries no tags on purpose.
+    const t = await fetch(`${GHL_API}/contacts/${encodeURIComponent(contactId)}/tags`, {
+      method: 'POST', headers, body: JSON.stringify({ tags }),
+    })
+    if (!t.ok) {
+      const tb = await t.json().catch(() => ({}))
+      return { name, ok: false, contactId, error: 'saved, but the tag was not added: ' + (tb?.message || `HTTP ${t.status}`) }
+    }
+    return { name, ok: true, contactId }
   } catch (e) {
     return { name, ok: false, error: (e as Error).message }
   }
@@ -152,8 +180,9 @@ Deno.serve(async (req) => {
   // Gate on the caller's hub login. Every CDS hub user has a real Supabase
   // account, so there is no separate shared key to leak.
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-  const { data: u } = await admin.auth.getUser(jwt)
-  const email = u?.user?.email
+  const server = !!jwt && jwt === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const { data: u } = server ? { data: null } : await admin.auth.getUser(jwt)
+  const email = server ? 'desktop step' : u?.user?.email
   if (!email) return json({ error: 'Sign in to the CDS hub first.' }, 401)
 
   const token = Deno.env.get('CDS_GHL_TOKEN')
@@ -176,26 +205,69 @@ Deno.serve(async (req) => {
   }
 
   const body = await req.json().catch(() => ({}))
-  const { only, id } = body as { only?: string; id?: string }
+  const { only, id, dry, audit } = body as { only?: string; id?: string; dry?: boolean; audit?: string }
   if (only && !LISTS[only]) return json({ error: `Unknown list "${only}".` }, 400)
   if (id && !only) return json({ error: 'Syncing one person needs the list it is in.' }, 400)
 
+  // The location's contact custom fields. Needed for the County field and the audit.
+  const fr = await fetch(`${GHL_API}/locations/${encodeURIComponent(locationId)}/customFields?model=contact`, { headers })
+  const fieldsBody = await fr.json().catch(() => ({}))
+  const fields = fr.ok ? (fieldsBody?.customFields ?? []) : null
+
+  if (audit === 'fields') {
+    if (!fields) return json({ error: `Could not read the GHL custom fields (HTTP ${fr.status}).` }, 502)
+    // Walk every contact, 100 at a time, keeping only which fields have something in them.
+    const contacts: unknown[] = []
+    let after: { startAfterId?: string; startAfter?: number } = {}
+    for (let page = 0; page < 300; page++) {
+      const qs = new URLSearchParams({ locationId, limit: '100' })
+      if (after.startAfterId) qs.set('startAfterId', after.startAfterId)
+      if (after.startAfter) qs.set('startAfter', String(after.startAfter))
+      const cr = await fetch(`${GHL_API}/contacts/?${qs}`, { headers })
+      const cb = await cr.json().catch(() => ({}))
+      if (!cr.ok) return json({ error: `Could not read GHL contacts (HTTP ${cr.status}).` }, 502)
+      const got = (cb?.contacts ?? []).map((c: { customFields?: unknown }) => ({ customFields: c.customFields }))
+      contacts.push(...got)
+      if (got.length < 100 || !cb?.meta?.startAfterId) break
+      after = { startAfterId: cb.meta.startAfterId, startAfter: cb.meta.startAfter }
+      await new Promise((r) => setTimeout(r, 150))
+    }
+    const cf = countyField(fields)
+    return json({ configured: true, ok: true, contacts: contacts.length, countyField: cf ? cf.id : null, fields: fieldAudit(fields, contacts) })
+  }
+
+  const cField = fields ? countyField(fields) : null
+
   const keys = only ? [only] : Object.keys(LISTS)
+  // A consumer's address can come from their old lead, so the lead list is read with them.
+  const readKeys = keys.includes('consumers') && !keys.includes('pipeline') ? [...keys, 'pipeline'] : keys
 
   const { data: rows, error: readErr } = await admin
     .from('agency_data')
     .select('data_key, data_value')
     .eq('agency_id', AGENCY_ID)
-    .in('data_key', keys)
+    .in('data_key', readKeys)
   if (readErr) return json({ error: 'Could not read hub data: ' + readErr.message }, 500)
 
   const byKey: Record<string, Person[]> = {}
-  for (const k of keys) byKey[k] = []
+  for (const k of readKeys) byKey[k] = []
   for (const r of rows ?? []) {
     if (Array.isArray(r.data_value)) byKey[r.data_key] = r.data_value as Person[]
   }
 
-  const report: Record<string, { total: number; synced: number; skipped: Outcome[]; failed: Outcome[] }> = {}
+  // Enrollment packets, address and name only. The SSN and the rest of the answers are never read.
+  let packets: unknown[] = []
+  if (keys.includes('consumers')) {
+    const { data: pk, error: pkErr } = await admin
+      .from('cds_enroll_packets')
+      .select('consumer_id, sent_at, signed_at, created_at, first:answers->>first, last:answers->>last, street:answers->>street, apt:answers->>apt, city:answers->>city, state:answers->>state, zip:answers->>zip, county:answers->>county')
+    if (pkErr) return json({ error: 'Could not read the enrollment packets: ' + pkErr.message }, 500)
+    packets = pk ?? []
+  }
+
+  type ListReport = { total: number; synced: number; skipped: Outcome[]; failed: Outcome[];
+    withAddress: number; withCounty: number; countyLeftOut: string[] }
+  const report: Record<string, ListReport> = {}
 
   for (const key of keys) {
     // Adding one lead syncs just that lead. Read it from the database by id so
@@ -205,12 +277,33 @@ Deno.serve(async (req) => {
       : (byKey[key] ?? [])
     if (id && !people.length) return json({ error: 'That person is no longer in the ' + key + ' list.' }, 404)
 
-    const results = await inBatches(people, 3, (p) => upsertContact(p, tagsFor(key, p), headers, locationId))
+    // County only when GHL has one County field and the value is one it takes.
+    const left = new Set<string>()
+    const places = new Map<Person, Place>()
+    for (const p of people) {
+      const pl = placeFor(key, p, { packets, pipeline: byKey.pipeline })
+      const v = cField ? countyValue(cField, pl.county) : null
+      if (pl.county && !v) left.add(pl.county)
+      places.set(p, { address: pl.address, county: v || '' })
+    }
+    const counts = {
+      withAddress: [...places.values()].filter((x) => Object.keys(x.address).length).length,
+      withCounty: [...places.values()].filter((x) => x.county).length,
+      countyLeftOut: [...left].sort(),
+    }
+
+    if (dry) {
+      report[key] = { total: people.length, synced: 0, skipped: [], failed: [], ...counts }
+      continue
+    }
+    const results = await inBatches(people, 3, (p) =>
+      upsertContact(p, tagsFor(key, p), headers, locationId, places.get(p)!, cField ? cField.id : null))
     report[key] = {
       total: people.length,
       synced: results.filter((r) => r.ok).length,
       skipped: results.filter((r) => !r.ok && r.skipped),
       failed: results.filter((r) => !r.ok && r.error),
+      ...counts,
     }
   }
 
@@ -218,6 +311,7 @@ Deno.serve(async (req) => {
   // so this cannot collide with an edit happening in the hub. Skipped for
   // single-person syncs, which fire on every lead added and would otherwise
   // bury the last full run's report.
+  if (dry) return json({ configured: true, ok: true, dry: true, countyField: cField ? cField.id : null, fieldsRead: !!fields, report })
   if (!id) {
     await admin.from('agency_data').upsert({
       agency_id: AGENCY_ID,
@@ -230,5 +324,5 @@ Deno.serve(async (req) => {
     }, { onConflict: 'agency_id,data_key' })
   }
 
-  return json({ configured: true, ok: true, report })
+  return json({ configured: true, ok: true, countyField: cField ? cField.id : null, fieldsRead: !!fields, report })
 })
