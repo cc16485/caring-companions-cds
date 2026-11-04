@@ -7807,7 +7807,7 @@ function renderLeadProfile(){
       (card && card.step === 'ready' ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
       (PIPELINE_CLOSED_STATUSES.includes(p.status)
         ? '<button class="btn btn-outline" onclick="reopenLead(\'' + pid + '\')">Reopen</button>'
-        : card && card.step !== 'closed' ? '<button class="btn btn-outline" onclick="openCloseLead(\'' + pid + '\')">Close: inactive or spam</button>' : '') +
+        : card && card.step !== 'closed' ? '<button class="btn btn-outline" onclick="openCloseLead(\'' + pid + '\')">Close this lead</button>' : '') +
     '</div>' +
     '<div style="margin-top:14px;font-weight:700;color:var(--primary);font-size:14px">Messages</div>' +
     '<div class="field-note" style="margin-top:2px">Each one opens the text and email first. Nothing sends until you press Send.</div>' +
@@ -8582,7 +8582,7 @@ function renderPipeline() {
       : c.whoCalled === 'solo' ? '<button type="button" class="ld-pool" onclick="ldPoolAsk(\'' + id + '\')">Move to Caregiver Pool</button>'
       : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
     const shut = c.step !== 'closed'
-      ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + ': inactive or spam" title="Close: inactive or spam"' + (calm ? ' hidden' : '') + '>Close</button>' : '';
+      ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + '" title="Close this lead"' + (calm ? ' hidden' : '') + '>Close</button>' : '';
     // The calm look: Close waits behind ···, like Caring Companions.
     const dots = calm && shut ? '<button type="button" class="ld-dots" aria-label="More for ' + esc(p.name || 'this lead') + '" onclick="this.hidden=true;this.nextElementSibling.hidden=false;this.nextElementSibling.focus()">···</button>' : '';
     const ct = ldCalmTone(c);
