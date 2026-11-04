@@ -233,7 +233,7 @@ export function nextHow(st, g) {
   if (st.now === 'checks' || f === 'gcw_needed' || f === 'edl' || f === 'not_moving' || f === 'finding') {
     if (f === 'gcw_needed') return { title: 'Waiting on ' + first + '\'s Good Cause Waiver', who: 'Attendant, then office', tone: 'y', steps: [
       first + ' applies to the state. They have the steps by email' + (g.screening.notice === 'phone' ? ' (you told them by phone)' : '') + '.',
-      'No shifts while the waiver is pending, and no Step 2 papers.',
+      'No shifts while the waiver is pending, and no Empeon invite or ID check.',
       'Every 2 weeks a to-do reminds you to check the status: FCSR site, Good Cause Waiver tab, Waiver Status, enter their SSN.',
       'When they send you the approval letter, add it below and pick Clear to continue or Not moving forward.'],
       links: [['Good Cause Waiver page', LINKS.gcw], ['Open the FCSR site', LINKS.fcsrSite]] };
@@ -257,7 +257,7 @@ export function nextHow(st, g) {
       links: [['Open the FCSR site', LINKS.fcsrSite], ['FCSR "cannot hire" list', LINKS.cannotHire]] };
   }
   const H = {
-    papers: { title: 'Waiting on ' + first + ' to sign their papers', who: 'Attendant', tone: 'b', steps: ['They sign the contract, pay rate, unit agreement and handbook from their private link. They were sent it when checks cleared.', 'Nothing to do unless it has been 3 days. Then call them.'] },
+    papers: { title: 'Waiting on ' + first + ' to sign their papers', who: 'Attendant', tone: 'b', steps: ['They sign the contract, pay rate, unit agreement and handbook from their private link. New attendants sign them in Step 1, with the application; this is someone who signed their application before that.', 'Nothing to do unless it has been 3 days. Then call them.'] },
     empeon_invite: { title: 'Send ' + first + '\'s Empeon invite', who: 'Office', mins: 'About 3 minutes', tone: 'r', steps: ['Tap Copy for Empeon below.', 'In Empeon, start a new hire and paste the details. ' + consumer + ' is the employer.', 'Send the invite.', 'Tap Empeon invite sent.'] },
     empeon: { title: 'Waiting on ' + first + ' in Empeon', who: 'Attendant', tone: 'b', steps: ['They fill out the W-4, I-9 part 1 and direct deposit, and upload photos of their ID front and back.', 'Nothing to do unless it has been 3 days. Then call them.'] },
     call: { title: '5-minute ID check with ' + first, who: 'Office and attendant', mins: '5 minutes', tone: 'r', steps: [p.call_slot ? 'Booked for ' + p.call_slot + '.' : 'They book a time from their link.', (g && g.room_url ? 'Open the video room at that time and let them in from the waiting room.' : 'Video call them.') + ' They hold up the same ID they uploaded to Empeon, front and back.', 'Check the name and photo match.', 'Tap ID seen on the video call.'],
@@ -654,7 +654,7 @@ export function mountHubPacket(el, opts) {
         ${p.id_checked_at ? `<span class="pill g">ID seen ${esc(fmtD(p.id_checked_at))}</span>` : st.checksClear ? `<button class="btn" data-mark="id_checked">ID seen on the video call</button>` : ''}
         ${p.i9_done_at ? `<span class="pill g">I-9 done ${esc(fmtD(p.i9_done_at))}</span>` : p.id_checked_at ? '<button class="btn" data-mark="i9_done">I-9 Section 2 done in Empeon</button>' : ''}
       </div>
-      ${g.forms.contract && !g.forms.contract.countersigned_at ? `<div class="copy"><b>Countersign the Attendant Care Contract</b><div><input type="text" id="hp_cs" placeholder="Type your full name"><button class="btn" data-act="countersign">Countersign</button></div></div>` : ''}
+      ${g.forms.contract && !g.forms.contract.countersigned_at && st.checksClear ? `<div class="copy"><b>Countersign the Attendant Care Contract</b><div><input type="text" id="hp_cs" placeholder="Type your full name"><button class="btn" data-act="countersign">Countersign</button></div></div>` : ''}
       ${p.list_choice === 'join' ? `<p class="small">Their caregiver profile is in Caregiver Match. Approve it there (one tap) once their checks are clear.</p>` : ''}
 
       <h3>Signed forms</h3>

@@ -166,7 +166,8 @@ export function createPacket(h) {
         answers: x.p.answers || {}, esign: !!x.p.esign_at,
         identity_done: await identityDone(x.pool_id, scr),
         signed: Object.fromEntries(Object.entries(x.forms).map(([k, f]) => [k, { at: f.signed_at, name: f.signed_name }])),
-        step: !x.st.step1 ? 1 : !x.st.step2Open ? 'checks' : !x.st.step2Signed || !x.p.call_slot ? 2 : 'done',
+        // 'papers': application signed before 2026-11-04, contract/pay/units/handbook not yet (they sign them now, checks or not)
+        step: !x.st.step1 ? 1 : !x.st.step2Signed ? 'papers' : !x.st.step2Open ? 'checks' : !x.p.call_slot ? 2 : 'done',
         mo_questions: (await setting('apply_questions', { live: false })).live === true ? P.MO_QUESTIONS : null,
         missing: { application: P.applicationMissing(x.p.answers || {}, { mo: (await setting('apply_questions', { live: false })).live === true }), background: P.backgroundMissing(x.p.answers || {}, await identityDone(x.pool_id, scr)) },
         docs, contract_parts: CONTRACT_PARTS, company: COMPANY,
@@ -253,7 +254,7 @@ export function createPacket(h) {
         await q('update cds_screening set authorization_signed_at=coalesce(authorization_signed_at, now()) where pool_id=$1', [x.pool_id]);
         await step1Done(x.pool_id);
       }
-      if (f.step === 2) {
+      if (STEP2.includes(form)) {
         const n = await one(`select count(*)::int c from cds_packet_forms where pool_id=$1 and form_key = any($2)`, [x.pool_id, STEP2]);
         if (n.c === STEP2.length) await q('update cds_packets set step2_signed_at=coalesce(step2_signed_at, now()) where pool_id=$1', [x.pool_id]);
       }
@@ -406,6 +407,9 @@ export function createPacket(h) {
       who(staff);
       const name = String(typed_name || '').trim().replace(/\s+/g, ' ').slice(0, 120);
       if (name.split(' ').length < 2) fail('Type your full name to countersign.');
+      // 2026-11-04 (her pick): they sign the contract in Step 1 now, so the office countersigns only once the checks are clear
+      const cx = await load(pool_id);
+      if (!cx || !cx.st.checksClear) fail('Countersign once their background checks are clear.');
       const r = await one(`update cds_packet_forms set countersigned_name=$3, countersigned_by=$2, countersigned_at=now()
                            where pool_id=$1 and form_key='contract' and countersigned_at is null returning id`, [pool_id, staff, name]);
       if (!r) fail('There is no signed contract waiting for a countersignature.');
@@ -538,8 +542,11 @@ export function createPacket(h) {
         const token = await crypto.token();
         await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)', [pool_id, await crypto.hash(token), 'packet-step2', addDays(now, R.CAREGIVER_LINK_DAYS)]);
         const link = packetLink(token);
-        await send({ template: 'att_step2_open', channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first, link } });
-        await send({ template: 'att_step2_open', channel: 'email', audience: 'caregiver', pool_id, to: pool.email, vars: { first, link } });
+        // 2026-11-04: papers are signed in Step 1 now, so the text asks only for Empeon and the ID check; anyone who signed
+        // their application before that and still has papers to sign gets the older words that mention them.
+        const tpl = x.st.step2Signed ? 'att_checks_clear' : 'att_step2_open';
+        await send({ template: tpl, channel: 'sms', audience: 'caregiver', pool_id, to: pool.phone, vars: { first, link } });
+        await send({ template: tpl, channel: 'email', audience: 'caregiver', pool_id, to: pool.email, vars: { first, link } });
         await h.task('packet_empeon', ('Checks clear: send the Empeon invite to ' + nameOf(pool) + ' (Copy for Empeon).').slice(0, 300), { pool_id }, 'packet_empeon:' + pool_id,
           (await one('select cds_next_business_4pm(now()) as d')).d);
         opened++;
