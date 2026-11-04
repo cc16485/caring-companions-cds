@@ -92,7 +92,7 @@ const CSS = `
 .hp .at-name{background:none;border:0;padding:0;font:inherit;font-weight:700;color:#0D365F;cursor:pointer;text-align:left;font-size:14.5px}
 .hp .at-name:hover{text-decoration:underline}
 .hp .at-sub{font-size:12.5px;color:#5b6977;white-space:normal}
-.hp .at-ok{color:#1f7a4d;font-weight:600}.hp .at-ok::before{content:"✓ "}
+.hp .at-ok{color:#1f7a4d;font-weight:600}.hp .at-ok[title],.hp .at-wait[title]{cursor:help}.hp .at-ok::before{content:"✓ "}
 .hp .at-na{color:#8a96a3}.hp .at-off{color:#c9d3dc}
 .hp .at-btn{border:2px solid #0f7a7c;color:#0f7a7c;background:#fff;border-radius:8px;padding:3px 9px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
 .hp .at-btn.late{border-color:#b42318;color:#b42318;background:#fdecea}
@@ -418,6 +418,16 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
 export const AT_COLS = [['step1', 'Step 1'], ['orient', 'Orientation'], ['fcsr', 'FCSR'], ['edl', 'EDL'], ['oig', 'OIG'], ['fp', 'Fingerprints'],
   ['invite', 'Empeon invite'], ['empeon', 'Empeon'], ['call', 'ID video check'], ['i9', 'I-9 Section 2'], ['counter', 'Countersign']];
 export const AT_JOB = Object.fromEntries(AT_COLS.map(([k, l]) => [k, l === 'Step 1' ? 'Step 1 application' : l]));
+// Hover text on a done cell: what finished, and the full date (and time when we have one).
+export const AT_DONE = { step1: 'Step 1 signed', orient: 'Orientation watched', fcsr: 'FCSR clear', edl: 'EDL and DMH registry clear',
+  oig: 'OIG and Missouri Medicaid clear', fp: 'Fingerprints clear', invite: 'Empeon invite sent', empeon: 'Empeon finished',
+  call: 'ID seen on video', i9: 'I-9 Section 2 done', counter: 'Countersigned' };
+// A check date is a plain day (2026-11-03); read it as that day, not as midnight in London, which is the day before here.
+const DAY_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+export const atDay = v => DAY_ONLY.test(v) ? v : new Date(v).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+export const atLong = v => DAY_ONLY.test(v)
+  ? new Date(v + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  : new Date(v).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(/, (\d+:\d\d)/, ' at $1');
 export const AT_HOLD = { office: 'Office', attendant: 'Attendant', state: 'State', fingerprints: 'Fingerprints', none: 'Nobody' };
 export const AT_SHOW = { now: 'Need you now', waiting: 'Consumer waiting', quiet: 'Quiet 10+ days' };
 export function onboardingRows({ starting = [], packets = [], now = new Date() }) {
@@ -632,14 +642,14 @@ export function mountHubPacket(el, opts) {
     const x = r.cells && r.cells[k];
     if (!x || x.s === 'off') return '<span class="at-off">·</span>';
     if (x.s === 'na') return `<span class="at-na">${esc(x.t)}</span>`;
-    if (x.s === 'done') return `<span class="at-ok">${esc(x.t ? shortDay(new Date(x.t).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : 'Done')}</span>`;
+    if (x.s === 'done') return `<span class="at-ok"${x.t ? ` title="${esc(AT_DONE[k] + ' ' + atLong(x.t))}"` : ''}>${esc(x.t ? shortDay(atDay(x.t)) : 'Done')}</span>`;
     if (x.s === 'bad') return `<span class="at-bad">${esc(x.t)}</span>`;
     const btn = (label, act, late) => act === 'open'
       ? `<button class="at-btn${late ? ' late' : ''}" data-open="packet:${esc(r.id)}">${esc(label)}</button>`
       : `<button class="at-btn${late ? ' late' : ''}${sure === r.id + ':' + act ? ' sure' : ''}" data-atmark="${esc(act)}" data-id="${esc(r.id)}">${esc(sure === r.id + ':' + act ? 'Tap again to save' : label)}</button>`;
     if (x.s === 'todo') { const late = r.urg === 'now' && r.job === k; return btn(x.t, x.act, late) + (late && r.why ? `<div class="at-sub" style="color:#b42318">${esc(r.why)}</div>` : ''); }
-    const sent = x.at ? ' ' + shortDay(new Date(x.at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })) : '';
-    return `<span class="at-wait${x.warn ? ' warn' : ''}">${esc(x.t + sent)}</span>${x.btn ? `<div style="margin-top:4px">${btn(x.btn, x.act)}</div>` : ''}`;
+    const sent = x.at ? ' ' + shortDay(atDay(x.at)) : '';
+    return `<span class="at-wait${x.warn ? ' warn' : ''}"${x.at ? ` title="${esc(x.t + ' ' + atLong(x.at))}"` : ''}>${esc(x.t + sent)}</span>${x.btn ? `<div style="margin-top:4px">${btn(x.btn, x.act)}</div>` : ''}`;
   }
   function tableHtml(g) {
     const all = onboardingRows({ starting: g.starting, packets: list });

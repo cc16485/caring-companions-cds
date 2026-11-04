@@ -25,7 +25,7 @@ def person(pid, name, consumer, waiting, c, hold, job, moved, note='', label='Ru
             'table': None if active else {'cells': c, 'hold': hold, 'note': note, 'job': job, 'moved': at(moved), 'fp_needed': c['fp']['s'] != 'na'}}
 LIST = [
   person('a1', 'Jeana Wise', 'Shasta Reed', True, cells(step1=D(7), orient=D(6), fcsr={'s': 'todo', 't': 'Copy for FCSR', 'act': 'open'}, edl={'s': 'todo', 't': 'Copy for EDL', 'act': 'open'}, oig=D(6)), 'office', 'fcsr', 4),
-  person('a2', 'Nora Kidd', 'Opal Henning', False, cells(step1=D(14), orient=D(13), fcsr=D(12), edl=D(12), oig=D(12), fp={'s': 'wait', 't': 'Sent', 'at': at(11), 'act': 'open', 'btn': 'Clear: add the result'}), 'fingerprints', 'fp', 11, 'Lived outside Missouri: fingerprints sent', 'Waiting on fingerprints', 'y'),
+  person('a2', 'Nora Kidd', 'Opal Henning', False, cells(step1={'s': 'done', 't': '2026-11-02T19:14:00Z'}, orient=D(13), fcsr=D(12), edl={'s': 'done', 't': '2026-11-03'}, oig=D(12), fp={'s': 'wait', 't': 'Sent', 'at': at(11), 'act': 'open', 'btn': 'Clear: add the result'}), 'fingerprints', 'fp', 11, 'Lived outside Missouri: fingerprints sent', 'Waiting on fingerprints', 'y'),
   person('a3', 'Ray Holcomb', 'Ida Kessler', False, cells(step1=D(9), orient=D(8), fcsr={'s': 'wait', 't': 'Good Cause Waiver', 'warn': True}, edl=D(8), oig=D(8)), 'state', 'fcsr', 3, 'Waiting on Good Cause Waiver', 'Waiting on Good Cause Waiver', 'y'),
   person('a4', 'Dee Ashford', 'Vernon Pike', False, cells(step1=D(10), orient=D(9), fcsr=D(7), edl=D(7), oig=D(7), invite={'s': 'todo', 't': 'Empeon invite sent', 'act': 'empeon_invited'}, counter={'s': 'todo', 't': 'Countersign', 'act': 'open'}), 'office', 'invite', 1, '', 'Send Empeon invite', 'r', at(2)),
   person('a5', 'Lena Fry', 'Leona Marsh', False, cells(step1=D(12), orient=D(11), fcsr=D(9), edl=D(9), oig=D(9), invite=D(5), empeon=D(4), call=D(2), i9={'s': 'todo', 't': 'I-9 done in Empeon', 'act': 'i9_done'}, counter=D(2)), 'office', 'i9', 1, '', 'Finish in Empeon'),
@@ -81,6 +81,12 @@ with sync_playwright() as pw:
     ck('preview says so', 'previewing it, only in this browser' in R['sw'], R['sw'])
     ck('Jeana: red edge (consumer waiting, quiet 4 days), Copy for FCSR, fingerprints Not needed', by['Jeana Wise']['cls'] == 'now' and 'Copy for FCSR' in by['Jeana Wise']['cells'][2] and by['Jeana Wise']['cells'][5] == 'Not needed' and 'Office' in by['Jeana Wise']['cells'][11], by['Jeana Wise'])
     ck('Nora: gold edge (quiet 11 days), fingerprints Sent with Clear: add the result, waiting on Fingerprints', by['Nora Kidd']['cls'] == 'quiet' and 'Sent' in by['Nora Kidd']['cells'][5] and 'Clear: add the result' in by['Nora Kidd']['cells'][5] and by['Nora Kidd']['cells'][11].startswith('Fingerprints'), by['Nora Kidd'])
+    T = pg.evaluate('''() => { const tr = [...document.querySelectorAll('table.at tbody tr')].find(r => r.textContent.includes('Nora Kidd'));
+      return [...tr.querySelectorAll('td')].map(td => { const x = td.querySelector('[title]'); return x ? x.title + ' | ' + x.textContent : ''; }); }''')
+    ck('hover on a done cell: what finished and the full date with the time', T[1] == 'Step 1 signed Monday, November 2, 2026 at 1:14 PM | Nov 2', T[1])
+    ck('a check date is that day, not the day before (2026-11-03 shows Nov 3)', T[4] == 'EDL and DMH registry clear Tuesday, November 3, 2026 | Nov 3', T[4])
+    ck('hover on fingerprints Sent: the full sent date', T[6].startswith('Sent ') and ' 2026' in T[6], T[6])
+    ck('every done cell has a hover date', all(T[i] for i in (1, 2, 3, 4, 5)), T)
     ck('Ray: Good Cause Waiver, waiting on the State', 'Good Cause Waiver' in by['Ray Holcomb']['cells'][2] and by['Ray Holcomb']['cells'][11].startswith('State'), by['Ray Holcomb'])
     ck('Dee: to-do late -> red, the late button says since when', by['Dee Ashford']['cls'] == 'now' and 'To-do late since' in by['Dee Ashford']['cells'][6], by['Dee Ashford'])
     ck('Gail: every step done, waiting on a first shift', 'Every step done' in ' '.join(by['Gail Reyes']['cells']) and 'first shift' in ' '.join(by['Gail Reyes']['cells']), by['Gail Reyes'])
