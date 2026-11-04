@@ -15,11 +15,16 @@
   const DAY = 864e5;
   // closed_inactive and closed_spam added 2026-10-22 (her ask: a way to make a lead inactive or mark it spam).
   // closed_linked (2026-10-29): the caller is family or the attendant of someone we serve or a lead; see linkLead.
-  const CLOSED = ['closed_ni', 'closed_other', 'closed_inactive', 'closed_spam', 'closed_pool', 'closed_linked'];
+  // The last eight added 2026-11-04 (her ask: close out a lead with no Medicaid, outside our area, and the reasons she picked).
+  const CLOSED = ['closed_ni', 'closed_other', 'closed_inactive', 'closed_spam', 'closed_pool', 'closed_linked',
+    'closed_no_medicaid', 'closed_area', 'closed_state_no', 'closed_more_care', 'closed_no_attendant', 'closed_facility', 'closed_passed', 'closed_no_reach'];
   const CLOSED_LABELS = { closed_ni: 'Not interested', closed_other: 'Went with another agency',
                           closed_inactive: 'Inactive, stopped answering', closed_spam: 'Spam, not a real lead',
                           closed_pool: 'Moved to the Caregiver Pool',  // closed_pool: Who called, 2026-10-22
-                          closed_linked: 'Linked to the person they called about' };
+                          closed_linked: 'Linked to the person they called about',
+                          closed_no_medicaid: 'No Medicaid', closed_area: 'Outside our service area', closed_state_no: 'The state said no',
+                          closed_more_care: 'Needs more care than CDS', closed_no_attendant: 'No attendant', closed_facility: 'Moved to a facility',
+                          closed_passed: 'Passed away', closed_no_reach: "Couldn't reach them" };
   // One rule for "active" (2026-10-22): the hub saves "inactive" lowercase and old
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
   const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());

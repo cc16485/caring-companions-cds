@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=31"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=32"></script>
 <script src="leads-table.js?v=3"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
@@ -673,6 +673,13 @@ input, select, textarea { border-radius:10px; }
              border:2px solid #e4e1d8; background:#fff; font:inherit; cursor:pointer; }
 .ld-choice:hover, .ld-choice:focus-visible { border-color:var(--cute-teal); box-shadow:0 6px 18px rgba(31,122,140,.14); }
 .ld-choice b { font-size:16.5px; color:#0D365F; }
+.cl-grp { font-size:12.5px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:#55677a; margin:10px 0 6px; }
+.cl-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.cl-grid .ld-choice { margin-bottom:0; padding:10px 14px; border-radius:14px; } .cl-grid .ld-choice b { font-size:15px; } .cl-grid .ld-choice span { font-size:12.5px; }
+.cl-sub { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0 2px; padding:10px 12px; background:#fff; border-radius:12px; border:1.5px solid var(--cute-teal); }
+.cl-sub[hidden] { display:none; } .cl-sub b { width:100%; color:#0D365F; }
+.cl-tick { display:flex; gap:8px; align-items:center; font-size:13.5px; color:#55677a; margin:12px 0 0; }
+@media (max-width:560px) { .cl-grid { grid-template-columns:1fr; } }
 /* Contacts and linking (2026-10-29) */
 .rp-lbl { display:block; font-size:13px; font-weight:600; color:var(--gray-700, #3c4a58); margin-bottom:6px; }
 .rp-roles { display:flex; flex-wrap:wrap; gap:8px; }
@@ -4068,18 +4075,46 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
 
 <!-- Close a lead (2026-10-22, her ask: make a lead inactive or mark it spam) -->
 <div class="modal-overlay" id="closeLeadModal">
-  <div class="modal" style="width:520px;background:var(--cute-cream)">
+  <div class="modal" style="width:640px;max-width:96vw;background:var(--cute-cream)">
     <div class="modal-header">
       <div class="modal-title cute-title" style="font-size:24px" id="closeLeadTitle">Close this lead</div>
       <button class="modal-close" onclick="closeModal('closeLeadModal')" aria-label="Close">×</button>
     </div>
     <input type="hidden" id="cl_id">
-    <p style="margin:0 0 14px;font-size:14.5px;color:#55677a">Why are they leaving the list? They move to Show closed, and you can reopen them any time.</p>
-    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_inactive')"><b>Inactive</b><span>Stopped answering, or went quiet.</span></button>
-    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_ni')"><b>Not interested</b><span>Told us they do not want CDS right now.</span></button>
-    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_other')"><b>Went with another agency</b><span>Chose someone else.</span></button>
-    <button type="button" class="ld-choice" onclick="closeLeadAs('closed_spam')"><b>Spam</b><span>Not a real person, a sales pitch, or a fake form.</span></button>
-    <button type="button" class="ld-choice" onclick="closeModal('closeLeadModal');openLinkLead(document.getElementById('cl_id').value)"><b>They called for someone else</b><span>Family or an attendant. Link them to that person, or make this lead theirs.</span></button>
+    <p style="margin:0 0 12px;font-size:14.5px;color:#55677a">Why are they leaving the list? They move to Show closed, and you can reopen them any time. Nothing is sent to them.</p>
+    <!-- 2026-11-04 her ask: close out a lead with no Medicaid, outside our service area, and the other reasons she picked -->
+    <div class="cl-grp">They can't get CDS</div>
+    <div class="cl-grid">
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_no_medicaid')"><b>No Medicaid</b><span>CDS needs active Medicaid.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_area')"><b>Outside our service area</b><span>They live where we don't serve.</span></button>
+      <button type="button" class="ld-choice" onclick="clStateNo()"><b>The state said no</b><span>Then pick why.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_more_care')"><b>Needs more care than CDS</b><span>Skilled or round-the-clock care.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_no_attendant')"><b>No attendant</b><span>Nobody to be their attendant, and they don't want us to find one.</span></button>
+    </div>
+    <div id="cl_stateno" class="cl-sub" hidden>
+      <b>Why did the state say no?</b>
+      <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_state_no','reach')">The state could not reach them</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_state_no','level')">They did not meet the level of care</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_state_no','other')">Another reason (say it in the note)</button>
+    </div>
+    <div class="cl-grp">They are not going ahead</div>
+    <div class="cl-grid">
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_ni')"><b>Not interested</b><span>Told us they do not want CDS right now.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_other')"><b>Went with another agency</b><span>Chose someone else.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_facility')"><b>Moved to a facility</b><span>Nursing home, assisted living or a long hospital stay.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_passed')"><b>Passed away</b><span>Closed quietly so nobody calls the family.</span></button>
+    </div>
+    <div class="cl-grp">We can't reach them</div>
+    <div class="cl-grid">
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_no_reach')"><b>Couldn't reach them</b><span>Several tries, never talked.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_inactive')"><b>Inactive</b><span>We talked, then they stopped answering.</span></button>
+    </div>
+    <div class="cl-grp">Not a real lead</div>
+    <div class="cl-grid">
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_spam')"><b>Spam</b><span>Not a real person, a sales pitch, or a fake form.</span></button>
+      <button type="button" class="ld-choice" onclick="closeModal('closeLeadModal');openLinkLead(document.getElementById('cl_id').value)"><b>They called for someone else</b><span>Family or an attendant. Link them to that person, or make this lead theirs.</span></button>
+    </div>
+    <label class="cl-tick"><input type="checkbox" id="cl_ccpp"> I told them about Caring Companions private pay</label>
     <div class="form-group" style="margin-top:6px"><label for="cl_note">Note (optional)</label>
       <textarea id="cl_note" rows="2" style="width:100%;padding:8px;border:1.5px solid var(--gray-300);border-radius:10px;font-family:inherit;font-size:13px" placeholder="For example: no answer after 3 calls"></textarea>
     </div>
@@ -4262,6 +4297,14 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
           <option value="closed_other">Closed, went with another agency</option>
           <option value="closed_inactive">Closed, inactive (stopped answering)</option>
           <option value="closed_spam">Closed, spam (not a real lead)</option>
+          <option value="closed_no_medicaid">Closed, no Medicaid</option>
+          <option value="closed_area">Closed, outside our service area</option>
+          <option value="closed_state_no">Closed, the state said no</option>
+          <option value="closed_more_care">Closed, needs more care than CDS</option>
+          <option value="closed_no_attendant">Closed, no attendant</option>
+          <option value="closed_facility">Closed, moved to a facility</option>
+          <option value="closed_passed">Closed, passed away</option>
+          <option value="closed_no_reach">Closed, couldn't reach them</option>
         </select>
       </div>
       <div class="form-group"><label>Call back on</label><input type="date" id="pl_followup"></div>
@@ -4633,6 +4676,14 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
           <option value="closed_other">Closed, went with another agency</option>
           <option value="closed_inactive">Closed, inactive (stopped answering)</option>
           <option value="closed_spam">Closed, spam (not a real lead)</option>
+          <option value="closed_no_medicaid">Closed, no Medicaid</option>
+          <option value="closed_area">Closed, outside our service area</option>
+          <option value="closed_state_no">Closed, the state said no</option>
+          <option value="closed_more_care">Closed, needs more care than CDS</option>
+          <option value="closed_no_attendant">Closed, no attendant</option>
+          <option value="closed_facility">Closed, moved to a facility</option>
+          <option value="closed_passed">Closed, passed away</option>
+          <option value="closed_no_reach">Closed, couldn't reach them</option>
         </select>
       </div>
       <div class="form-group"><label>Call back on</label><input type="date" id="ep_followup"></div>
@@ -6946,9 +6997,13 @@ const PIPELINE_STATUS_LABELS = {
   processing: 'The state is working on it', authorized: 'Approved by the state', transfer_complete: 'Transfer done',
   closed_ni: 'Closed, not interested', closed_other: 'Closed, went with another agency',
   closed_inactive: 'Closed, inactive', closed_spam: 'Closed, spam', closed_pool: 'Closed, moved to Caregiver Pool',
-  closed_linked: 'Linked to the person they called about'
+  closed_linked: 'Linked to the person they called about',
+  closed_no_medicaid: 'Closed, no Medicaid', closed_area: 'Closed, outside our service area', closed_state_no: 'Closed, the state said no',
+  closed_more_care: 'Closed, needs more care than CDS', closed_no_attendant: 'Closed, no attendant', closed_facility: 'Closed, moved to a facility',
+  closed_passed: 'Closed, passed away', closed_no_reach: "Closed, couldn't reach them"
 };
-const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other','closed_inactive','closed_spam','closed_pool','closed_linked'];
+const PIPELINE_CLOSED_STATUSES = ['closed_ni','closed_other','closed_inactive','closed_spam','closed_pool','closed_linked',
+  'closed_no_medicaid','closed_area','closed_state_no','closed_more_care','closed_no_attendant','closed_facility','closed_passed','closed_no_reach'];   // the last eight: 2026-11-04
 const PIPELINE_DONE_STATUSES = ['authorized','transfer_complete'];
 
 // ============================================================================
@@ -7303,10 +7358,15 @@ function openCloseLead(id) {
   document.getElementById('cl_id').value = id;
   document.getElementById('closeLeadTitle').textContent = 'Close ' + (p.name || 'this lead');
   document.getElementById('cl_note').value = '';
+  document.getElementById('cl_stateno').hidden = true;
+  document.getElementById('cl_ccpp').checked = false;
   openModal('closeLeadModal');
 }
 
-function closeLeadAs(status) {
+// The state said no: one more tap for why (her ask 2026-11-04: "could the state not reach them or did they not meet the level of care")
+function clStateNo() { const b = document.getElementById('cl_stateno'); b.hidden = !b.hidden; }
+const CL_STATE_NO = { reach: 'the state could not reach them', level: 'they did not meet the level of care', other: 'another reason' };
+function closeLeadAs(status, why) {
   const id = document.getElementById('cl_id').value;
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === id);
@@ -7316,8 +7376,12 @@ function closeLeadAs(status) {
   p.followup = '';
   const note = document.getElementById('cl_note').value.trim();
   if (!p.notes) p.notes = [];
+  const extra = [];
+  if (status === 'closed_state_no') { p.stateNoWhy = why || 'other'; extra.push(CL_STATE_NO[p.stateNoWhy]); }
+  if (status === 'closed_area' && p.county) extra.push(p.county + ' County');
+  if (document.getElementById('cl_ccpp')?.checked) extra.push('told them about Caring Companions private pay');
   p.notes.push({ date: new Date().toLocaleDateString('en-CA'),
-                 text: 'Closed: ' + (CDSRules.CLOSED_LABELS[status] || status) + (note ? '. ' + note : '') });
+                 text: 'Closed: ' + (CDSRules.CLOSED_LABELS[status] || status) + (extra.length ? ' (' + extra.join('; ') + ')' : '') + (note ? '. ' + note : '') });
   setData('pipeline', pipeline);
   closeModal('closeLeadModal');
   renderPipeline();
@@ -7333,6 +7397,7 @@ function reopenLead(id) {
   if (p.status === 'closed_linked') { const o = rpOwnerOf(p); if (o) return rpUnlink(o.kind, o.owner.id, o.contact.id, true); }
   p.status = 'nurturing';
   delete p.closedAt;
+  delete p.stateNoWhy;
   if (!p.notes) p.notes = [];
   p.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: 'Reopened.' });
   setData('pipeline', pipeline);
