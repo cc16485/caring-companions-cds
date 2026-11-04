@@ -114,10 +114,10 @@
     if (a && a.name) {
       const steps = typeof ATT_STEPS !== 'undefined' ? ATT_STEPS : [];
       const n = steps.filter(([k]) => a[k]).length;
-      if (a.backgroundResult === 'failed') cells[5] = late('Find another', prof, a.name + ': background failed');
+      if (a.backgroundResult === 'failed') cells[5] = late('Pick another', "openLeadAttendant('" + id + "')", a.name + ': background failed');
       else if (a.backgroundResult === 'clear' && n >= steps.length) cells[5] = ok(a.name);
       else cells[5] = wait(a.name + (a.backgroundResult === 'clear' ? ', ' + n + ' of ' + steps.length + ' steps' : ', check not back'));
-    } else if (c.cg === 'has') cells[5] = { s: 'none', t: 'Has one' };
+    } else if (c.step !== 'closed') cells[5] = { s: 'add', t: c.cg === 'has' ? 'Add (has one)' : 'Add', go: "openLeadAttendant('" + id + "')" };   // 2026-11-04 "attach them"
     /* 7 Move to Consumers */
     if (c.step === 'ready') {
       cells[6] = todo('Move to Consumers', "convertToConsumer('" + id + "')");
@@ -144,6 +144,7 @@
 
   function cellHTML(x, r, i) {
     const hi = i === r.cur ? ' lt-hi' : '';
+    if (x && x.s === 'add') return '<td class="' + hi.trim() + '"><button type="button" class="lt-b lt-b-q" onclick="' + E(x.go) + '">' + E(x.t) + '</button></td>';
     if (!x || x.s === 'none') return '<td class="' + hi.trim() + '"><span class="lt-none">' + E(x && x.t ? x.t : '–') + '</span></td>';
     if (x.s === 'ok') return '<td class="' + hi.trim() + '"><span class="lt-ok">✓</span>' + (x.t ? ' ' + E(x.t) : '') + (x.sub ? '<div class="lt-sub">' + E(x.sub) + '</div>' : '') + '</td>';
     if (x.s === 'wait') return '<td class="' + hi.trim() + '"><span class="lt-wait' + (x.warn ? ' lt-warn' : '') + '">' + E(x.t) + '</span>' + (x.sub ? '<div class="lt-sub">' + E(x.sub) + '</div>' : '') + '</td>';

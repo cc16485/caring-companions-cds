@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=32"></script>
-<script src="leads-table.js?v=3"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="leads-table.js?v=4"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -4154,6 +4154,31 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
   </div>
 </div>
 
+<!-- Their attendant on a lead (2026-11-04, her ask: "how can we add the attendant on to the cds lead? ... attach them") -->
+<div class="modal-overlay" id="leadAttModal">
+  <div class="modal" style="width:520px;max-width:96vw;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:22px" id="la_title">Their attendant</div>
+      <button class="modal-close" onclick="closeModal('leadAttModal')" aria-label="Close">×</button>
+    </div>
+    <input type="hidden" id="la_id">
+    <div id="la_picks"></div>
+    <div class="form-row">
+      <div class="form-group"><label for="la_name">Attendant full name</label><input type="text" id="la_name"></div>
+      <div class="form-group"><label for="la_phone">Attendant phone</label><input type="tel" id="la_phone"></div>
+    </div>
+    <div class="form-group"><label for="la_email">Attendant email</label><input type="email" id="la_email"></div>
+    <div class="field-note" style="margin:2px 0 10px">Nothing is sent to them from here. It is saved on this lead so the office can track their Empeon pack, background check and WellSky.</div>
+    <div id="la_err" class="field-note" style="color:var(--danger)"></div>
+    <div class="modal-footer" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-outline" id="la_remove" onclick="removeLeadAttendant()">Take them off this lead</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-outline" onclick="closeModal('leadAttModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLeadAttendant()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add a contact by hand (family, attendant or someone else) -->
 <div class="modal-overlay" id="factsModal">
   <div class="modal" style="width:560px;background:var(--cute-cream)">
@@ -7882,7 +7907,8 @@ function renderLeadProfile(){
     const failed = a.backgroundResult === 'failed';
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px' +
       (failed ? ';border-left:4px solid var(--danger)' : '') + '">' +
-      '<b style="color:var(--primary)">Their attendant</b>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="color:var(--primary)">Their attendant</b>' +
+        '<button class="btn btn-sm btn-outline" onclick="openLeadAttendant(\'' + esc(p.id) + '\')">' + (failed ? 'Pick a different attendant' : 'Change') + '</button></div>' +
       row('Name', a.name) + row('Phone', a.phone) + row('Email', a.email) +
       '<div style="display:flex;gap:10px;align-items:center;padding:8px 0;flex-wrap:wrap">' +
         '<span style="min-width:250px;font-size:13px">Background check</span>' +
@@ -7903,6 +7929,12 @@ function renderLeadProfile(){
       '<div class="field-note" style="margin-top:6px">No clock in and out on WellSky means those hours cannot ' +
         'be paid, and it cannot be fixed afterwards. That is why it is on this list.</div>' +
       '</div>';
+  } else if (!CDSRules.CLOSED.includes(p.status)) {
+    // 2026-11-04 her ask: "how can we add the attendant on to the cds lead? ... attach them"
+    html += '<div class="card" style="padding:14px 20px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<span><b style="color:var(--primary)">Their attendant</b> <span class="field-note">' +
+        (CDSRules.caregiverPlan(p) === 'has' ? 'They have someone in mind. Add them here.' : 'Nobody yet.') + '</span></span>' +
+      '<button class="btn btn-primary btn-sm" onclick="openLeadAttendant(\'' + esc(p.id) + '\')">Add their attendant</button></div>';
   }
 
   // ---- the HCBS-1 answers, if this was a referral call ----
@@ -8365,6 +8397,68 @@ function lpSetStep(where, key, value){
   }
   setData('pipeline', list);
   renderLeadProfile();
+}
+
+// ---------- Their attendant on a lead (2026-11-04, her ask: "attach them") ----------
+// Add, change or take off the attendant on a lead, from the lead profile or the Leads table. Quick picks: anyone already
+// linked to this lead as their Attendant (Contacts), and caregivers moved to the Caregiver Pool from Leads. A different
+// person starts their checklist fresh; the same person keeps their dates. Nothing is sent to anyone.
+let _laPicks = [];
+function openLeadAttendant(id) {
+  const p = getData('pipeline').find(x => x.id === id);
+  if (!p) return;
+  const a = p.attendant || {};
+  document.getElementById('la_id').value = id;
+  document.getElementById('la_title').textContent = (a.name ? 'Change the attendant for ' : 'Add the attendant for ') + (p.name || 'this lead');
+  document.getElementById('la_name').value = a.name || '';
+  document.getElementById('la_phone').value = a.phone || '';
+  document.getElementById('la_email').value = a.email || '';
+  document.getElementById('la_err').textContent = '';
+  document.getElementById('la_remove').style.display = a.name ? '' : 'none';   // .btn's own display beats hidden
+  const linked = CDSRules.relatedPeople(p).filter(r => r.role === 'attendant').map(r => ({ name: r.name, phone: r.phone || '', email: r.email || '', from: 'linked to this lead' }));
+  const pool = getData('pipeline').filter(x => x.status === 'closed_pool' && x.name).map(x => ({ name: x.name, phone: x.phone || '', email: x.email || '', from: 'Caregiver Pool' }));
+  _laPicks = linked.concat(pool).filter(x => String(x.name).trim().toLowerCase() !== String(a.name || '').trim().toLowerCase()).slice(0, 12);
+  document.getElementById('la_picks').innerHTML = _laPicks.length
+    ? '<div class="field-note" style="margin:0 0 6px">Someone we already know:</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">' +
+      _laPicks.map((x, i) => '<button type="button" class="btn btn-sm btn-outline" onclick="laPick(' + i + ')">' + esc(x.name) + ' <span class="field-note">(' + esc(x.from) + ')</span></button>').join('') + '</div><div class="field-note" style="margin:0 0 6px">Or type them in:</div>'
+    : '';
+  openModal('leadAttModal');
+}
+function laPick(i) {
+  const x = _laPicks[i]; if (!x) return;
+  document.getElementById('la_name').value = x.name || '';
+  document.getElementById('la_phone').value = x.phone || '';
+  document.getElementById('la_email').value = x.email || '';
+}
+function saveLeadAttendant() {
+  const id = document.getElementById('la_id').value, list = getData('pipeline'), p = list.find(x => x.id === id);
+  if (!p) return;
+  const name = document.getElementById('la_name').value.trim(), phone = document.getElementById('la_phone').value.trim(), email = document.getElementById('la_email').value.trim();
+  if (!name) { document.getElementById('la_err').textContent = 'Type their name, or pick someone above.'; return; }
+  const was = p.attendant || null;
+  const same = was && String(was.name || '').trim().toLowerCase() === name.toLowerCase();
+  p.attendant = same ? Object.assign({}, was, { name, phone: phone || null, email: email || null })
+    : { name, phone: phone || null, email: email || null, empeonInvited: null, toldAboutEmpeon: null, paperworkBack: null, backgroundResult: null, wellskyReady: null };
+  p.caregiverPlan = 'has';
+  if (!p.notes) p.notes = [];
+  p.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: same ? 'Attendant details updated: ' + name + '.' : (was && was.name ? 'Attendant changed from ' + was.name + ' to ' + name + '.' : 'Attendant added: ' + name + '.') });
+  setData('pipeline', list);
+  closeModal('leadAttModal');
+  renderPipeline();
+  if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
+}
+function removeLeadAttendant() {
+  const id = document.getElementById('la_id').value, list = getData('pipeline'), p = list.find(x => x.id === id);
+  if (!p || !p.attendant) return;
+  const was = p.attendant.name;
+  p.attendant = null;
+  if (p.caregiverPlan === 'has') p.caregiverPlan = 'ask';
+  if (!p.notes) p.notes = [];
+  p.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: 'Attendant taken off this lead: ' + (was || 'no name') + '.' });
+  setData('pipeline', list);
+  closeModal('leadAttModal');
+  renderPipeline();
+  if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
 }
 
 function lpSetBackground(value){
