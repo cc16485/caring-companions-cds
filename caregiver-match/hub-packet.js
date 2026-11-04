@@ -102,7 +102,6 @@ const CSS = `
 .hp .at-bad{display:inline-block;border-radius:6px;padding:2px 7px;font-size:12.5px;font-weight:700;background:#fdecea;color:#b42318}
 .hp .at-hold{font-weight:700}.hp .h-office{color:#0f7a7c}.hp .h-attendant{color:#8a5a00}.hp .h-state,.hp .h-fingerprints{color:#2b5c8a}.hp .h-none{color:#5b6977}
 .hp .at-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:#5b6977;margin-top:8px}
-.hp .at-switch{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;background:#f3f7f8;border:1px dashed #c9d3dc;border-radius:10px;padding:8px 12px;margin:6px 0 4px;font-size:13.5px}
 .hp .at-cards{display:none}
 @media (max-width:760px){.hp .at-scroll{display:none}.hp .at-cards{display:grid;gap:8px}
 .hp .at-card{background:#fff;border:1px solid #dfe6ec;border-radius:12px;padding:12px 14px;display:grid;gap:6px}
@@ -557,10 +556,8 @@ export function mountHubPacket(el, opts) {
   const ended = () => (opts.roster ? opts.roster() : []).filter(a => a.status === 'inactive');
   // Tabs (her ask 2026-10-22): Onboarding / Working / Inactive. Opens on Onboarding when someone is in it.
   let list = [], open = null, err = '', tab = null, query = '';
-  // Onboarding as one table (2026-11-04): her switch, an owner's preview in this browser, the menus remembered here.
+  // Onboarding as one table (2026-11-04; on for everyone, switch removed at her ask the same day): the menus remembered here.
   const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* storage blocked */ } return null; };
-  const sw = opts.tableSwitch || null;
-  const tableOn = () => !!sw && (sw.live() || (sw.owner() && ls('hpTable') === '1'));
   let F = { show: '', job: '', hold: '' };
   try { const s = JSON.parse(ls('hpTableF') || 'null'); if (s && typeof s === 'object') F = Object.assign(F, s); } catch { /* none saved */ }
   let sure = '';
@@ -611,9 +608,7 @@ export function mountHubPacket(el, opts) {
         ${found.map(x => rowHtml({ ...x, meta: x.where + (x.meta ? ' · ' + x.meta : '') })).join('')}
         ${gone.map(endedRow).join('')}
         ${found.length + gone.length ? '' : '<p class="small">Nobody matches. Try fewer letters.</p>'}`;
-    } else if (tab === 'onboarding' && tableOn()) body = switchRow() + tableHtml(g);
-    else if (tab === 'onboarding') body = switchRow() + `<div class="ghead"><span>Consumer waiting goes first</span></div>
-      ${g.starting.length ? g.starting.map(rowHtml).join('') : '<p class="small">Nobody is onboarding. New attendants start at caringcds.com/apply; you get an alert when they sign Step 1.</p>'}`;
+    } else if (tab === 'onboarding') body = tableHtml(g);
     else if (tab === 'working') body = `<div class="ghead"><span>${ws.have ? 'Shift in WellSky in the last ' + WORKING_DAYS + ' days. WellSky ' + esc(asOf) + esc(hoursNote) : 'WellSky has not sent anything yet, so everyone shows here'}</span>
         <span>${t.due ? `<span class="pill r">${t.due} check due or overdue</span> ` : ''}${t.dates ? `<span class="pill y">${t.dates} with check dates to add</span>` : ''}</span></div>
       ${g.working.length ? g.working.map(rowHtml).join('') : '<p class="small">Nobody yet.</p>'}`;
@@ -631,13 +626,6 @@ export function mountHubPacket(el, opts) {
       <p class="small" style="margin-top:12px">New attendants apply at <b>caringcds.com/apply</b>. Rechecks: OIG every month (runs by itself), EDL every 3 months, FCSR every year.</p>`;
   }
 
-  // Only the owners see the switch: preview it here, then turn it on for everyone.
-  function switchRow() {
-    if (!sw || !sw.owner()) return '';
-    const lv = sw.live(), pv = !lv && ls('hpTable') === '1', at = sw.at ? sw.at() : null;
-    return `<div class="at-switch"><span><b>Onboarding as a table:</b> ${lv ? 'On for everyone' : pv ? 'Off (you are previewing it, only in this browser)' : 'Off'}${at && at.by ? ' (changed by ' + esc(at.by) + ')' : ''}. Only you see this switch.</span>
-      <span class="btns" style="margin:0">${lv ? '' : `<button class="btn o" data-act="at-preview">${pv ? 'Back to the list' : 'Preview it (only me)'}</button>`}<button class="btn ${lv ? 'o' : ''}" data-act="at-flip">${lv ? 'Turn off for everyone' : 'Turn on for everyone'}</button></span></div>`;
-  }
   function cellHtml(r, k) {
     const x = r.cells && r.cells[k];
     if (!x || x.s === 'off') return '<span class="at-off">·</span>';
@@ -877,8 +865,6 @@ export function mountHubPacket(el, opts) {
     const fail = m => { const x = errEl(); if (x) x.textContent = m; else alert(m); };
     try {
       if (b.dataset.tab) { tab = b.dataset.tab; draw(); return; }
-      if (act0(b) === 'at-preview') { ls('hpTable', ls('hpTable') === '1' ? null : '1'); draw(); return; }
-      if (act0(b) === 'at-flip') { if (!sw || !sw.owner()) return; await sw.set(!sw.live()); draw(); return; }
       if (act0(b) === 'at-clear') { F = { show: '', job: '', hold: '' }; ls('hpTableF', JSON.stringify(F)); draw(); return; }
       // A one-tap step from the table: tap twice so a stray click never records it.
       if (b.dataset.atmark) {

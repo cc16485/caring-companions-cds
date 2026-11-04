@@ -1,7 +1,7 @@
 """CDS attendant onboarding as one table (Samantha 2026-11-04: "Approve the CDS attendant onboarding table as shown in the
 mockup, with your picks, including the new fingerprints check for anyone who lived out of state. Build it switched off.").
 The real Attendants page code and the real hub page, served from THIS checkout by the test itself, offline (Supabase is
-blocked), MADE-UP people only. Checks the switch (off, owner preview, on), the columns, red and gold edges, the menus and
+blocked), MADE-UP people only. Checks the table is always on with no switch (removed at her ask 2026-11-04), the columns, red and gold edges, the menus and
 their memory, the two-tap buttons, Not needed fingerprints, phone cards, and the lead showing the packet's real step.
 Saves screenshots. (python3 tests/attendants_table_look.py; OUT=<dir>). Needs playwright. Nothing is sent or saved."""
 import os, threading, functools, datetime, json
@@ -35,19 +35,18 @@ LIST = [
 LIST[5]['step1_at'] = None
 SETUP = r"""
 async([LIST, mode])=>{
-  try { ['hpTable','hpTableF'].forEach(k => localStorage.removeItem(k)); if (mode === 'preview') localStorage.setItem('hpTable','1'); } catch (e) {}
+  try { ['hpTable','hpTableF'].forEach(k => localStorage.removeItem(k)); } catch (e) {}
   const lo = document.getElementById('loginOverlay'); if (lo) lo.style.display = 'none';
   window.SW = { live: mode === 'live', owner: mode !== 'staff', flips: [] };
   window.CALLS = [];
   const api = async (a, b) => { CALLS.push([a, b]); if (a === 'packetList') return { attendants: JSON.parse(JSON.stringify(LIST)) };
     if (a === 'packetGet') return { pool: { first: 'Jeana', last: 'Wise' }, packet: {}, status: { steps: [], label: 'Run EDL and FCSR', tone: 'r', next: 'x' }, screening: { checks: [] }, forms: {}, answers: {} }; return { ok: true }; };
-  const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=21');
+  const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=23');
   let host = document.getElementById('att_test'); if (host) host.remove();
   host = document.createElement('div'); host.id = 'att_test'; host.style.cssText = 'position:fixed;inset:0;overflow:auto;background:#f6f7f5;z-index:99999;padding:16px';
   document.body.appendChild(host);
   const el = document.createElement('div'); host.appendChild(el);
-  mountHubPacket(el, { api, roster: () => [], wellsky: () => null,
-    tableSwitch: { live: () => SW.live, owner: () => SW.owner, at: () => ({ by: 'samantha' }), set: async v => { SW.flips.push(v); SW.live = v; } } });
+  mountHubPacket(el, { api, roster: () => [], wellsky: () => null });
   await new Promise(r => setTimeout(r, 400));
   return true;
 }"""
@@ -69,16 +68,9 @@ with sync_playwright() as pw:
     pg.route('**/*', lambda r: r.abort() if not r.request.url.startswith(f'http://127.0.0.1:{PORT}') else r.continue_())
     pg.goto(f'http://127.0.0.1:{PORT}/index.html'); pg.wait_for_timeout(1500)
 
-    pg.evaluate(SETUP, [LIST, 'off']); R = pg.evaluate(READ)
-    ck('switch off: the list as today, no table', not R['rows'] and R['list'] >= 6, R)
-    ck('switch off: the owner sees the switch with Preview and Turn on', 'Onboarding as a table: Off' in R['sw'] and 'Preview it (only me)' in R['sw'] and 'Turn on for everyone' in R['sw'], R['sw'])
-    pg.evaluate(SETUP, [LIST, 'staff']); R = pg.evaluate(READ)
-    ck('office staff: no switch, no table while it is off', not R['sw'] and not R['rows'], R['sw'])
-
-    pg.evaluate(SETUP, [LIST, 'preview']); R = pg.evaluate(READ); by = {r['name']: r for r in R['rows']}
-    ck('owner preview: the table, one row per attendant onboarding', len(R['rows']) == 7, R['rows'])
+    pg.evaluate(SETUP, [LIST, 'live']); R = pg.evaluate(READ); by = {r['name']: r for r in R['rows']}
+    ck('the table, one row per attendant onboarding, with no switch bar', len(R['rows']) == 7 and not R['sw'] and 'Turn off for everyone' not in R['text'], R['sw'])
     ck('the columns as on the mockup', R['heads'] == ['Attendant', 'Step 1', 'Orientation', 'FCSR', 'EDL', 'OIG', 'Fingerprints', 'Empeon invite', 'Empeon', 'ID video check', 'I-9 Section 2', 'Countersign', 'Waiting on', 'Consumer', 'Days quiet'], R['heads'])
-    ck('preview says so', 'previewing it, only in this browser' in R['sw'], R['sw'])
     ck('Jeana: red edge (consumer waiting, quiet 4 days), Copy for FCSR, fingerprints Not needed', by['Jeana Wise']['cls'] == 'now' and 'Copy for FCSR' in by['Jeana Wise']['cells'][2] and by['Jeana Wise']['cells'][5] == 'Not needed' and 'Office' in by['Jeana Wise']['cells'][11], by['Jeana Wise'])
     ck('Nora: gold edge (quiet 11 days), fingerprints Sent with Clear: add the result, waiting on Fingerprints', by['Nora Kidd']['cls'] == 'quiet' and 'Sent' in by['Nora Kidd']['cells'][5] and 'Clear: add the result' in by['Nora Kidd']['cells'][5] and by['Nora Kidd']['cells'][11].startswith('Fingerprints'), by['Nora Kidd'])
     T = pg.evaluate('''() => { const tr = [...document.querySelectorAll('table.at tbody tr')].find(r => r.textContent.includes('Nora Kidd'));
@@ -117,13 +109,7 @@ with sync_playwright() as pw:
     pg.click('#att_test [data-open="packet:a1"].at-name'); pg.wait_for_timeout(200)
     ck('a name opens their packet', pg.evaluate("()=>CALLS.some(c=>c[0]==='packetGet'&&c[1].pool_id==='a1')") and '← All attendants' in pg.evaluate(READ)['text'])
 
-    # turn on for everyone
-    pg.evaluate(SETUP, [LIST, 'off']); pg.click('#att_test [data-act="at-flip"]'); pg.wait_for_timeout(200)
-    R = pg.evaluate(READ)
-    ck('Turn on for everyone: saved, table shows', pg.evaluate('()=>SW.flips') == [True] and len(R['rows']) == 7 and 'On for everyone' in R['sw'], R['sw'])
-    pg.evaluate(SETUP, [LIST, 'live']); pg.evaluate("()=>{SW.owner=false}"); pg.evaluate(SETUP.replace("owner: mode !== 'staff'", "owner: false"), [LIST, 'live']); R = pg.evaluate(READ)
-    ck('on: office staff see the table, not the switch', len(R['rows']) == 7 and not R['sw'], R['sw'])
-
+    pg.evaluate(SETUP, [LIST, 'live'])
     # phone
     pg.set_viewport_size({'width': 390, 'height': 844}); pg.wait_for_timeout(200)
     ph = pg.evaluate("()=>({cards: [...document.querySelectorAll('#att_test .at-card')].filter(c=>c.offsetParent).length, table: !!document.querySelector('#att_test .at-scroll').offsetParent, wide: document.getElementById('att_test').scrollWidth > 400})")
@@ -132,7 +118,7 @@ with sync_playwright() as pw:
     pg.set_viewport_size({'width': 1440, 'height': 1000})
     pg.evaluate("()=>document.getElementById('att_test').remove()")
 
-    # the lead shows the packet's real step (same switch)
+    # the lead shows the packet's real step (always)
     LEAD = r"""
     async([LIST, live])=>{
       _store.attendantsTable = live ? { live: true } : {};
@@ -154,9 +140,7 @@ with sync_playwright() as pw:
       renderLeadProfile(); return pg.textContent; }""")
     ck('lead profile: the packet step, no hand-typed checklist', 'Waiting on Good Cause Waiver' in prof and 'Open Attendants' in prof and 'Invited into Empeon' not in prof, prof[:400])
     got = pg.evaluate(LEAD, [LIST, False])
-    ck('switch off: leads as before (no packet lookups)', got == [None, None, None], got)
-    prof = pg.evaluate("()=>{ renderLeadProfile(); return document.getElementById('page-leadprofile').textContent; }")
-    ck('switch off: the hand-typed attendant list as before', 'Invited into Empeon' in prof, prof[:300])
+    ck('old switch setting cleared: leads still show the packet step', got[1] == 'Ray Holcomb | Waiting on Good Cause Waiver', got)
     ck('no page errors', not errs, errs)
     b.close()
 print(f"{sum(res)} passed, {len(res) - sum(res)} failed")
