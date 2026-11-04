@@ -131,6 +131,25 @@ with sync_playwright() as pw:
     ck('Move to Consumers runs the same move as the card', pg.evaluate("""()=>{ let got = null; const o = window.convertToConsumer; window.convertToConsumer = id => { got = id; };
       const tr = [...document.querySelectorAll('#ldCards tbody tr')].find(t => t.textContent.includes('Hazel Dunn')); [...tr.querySelectorAll('button')].find(b => b.textContent === 'Move to Consumers').click();
       window.convertToConsumer = o; return got === 'p7'; }"""))
+    ck('a lead with no attendant has an Add button in the Attendant column', '+' not in by['Hazel Dunn']['cells'][5] and by['Hazel Dunn']['cells'][5] == 'Add', by['Hazel Dunn']['cells'])
+    ck('Add attaches an attendant (pick from the Caregiver Pool or type), saves a note, and the row shows them', pg.evaluate("""()=>{
+      _store.pipeline.push({ id: 'pool1', name: 'Pat Pooler', type: 'lead', status: 'closed_pool', phone: '4175550199', notes: [] });
+      const tr = [...document.querySelectorAll('#ldCards tbody tr')].find(t => t.textContent.includes('Hazel Dunn'));
+      [...tr.querySelectorAll('button')].find(b => b.textContent === 'Add').click();
+      const picks = [...document.querySelectorAll('#la_picks button')].map(b => b.textContent);
+      const noRemove = getComputedStyle(document.getElementById('la_remove')).display === 'none';
+      [...document.querySelectorAll('#la_picks button')].find(b => b.textContent.includes('Pat Pooler')).click();
+      const phone = document.getElementById('la_phone').value; saveLeadAttendant();
+      const h = _store.pipeline.find(x => x.id === 'p7'), row = [...document.querySelectorAll('#ldCards tbody tr')].find(t => t.textContent.includes('Hazel Dunn'));
+      const ok = noRemove && picks.some(x => x.includes('Caregiver Pool')) && phone === '4175550199' && h.attendant.name === 'Pat Pooler' && h.caregiverPlan === 'has'
+        && /Attendant added: Pat Pooler/.test(h.notes.slice(-1)[0].text) && row.children[6].textContent.includes('Pat Pooler');
+      _store.pipeline = _store.pipeline.filter(x => x.id !== 'pool1'); h.attendant = null; delete h.caregiverPlan; renderPipeline(); return ok; }"""))
+    ck('changing to a different person starts their checklist fresh; taking them off clears it', pg.evaluate("""()=>{
+      const i = _store.pipeline.find(x => x.id === 'p9'); i.attendant.empeonInvited = '2026-11-01';
+      openLeadAttendant('p9'); document.getElementById('la_name').value = 'New Person'; saveLeadAttendant();
+      const fresh = i.attendant.name === 'New Person' && !i.attendant.empeonInvited && /changed from Sam Helper to New Person/.test(i.notes.slice(-1)[0].text);
+      openLeadAttendant('p9'); removeLeadAttendant(); const off = i.attendant === null;
+      i.attendant = { name: 'Sam Helper', backgroundResult: null }; renderPipeline(); return fresh && off; }"""))
     ck('no em dashes in the table', pg.evaluate("()=>document.getElementById('ldCards').textContent.indexOf('\\u2014') < 0"))
     box = pg.locator('#csub-pipeline').bounding_box()
     pg.screenshot(path=os.path.join(OUT, 'cds_lt_desktop.png'), clip={'x': box['x'], 'y': box['y'], 'width': box['width'], 'height': min(1200, box['height'])}, full_page=True)
