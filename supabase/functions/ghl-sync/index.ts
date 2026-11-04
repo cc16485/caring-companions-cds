@@ -32,7 +32,10 @@
 //
 // Auth: POST with a CDS-project user's access token (Authorization: Bearer).
 // Any signed-in hub user may sync; the GHL token never leaves the server.
-// The project's own server key is also accepted, for Desktop steps.
+// A Desktop step signs in with a one-time code instead: it stores the code's
+// sha-256 under agency_data 'ghl_sync_step_code' { hash, expires } and sends
+// "step-<code>". (The server key was tried first, 2026-11-04 1288, and did not
+// match the key the function sees.)
 //
 // Secrets required (function returns configured:false until both are set). CDS-only names (2026-10-08) so a
 // Caring Companions (non-CDS) key can't be set here by mistake; any location but the CDS sub-account is refused:
@@ -168,6 +171,17 @@ async function inBatches<T, R>(items: T[], size: number, fn: (item: T) => Promis
   return out
 }
 
+// A Desktop step's one-time code: right hash, not expired.
+async function stepCodeOk(admin: ReturnType<typeof createClient>, code: string): Promise<boolean> {
+  const { data } = await admin.from('agency_data').select('data_value')
+    .eq('agency_id', AGENCY_ID).eq('data_key', 'ghl_sync_step_code').maybeSingle()
+  const v = (data?.data_value ?? {}) as { hash?: string; expires?: string }
+  if (!v.hash || !v.expires || Date.parse(v.expires) < Date.now()) return false
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code))
+  const hex = [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return hex === v.hash
+}
+
 // The only GoHighLevel location this function may ever touch (Caring Companions CDS).
 const CDS_LOCATION = '4EFPkajwe0hHrqxvYkZ9'
 
@@ -180,7 +194,7 @@ Deno.serve(async (req) => {
   // Gate on the caller's hub login. Every CDS hub user has a real Supabase
   // account, so there is no separate shared key to leak.
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-  const server = !!jwt && jwt === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const server = /^step-[a-f0-9]{32,}$/.test(jwt) && await stepCodeOk(admin, jwt.slice(5))
   const { data: u } = server ? { data: null } : await admin.auth.getUser(jwt)
   const email = server ? 'desktop step' : u?.user?.email
   if (!email) return json({ error: 'Sign in to the CDS hub first.' }, 401)
