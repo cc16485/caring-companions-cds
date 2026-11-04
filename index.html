@@ -13934,6 +13934,12 @@ function _ghlSyncReport(report) {
     const problems = (r.skipped || []).concat(r.failed || []);
     html += '<div style="padding:10px 12px;background:var(--gray-100);border-radius:8px;margin-bottom:8px">' +
       '<strong>' + (LABEL[key] || key) + ':</strong> ' + r.synced + ' of ' + r.total + ' synced';
+    // Address and county (2026-11-04): how many went over with each.
+    if (r.withAddress != null && key !== 'attendants') {
+      html += '<div style="margin-top:4px;font-size:12px;color:var(--gray-600)">' + r.withAddress + ' with an address, ' +
+        r.withCounty + ' with a county' + ((r.countyLeftOut || []).length ? '. County not sent for ' +
+        r.countyLeftOut.join(', ') + ' (not a choice in the GoHighLevel County field)' : '') + '</div>';
+    }
     if (problems.length) {
       html += '<div style="margin-top:8px;font-size:12px;color:var(--gray-600)">Not synced:<ul style="margin:4px 0 0 18px">' +
         problems.map(p => '<li>' + p.name + ' — ' + (p.skipped || p.error) + '</li>').join('') +
