@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=31"></script>
-<script src="leads-table.js?v=1"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="leads-table.js?v=2"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -664,6 +664,7 @@ input, select, textarea { border-radius:10px; }
 .ld-calm .ld-tel { color:#0D365F; } .ld-calm .ld-tel svg { color:#8a96a3; }
 .ld-calm .ld-btns button { background:#fff !important; border:1.5px solid #0D365F !important; color:#0D365F !important; border-radius:10px; }
 .ld-calm .ld-btns .ld-dots, .ld-calm .ld-btns .ld-shut { border-color:#e4e1d8 !important; color:#55677a !important; }
+.ld-sws { margin:0 0 10px; } .ld-sws > summary { cursor:pointer; font-size:13px; font-weight:700; color:#55677a; margin-bottom:8px; }
 .ld-switch { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-size:13px; color:#55677a; margin:0 0 10px; }
 .ld-came { font-weight:700; color:#0D365F; }
 .ld-move { flex:1.4 !important; border:0; background:var(--cute-honey); color:var(--cute-ink); }
@@ -8437,7 +8438,7 @@ function renderPipeline() {
   let shown = q || _ldStep === 'all' ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
   try { renderLdWho(shown, wcOn); } catch (e) { console.error('who called:', e); }
   // 2026-11-03 Leads as one table (leads-table.js, her switch leadsTable): the same people, one row each, instead of the cards.
-  if (window.LDT && LDT.on()) { LDT.draw({ open, closed, showClosed, match, today, calls: _leadCalls, cardsEl, stepsEl, pager: document.getElementById('ldPager') }); return; }
+  if (window.LDT && LDT.on()) { LDT.draw({ open, closed, showClosed, match, today, calls: _leadCalls, cardsEl, stepsEl, pager: document.getElementById('ldPager'), who: wcOn ? _ldWhoFilter : 'all' }); return; }
   if (window.LDT) LDT.restore(stepsEl, cardsEl);
   if (wcOn && _ldWhoFilter !== 'all') shown = shown.filter(x => x.c.whoCalled === _ldWhoFilter);
   if (showClosed) shown = shown.concat(closed.filter(match));
@@ -8562,6 +8563,7 @@ const _ldMe = () => String((document.getElementById('header_user') || {}).textCo
 const ldWhoOwner = () => LD_WHO_OWNERS.includes(_ldMe());
 const _ldWhoBy = () => _ldMe() ? _ldMe().split('@')[0] : 'office';
 
+let _ldSwOpen = false;
 function renderLdWho(shown, on) {
   const host = document.getElementById('ldWho');
   if (!host) return;
@@ -8571,6 +8573,8 @@ function renderLdWho(shown, on) {
   if (ldWhoOwner()) h += '<div class="ld-switch"><span><strong>Who called labels:</strong> ' + (on ? 'On' : 'Off') +
     (sw.by ? ' (changed by ' + esc(sw.by) + ')' : '') + '. Only you see this switch.</span>' +
     '<button type="button" class="btn btn-sm ' + (on ? 'btn-outline' : 'btn-primary') + '" onclick="ldWhoSwitch(' + !on + ')">Turn ' + (on ? 'off' : 'on') + '</button></div>';
+  // 2026-11-03 her "clear that": the owner's switch rows fold into one closed line (they stay one click away)
+  if (h) h = '<details class="ld-sws"' + (_ldSwOpen ? ' open' : '') + ' ontoggle="_ldSwOpen=this.open"><summary>Leads switches (only you see these)</summary>' + h + '</details>';
   if (on) {
     const kinds = Object.keys(CDSRules.WHO_CALLED);
     const n = k => shown.filter(x => x.c.whoCalled === k).length;

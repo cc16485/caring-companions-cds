@@ -179,9 +179,10 @@
 
   /* draw the table into the Leads list box (renderPipeline hands over what it already worked out) */
   function draw(o) {
-    const { open, closed, showClosed, match, today, calls, cardsEl, stepsEl, pager } = o;
-    if (stepsEl) stepsEl.hidden = true;
-    const sp = document.getElementById('ldSort'); if (sp && sp.closest('label')) sp.closest('label').hidden = true;
+    const { open, closed, showClosed, match, today, calls, cardsEl, stepsEl, pager, who } = o;
+    /* the cards' step tabs and sort are the table's Step chips and order now (the CSS display wins over hidden, so set it) */
+    if (stepsEl) stepsEl.style.display = 'none';
+    const sp = document.getElementById('ldSort'); if (sp && sp.closest('label')) sp.closest('label').style.display = 'none';
     if (pager) pager.innerHTML = '';
     cardsEl.classList.add('lt-host');
     const rows = open.map(x => row(x.p, x.c, today, calls));
@@ -189,15 +190,16 @@
     rows.sort((a, b) => urgRank[a.urg] - urgRank[b.urg] || a.c.sort - b.c.sort || String(a.followup || '9').localeCompare(String(b.followup || '9')) || String(a.name).localeCompare(String(b.name)));
     const q = (document.getElementById('ldSearch') || {}).value || '';
     const county = r => !q || String(r.county).toLowerCase().indexOf(q.trim().toLowerCase()) > -1;
-    let list = rows.filter(r => (match({ p: r.p }) || county(r)) && pass(r));
+    /* the Who called chips above the table still pick who shows */
+    let list = rows.filter(r => (match({ p: r.p }) || county(r)) && pass(r) && (!who || who === 'all' || r.c.whoCalled === who));
     if (showClosed) list = list.concat(closed.filter(x => match(x)).map(x => closedRow(x.p, x.c)));
     const cnt = document.getElementById('ldCount'); if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' lead' : ' leads');
     const n = f => rows.filter(f).length;
     const jobs = {}; COLS.forEach(c => { jobs[c.k] = c.job; });
     const any = F.step || F.job || F.hold || F.kind;
     cardsEl.innerHTML = '<div class="lt">'
-      + '<div class="lt-sum"><span><b>' + rows.length + '</b> open leads</span><span class="lt-red"><b>' + n(r => r.urg === 'now') + '</b> need you now</span><span class="lt-gold"><b>' + n(r => r.urg === 'today') + '</b> today</span>'
-      + '<span><b>' + n(r => r.hold === 'state') + '</b> with the state</span><span><b>' + n(r => r.hold === 'consumer') + '</b> waiting on the consumer</span><span><b>' + n(r => r.step === 'ready') + '</b> ready to start</span></div>'
+      /* the page's own line above already says how many people and who needs you now */
+      + '<div class="lt-sum"><span><b>' + n(r => r.hold === 'state') + '</b> with the state</span><span><b>' + n(r => r.hold === 'consumer') + '</b> waiting on the consumer</span><span><b>' + n(r => r.step === 'ready') + '</b> ready to start</span></div>'
       + chips('Step', 'step', STEP, rows) + chips('Who needs', 'job', jobs, rows) + chips('Waiting on', 'hold', HOLD, rows) + chips('Kind', 'kind', KIND, rows)
       + (any ? '<div class="lt-qs"><button type="button" class="lt-q" onclick="LDT.clear()">Clear filters</button></div>' : '')
       + '<div class="lt-wrap"><table class="lt-t"><thead><tr class="lt-grp"><th class="lt-n"></th><th colspan="2">To call</th><th colspan="2" class="lt-sep">Sent to state</th><th colspan="3" class="lt-sep">Ready to start</th><th colspan="3" class="lt-sep"></th></tr>'
@@ -209,8 +211,8 @@
   }
   /* the cards again: the step tabs and the sort come back */
   function restore(stepsEl, cardsEl) {
-    if (stepsEl) stepsEl.hidden = false;
-    const sp = document.getElementById('ldSort'); if (sp && sp.closest('label')) sp.closest('label').hidden = false;
+    if (stepsEl) stepsEl.style.display = '';
+    const sp = document.getElementById('ldSort'); if (sp && sp.closest('label')) sp.closest('label').style.display = '';
     if (cardsEl) cardsEl.classList.remove('lt-host');
   }
   /* the owner's switch row (beside the calmer list's), and everyone's way back to the table once it is on */

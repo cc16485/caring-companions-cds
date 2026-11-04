@@ -57,7 +57,7 @@ READ = r"""
     return { name: td[0].querySelector('.lt-name') ? td[0].querySelector('.lt-name').textContent.trim() : td[0].textContent.trim(), cells: td.slice(1, 8).map(x => x.textContent.trim()),
       wait: td[8] && td[8].textContent.trim(), cb: td[9] && td[9].textContent.trim(), cls: tr.className }; });
   return { rows, heads: [...document.querySelectorAll('#ldCards table.lt-t thead tr:last-child th')].map(x => x.textContent.trim()),
-    sum: (document.querySelector('#ldCards .lt-sum') || {}).textContent || '', tabsHidden: document.getElementById('ldSteps').hidden,
+    sum: (document.querySelector('#ldCards .lt-sum') || {}).textContent || '', tabsHidden: getComputedStyle(document.getElementById('ldSteps')).display === 'none' && getComputedStyle(document.getElementById('ldSort').closest('label')).display === 'none',
     sw: (document.getElementById('ldWho') || {}).textContent || '' };
 }"""
 res = []
@@ -100,7 +100,10 @@ with sync_playwright() as pw:
     ck('Earl (packet signed by them): Sign as agent, Office', e.get('cells', [''] * 5)[4] == 'Sign as agent' and e['wait'].startswith('Office'), e)
     i = by.get('Ida Kessler', {})
     ck('Ida (packet done, attendant check not back): packet ticked, attendant waiting, Waiting on Attendant', i.get('cells', [''] * 6)[4].startswith('✓') and 'Sam Helper' in i['cells'][5] and i['wait'].startswith('Attendant'), i)
-    ck('the summary', '10 open leads' in R['sum'] and 'with the state' in R['sum'], R['sum'])
+    ck('the summary adds only what the page line does not say (no second "need you now")', 'with the state' in R['sum'] and 'need you now' not in R['sum'], R['sum'])
+    ck('the owner switch rows fold into one closed line', pg.evaluate("()=>{ const d = document.querySelector('#ldWho details.ld-sws'); return !!d && !d.open && d.textContent.includes('Leads as a table'); }"))
+    ck('the Who called chips still pick who shows in the table', pg.evaluate("""()=>{ _store.leadsWhoCalled = { live: true }; _ldWhoFilter = 'self'; renderPipeline();
+      const n = document.querySelectorAll('#ldCards table.lt-t tbody tr').length; _ldWhoFilter = 'all'; _store.leadsWhoCalled = {}; renderPipeline(); return n < 10; }"""))
     ck('each packet is asked once (not on every redraw)', pg.evaluate("()=>{ const n = PKCALLS.length; renderPipeline(); renderPipeline(); return n > 0 && PKCALLS.length === n && PKCALLS.every(c => c[0] === 'enrollGet'); }"))
     pg.evaluate("()=>LDT.set('hold','state')"); pg.wait_for_timeout(150)
     ck('Waiting on: State', sorted(r['name'] for r in pg.evaluate(READ)['rows']) == ['Leona Marsh', 'Vernon Pike'], pg.evaluate(READ)['rows'])
@@ -126,7 +129,7 @@ with sync_playwright() as pw:
     # live for everyone, then this computer picks the cards, then back
     pg.evaluate(SETUP, [PIPE, PACK, 'live']); pg.wait_for_timeout(300)
     ck('live: everyone sees the table (office staff too)', pg.evaluate("()=>{ document.getElementById('header_user').textContent='office@caringcds.com'; renderPipeline(); return document.querySelectorAll('#ldCards table.lt-t tbody tr').length === 10; }"))
-    ck('live: a person can show the cards on their own computer, and get the table back', pg.evaluate("""()=>{ LDT.view('cards'); const cards = !document.querySelector('#ldCards table.lt-t') && document.querySelectorAll('#ldCards .ld-row').length > 3 && !document.getElementById('ldSteps').hidden && document.getElementById('ldWho').textContent.includes('Show the table');
+    ck('live: a person can show the cards on their own computer, and get the table back', pg.evaluate("""()=>{ LDT.view('cards'); const cards = !document.querySelector('#ldCards table.lt-t') && document.querySelectorAll('#ldCards .ld-row').length > 3 && getComputedStyle(document.getElementById('ldSteps')).display !== 'none' && document.getElementById('ldWho').textContent.includes('Show the table');
       LDT.view('table'); return cards && !!document.querySelector('#ldCards table.lt-t'); }"""))
     ck('no script errors', not errs, errs)
     m2 = b.new_page(viewport={'width': 390, 'height': 844}, device_scale_factor=2)
