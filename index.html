@@ -25,11 +25,12 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=32"></script>
-<script src="leads-table.js?v=5"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
-<script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=34"></script>
+<script src="supabase/functions/_shared/office/starting-rules.js?v=2"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
+<script src="leads-table.js?v=6"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
-<script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
+<script src="supabase/functions/_shared/office/cds-attendant-check.js?v=2"></script>
 <!-- Tax Setup in stages (2026-10-25, her switch 'taxStages'). -->
 <script src="tax/tax-stages.js?v=3"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -71,6 +72,17 @@
 
   /* HEADER */
   .header { background: var(--primary); color: white; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+  /* Phones (2026-11-04): the header wrapped off the right edge with a long sign-in email, so every page scrolled
+     sideways. Under 600px the buttons wrap and the email shortens; wider screens are unchanged. */
+  @media (max-width: 600px) {
+    .header { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+    .header > div:last-child { flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+    #header_user { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Consumers (where the Starting tab lives): the search and Bulk contacts row wraps too. */
+    #csub-active > .section-header { flex-wrap: wrap; gap: 8px; }
+    #csub-active > .section-header .ld-search { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+    #csub-active > .section-header .ld-search input { width: 100%; min-width: 0; }
+  }
   .header h1 { font-size: 20px; font-weight: 700; }
   .header .subtitle { font-size: 12px; opacity: 0.8; margin-top: 2px; }
   .header-badge { background: rgba(255,255,255,0.2); border-radius: 20px; padding: 4px 12px; font-size: 12px; }
@@ -1096,7 +1108,7 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
         <h1 class="cute-title ld-title">Leads</h1>
         <p class="ld-sum" id="ldSummary"></p>
       </div>
-      <button type="button" class="ld-add" onclick="openModal('addSomeoneModal')">
+      <button type="button" class="ld-add" onclick="window.StartCall && StartHub.on() ? StartCall.open() : openModal('addSomeoneModal')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         Add someone
       </button>
@@ -1154,6 +1166,7 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
       <div class="roster-seg" role="tablist" aria-label="Which consumers">
         <button type="button" id="rosterSegActive" class="on" onclick="setRosterView('active')">Active</button>
         <button type="button" id="rosterSegInactive" onclick="setRosterView('inactive')">Inactive</button>
+        <button type="button" id="rosterSegStarting" onclick="setRosterView('starting')" hidden>Starting</button>
       </div>
       <label class="ld-search">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -5561,7 +5574,7 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=9');
+    const { mountHours } = await import('./hours/hub-hours.js?v=10');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
@@ -5787,6 +5800,8 @@ function addConsumer() {
 }
 
 function renderConsumers() {
+  // Starting people whose first shift is in WellSky move to Active first (2026-11-04).
+  if (window.StartHub) StartHub.promoteAll();
   const consumers = getData('consumers');
   const tbody = document.getElementById('consumerTableBody');
   const now = new Date();
@@ -5807,7 +5822,21 @@ function renderConsumers() {
   const find = rosterFind((document.getElementById('rosterSearch') || {}).value);
   const hit = c => find(c.name, c.phone, ...allAtt.filter(a => (a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name))).map(a => a.name));
   const active = consumers.filter(CDSRules.isActive).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
-  const inactive = consumers.filter(c => !CDSRules.isActive(c)).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
+  // Starting people (2026-11-04) are neither active nor inactive: their own tab.
+  const starting = consumers.filter(c => CDSStarting.isStarting(c)).filter(hit);
+  const inactive = consumers.filter(c => !CDSRules.isActive(c) && !CDSStarting.isStarting(c)).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
+  const segS = document.getElementById('rosterSegStarting');
+  if (segS) { segS.hidden = !((window.StartHub && StartHub.on()) || starting.length); segS.textContent = 'Starting (' + starting.length + ')'; segS.classList.toggle('on', _rosterView === 'starting'); }
+  if (_rosterView === 'starting' && window.StartHub) {
+    ['rosterSegActive', 'rosterSegInactive'].forEach(id => document.getElementById(id).classList.remove('on'));
+    document.getElementById('rosterSegActive').textContent = 'Active (' + consumers.filter(CDSRules.isActive).length + ')';
+    document.getElementById('rosterSegInactive').textContent = 'Inactive (' + inactive.length + ')';
+    document.getElementById('rosterInactiveHead').hidden = true;
+    document.getElementById('rosterCallHead').parentElement.hidden = true;
+    document.getElementById('rosterSummary').textContent = starting.length + ' starting · said yes, not on a first shift yet';
+    tbody.innerHTML = StartHub.rosterHtml();
+    return;
+  }
   document.getElementById('rosterSegActive').textContent = 'Active (' + active.length + ')';
   document.getElementById('rosterSegInactive').textContent = 'Inactive (' + inactive.length + ')';
   const showInactive = _rosterView === 'inactive';
@@ -6544,7 +6573,7 @@ function markBackupReviewed(cid) {
 }
 // (5)(H)4 and (5)(H)8: letters, emails and other papers kept in the consumer's file. Files go in the
 // same private bucket as the EIN proof (signed links only). kind: letter | careplan | other.
-const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['other', 'Other document']];
+const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['emomed', 'eMOMED eligibility page'], ['review', 'Supervisor review proof'], ['other', 'Other document']];
 function consumerDocsHtml(c) {
   const docs = (c.docs || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const open = d => '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' + esc(d.path).replace(/'/g, "\\'") + '\')">View</button>';
@@ -6728,7 +6757,7 @@ function renderAttendantCheck(note) {
   const host = document.getElementById('attendantCheck');
   if (!host || typeof CDSAttendantCheck !== 'object') return;
   const A = CDSAttendantCheck;
-  const r = _acLast = A.compare({ attendants: getData('attendants'), shifts: getObj('wellskyCheck').shifts,
+  const r = _acLast = A.compare({ attendants: getData('attendants'), shifts: getObj('wellskyCheck').shifts, starting: getData('consumers').filter(c => window.CDSStarting && CDSStarting.isStarting(c)).map(c => c.name),
                                   reviewed: getObj('attendantCheckReviewed'), now: new Date() });
   const btn = (label, call, cls) => '<button class="btn btn-sm ' + (cls || 'btn-outline') + '" style="font-size:11.5px;margin:2px 4px 2px 0" onclick="' + call + '">' + esc(label) + '</button>';
   const row = (text, buttons) => '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;padding:7px 0;border-top:1px solid var(--gray-200);font-size:13px">' +
@@ -6870,8 +6899,9 @@ async function renderSwitches(reload) {
   host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">🎚️</span> Switches</div>' +
     '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:4px">What runs on its own in the CDS hub. Only Samantha can change these. Every change is recorded.</div>' +
     '<div id="hubSwitches"></div>' +
-    rows + idRoomHtml(d) + '</div>' + needOwnersHtml(d) + todayOwnersHtml();
+    rows + idRoomHtml(d) + '</div>' + needOwnersHtml(d) + todayOwnersHtml() + '<div id="startingAdmin"></div>';
   renderHubSwitches();
+  if (window.StartHub) StartHub.renderAdmin();
 }
 // Who owns each need (Communication Center step 2, 2026-10-22). A new follow-up card goes to this
 // person. Same rule as the switches: everyone sees it, only Samantha changes it, every change recorded.
@@ -7380,6 +7410,10 @@ function addPipelineContact() {
   }
 }
 
+// Starting consumers (2026-11-04) as WellSky name keys: their WellSky authorization is not counted as hours, money or warnings.
+function startingSkip() { return typeof CDSWellSky === 'object' && typeof CDSStarting === 'object' ? new Set(getData('consumers').filter(CDSStarting.isStarting).map(c => CDSWellSky.nameKey(c.name))) : null; }
+// Log a call: the first-call screen while the Starting switch is on (2026-11-04), else the quick Log a call as before.
+function ldLogCall(id) { if (window.StartCall && window.StartHub && StartHub.on()) StartCall.open(id); else openPipelineEdit(id); }
 function openPipelineEdit(id) {
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === id);
@@ -7947,9 +7981,9 @@ function renderLeadProfile(){
     (card ? '<div class="ld-next" style="margin-bottom:12px"><span class="ld-due t-' + card.tone + '">' + esc(card.due) + '</span>' +
       '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(card.next) + '</span></div>' : '') +
     '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
-      '<button class="btn btn-primary" onclick="openPipelineEdit(\'' + pid + '\')">Log a call</button>' +
+      '<button class="btn btn-primary" onclick="ldLogCall(\'' + pid + '\')">Log a call</button>' +
       (p.status !== 'closed_linked' ? '<button class="btn btn-outline" onclick="openLinkLead(\'' + pid + '\')">Called for someone else?</button>' : '') +
-      (card && card.step === 'ready' ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
+      (card && card.step === 'ready' && !(window.StartHub && StartHub.on()) ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
       (PIPELINE_CLOSED_STATUSES.includes(p.status)
         ? '<button class="btn btn-outline" onclick="reopenLead(\'' + pid + '\')">Reopen</button>'
         : card && card.step !== 'closed' ? '<button class="btn btn-outline" onclick="openCloseLead(\'' + pid + '\')">Close this lead</button>' : '') +
@@ -7961,6 +7995,7 @@ function renderLeadProfile(){
       '<button class="btn btn-outline btn-sm" onclick="openPipelineOutreach(\'' + pid + '\',\'app_sent\')">Tell them the packet is on its way</button>' +
     '</div></div>';
   // ---- the enrollment packet: one button, signed on their phone (2026-10-22) ----
+  html += '<div id="lpStarting"></div>';   // Starting (2026-11-04, switch starting)
   html += '<div id="lpEnroll"></div>';
   // ---- calls logged from the lead link page (the new-lead text) ----
   const OUT = { connected: 'We talked', voicemail: 'Voicemail', no_answer: 'No answer', wrong_number: 'Wrong number' };
@@ -8131,6 +8166,7 @@ function renderLeadProfile(){
   host.innerHTML = html;
   if (window.cdsCommHistory) window.cdsCommHistory(host);
   mountLeadEnrollCard(p);
+  if (window.StartHub) StartHub.mountLead(p);
 }
 
 /* The details a care plan change request asks for, in one block to copy. */
@@ -8803,7 +8839,7 @@ function renderPipeline() {
       ? '<button type="button" class="ld-move" onclick="convertToConsumer(\'' + id + '\')">Move to Consumers</button>'
       : c.step === 'closed' ? (PIPELINE_CLOSED_STATUSES.includes(p.status) ? '<button type="button" class="ld-open" onclick="reopenLead(\'' + id + '\')">Reopen</button>' : '')
       : c.whoCalled === 'solo' ? '<button type="button" class="ld-pool" onclick="ldPoolAsk(\'' + id + '\')">Move to Caregiver Pool</button>'
-      : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
+      : '<button type="button" class="ld-log" onclick="ldLogCall(\'' + id + '\')">Log a call</button>';
     const shut = c.step !== 'closed'
       ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + '" title="Close this lead"' + (calm ? ' hidden' : '') + '>Close</button>' : '';
     // The calm look: Close waits behind ···, like Caring Companions.
@@ -10322,6 +10358,8 @@ const HUB_SWITCHES = [
     does: 'On: Tax & Enrollment Setup reads top to bottom in one column, grouped by when each step happens (today, the day the EIN arrives, waiting, Fusion proof, payroll, after the first $1,000 quarter). A Next line at the top says the one thing to do, the 90-day Fusion clock sits beside it, and it asks once whether the consumer is new or transferring. Every card, link and instruction is the same as before. Off: the two-column screen as before.' },
   { key: 'packetOnProfile', label: 'Enrollment packet on the consumer profile',
     does: 'On: Overview says where their Hub enrollment packet stands, and Tax and EIN shows the same packet card as their lead (each form signed, Sign as agent, Download the signed forms). Off: the packet shows on their lead only.' },
+  { key: 'starting', label: 'Starting profile',
+    does: 'On: a lead who says yes becomes a Starting consumer right away, with seven enrollment steps, one Next step, a Medicaid tab (eMOMED check, the required PDF, what the ME code means, supervisor review), Medicaid application instructions by text or email (sent only when someone presses Send, and only while Medicaid application texts is on), follow-ups on Today, and the Ready for first shift checklist. They move to Active the day WellSky shows the first shift. Off: Move to Consumers as before.' },
   { key: 'faxLive', label: 'One-click fax',
     does: 'On: the SS-4, 2643A and 2827 steps on Tax Setup get a Fax it now button (the SS-4 only when there is no EIN yet and, for a transfer, after the existing-EIN check) (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
@@ -10348,6 +10386,7 @@ function hubSwitch(key, on) {
   renderHubSwitches();
   if (key === 'moManager') renderManagerCard();
   if (key === 'moForms' || key === 'moStaffOig') renderOfficeCard();
+  if (key === 'starting' && window.StartHub) StartHub.renderAdmin();
   if (key === 'authSlim') { _hx = null; renderMainTabs(PAGE_TO_SECTION.automations); renderSectionNav(PAGE_TO_SECTION.automations, 'automations'); }
 }
 
@@ -10991,6 +11030,8 @@ function renderProfile() {
   if (backBtn) backBtn.textContent = '← ' + (PROFILE_BACK_LABEL[_profileFrom] || 'Back');
 
   const c = consumers.find(x => x.id === _profileId);
+  // A Starting consumer gets the Starting profile (2026-11-04, switch starting).
+  if (window.StartHub && StartHub.renderProfile(c, host)) return;
   const s = taxStatus(c);
   const e = empeonStatus(c);
   const auths = getAuths();
@@ -11675,8 +11716,10 @@ async function importAuthorizations(event) {
     catch (e) { bad.push(files[i].name + ' (' + e.message + ')'); continue; }
     if (r.error) { bad.push(files[i].name + ' (' + r.error + ')'); continue; }
     // Match on DCN first, which is exact; fall back to the name on the document.
-    const hit = consumers.find(c => (c.dcn || '').replace(/^0+/, '') === (r.dcn || '').replace(/^0+/, '')) ||
-                consumers.find(c => prNorm(c.name) === prNorm(r.name));
+    // An old inactive record with the same DCN or name never wins over a current or Starting one (2026-11-04).
+    const live1 = f => consumers.filter(f).sort((x, y) => ((CDSRules.isActive(y) || (window.CDSStarting && CDSStarting.isStarting(y))) ? 1 : 0) - ((CDSRules.isActive(x) || (window.CDSStarting && CDSStarting.isStarting(x))) ? 1 : 0))[0];
+    const hit = live1(c => (c.dcn || '').replace(/^0+/, '') === (r.dcn || '').replace(/^0+/, '')) ||
+                live1(c => prNorm(c.name) === prNorm(r.name));
     if (hit) r.consumer = hit.name; else unmatched.push(r.name || r.dcn || files[i].name);
     // Keep the PDF itself in the consumer's file ((5)(H)2, her yes 2026-10-23).
     if (hit && _db) {
@@ -11734,12 +11777,12 @@ function renderWellSky() {
   }
   const now = new Date();
   const today = W.isoLocal(now);
-  const problems = W.items(check, reviewed, now).filter(i => /has not run|did not finish/.test(i.t));
+  const problems = W.items(check, reviewed, now, { skip: startingSkip() }).filter(i => /has not run|did not finish/.test(i.t));
   const longs = W.longShifts(check.shifts, reviewed, today);
   const opens = W.openShifts(check.open, reviewed);
   const HA = W.hoursAuths(check);   // the daily email when it has the approved hours (2026-11-01)
   const pulledOn = HA && HA.at ? W.isoLocal(new Date(HA.at)) : today;
-  const hours = W.hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn);
+  const hours = W.hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn, startingSkip());
   const unread = ((check.shifts && check.shifts.unread) || []).length + ((check.auths && check.auths.unread) || []).length;
   const statusColor = { over: 'var(--danger)', 'booked-over': 'var(--danger)', 'pace-over': '#b54708', low: '#b54708', ok: 'var(--success)' };
 
@@ -12389,7 +12432,7 @@ function renderUnmappedAttendants() {
   const un = aw.unmapped || {};
   const ids = Object.keys(un);
   if (!ids.length) { el.innerHTML = ''; return; }
-  const opts = getData('consumers').filter(CDSRules.isActive)
+  const opts = getData('consumers').filter(c => CDSRules.isActive(c) || (window.CDSStarting && CDSStarting.isStarting(c)))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('');
   const total = ids.reduce((s, i) => s + un[i].net, 0);
@@ -15364,7 +15407,7 @@ function renderDailyRoutine() {
   // uses, so the Dashboard and the email always say the same thing.
   // 2026-10-22 (her ask, for Zach): problems with the WellSky check itself go to the
   // owner only; everyone else gets one grey line saying how old the numbers are.
-  const wsAll = CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date());
+  const wsAll = CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date(), { skip: startingSkip() });
   const wsSystem = wsAll.filter(i => i.system);
   const steps = CDSRules.dailyRoutine({
     consumers: getData('consumers'), pipeline: getData('pipeline'),
@@ -15432,7 +15475,7 @@ function renderDailyRoutine() {
           ? 'Work down the list. Everything else can wait until it is clear.'
           : 'Nothing outstanding. This is what a clear morning looks like.') +
       '</div>' +
-      mineBar + systemHtml + attErr + failedHtml + vmHtml +
+      mineBar + systemHtml + attErr + failedHtml + (window.StartHub ? StartHub.failedHtml((_todayAtt.data || {}).tasks) + StartHub.todayHtml() : '') + vmHtml +
       shown.map(st =>
         '<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--gray-200)">' +
           '<span style="flex:none;width:26px;height:26px;border-radius:50%;background:' +
@@ -15555,6 +15598,7 @@ async function _loadDashOig() {
   } catch (e) { console.error('dashboard OIG:', e); }
 }
 function updateDashboard() {
+  if (window.StartHub) StartHub.promoteAll();   // first shift in WellSky: Starting moves to Active (2026-11-04)
   // keep the morning list in step with everything else the dashboard shows
   try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   try { renderCdsGoal(); } catch (e) { console.error('cds goal:', e); }
@@ -15569,7 +15613,7 @@ function updateDashboard() {
     consumers: getData('consumers'), attendants: getData('attendants'), now: new Date(),
     wsPeople: _activePeople(), nameKey: CDSWellSky.nameKey,
     oigPeople: _dashOig, checks: getObj('complianceChecks'), checklistIds, checklistTotal: checklistIds.length,
-    hours: authOn ? CDSWellSky.hoursThisMonth(HA, HA.email ? null : check.shifts, authOn) : [], rates: getRates(), payRange: [15, 16] });
+    hours: authOn ? CDSWellSky.hoursThisMonth(HA, HA.email ? null : check.shifts, authOn, startingSkip()) : [], rates: getRates(), payRange: [15, 16] });
   _loadDashOig();
   const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
   const bar = (id, n, of) => { const el = document.getElementById(id); if (el) el.style.width = (of ? Math.min(100, Math.round(n / of * 100)) : 0) + '%'; };
@@ -15997,7 +16041,7 @@ function openComplaintModal(editId) {
   const consumers = getData('consumers');
   const sel = document.getElementById('cmp_consumer');
   sel.innerHTML = '<option value="">— General / Unknown —</option>' +
-    consumers.filter(CDSRules.isActive).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    consumers.filter(c => CDSRules.isActive(c) || (window.CDSStarting && CDSStarting.isStarting(c))).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
   if (editId) {
     const complaints = getData('complaints');
@@ -17288,5 +17332,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
+<script src="starting/hub-starting.js?v=4"></script>
+<script src="starting/hub-call.js?v=2"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>

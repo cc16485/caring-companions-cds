@@ -245,7 +245,8 @@
 
   // Each consumer's personal care hours this month. pulledOn = the date of the pull
   // (yyyy-mm-dd): the pull runs early, so that day itself has not been worked yet.
-  function hoursThisMonth(auths, shifts, pulledOn) {
+  // skip (2026-11-04): a Set of nameKeys for Starting consumers, who are not served yet (no hours rows, money or warnings).
+  function hoursThisMonth(auths, shifts, pulledOn, skip) {
     if (!auths || !auths.consumers) return [];
     const ym = pulledOn.slice(0, 7), nm = nextMonth(ym);
     const dim = daysInMonth(ym), day = +pulledOn.slice(8, 10);
@@ -253,6 +254,7 @@
     const coversNext = auths.to >= nm + '-01';
     const out = [];
     auths.consumers.forEach(c => {
+      if (skip && skip.has(nameKey(c.name))) return;
       c.auths.filter(isPersonalCare).forEach(a => {
         const m = a.months.find(x => x.month === ym);
         if (!m) return;
@@ -288,7 +290,7 @@
   // a check that was never switched on.
   // Items with system: true are about the check itself (not run, report missing), not about a
   // consumer. The hub shows them to the owner only (her ask 2026-10-22: Zach cannot fix them).
-  function items(check, reviewed, now) {
+  function items(check, reviewed, now, opts) {
     if (!check || (!check.lastRun && !check.analyticsRun)) return [];
     now = now || new Date();
     const today = isoLocal(now);
@@ -332,7 +334,7 @@
     if (wkNear.length) out.push({ t: tag + plural(wkNear.length, 'attendant', 'attendants') + ' close to 40 hours this week for one consumer', go: 'hoursmonth', people: wkPpl(wkNear) });
     const HA = hoursAuths(check);
     const pulledOn = HA && HA.at ? isoLocal(new Date(HA.at)) : today;
-    const h = hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn);
+    const h = hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn, opts && opts.skip);
     const over = h.filter(x => x.status === 'over' || x.status === 'booked-over');
     const pace = h.filter(x => x.status === 'pace-over');
     const low = h.filter(x => x.status === 'low');
@@ -446,7 +448,7 @@
     const since = flOk ? '' : (shifts.from || '');
     const people = (consumers || []).filter(c => {
       const st = String(c.status || '').toLowerCase();
-      if (['inactive', 'discharged', 'closing', 'paused', 'pending'].includes(st) || c.ending) return false;
+      if (['inactive', 'discharged', 'closing', 'paused', 'pending', 'starting'].includes(st) || c.ending) return false;
       if (Number(c.id) > cutoffMs) return false;   // in the hub less than 30 days
       const l = last[nameKey(c.name)];
       return !l || l < cutoff;

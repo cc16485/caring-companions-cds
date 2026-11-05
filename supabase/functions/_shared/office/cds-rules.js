@@ -27,7 +27,9 @@
                           closed_passed: 'Passed away', closed_no_reach: "Couldn't reach them" };
   // One rule for "active" (2026-10-22): the hub saves "inactive" lowercase and old
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
-  const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
+  // 'starting' (2026-11-04, the Starting profile): said yes, not on a first shift yet. Not active, so no
+  // monthly calls, EIN clock, DES, billing or counts until WellSky shows the first shift.
+  const isActive = c => !!c && !['inactive', 'discharged', 'starting'].includes(String(c.status || '').toLowerCase());
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
   // Due-date helpers (her approved rules 2026-10-23).
   const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); };
@@ -214,7 +216,9 @@
     });
 
     const records = (data.authorizations && data.authorizations.records) || {};
-    const auths = Object.values(records).filter(a => !data.wsPeople || nowNames.has(String(a.consumer || a.name || '').toUpperCase()));
+    // Starting people (2026-11-04) are not served yet: their authorization is enrollment work, not "protect the money".
+    const startingNames = new Set((data.consumers || []).filter(c => String(c.status || '').toLowerCase() === 'starting').map(c => String(c.name).toUpperCase()));
+    const auths = Object.values(records).filter(a => !startingNames.has(String(a.consumer || a.name || '').toUpperCase()) && (!data.wsPeople || nowNames.has(String(a.consumer || a.name || '').toUpperCase())));
     const authWho = (a, why) => { const n = String(a.consumer || a.name || ''), c = byName.get(n.toUpperCase());
       const due = /ended/.test(why) ? '' : (a.planEnd || '');
       return c ? who(c, why, due, 'profile') : { name: n, why, due, act: '' }; };
@@ -969,7 +973,8 @@
     const closed = CLOSED.includes(p.status);
     const done = DONE.includes(p.status);
     const sent = !done && (p.type === 'referral' || p.type === 'pccp') && (p.status === 'submitted' || p.status === 'processing');
-    const step = closed || (done && moved) ? 'closed' : done ? 'ready' : sent ? 'state' : 'call';
+    const starting = !!(p.startingId && moved);   // said yes: on Consumers as Starting (2026-11-04)
+    const step = closed || starting || (done && moved) ? 'closed' : done ? 'ready' : sent ? 'state' : 'call';
 
     let who = form ? formWho(form.text) : '';
     if (!who) who = formAbout(p);
@@ -1018,9 +1023,9 @@
       due = 'Approved'; tone = 'ready'; sort = 1;
       next = 'Move them to Consumers to start the first shift checklist.';
     } else {
-      due = done ? 'On the Consumers list' : p.status === 'closed_linked' && p.linkedTo ? 'Linked to ' + (p.linkedTo.name || 'someone')
+      due = starting && !closed ? 'Starting' : done ? 'On the Consumers list' : p.status === 'closed_linked' && p.linkedTo ? 'Linked to ' + (p.linkedTo.name || 'someone')
         : 'Closed: ' + (CLOSED_LABELS[p.status] || 'closed'); tone = 'none'; sort = 5;
-      next = done ? 'Nothing to do here.' : 'Nothing to do. Press Reopen if they come back.';
+      next = starting && !closed ? 'On Consumers as Starting. Open their profile.' : done ? 'Nothing to do here.' : 'Nothing to do. Press Reopen if they come back.';
     }
     // needsToday: a call that should happen today (the Leads summary line).
     const needsToday = (step === 'call' && (tone === 'late' || tone === 'today')) || (step === 'state' && tone === 'late');

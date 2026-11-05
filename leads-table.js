@@ -60,7 +60,7 @@
   /* one row from a pipeline person and their CDSRules.leadCard */
   function row(p, c, today, calls) {
     const R = window.CDSRules, id = String(p.id).replace(/[^\w.-]/g, ''), type = KIND[p.type] ? p.type : 'lead';
-    const prof = "openLeadProfile('" + id + "')", log = "openPipelineEdit('" + id + "')";
+    const prof = "openLeadProfile('" + id + "')", log = "ldLogCall('" + id + "')";
     const cells = COLS.map(none);
     let cur = 0, hold = 'office', holdNote = '', days = null;
     const waiting = R.leadWaiting(p, calls);

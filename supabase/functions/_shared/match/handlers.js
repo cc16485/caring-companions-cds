@@ -19,6 +19,7 @@ import { TEMPLATES, fill, CONSENT_WORDING, FCSR_EXPLAINER, PROVIDER_CHOICE, FCSR
 import { createPacket } from '../packet/handlers.js';
 import { createEnroll } from '../enroll/handlers.js';
 import { createSign } from '../enroll/sign.js';
+import { createMedicaidMessages } from '../enroll/medicaid.js';
 import { createRosterProof } from '../office/roster-proof.js';
 
 export class MatchError extends Error {
@@ -1404,6 +1405,8 @@ export function createMatch(deps) {
   // Missouri forms for consumers on the roster (2026-10-22): rights, office details, pandemic policy.
   const sign = createSign({ q, one, nowIso, audit, setting, crypto, links, R, fail, deps, isTestRecipient });
   Object.assign(staff, sign.office);
+  // Medicaid application instructions from the Starting profile (2026-11-04): staff press Send, switch medicaid_messages.
+  Object.assign(staff, createMedicaidMessages({ q, one, audit, setting, task, R, fail, deps, isTestRecipient }).office);
   // Background check proof for Roster attendants, brought in from GHL (2026-10-22).
   Object.assign(staff, createRosterProof({ q, one, nowIso, audit, fail, crypto, deps }).office);
   // 'job' is only reachable with the schedule's secret (checked in the edge function).

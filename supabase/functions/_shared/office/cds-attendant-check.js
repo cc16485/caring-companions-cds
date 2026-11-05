@@ -57,7 +57,8 @@
   }
 
   // reviewed = agency_data 'attendantCheckReviewed': { [key]: { choice, until?, sig?, by, at } }
-  function compare({ attendants, shifts, reviewed, now }) {
+  // starting (2026-11-04): names of Starting consumers; their attendant has no shifts yet, so is never "quiet".
+  function compare({ attendants, shifts, reviewed, now, starting }) {
     now = now || new Date();
     const today = isoLocal(now);
     reviewed = reviewed || {};
@@ -92,6 +93,7 @@
     }
     for (const a of list) {
       if (a.status === 'inactive') continue;
+      if (starting && starting.length && String(a.consumer || '').split(',').some(n => starting.some(sn => names(n, sn)))) continue;
       const k = keyOf(a);
       if (!k || ws.has(k) || hidden('quiet:' + k, 'still-active')) continue;
       out.quiet.push({ key: k, id: a.id, name: a.name, since: shifts.from });

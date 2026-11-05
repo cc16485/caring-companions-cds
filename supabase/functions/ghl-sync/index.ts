@@ -286,9 +286,11 @@ Deno.serve(async (req) => {
   for (const key of keys) {
     // Adding one lead syncs just that lead. Read it from the database by id so
     // the caller can neither invent a contact nor pick its tag.
-    const people = id
+    // Starting consumers (2026-11-04) are not served yet: they keep their lead tag and get 'consumer' once Active.
+    const notStarting = (p: Person) => !(key === 'consumers' && String((p as Record<string, unknown>).status || '').toLowerCase() === 'starting')
+    const people = (id
       ? (byKey[key] ?? []).filter((p) => String(p.id) === String(id))
-      : (byKey[key] ?? [])
+      : (byKey[key] ?? [])).filter(notStarting)
     if (id && !people.length) return json({ error: 'That person is no longer in the ' + key + ' list.' }, 404)
 
     // County only when GHL has one County field and the value is one it takes.
