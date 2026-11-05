@@ -27,7 +27,9 @@
                           closed_passed: 'Passed away', closed_no_reach: "Couldn't reach them" };
   // One rule for "active" (2026-10-22): the hub saves "inactive" lowercase and old
   // imports said "Inactive" or "Discharged", so compare without case. The hub uses this too.
-  const isActive = c => !!c && !['inactive', 'discharged'].includes(String(c.status || '').toLowerCase());
+  // 'starting' (2026-11-04, the Starting profile): said yes, not on a first shift yet. Not active, so no
+  // monthly calls, EIN clock, DES, billing or counts until WellSky shows the first shift.
+  const isActive = c => !!c && !['inactive', 'discharged', 'starting'].includes(String(c.status || '').toLowerCase());
   const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
   // Due-date helpers (her approved rules 2026-10-23).
   const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); };

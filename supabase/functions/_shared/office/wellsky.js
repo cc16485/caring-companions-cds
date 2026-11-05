@@ -446,7 +446,7 @@
     const since = flOk ? '' : (shifts.from || '');
     const people = (consumers || []).filter(c => {
       const st = String(c.status || '').toLowerCase();
-      if (['inactive', 'discharged', 'closing', 'paused', 'pending'].includes(st) || c.ending) return false;
+      if (['inactive', 'discharged', 'closing', 'paused', 'pending', 'starting'].includes(st) || c.ending) return false;
       if (Number(c.id) > cutoffMs) return false;   // in the hub less than 30 days
       const l = last[nameKey(c.name)];
       return !l || l < cutoff;
