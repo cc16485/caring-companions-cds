@@ -553,7 +553,7 @@
       st.gate.map(g => '<div style="padding:4px 0;font-size:13.5px;' + (g.ok ? 'color:var(--success);font-weight:600' : '') + '">' + (g.ok ? '✓' : '○') + ' ' + esc(g.t) + '</div>').join('') +
       '<div style="margin-top:10px">' + (c.starting && c.starting.readyAt ? '<span style="color:var(--success);font-weight:600">Marked ready ' + esc(day(c.starting.readyAt)) + '. They move to Active by themselves when WellSky shows the first shift.</span>'
         : btn('Mark ready for first shift', "StartHub.markReady('" + q(c.id) + "')", false, st.gateOk ? '' : ' disabled')) + '</div>' +
-      '<div class="field-note" style="margin-top:8px">Authorization and tasks in WellSky are the two WellSky lines from the first-shift checklist; tick them on the usual checklist once they are in.</div>' +
+      '<div class="field-note" style="margin-top:8px">Press each one when it is done. The rest the Hub checks by itself.</div>' +
       btn('WellSky: authorization is in', "StartHub.prep('" + q(c.id) + "','authWellSky')", true) + ' ' + btn('WellSky: tasks are in', "StartHub.prep('" + q(c.id) + "','tasksWellSky')", true) + ' ' +
       btn('Told the consumer how to clock in', "StartHub.prep('" + q(c.id) + "','toldClockIn')", true) + ' ' + btn('The attendant can clock in (WellSky app set up)', "StartHub.attClock('" + q(c.id) + "')", true);
   }
