@@ -633,7 +633,8 @@
     setObj('medicaidMessages', { templates, resources, log: M.log.concat([{ at: nowIso(), by: meName(), reason, text: 'Changed ' + changed.join(', ') + '.' }]) });
     renderAdmin();
   }
-  function rerender() { if (typeof renderProfile === 'function' && document.getElementById('page-profile') && document.getElementById('page-profile').classList.contains('active')) renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
+  // window.renderProfile is the hub's; renderProfile inside this file is the Starting one.
+  function rerender() { const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
 
   window.StartHub = { on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
     renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, renderAdmin, admEdit, admSaveRule, admSaveMsgs };

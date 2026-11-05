@@ -5789,6 +5789,8 @@ function addConsumer() {
 }
 
 function renderConsumers() {
+  // Starting people whose first shift is in WellSky move to Active first (2026-11-04, switch starting).
+  if (window.StartHub && StartHub.on()) StartHub.promoteAll();
   const consumers = getData('consumers');
   const tbody = document.getElementById('consumerTableBody');
   const now = new Date();
@@ -5810,7 +5812,6 @@ function renderConsumers() {
   const hit = c => find(c.name, c.phone, ...allAtt.filter(a => (a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name))).map(a => a.name));
   const active = consumers.filter(CDSRules.isActive).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
   // Starting people (2026-11-04) are neither active nor inactive: their own tab.
-  if (window.StartHub && StartHub.on()) StartHub.promoteAll();
   const starting = consumers.filter(c => CDSStarting.isStarting(c)).filter(hit);
   const inactive = consumers.filter(c => !CDSRules.isActive(c) && !CDSStarting.isStarting(c)).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
   const segS = document.getElementById('rosterSegStarting');
