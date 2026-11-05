@@ -4200,7 +4200,7 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
       <div class="form-group"><label for="la_phone">Attendant phone</label><input type="tel" id="la_phone" inputmode="tel" placeholder="(417) 555-1234"></div>
     </div>
     <div class="form-group"><label for="la_email">Attendant email</label><input type="email" id="la_email"></div>
-    <div class="field-note" style="margin:2px 0 10px">Nothing is sent to them from here. It is saved on this lead so the office can track their Empeon pack, background check and WellSky.</div>
+    <div class="field-note" style="margin:2px 0 10px">Save puts them in Attendants, Onboarding, for this consumer, and in GoHighLevel. Nothing is sent to them. The text with their application link is its own button on the lead.</div>
     <div id="la_err" class="field-note" style="color:var(--danger)"></div>
     <div class="modal-footer" style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-outline" id="la_remove" onclick="removeLeadAttendant()">Take them off this lead</button>
@@ -7799,9 +7799,67 @@ function attPacketFor(p) {
         if (lp && lp.classList.contains('active') && !lp.contains(document.activeElement)) renderLeadProfile(); });
   }
   const list = _attPk.list || [], a = p.attendant;
+  // Saved from this lead (2026-11-05): the same record, whatever name they go by.
+  if (a && a.pool_id) { const m = list.find(x => x.pool_id === a.pool_id); if (m) return m; }
   if (a && a.name) return list.find(x => _attKey(x.name) === _attKey(a.name)) || null;
   const mine = list.filter(x => x.consumer && _attKey(x.consumer) === _attKey(p.name));
   return mine.length === 1 ? mine[0] : null;
+}
+
+// Their onboarding steps on the lead card, from the Onboarding table's row (packetList .table.cells, rules.js tableRow).
+// Same names as the Onboarding table's columns (hub-packet.js AT_COLS).
+const LP_ATT_COLS = [['step1', 'Step 1 application'], ['orient', 'Orientation'], ['fcsr', 'FCSR'], ['edl', 'EDL'], ['oig', 'OIG'], ['fp', 'Fingerprints'],
+  ['invite', 'Empeon invite'], ['empeon', 'Empeon'], ['call', 'ID video check'], ['i9', 'I-9 Section 2'], ['counter', 'Countersign']];
+function lpAttSteps(ak) {
+  const c = ak && ak.table && ak.table.cells;
+  if (!c) return '';
+  return '<div style="margin-top:8px">' + LP_ATT_COLS.filter(([k]) => c[k] && c[k].s !== 'na').map(([k, label]) => {
+    const x = c[k], done = x.s === 'done', bad = x.s === 'bad';
+    const say = done ? (x.t ? new Date(String(x.t).length === 10 ? x.t + 'T12:00:00' : x.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'done')
+      : x.s === 'off' ? 'not yet' : (x.t || '');
+    return '<div style="display:flex;gap:10px;padding:3px 0;font-size:13px"><span style="min-width:170px' + (done ? ';color:var(--success);font-weight:600' : bad ? ';color:var(--danger);font-weight:600' : '') + '">' +
+      (done ? '✓ ' : '○ ') + esc(label) + '</span><span class="field-note">' + esc(say) + '</span></div>';
+  }).join('') + '</div>';
+}
+// Save on "Their attendant" (2026-11-05, her yes): put them in Attendants, Onboarding, for this consumer, and in GoHighLevel
+// tagged 'attendant onboarding'. Nothing is sent to them. Every outcome is said on screen.
+async function laStartOnboarding(id) {
+  const p0 = getData('pipeline').find(x => x.id === id), a0 = p0 && p0.attendant;
+  if (!a0 || !a0.name) return;
+  if (!a0.phone) { _ghlToast('⚠️ ' + a0.name + ' is saved on this lead, but not in Onboarding or GoHighLevel yet. Add their phone number (Change) to put them there.', true); return; }
+  let r;
+  try { r = await cdsMatchApi('packetStartFromLead', { name: a0.name, phone: a0.phone, email: a0.email || '', consumer: p0.name || '' }); }
+  catch (e) { _ghlToast('⚠️ ' + a0.name + ' is saved on this lead, but not put in Onboarding: ' + e.message + ' Press Change, then Save, to try again.', true); return; }
+  const list = getData('pipeline'), p = list.find(x => x.id === id);
+  if (!p || !p.attendant || p.attendant.name !== a0.name) return;   // changed again while we waited
+  const first = !p.attendant.pool_id;
+  p.attendant.pool_id = r.pool_id;
+  if (!p.notes) p.notes = [];
+  if (first) p.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: a0.name + (r.repeat ? ' was already in Attendants; linked to this lead.' : ' put in Attendants, Onboarding.') });
+  setData('pipeline', list);
+  _attPk.at = 0;   // fetch the Onboarding list again so the card shows their steps
+  if (r.ghl && r.ghl.ok) _ghlToast('✅ ' + a0.name + ' is in Attendants, Onboarding, and in GoHighLevel. Nothing was sent to them.');
+  else _ghlToast('⚠️ ' + a0.name + ' is in Attendants, Onboarding, but not in GoHighLevel: ' + ((r.ghl && r.ghl.error) || 'unknown reason') + '. Press Change, then Save, to try again.', true);
+  renderPipeline();
+  if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
+}
+// The office's button on the card: text them their private Step 1 link.
+async function laSendLink(id, poolId) {
+  const p = getData('pipeline').find(x => x.id === id), a = (p && p.attendant) || {};
+  if (!confirm('Text ' + (a.name || 'them') + ' their attendant application link' + (a.phone ? ' at ' + a.phone : '') + '?')) return;
+  let r;
+  try { r = await cdsMatchApi('packetSendLink', { pool_id: poolId }); }
+  catch (e) { _ghlToast('⚠️ Not sent: ' + e.message, true); return; }
+  const said = { sent: '✅ Texted ' + (a.name || 'them') + ' their application link.',
+    held: '⚠️ Not sent: attendant application texts are switched off (Switches card). Nothing went out.',
+    failed: '⚠️ The text did not go through. Try again, or call them.' }[r.status] || ('Link made (' + r.status + ').');
+  _ghlToast(said, r.status !== 'sent');
+  if (r.status === 'sent') {
+    const list = getData('pipeline'), q = list.find(x => x.id === id);
+    if (q) { if (!q.notes) q.notes = []; q.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: 'Texted ' + (a.name || 'their attendant') + ' their application link.' }); setData('pipeline', list); }
+  }
+  _attPk.at = 0;
+  if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
 }
 
 function lpDate(v){ return v ? String(v).slice(0,10) : ''; }
@@ -8192,9 +8250,14 @@ function renderLeadProfile(){
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--primary)">Their attendant</b>' +
         '<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm btn-primary" onclick="showPage(\'activeattendants\')">Open Attendants</button>' +
         '<button class="btn btn-sm btn-outline" onclick="openLeadAttendant(\'' + esc(p.id) + '\')">Change</button></span></div>' +
-      row('Name', ak.name) + row('Onboarding', ak.active ? 'Done: every step finished' : ak.label) +
+      row('Name', ak.name) + row('Phone', a && a.phone) + row('Onboarding', ak.active ? 'Done: every step finished' : ak.label) +
       (ak.active ? '' : '<div class="field-note" style="margin-top:6px">Next: ' + esc(ak.next || '') + '</div>') +
-      '<div class="field-note" style="margin-top:6px">From their application at caringcds.com/apply. Every step is tracked on Attendants, so nothing is ticked here.</div></div>';
+      lpAttSteps(ak) +
+      (!ak.active && !ak.step1_at ? '<div style="margin-top:10px"><button class="btn btn-sm btn-primary" onclick="laSendLink(\'' + esc(p.id) + '\',\'' + esc(ak.pool_id) + '\')">Text their application link</button>' +
+        '<span class="field-note" style="margin-left:8px">The same private link caringcds.com/apply sends, with reminders on day 2 and day 4.</span></div>' : '') +
+      (a && ATT_STEPS.some(([k]) => a[k]) ? '<div class="field-note" style="margin-top:8px">Typed on this lead earlier: ' +
+        ATT_STEPS.filter(([k]) => a[k]).map(([k, label]) => esc(label) + ' ' + esc(lpDate(a[k]))).join(', ') + '.</div>' : '') +
+      '<div class="field-note" style="margin-top:6px">' + (a && a.pool_id ? 'Added from this lead.' : 'From their application at caringcds.com/apply.') + ' Every step is tracked on Attendants, so nothing is ticked here.</div></div>';
   } else if(a){
     const failed = a.backgroundResult === 'failed';
     html += '<div class="card" style="padding:18px 20px;margin-bottom:14px' +
@@ -8750,6 +8813,7 @@ function saveLeadAttendant() {
   closeModal('leadAttModal');
   renderPipeline();
   if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
+  laStartOnboarding(id);
 }
 function removeLeadAttendant() {
   const id = document.getElementById('la_id').value, list = getData('pipeline'), p = list.find(x => x.id === id);

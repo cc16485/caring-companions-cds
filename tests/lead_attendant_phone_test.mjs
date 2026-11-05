@@ -20,7 +20,7 @@ const data = { pipeline: [] };
 const ctx = {
   getData: k => data[k], setData: (k, v) => { data[k] = v; },
   document: { getElementById: el }, openModal: () => {}, closeModal: () => {}, renderPipeline: () => {}, renderLeadProfile: () => {},
-  CDSRules: { relatedPeople: () => [] }, esc: s => String(s), _lprofId: null,
+  CDSRules: { relatedPeople: () => [] }, esc: s => String(s), _lprofId: null, laStartOnboarding: () => {},
 };
 vm.createContext(ctx);
 vm.runInContext(code + '\nthis.openLeadAttendant = openLeadAttendant; this.saveLeadAttendant = saveLeadAttendant;', ctx);
