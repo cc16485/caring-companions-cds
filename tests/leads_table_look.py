@@ -57,7 +57,7 @@ READ = r"""
     return { name: td[0].querySelector('.lt-name') ? td[0].querySelector('.lt-name').textContent.trim() : td[0].textContent.trim(), cells: td.slice(1, 8).map(x => x.textContent.trim()),
       wait: td[8] && td[8].textContent.trim(), cb: td[9] && td[9].textContent.trim(), cls: tr.className }; });
   return { rows, heads: [...document.querySelectorAll('#ldCards table.lt-t thead tr:last-child th')].map(x => x.textContent.trim()),
-    sum: (document.querySelector('#ldCards .lt-sum') || {}).textContent || '', tabsHidden: getComputedStyle(document.getElementById('ldSteps')).display === 'none' && getComputedStyle(document.getElementById('ldSort').closest('label')).display === 'none',
+    tabs: [...document.querySelectorAll('#ldSteps .ld-tab')].map(b => b.textContent.trim()), sortHidden: getComputedStyle(document.getElementById('ldSort').closest('label')).display === 'none',
     sw: (document.getElementById('ldWho') || {}).textContent || '' };
 }"""
 res = []
@@ -71,13 +71,13 @@ with sync_playwright() as pw:
     ck('the page loads the table file', pg.evaluate('()=>!!window.LDT'))
     pg.evaluate(SETUP, [PIPE, PACK, 'off']); pg.wait_for_timeout(200)
     R0 = pg.evaluate(READ)
-    ck('switch off: today\'s cards, step tabs showing, no table', not R0['rows'] and not R0['tabsHidden'] and pg.evaluate("()=>document.querySelectorAll('#ldCards .ld-row').length > 3"), R0)
+    ck('switch off: today\'s cards, step tabs showing, no table', not R0['rows'] and not R0['sortHidden'] and R0['tabs'][0].startswith('All') and pg.evaluate("()=>document.querySelectorAll('#ldCards .ld-row').length > 3"), R0)
     ck('switch off: the owner sees the switch row with Preview', 'Leads as a table: Off' in R0['sw'] and 'Preview it (only me)' in R0['sw'], R0['sw'])
     pg.evaluate(SETUP, [PIPE, PACK, 'staff']); pg.wait_for_timeout(200)
     ck('office staff (not an owner) see no switch and no table while it is off', 'Leads as a table' not in pg.evaluate(READ)['sw'] and not pg.evaluate(READ)['rows'])
     pg.evaluate(SETUP, [PIPE, PACK, 'preview']); pg.wait_for_timeout(400)
     R = pg.evaluate(READ); by = {r['name']: r for r in R['rows']}
-    ck('owner preview: the table instead of the cards, tabs hidden', len(R['rows']) == 10 and R['tabsHidden'], R)
+    ck('owner preview: the table instead of the cards, the reason tabs on top, no Sort', len(R['rows']) == 10 and R['sortHidden'] and len(R['tabs']) == 8 and R['tabs'][0].startswith('Active Leads 10'), R)
     ck('the columns', R['heads'] == ['Person', 'First call', 'Referral or PCCP answers', 'Sent to the state', 'State approved', 'Enrollment packet', 'Attendant', 'Move to Consumers', 'Waiting on', 'Call back on', 'Days on this step'], R['heads'])
     ck('closed leads are not in the table', 'Gone Person' not in by)
     m = by.get('Martha Quill', {})
@@ -100,32 +100,69 @@ with sync_playwright() as pw:
     ck('Earl (packet signed by them): Sign as agent, Office', e.get('cells', [''] * 5)[4] == 'Sign as agent' and e['wait'].startswith('Office'), e)
     i = by.get('Ida Kessler', {})
     ck('Ida (packet done, attendant check not back): packet ticked, attendant waiting, Waiting on Attendant', i.get('cells', [''] * 6)[4].startswith('✓') and 'Sam Helper' in i['cells'][5] and i['wait'].startswith('Attendant'), i)
-    ck('the summary adds only what the page line does not say (no second "need you now")', 'with the state' in R['sum'] and 'need you now' not in R['sum'], R['sum'])
-    ck('the filters are one short row of menus (Step, Who needs, Waiting on, Kind), no rows of chips', pg.evaluate("""()=>{ const bar = document.querySelector('#ldCards .lt-bar'); const labels = [...bar.querySelectorAll('.lt-m > span')].map(x => x.textContent);
-      return JSON.stringify(labels) === JSON.stringify(['Step','Who needs','Waiting on','Kind']) && !document.querySelector('#ldCards .lt-qs') && bar.getBoundingClientRect().height < 60; }"""))
-    ck('picking a menu filters the table and is remembered', pg.evaluate("""()=>{ const s = [...document.querySelectorAll('#ldCards .lt-m')].find(l => l.textContent.startsWith('Waiting on')).querySelector('select');
-      s.value = 'state'; s.dispatchEvent(new Event('change')); const n = document.querySelectorAll('#ldCards table.lt-t tbody tr').length;
-      const kept = JSON.parse(localStorage.getItem('ldTableF')).hold === 'state'; LDT.clear(); return n === 2 && kept; }"""))
-    ck('with Who called labels on, Who called is a menu in the same row (no separate chip row)', pg.evaluate("""()=>{ _store.leadsWhoCalled = { live: true }; renderPipeline();
-      const ok = [...document.querySelectorAll('#ldCards .lt-m > span')].some(x => x.textContent === 'Who called') && !document.querySelector('#ldWho .ld-filters');
-      _store.leadsWhoCalled = {}; renderPipeline(); return ok; }"""))
-    ck('the owner switch rows fold into one closed line', pg.evaluate("()=>{ const d = document.querySelector('#ldWho details.ld-sws'); return !!d && !d.open && d.textContent.includes('Leads as a table'); }"))
-    ck('the Who called chips still pick who shows in the table', pg.evaluate("""()=>{ _store.leadsWhoCalled = { live: true }; _ldWhoFilter = 'self'; renderPipeline();
-      const n = document.querySelectorAll('#ldCards table.lt-t tbody tr').length; _ldWhoFilter = 'all'; _store.leadsWhoCalled = {}; renderPipeline(); return n < 10; }"""))
+    ck('the top is just the title, Add someone, the tabs and search: no count, Show closed, help, summary or filter menus', pg.evaluate("""()=>{
+      const shown = el => !!el && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+      return !shown(document.getElementById('ldCount')) && !shown(document.getElementById('pipeShowClosed').closest('label')) && !shown(document.querySelector('#csub-pipeline .ld-helpbtn'))
+        && !shown(document.getElementById('ldSummary')) && !document.querySelector('#ldCards .lt-bar') && !document.querySelector('#ldCards .lt-m') && shown(document.getElementById('ldSearch')) && shown(document.querySelector('#csub-pipeline .ld-add')); }"""))
+    ck('the owner switch rows fold into one closed line, under the list', pg.evaluate("()=>{ const d = document.querySelector('#ldWho details.ld-sws'); const w = document.getElementById('ldWho'); return !!d && !d.open && d.textContent.includes('Leads as a table') && w.previousElementSibling === document.getElementById('ldPager'); }"))
+    ck('call notes waiting still show at the top', pg.evaluate("()=>{ const o = window.cnFor; window.cnFor = (k, id) => id === 'p2' ? [{ id: 'n1' }] : []; const o2 = window.cnPanelHtml; window.cnPanelHtml = () => ''; renderPipeline(); const t = document.getElementById('ldSummary'); const ok = getComputedStyle(t).display !== 'none' && /1 call note is waiting/.test(t.textContent) && !/people right now/.test(t.textContent); window.cnFor = o; window.cnPanelHtml = o2; renderPipeline(); return ok; }"))
     ck('each packet is asked once, and the attendant list once (not on every redraw)', pg.evaluate("()=>{ const n = PKCALLS.length; renderPipeline(); renderPipeline(); return n > 0 && PKCALLS.length === n && PKCALLS.every(c => ['enrollGet', 'packetList'].includes(c[0])) && PKCALLS.filter(c => c[0] === 'packetList').length <= 1; }"))
-    pg.evaluate("()=>LDT.set('hold','state')"); pg.wait_for_timeout(150)
-    ck('Waiting on: State', sorted(r['name'] for r in pg.evaluate(READ)['rows']) == ['Leona Marsh', 'Vernon Pike'], pg.evaluate(READ)['rows'])
-    ck('the chip is remembered', pg.evaluate("()=>JSON.parse(localStorage.getItem('ldTableF')).hold === 'state'"))
-    pg.evaluate("()=>{ LDT.clear(); LDT.set('step','ready'); }"); pg.wait_for_timeout(150)
-    ck('Step: Ready to start', sorted(r['name'] for r in pg.evaluate(READ)['rows']) == ['Earl Simmons', 'Hazel Dunn', 'Ida Kessler'], pg.evaluate(READ)['rows'])
-    pg.evaluate("()=>{ LDT.clear(); LDT.set('kind','pccp'); }"); pg.wait_for_timeout(150)
-    ck('Kind: PCCP', sorted(r['name'] for r in pg.evaluate(READ)['rows']) == ['Earl Simmons', 'Leona Marsh'], pg.evaluate(READ)['rows'])
+    ck('an old saved filter from the menus can not hide anyone now', pg.evaluate("()=>{ localStorage.setItem('ldTableF', JSON.stringify({ hold: 'state' })); renderPipeline(); return document.querySelectorAll('#ldCards table.lt-t tbody tr').length === 10; }"))
     pg.evaluate("()=>{ LDT.clear(); document.getElementById('ldSearch').value = 'polk'; renderPipeline(); }"); pg.wait_for_timeout(150)
     ck('search finds a county', [r['name'] for r in pg.evaluate(READ)['rows']] == ['Vernon Pike'], pg.evaluate(READ)['rows'])
-    pg.evaluate("()=>{ document.getElementById('ldSearch').value = ''; document.getElementById('pipeShowClosed').checked = true; renderPipeline(); }"); pg.wait_for_timeout(150)
-    gone = [r for r in pg.evaluate(READ)['rows'] if r['name'] == 'Gone Person']
-    ck('Show closed adds closed leads, with Reopen', len(gone) == 1 and 'Reopen' in gone[0]['wait'], gone)
-    pg.evaluate("()=>{ document.getElementById('pipeShowClosed').checked = false; renderPipeline(); }")
+    pg.evaluate("()=>{ document.getElementById('ldSearch').value = ''; renderPipeline(); }")
+    # ---- the reason tabs (her ask 2026-11-05)
+    EXTRA = [
+      {'id': 'm1', 'name': 'Due Medic', 'type': 'lead', 'status': 'closed_no_medicaid', 'county': 'Greene', 'phone': '4175550111', 'medicaidApplying': True, 'medicaidCheck': day(-2), 'closedAt': day(-32), 'notes': [note(-32, 'Closed: No Medicaid (applying for Medicaid)')]},
+      {'id': 'm2', 'name': 'Later Medic', 'type': 'lead', 'status': 'closed_no_medicaid', 'county': 'Greene', 'medicaidApplying': False, 'medicaidCheck': day(20), 'closedAt': day(-3), 'notes': [note(-3)]},
+      {'id': 'a1', 'name': 'Far Away', 'type': 'lead', 'status': 'closed_area', 'county': 'Jasper', 'closedAt': day(-5), 'notes': [note(-5)]},
+      {'id': 'a2', 'name': 'Far Too', 'type': 'lead', 'status': 'closed_area', 'county': 'Jasper', 'closedAt': day(-4), 'notes': [note(-4)]},
+      {'id': 's1', 'name': 'State Nope', 'type': 'referral', 'status': 'closed_state_no', 'stateNoWhy': 'level', 'closedAt': day(-6), 'notes': [note(-6)]},
+      {'id': 'n1', 'name': 'No Helper', 'type': 'lead', 'status': 'closed_no_attendant', 'closedAt': day(-7), 'notes': [note(-7)]},
+      {'id': 'g1', 'name': 'Rest Peace', 'type': 'lead', 'status': 'closed_passed', 'closedAt': day(-8), 'notes': [note(-8)]},
+      {'id': 'v1', 'name': 'Moved Mary', 'type': 'referral', 'status': 'authorized', 'movedToConsumers': True, 'firstContact': day(-70), 'notes': [note(-70)]},
+    ]
+    pg.evaluate(SETUP, [PIPE + EXTRA, PACK, 'preview']); pg.wait_for_timeout(300)
+    T = pg.evaluate(READ)
+    names = [' '.join(w for w in t.split(' ') if not w[0].isdigit() and w not in ('late', 'due')) for t in T['tabs']]
+    ck('eight tabs in order', names == ['Active Leads', 'No Medicaid', 'Needs an Attendant', 'State Said No', 'Out of Service Area', 'Inactive Leads', 'Moved to Consumers', 'Closed for Good'], T['tabs'])
+    ck('Active Leads counts the due Medicaid check back; No Medicaid shows 2 with 1 due', T['tabs'][0].startswith('Active Leads 11') and T['tabs'][1] == 'No Medicaid 21 due', T['tabs'])
+    ck('the due check back is the first row on Active Leads, red, with Log a call and They have Medicaid now', T['rows'][0]['name'] == 'Due Medic' and 'lt-now' in T['rows'][0]['cls'] and 'Log a call' in T['rows'][0]['cells'][0] and 'They have Medicaid now' in T['rows'][0]['cells'][0], T['rows'][:1])
+    ck('Later Medic (check back in 20 days) is not on Active Leads', 'Later Medic' not in [r['name'] for r in T['rows']])
+    CT = """()=>[...document.querySelectorAll('#ldCards table.lt-t tbody tr')].map(tr => [...tr.children].map(td => (td.querySelector('input') ? td.querySelector('input').value : td.textContent).trim()))"""
+    pg.evaluate("()=>LDT.tab('med')"); pg.wait_for_timeout(100)
+    med = pg.evaluate(CT)
+    ck('No Medicaid tab: due one first, applying or not, the check back date, Log a call', [r[0][:9] for r in med] == ['Due Medic', 'Later Med'] and med[0][1] == 'Yes, applying' and med[1][1] == 'Not right now' and med[1][2] == day(20) and 'Log a call' in med[0][4], med)
+    ck('changing the check back date saves it with a note', pg.evaluate("""()=>{ const i = document.getElementById('ltMed_m2'); i.value = '""" + day(40) + """'; i.dispatchEvent(new Event('change'));
+      const p = _store.pipeline.find(x => x.id === 'm2'); return p.medicaidCheck === '""" + day(40) + """' && /Medicaid check back set/.test(p.notes.slice(-1)[0].text); }"""))
+    ck('They have Medicaid now reopens them onto Active Leads', pg.evaluate("""()=>{ const tr = [...document.querySelectorAll('#ldCards tbody tr')].find(t => t.textContent.includes('Later Medic')); [...tr.querySelectorAll('button')].find(b => b.textContent === 'They have Medicaid now').click(); closeModal('editPipelineModal');
+      const p = _store.pipeline.find(x => x.id === 'm2'); LDT.tab('active'); const on = [...document.querySelectorAll('#ldCards .lt-name')].some(b => b.textContent === 'Later Medic');
+      const gone = p.status === 'nurturing' && !('medicaidCheck' in p); p.status = 'closed_no_medicaid'; p.medicaidCheck = '""" + day(20) + """'; renderPipeline(); return on && gone; }"""))
+    ck('Close as No Medicaid asks if they are applying and sets a check back 30 days out', pg.evaluate("""()=>{ openCloseLead('p2'); clNoMedicaid(); const d = document.getElementById('cl_medDate').value;
+      closeLeadAs('closed_no_medicaid', 'yes'); const p = _store.pipeline.find(x => x.id === 'p2');
+      const ok = d === '""" + day(30) + """' && p.status === 'closed_no_medicaid' && p.medicaidApplying === true && p.medicaidCheck === d && /applying for Medicaid; check back/.test(p.notes.slice(-1)[0].text);
+      reopenLead('p2'); p.followup = '""" + day(5) + """'; renderPipeline(); return ok; }"""))
+    ck('Log a call on a No Medicaid lead: the call back date becomes the next check back, the lead stays closed', pg.evaluate("""()=>{ openPipelineEdit('m1'); const pre = document.getElementById('ep_followup').value;
+      document.getElementById('ep_followup').value = '""" + day(30) + """'; savePipelineUpdate(); const p = _store.pipeline.find(x => x.id === 'm1');
+      const ok = pre === '""" + day(-2) + """' && p.status === 'closed_no_medicaid' && p.medicaidCheck === '""" + day(30) + """' && !p.followup; p.medicaidCheck = '""" + day(-2) + """'; renderPipeline(); return ok; }"""))
+    pg.evaluate("()=>LDT.tab('area')"); pg.wait_for_timeout(100)
+    ck('Out of Service Area: both Jasper leads, with a count by county', pg.inner_text('#ldCards').count('Jasper County') == 2 and 'By county: Jasper 2' in pg.inner_text('#ldCards'), pg.inner_text('#ldCards')[:400])
+    pg.evaluate("()=>LDT.tab('stateno')"); pg.wait_for_timeout(100)
+    ck('State Said No shows why', 'Did not meet the level of care' in pg.inner_text('#ldCards'))
+    pg.evaluate("()=>LDT.tab('att')"); pg.wait_for_timeout(100)
+    ck('Needs an Attendant has No Helper with Reopen', 'No Helper' in pg.inner_text('#ldCards') and 'Reopen' in pg.inner_text('#ldCards'))
+    pg.evaluate("()=>LDT.tab('inactive')"); pg.wait_for_timeout(100)
+    ck('Inactive Leads has Gone Person', 'Gone Person' in pg.inner_text('#ldCards'))
+    pg.evaluate("()=>LDT.tab('moved')"); pg.wait_for_timeout(100)
+    ck('Moved to Consumers has Moved Mary with Open, no Reopen', 'Moved Mary' in pg.inner_text('#ldCards') and 'Reopen' not in pg.inner_text('#ldCards'))
+    pg.evaluate("()=>LDT.tab('gone')"); pg.wait_for_timeout(100)
+    ck('Closed for Good: passed away, and no Reopen for them', 'Rest Peace' in pg.inner_text('#ldCards') and 'Reopen' not in pg.inner_text('#ldCards'))
+    box = pg.locator('#csub-pipeline').bounding_box()
+    pg.evaluate("()=>LDT.tab('med')"); pg.wait_for_timeout(100)
+    pg.screenshot(path=os.path.join(OUT, 'cds_lt_nomedicaid.png'), clip={'x': box['x'], 'y': box['y'], 'width': box['width'], 'height': 700}, full_page=True)
+    pg.evaluate("()=>{ LDT.tab('active'); document.getElementById('ldSearch').value = 'jasper'; renderPipeline(); }"); pg.wait_for_timeout(100)
+    ck('a search counts matches on every tab', pg.evaluate(READ)['tabs'][4] == 'Out of Service Area 2' and pg.evaluate(READ)['tabs'][0].startswith('Active Leads 0'), pg.evaluate(READ)['tabs'])
+    pg.evaluate(SETUP, [PIPE, PACK, 'preview']); pg.wait_for_timeout(300)
     ck('a name opens the lead profile', pg.evaluate("""()=>{ let got = null; const o = window.openLeadProfile; window.openLeadProfile = id => { got = id; };
       [...document.querySelectorAll('#ldCards .lt-name')].find(b => b.textContent === 'Hazel Dunn').click(); window.openLeadProfile = o; return got === 'p7'; }"""))
     ck('Move to Consumers runs the same move as the card', pg.evaluate("""()=>{ let got = null; const o = window.convertToConsumer; window.convertToConsumer = id => { got = id; };

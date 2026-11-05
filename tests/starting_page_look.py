@@ -54,7 +54,7 @@ with sync_playwright() as pw:
     # ---- switch off, nobody Starting: everything as before
     pg.evaluate(SETUP, [PIPE[:3], CONS[1:], False, True]); pg.evaluate("()=>showPage('pipeline')"); pg.wait_for_timeout(300)
     ck('off: no Starting tab in the menu', 'Starting' not in pg.evaluate(tabs), pg.evaluate(tabs))
-    ck('off: Leads table keeps all seven steps', 'Move to Consumers' in pg.inner_text('#ldCards') and 'Robin Before' in pg.inner_text('#ldCards'))
+    ck('off: Leads table keeps all seven steps', 'move to consumers' in pg.inner_text('#ldCards').lower() and 'Robin Before' in pg.inner_text('#ldCards'))
 
     # ---- switch on
     pg.evaluate(SETUP, [PIPE, CONS, True, True]); pg.evaluate("()=>showPage('pipeline')"); pg.wait_for_timeout(300)
@@ -62,11 +62,11 @@ with sync_playwright() as pw:
     ck('on: Starting sits between Leads and Consumers', t.index('Starting') == t.index('Leads') + 1 and t.index('Consumers') == t.index('Starting') + 1, t)
     lt = pg.inner_text('#ldCards')
     ck('Leads table: First call, answers, They said yes; no state, packet, attendant or move columns',
-       all(x in lt for x in ['First call', 'Referral or PCCP answers', 'They said yes']) and not any(x in lt for x in ['Sent to the state', 'State approved', 'Enrollment packet', 'Move to Consumers']), lt[:600])
+       all(x.lower() in lt.lower() for x in ['First call', 'Referral or PCCP answers', 'They said yes']) and not any(x.lower() in lt.lower() for x in ['Sent to the state', 'State approved', 'Enrollment packet', 'Move to Consumers']), lt[:600])
     ck('Leads: the lead sent to the state is not on Leads', 'Robin Before' not in lt)
     ck('Leads: the one who said yes is not on Leads', 'Dana Started' not in lt)
     ck('Leads: Pat (answers in) has They said yes, Lee still has Log a call', 'Pat Example' in lt and 'Lee Sample' in lt)
-    ck('Leads: no Step menu', 'Step' not in pg.inner_text('.lt-bar').split('\n')[0:1][0] if pg.inner_text('.lt-bar') else True)
+    ck('Leads: no Step menu (2026-11-05: no menus at all, the reason tabs instead)', pg.evaluate("()=>!document.querySelector('.lt-bar') && document.querySelector('#ldSteps .ld-tab').textContent.startsWith('Active Leads')"))
     shot(pg, '01-leads-with-starting-desktop')
     pg.evaluate("()=>{ localStorage.setItem('ldView','cards'); renderPipeline(); }"); pg.wait_for_timeout(200)
     ck('Leads cards: no step tabs, no Robin', pg.inner_text('#ldSteps').strip() == '' and 'Robin Before' not in pg.inner_text('#ldCards'))
