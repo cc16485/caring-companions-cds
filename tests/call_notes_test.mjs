@@ -45,6 +45,9 @@ await pg.exec(strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8')));
 const NOTES_SQL = strip(readFileSync(ROOT + '/call_notes.sql', 'utf8'));
 await pg.exec(NOTES_SQL); await pg.exec(NOTES_SQL);
 ok(true, 'call_notes.sql runs twice');
+const ANS_SQL = strip(readFileSync(ROOT + '/call_answers.sql', 'utf8'));
+await pg.exec(ANS_SQL); await pg.exec(ANS_SQL);
+ok(true, 'call_answers.sql runs twice (2026-11-05)');
 // voicemail leads (2026-10-29): voicemails get notes too; links can point at a voicemail
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
 await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));   // the phone book reads cds_packets (2026-11-05)
@@ -90,7 +93,9 @@ const comms = C.createComms({
     if (aiFail > 0) { aiFail--; throw new Error('Claude 529: overloaded'); }
     const wrong = /wrong number/i.test(req.messages[0].content);
     return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ about_person: !wrong, note: wrong ? 'Wrong number.' : 'Mark called for his mom Ruth. She fell twice in October and has Medicaid. Mark will be her attendant. Call back Friday with her DCN.',
-      call_back: '2026-10-31', people: wrong ? [] : [{ name: 'Ana Ellis', relation: 'daughter', phone: '' }] }) }] };
+      call_back: '2026-10-31', people: wrong ? [] : [{ name: 'Ana Ellis', relation: 'daughter', phone: '' }],
+      answers: wrong ? {} : { who: 'family', first: 'Ruth', last: 'Ellis', dob: '1944-02-03', county: 'Greene County', medicaid: 'yes', dcn: '', cds: 'new', agency: 'Old Co', help: ['bathing', 'flying'],
+        help_note: '', attendant: 'has', att_name: 'Mark Ellis', att_phone: '', att_relation: 'son' } }) }] };
   },
 });
 const rows = async () => (await pg.query(`select * from cds_call_notes order by comm_id`)).rows;
@@ -117,6 +122,9 @@ const m = all.find(x => x.comm_id === mark);
 ok(r.notes === 1 && m && m.status === 'waiting' && m.person_ref === 'family:lead:l1', 'Mark\'s call: a note waiting, filed under Ruth\'s lead');
 ok(/Mark called for his mom Ruth/.test(m.note) && String(m.followup).startsWith('2026-10-31') || (m.followup instanceof Date && m.followup.toISOString().startsWith('2026-10-31')), 'note and call back date saved');
 ok(m.people[0].name === 'Ana Ellis' && /Hi, this is Mark/.test(m.transcript), 'people heard and the transcript kept');
+ok(m.answers.who === 'family' && m.answers.dob === '1944-02-03' && m.answers.county === 'Greene' && m.answers.medicaid === 'yes' && JSON.stringify(m.answers.help) === '["bathing"]'
+  && !('dcn' in m.answers) && !('agency' in m.answers) && m.answers.att_name === 'Mark Ellis', 'answers kept, cleaned: no County word, only known help, empty ones left out, no agency for someone new');
+ok(aiCalls[0].output_config.format.schema.required.includes('answers') && /answers: the facts said on the call/.test(aiCalls[0].system) && /Never guess/.test(aiCalls[0].system), 'Claude is asked for the answers, only what was said');
 ok(/Mark Ellis, Family \(son, family for Ruth Ellis\)/.test(aiCalls[0].messages[0].content), 'Claude is told who the caller is to Ruth: ' + aiCalls[0].messages[0].content.split('\n')[2]);
 ok(/Thursday, 2026-10-29/.test(aiCalls[0].messages[0].content) && /Krystal Smith for the office/.test(aiCalls[0].messages[0].content), 'call day in Missouri time and who answered');
 ok(!all.some(x => x.comm_id === short) && !all.some(x => x.comm_id === missed), 'too short or missed: no note');
@@ -150,7 +158,9 @@ const hm = h.items.find(i => i.id === mark);
 ok(hm && hm.note_status === 'waiting' && /Mark called/.test(hm.note) && hm.has_transcript, 'Calls and texts shows the note is waiting');
 threw = ''; try { await comms.noteDecide('krystal@mo-care.com', { id: mark, decision: 'maybe' }); } catch (e) { threw = e.message; }
 ok(/Unknown choice/.test(threw), 'only OK or Not about');
-ok((await comms.noteDecide('krystal@mo-care.com', { id: mark, decision: 'ok', note: 'Mark called for Ruth — fell twice.', followup: '2026-11-03' })).ok, 'OK with her own words');
+ok(w.notes[0].answers && w.notes[0].answers.dob === '1944-02-03', 'the waiting note carries its answers to the hub');
+ok((await comms.noteDecide('krystal@mo-care.com', { id: mark, decision: 'ok', note: 'Mark called for Ruth — fell twice.', followup: '2026-11-03', kept: ['dob', 'county', 'DROP TABLE x'] })).ok, 'OK with her own words');
+ok(JSON.stringify((await rows()).find(x => x.comm_id === mark).kept) === '["dob","county"]', 'which answers she kept is saved (only plain names)');
 const done = (await rows()).find(x => x.comm_id === mark);
 ok(done.status === 'ok' && done.final_note === 'Mark called for Ruth, fell twice.' && done.decided_by === 'krystal@mo-care.com', 'saved as OK, her words kept, by whom');
 threw = ''; try { await comms.noteDecide('zach@mo-care.com', { id: mark, decision: 'not_about' }); } catch (e) { threw = e.message; }
@@ -173,7 +183,7 @@ ok((await comms.notesWaiting()).notes.length === 0, 'nothing left waiting');
   const html = readFileSync(ROOT + '/index.html', 'utf8');
   const a = html.indexOf('// CALL NOTES (2026-10-29'), b = html.indexOf('async function commLoad()');
   ok(a > 0 && b > a && !/—/.test(html.slice(a, b)), 'call note page code: no em dashes');
-  ok(/action: 'note_decide', id: commId, decision, note, followup/.test(html) && /fromCall: commId/.test(html), 'OK answers the server first, then puts the note on the lead');
+  ok(/action: 'note_decide', id: commId, decision, note, followup, kept/.test(html) && /fromCall: commId/.test(html), 'OK answers the server first, then puts the note on the lead');
   ok(/cnPanelHtml\(notes\[0\], 'lead', p\)/.test(html) && /cnFor\('consumer', c\.id\)/.test(html), 'the panel on Leads rows, lead profiles and consumer profiles');
   ok(/Nothing is saved until someone presses OK/.test(html) && /call notes are' : ' call notes are|call notes are/.test(html), 'says nothing is saved before OK');
 }

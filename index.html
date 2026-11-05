@@ -26,7 +26,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
-<script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
+<script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script>
+<script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=8"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="followups-table.js?v=1"></script><!-- 2026-11-05 Follow-ups as one table (switch followupsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
@@ -715,6 +716,13 @@ input, select, textarea { border-radius:10px; }
 .rp-from { color:#7A4E0B; font-weight:700; }
 /* Call notes (2026-10-29) */
 .cn-panel { margin-top:10px; padding:14px 16px; border-radius:14px; background:#FFFBF1; border:1.5px solid #F0D9A8; display:flex; flex-direction:column; gap:10px; }
+.cn-ans { border-top:1.5px solid #edf1f3; margin-top:10px; padding-top:10px; display:grid; gap:4px; }   /* 2026-11-05 answers from the call */
+.cn-ans-head { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; align-items:baseline; margin-bottom:2px; } .cn-ans-head b { color:var(--primary); font-size:13.5px; }
+.cn-ans-row { display:grid; grid-template-columns:22px minmax(110px,150px) minmax(0,1fr) auto; gap:8px; align-items:center; padding:6px 8px; border-radius:9px; font-size:13px; cursor:pointer; }
+.cn-ans-row input { width:17px; height:17px; accent-color:#0f5f61; } .cn-ans-l { color:var(--gray-600); } .cn-ans-s { font-size:12px; color:#0f5f61; }
+.cn-ans-row.cn-new, .cn-ans-row.cn-adds { background:#f3fafa; } .cn-ans-row.cn-differs { background:#fff6e6; } .cn-ans-row.cn-differs .cn-ans-s { color:#9C6410; } .cn-ans-row.cn-same { color:var(--gray-600); cursor:default; } .cn-ans-row.cn-same .cn-ans-s { color:var(--gray-600); }
+@media (max-width:640px) { .cn-ans-row { grid-template-columns:22px minmax(0,1fr); } .cn-ans-row b, .cn-ans-row .cn-ans-s { grid-column:2; } }
+.lp-call { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; margin-top:4px; } .lp-call .cn-media { flex-basis:100%; } .lp-fromcall { font-size:11.5px; color:#0f5f61; margin-left:6px; }
 .cn-head { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; font-size:14px; color:#0D365F; }
 .cn-grid { display:grid; grid-template-columns:minmax(0,1fr) 240px; gap:14px; }
 .cn-grid textarea { width:100%; box-sizing:border-box; padding:9px 11px; border:1.5px solid #e4e1d8; border-radius:10px; font:inherit; font-size:14px; line-height:1.5; background:#fff; }
@@ -8207,6 +8215,15 @@ function saveLeadDetails() {
   renderLeadProfile();
   syncOneToGhl('pipeline', p.id, p.name, saved);
 }
+// A note saved from a recorded call (2026-11-05): which call, what it filled in, and Listen / Read the whole call.
+function lpCallLinks(n) {
+  if (!n || !n.fromCall) return '';
+  const id = esc(n.fromCall), L = (window.CallAnswers && CallAnswers.LABEL) || {};
+  return '<div class="lp-call"><span class="field-note">' + (n.callAt ? 'Call ' + esc(_commWhen(n.callAt)) + (n.callMin ? ', ' + n.callMin + ' min' : '') : 'From a recorded call') + (n.by ? ' · OK by ' + esc(String(n.by).charAt(0).toUpperCase() + String(n.by).slice(1)) : '') + '</span>' +
+    (Array.isArray(n.kept) && n.kept.length ? '<span class="field-note">Saved from this call: ' + esc(n.kept.map(k => String(L[k] || k).toLowerCase()).join(', ')) + '.</span>' : '') +
+    '<span><button type="button" class="rp-linkbtn" onclick="cnListen(\'' + id + '\')">Listen</button> &middot; <button type="button" class="rp-linkbtn" onclick="cnTranscript(\'' + id + '\')">Read the whole call</button></span>' +
+    '<div class="cn-media" id="cnm_' + id + '"></div></div>';
+}
 function renderLeadProfile(){
   const host = document.getElementById('lprof_body'); if(!host) return;
   const p = getData('pipeline').find(x => x.id === _lprofId);
@@ -8218,6 +8235,8 @@ function renderLeadProfile(){
   const row = (label, val) => val
     ? '<div style="display:flex;gap:10px;padding:4px 0;font-size:13px"><span style="color:var(--gray-600);min-width:150px">' +
       esc(label) + '</span><span>' + esc(val) + '</span></div>' : '';
+  // 2026-11-05: an answer that came from a recorded call says which call
+  const callTag = (html, p, k) => { const t = html && window.CallAnswers ? CallAnswers.fromLabel(p, k) : ''; return t ? html.replace(/<\/span><\/div>$/, ' <span class="lp-fromcall">' + esc(t) + '</span></span></div>') : html; };
 
   // ---- the call ----
   let html = '<div class="card" style="padding:18px 20px;margin-bottom:14px">' +
@@ -8230,10 +8249,12 @@ function renderLeadProfile(){
     row('Phone', p.phone) +
     // No phone of their own yet: whoever called for them (2026-10-29).
     (!p.phone ? (CDSRules.relatedPeople(p).filter(r => r.phone).slice(0, 1).map(r => row('Reach them through', r.name + (r.relation ? ' (' + r.relation + ')' : '') + ', ' + r.phone))[0] || '') : '') +
-    row('Email', p.email) + row('Address', leadAddress(p)) + row('County', p.county) +
-    row('Date of birth', lpDate(p.dob || (R && R.dob))) + row('DCN', p.dcn || (R && R.dcn)) +
+    row('Email', p.email) + row('Address', leadAddress(p)) + callTag(row('County', p.county), p, 'county') +
+    callTag(row('Date of birth', lpDate(p.dob || (R && R.dob))), p, 'dob') + callTag(row('DCN', p.dcn || (R && R.dcn)), p, 'dcn') +
+    callTag(row('Medicaid', ({ active: 'Has Medicaid', inactive: 'No Medicaid', pending: 'Applied, waiting' })[p.medicaidStatus]), p, 'medicaid') +
+    callTag(row('Help needed', [(p.helpNeeded || []).map(h => (window.CallAnswers ? CallAnswers.HELP[h] : '') || h).join(', '), p.helpNote].filter(Boolean).join('; ')), p, 'help') +
     row('First contact', p.firstContact) + (p.form ? '' : row('Heard about us', p.source)) +
-    row('Leaving', p.leavingAgency) + row('Why switching', p.whySwitching) +
+    callTag(row('Leaving', p.leavingAgency), p, 'agency') + row('Why switching', p.whySwitching) +
     row('Where they are', ({ready:'Wants to switch now', shopping:'Calling around', unsure:'Unsure'})[p.readiness]) +
     '</div>';
 
@@ -8449,7 +8470,7 @@ function renderLeadProfile(){
     '<b style="color:var(--primary)">Notes</b>' +
     (notes.length
       ? notes.map(n => '<div style="padding:6px 0;font-size:13px;border-bottom:1px solid var(--gray-200)">' +
-          '<span style="color:var(--gray-600)">' + esc(n.date || '') + '</span> ' + (n.from ? '<b class="rp-from">From ' + esc(n.from) + ':</b> ' : '') + esc(n.text || '') + '</div>').join('')
+          '<span style="color:var(--gray-600)">' + esc(n.date || '') + '</span> ' + (n.from ? '<b class="rp-from">From ' + esc(n.from) + ':</b> ' : '') + esc(n.text || '') + lpCallLinks(n) + '</div>').join('')
       : '<div class="field-note">No notes yet.</div>') +
     '</div>';
 
@@ -9369,7 +9390,7 @@ function cnFor(kind, id) { return _cnWaiting.filter(n => { const r = _cnRefOf(n.
 function _cnDay(iso) { return iso ? (CDSRules.isoLocal ? CDSRules.isoLocal(new Date(iso)) : String(iso).slice(0, 10)) : _todayIso(); }
 // The panel: the note to fix, the call back date, people heard on the call, OK / Not about them.
 function cnPanelHtml(n, kind, owner) {
-  const id = esc(n.comm_id), first = esc(String(owner.name || 'them').split(' ')[0]);
+  const id = esc(n.comm_id), first = esc(/^(caller:|unknown caller)/i.test(String(owner.name || '')) || !owner.name ? 'them' : String(owner.name).split(' ')[0]);
   const known = CDSRules.relatedPeople(owner).map(x => String(x.name || '').toLowerCase());
   const heard = (Array.isArray(n.people) ? n.people : []).filter(x => x && x.name && !known.includes(String(x.name).toLowerCase()) && String(x.name).toLowerCase() !== String(owner.name || '').toLowerCase());
   const mins = Math.max(1, Math.round((n.seconds || 0) / 60));
@@ -9381,10 +9402,24 @@ function cnPanelHtml(n, kind, owner) {
         (heard.length ? '<div class="rp-lbl" style="margin-top:8px">Heard on the call</div>' + heard.map((x, i) => '<div class="cn-heard">' + esc(x.name) + (x.relation ? ', ' + esc(x.relation) : '') + (x.phone ? ', ' + esc(_cnPhone(x.phone)) : '') +
           ' <button type="button" class="rp-linkbtn" onclick="cnAddPerson(\'' + id + '\',' + i + ',\'' + kind + '\',\'' + esc(String(owner.id)) + '\')">Add as a contact</button></div>').join('') : '') +
       '</div></div>' +
+    cnAnswersHtml(n, kind, owner) +
     '<div class="cn-media" id="cnm_' + id + '"></div>' +
     '<div class="cn-btns"><button type="button" class="btn btn-primary btn-sm"' + (_cnBusy === n.comm_id ? ' disabled' : '') + ' onclick="cnDecide(\'' + id + '\',\'ok\',\'' + kind + '\',\'' + esc(String(owner.id)) + '\')">OK, save it</button>' +
       '<button type="button" class="btn btn-outline btn-sm"' + (_cnBusy === n.comm_id ? ' disabled' : '') + ' onclick="cnDecide(\'' + id + '\',\'not_about\',\'' + kind + '\',\'' + esc(String(owner.id)) + '\')">Not about ' + first + '</button>' +
       '<span class="field-note" id="cne_' + id + '">Nothing is saved until someone presses OK.</span></div></div>';
+}
+// Answers from this call (2026-11-05, mockup W47w6qkzLLB3FF91iEJ8J1): the first call questions heard on the call, next to
+// what the lead has. New ones are ticked; a different one is not (listen first). Ticked ones go on the lead with OK.
+const CN_STATE = { new: 'new', same: 'already on the lead', adds: 'adds to the lead' };
+function cnAnswersHtml(n, kind, owner) {
+  if (kind !== 'lead' || !window.CallAnswers || !n.answers || !Object.keys(n.answers).length) return '';
+  const rows = CallAnswers.rows(owner, n.answers, _todayIso()), id = esc(n.comm_id);
+  if (!rows.length) return '';
+  return '<div class="cn-ans"><div class="cn-ans-head"><b>Answers from this call</b><span class="field-note">Ticked ones go on the lead when you press OK</span></div>' +
+    rows.map(r => '<label class="cn-ans-row cn-' + r.state + '"><input type="checkbox" id="cna_' + id + '_' + r.k + '"' + (r.tick ? ' checked' : '') + (r.state === 'same' ? ' disabled' : '') + '>' +
+      '<span class="cn-ans-l">' + esc(r.label) + '</span><b>' + esc(r.value) + '</b>' +
+      '<span class="cn-ans-s">' + (r.state === 'differs' ? 'lead says ' + esc(r.current) : esc(CN_STATE[r.state] || '')) + '</span></label>').join('') +
+    (rows.some(r => r.state === 'differs') ? '<div class="field-note">A different answer than the lead has is not ticked for you. Listen, then tick it if the call is right.</div>' : '') + '</div>';
 }
 async function cnDecide(commId, decision, kind, ownerId) {
   const n = _cnWaiting.find(x => x.comm_id === commId) || {};
@@ -9392,14 +9427,17 @@ async function cnDecide(commId, decision, kind, ownerId) {
   const followup = (document.getElementById('cnd_' + commId) || {}).value || '';
   const err = document.getElementById('cne_' + commId);
   if (decision === 'ok' && !note.trim()) { if (err) err.textContent = 'Write the note first, or press Not about.'; return; }
+  const kept = decision === 'ok' && kind === 'lead' && window.CallAnswers && n.answers
+    ? CallAnswers.ORDER.filter(k => { const b = document.getElementById('cna_' + commId + '_' + k); return b && b.checked && !b.disabled; }) : [];
   _cnBusy = commId;
-  try { await _commCall({ action: 'note_decide', id: commId, decision, note, followup }); }
+  try { await _commCall({ action: 'note_decide', id: commId, decision, note, followup, kept }); }
   catch (e) { _cnBusy = ''; if (err) { err.textContent = e.message; err.style.color = 'var(--danger)'; } return; }
   // Answered: for a lead, the note and call back date go on the lead.
   if (decision === 'ok' && kind === 'lead') {
     const pipeline = getData('pipeline'), p = pipeline.find(x => x.id === ownerId);
     if (p) {
-      p.notes = (Array.isArray(p.notes) ? p.notes : []).concat({ date: _cnDay(n.at), text: note.trim(), fromCall: commId, by: _ldWhoBy() });
+      const did = kept.length ? CallAnswers.apply(p, n.answers, kept, { id: commId, at: n.at, by: _ldWhoBy() }) : [];
+      p.notes = (Array.isArray(p.notes) ? p.notes : []).concat(Object.assign({ date: _cnDay(n.at), text: note.trim(), fromCall: commId, callAt: n.at || '', callMin: Math.max(1, Math.round((n.seconds || 0) / 60)), by: _ldWhoBy() }, did.length ? { kept: did } : {}));
       if (followup) p.followup = followup;
       await setData('pipeline', pipeline);
     }
