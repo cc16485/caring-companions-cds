@@ -724,6 +724,9 @@ input, select, textarea { border-radius:10px; }
 .cn-pill { display:inline-block; margin-top:4px; background:var(--cute-honey-pale) !important; color:#7A4E0B !important; }
 .ch-note { margin-top:4px; font-size:13px; line-height:1.5; color:var(--cute-ink); background:#f6f5f0; border-radius:8px; padding:6px 10px; }
 .ch-note.wait { background:#FFFBF1; color:#7A4E0B; }
+.fu-boss { font-size:13px; color:#0D365F; background:#EEF6F6; border-radius:8px; padding:6px 10px; margin:6px 0; }
+.ch-play { margin-top:4px; font-size:13px; display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center; }
+.ch-play > div { flex:1 1 100%; }
 @media (max-width: 700px) { .cn-grid { grid-template-columns:1fr; } }
 .rp-linkbtn { border:0; background:none; padding:0; color:#14606F; font:inherit; font-size:13px; font-weight:600; text-decoration:underline; cursor:pointer; }
 .ch-filter { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
@@ -9241,6 +9244,11 @@ async function renderFollowups(reload) {
     const events = (c.events || []).slice(-6).map(e => '<li><span>' + esc(_commWhen(e.at)) + '</span>' + esc(e.text) + '</li>').join('');
     const role = hidden ? 'Number not shown' : c.kind === 'who_is_this' ? phone : [c.role, c.detail].filter(Boolean).join(': ');
     const id = esc(c.id);
+    // The consumer is the boss (2026-11-05, switch consumerComms): an attendant's call points to the consumer they work
+    // for. Pay and Clock-in & EVV stay with the attendant: those are the attendant's own pay and time (her pick C).
+    const boss = hubSwitchOn('consumerComms') && (c.forConsumers || []).length && !['pay', 'evv'].includes(c.need) ? c.forConsumers.filter(f => !f.past)[0] || c.forConsumers[0] : null;
+    const bossLink = boss && boss.contactId ? CDS_GHL_APP + '/contacts/detail/' + encodeURIComponent(boss.contactId) : '';
+    const bossFirst = boss ? String(boss.name).split(' ')[0] : '';
     const needOpts = (d.needs || []).map(n => '<option value="' + esc(n.key) + '"' + ((c.need || 'not_sure') === n.key ? ' selected' : '') + '>' + esc(n.label) + '</option>').join('');
     const ownOpts = '<option value=""' + (!c.owner ? ' selected' : '') + '>Nobody yet</option>' + (d.people || []).map(p => '<option value="' + esc(p.email) + '"' + (c.owner === p.email ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('')
       + (c.owner && !(d.people || []).some(p => p.email === c.owner) ? '<option value="' + esc(c.owner) + '" selected>' + esc(commOwnerName(c.owner)) + '</option>' : '');
@@ -9251,6 +9259,9 @@ async function renderFollowups(reload) {
     return '<article class="ld-card' + (c.urgent ? ' fu-urgent' : '') + '">' +
       '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') + '</div>' +
       (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
+      (hubSwitchOn('consumerComms') && (c.forConsumers || []).length ? '<div class="fu-boss">' + c.forConsumers.map(f => (f.past ? 'Past attendant for ' : 'Attendant for ') +
+        '<button type="button" class="rp-linkbtn" onclick="openProfile(\'' + esc(f.id) + '\')">' + esc(f.name) + '</button>').join(' · ') +
+        (boss ? '. ' + esc(bossFirst) + ' is the boss, so this goes to ' + esc(bossFirst) + '.' : '. Pay and clock-in stay with the attendant.') + '</div>' : '') +
       '<ul class="fu-events">' + events + '</ul>' +
       (c.voicemailNote ? '<div class="fu-said"><b>' + (c.newLead ? 'Sounds like a new lead. ' : '') + 'They said:</b> ' + esc(c.voicemailNote) + '</div>' : '') +
       (c.urgent && c.urgentWhy ? '<p class="fu-why">' + esc(c.urgentWhy) + '</p>' : '') +
@@ -9260,8 +9271,11 @@ async function renderFollowups(reload) {
         '<label for="fuOwner_' + id + '">Owner<select id="fuOwner_' + id + '" onchange="fuSet(\'' + id + '\',\'set_owner\',{owner:this.value})">' + ownOpts + '</select></label></div>') +
       '<div class="ld-next"><span class="ld-due ' + (sec === 'later' ? '' : old || c.urgent ? 't-late' : 't-today') + '">' + esc(due) + '</span>' +
         '<span class="ld-nexttext">' + (hidden ? 'There is no number to call back. Look at it in GoHighLevel, then press Done.'
+          : boss ? 'Talk it over with ' + esc(bossFirst) + ', then press Done.'
           : sec === 'later' ? 'Comes back that morning, or sooner if they call or text again.' : 'Closes itself when someone calls or texts them back.') + '</span></div>' +
-      '<div class="fu-acts"><a class="go" href="' + esc(link) + '" target="_blank" rel="noopener">' + (hidden ? 'Open in GoHighLevel' : 'Call or text back') + '</a>' +
+      '<div class="fu-acts">' + (boss ? (bossLink ? '<a class="go" href="' + esc(bossLink) + '" target="_blank" rel="noopener">Call or text ' + esc(bossFirst) + '</a>'
+          : '<button type="button" class="go" onclick="openProfile(\'' + esc(boss.id) + '\')">Open ' + esc(bossFirst) + '\'s profile</button>')
+        : '<a class="go" href="' + esc(link) + '" target="_blank" rel="noopener">' + (hidden ? 'Open in GoHighLevel' : 'Call or text back') + '</a>') +
         (!step2 ? '' : '<button type="button" class="urg' + (c.urgent ? ' on' : '') + '" aria-pressed="' + (c.urgent ? 'true' : 'false') + '" onclick="fuSet(\'' + id + '\',\'urgent\',{on:' + (!c.urgent) + '})">' + (c.urgent ? 'Not care or safety' : 'Care or safety today') + '</button>' +
         '<button type="button" class="plain" onclick="fuLaterPick(\'' + id + '\')">' + (sec === 'later' ? 'Change the day' : 'Later this week') + '</button>') +
         '<button type="button" class="plain" onclick="commDone(\'' + id + '\')">Done</button></div>' + days +
@@ -9385,14 +9399,16 @@ window.cdsCommHistory = function (root) {
   if (!root || !_db) return;
   root.querySelectorAll('.cds-comm-history').forEach(el => commHistoryFill(el,
     (el.dataset.refs || '').split(',').filter(Boolean), (el.dataset.phones || '').split(',').filter(Boolean),
-    Object.fromEntries((el.dataset.names || '').split('|').filter(Boolean).map(x => { const i = x.indexOf('='); return [x.slice(0, i), decodeURIComponent(x.slice(i + 1))]; }))));
+    Object.fromEntries((el.dataset.names || '').split('|').filter(Boolean).map(x => { const i = x.indexOf('='); return [x.slice(0, i), decodeURIComponent(x.slice(i + 1))]; })), el.dataset.att === '1'));
 };
-async function commHistoryFill(el, refs, phones, names) {
+// att (the Communication tab, 2026-11-05): their attendants' calls and texts too, each named, with Listen and Show the words.
+async function commHistoryFill(el, refs, phones, names, att) {
   names = names || {};
-  el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b><div class="field-note">Loading…</div></div>';
+  const title = att ? 'Communication' : 'Calls and texts';
+  el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">' + title + '</b><div class="field-note">Loading…</div></div>';
   let h;
-  try { h = await _commCall({ action: 'history', refs, phones }); }
-  catch (e) { el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b><div class="field-note">Could not load: ' + esc(e.message) + '</div></div>'; return; }
+  try { h = await _commCall(att ? { action: 'history', refs, phones, with_attendants: true } : { action: 'history', refs, phones }); }
+  catch (e) { el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">' + title + '</b><div class="field-note">Could not load: ' + esc(e.message) + '</div></div>'; return; }
   const ico = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#14606F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
   const phoneIco = ico + '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>';
   const textIco = ico + '<path d="M4 5h16v11H8l-4 4z"/></svg>';
@@ -9400,9 +9416,10 @@ async function commHistoryFill(el, refs, phones, names) {
     // A contact (2026-10-29): "Kim (granddaughter, attendant)". Names typed on the record show before the phone book catches up.
     const typed = names[i.phone10];
     const who = typed ? typed.split(', ')[0] + ' (' + typed.split(', ').slice(1).join(', ') + ')'
+      : i.attendant ? (i.who || 'Attendant') + (i.attendant === 'past' ? ' (past attendant)' : ' (attendant)')
       : i.contact ? (i.who || 'Contact') + (i.detail ? ' (' + i.detail.replace(/ for .*$/, '') + ')' : '')
       : (i.who || 'them') + (i.family ? ' (family)' : '');
-    i._who = typed ? typed.split(', ')[0] : i.contact || i.family ? (i.who || 'Contact') : 'main';
+    i._who = typed ? typed.split(', ')[0] : i.attendant || i.contact || i.family ? (i.who || 'Contact') : 'main';
     const we = i.staff_name || 'We';
     const mins = i.seconds >= 60 ? Math.round(i.seconds / 60) + ' min' : i.seconds + ' sec';
     let t, missed = false;
@@ -9413,10 +9430,16 @@ async function commHistoryFill(el, refs, phones, names) {
     const cn = i.note && i.note_status === 'ok' ? '<div class="ch-note">' + esc(i.note) + (i.note_by ? ' <small>OK by ' + esc(String(i.note_by).split('@')[0]) + '</small>' : '') + '</div>'
       : i.note_status === 'waiting' ? '<div class="ch-note wait">A note from this call is waiting for an OK.</div>'
       : i.note_status === 'no_transcript' ? '<div class="ch-note wait">No transcript from GoHighLevel. <button type="button" class="rp-linkbtn" onclick="cnListen(\'' + esc(i.id) + '\')">Listen</button><span id="cnm_' + esc(i.id) + '"></span></div>' : '';
-    return '<div class="ch-row" data-who="' + esc(i._who) + '"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small>' + cn + '</div></div>';
+    // Listen and Show the words on every call that was answered or left a voicemail (Communication tab only)
+    const heard = att && i.channel === 'call' && (i.answered || i.voicemail) && i.note_status !== 'no_transcript'
+      ? '<div class="ch-play"><button type="button" class="rp-linkbtn" onclick="cnListen(\'' + esc(i.id) + '\')">Listen</button>' +
+        (i.has_transcript ? ' <button type="button" class="rp-linkbtn" onclick="cnTranscript(\'' + esc(i.id) + '\')">Show the words</button>' : '') +
+        '<div id="cnm_' + esc(i.id) + '"></div></div>' : '';
+    return '<div class="ch-row" data-who="' + esc(i._who) + '"><span class="ch-dot' + (missed ? ' missed' : '') + '">' + (i.channel === 'sms' ? textIco : phoneIco) + '</span><div>' + esc(t) + '<small>' + esc(_commWhen(i.at)) + '</small>' + cn + heard + '</div></div>';
   }).join('');
-  el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Calls and texts</b>' +
-    '<div class="field-note" style="margin:2px 0 8px">From GoHighLevel, both CDS lines. A call never counts as a monthly check-in unless you record it.</div>' +
+  el.innerHTML = '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">' + title + '</b>' +
+    '<div class="field-note" style="margin:2px 0 8px">From GoHighLevel, both CDS lines' + (att ? ': them, their family and contacts, and their attendants. The consumer is the boss, so it all lives here.' : '.') +
+    ' A call never counts as a monthly check-in unless you record it.</div>' +
     (rows ? chFilterHtml(h.items || []) + '<div class="ch-list">' + rows + '</div>' : '<div class="field-note">No calls or texts yet.</div>') + '</div>';
 }
 // Everyone / one person, when contacts call too (2026-10-29).
@@ -10360,6 +10383,8 @@ const HUB_SWITCHES = [
     does: 'On: Overview says where their Hub enrollment packet stands, and Tax and EIN shows the same packet card as their lead (each form signed, Sign as agent, Download the signed forms). Off: the packet shows on their lead only.' },
   { key: 'starting', label: 'Starting profile',
     does: 'On: a lead who says yes becomes a Starting consumer right away, with seven enrollment steps, one Next step, a Medicaid tab (eMOMED check, the required PDF, what the ME code means, the ME code review), Medicaid application instructions by text or email (sent only when someone presses Send, and only while Medicaid application texts is on), follow-ups on Today, and the Ready for first shift checklist. They move to Active the day WellSky shows the first shift. Off: Move to Consumers as before.' },
+  { key: 'consumerComms', label: 'Communication tab on the consumer profile',
+    does: 'On: Communication is the second tab on every consumer profile. It holds every call and text with the consumer, their representative, family and contacts, and every attendant who works or worked for them, each named, with Listen and Show the words. A follow-up from an attendant\'s call names the consumer they work for and points to the consumer, except Pay and Clock-in & EVV. Documents keeps its own tab. Off: Calls and texts as before.' },
   { key: 'faxLive', label: 'One-click fax',
     does: 'On: the SS-4, 2643A and 2827 steps on Tax Setup get a Fax it now button (the SS-4 only when there is no EIN yet and, for a transfer, after the existing-EIN check) (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
@@ -11187,7 +11212,10 @@ function renderProfile() {
 
   // Tabs
   const tab = _profTab;
-  const tabs = [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['calls', 'Calls and texts'], ['closings', 'Closings and pauses'], ['docs', 'Documents'], ['notes', 'Notes']]
+  // Communication (her ask 2026-11-05, switch consumerComms): second, right after Overview, as on the Caring Companions hub.
+  const commOn = hubSwitchOn('consumerComms');
+  const tabs = (commOn ? [['overview', 'Overview'], ['calls', 'Communication'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['closings', 'Closings and pauses'], ['docs', 'Documents'], ['notes', 'Notes']]
+    : [['overview', 'Overview'], ['hours', 'Hours and authorization'], ['tax', 'Tax and EIN'], ['money', 'Money'], ['calls', 'Calls and texts'], ['closings', 'Closings and pauses'], ['docs', 'Documents'], ['notes', 'Notes']])
     .map(([k, l]) => '<button type="button" class="' + (tab === k ? 'on' : '') + '" onclick="_profTab=\'' + k + '\';renderProfile()">' + l + '</button>').join('');
   const line = (k, v) => '<div class="cp-line"><span>' + k + '</span><span>' + v + '</span></div>';
   let body = '';
@@ -11247,7 +11275,7 @@ function renderProfile() {
   else if (tab === 'closings') body = closingRecords(c);
   else if (tab === 'docs') body = consumerDocsHtml(c);
   else if (tab === 'calls') body =
-    '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"></div>';
+    '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"' + (commOn ? ' data-att="1"' : '') + '></div>';
   else body = (c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>') +
     // What linked family and attendants told us before (2026-10-29), from their leads.
     (function () { const ln = CDSRules.linkedNotes(c, getData('pipeline'));

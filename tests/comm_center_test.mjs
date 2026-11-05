@@ -48,7 +48,10 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + '\n   go
            { id: 'p2', first_name: 'Bev', last_name: 'Carter', phone: '4175550166', status: 'new' }],
     staff: [{ name: 'Krystal', email: 'krystal@mo-care.com', phone: '4175550100' }],
   });
-  const by = p => rows.filter(r => r.phone10 === p).map(r => r.ref + '|' + r.kind);
+  const by = p => rows.filter(r => r.phone10 === p && !r.ref.startsWith('serves:')).map(r => r.ref + '|' + r.kind);
+  // 2026-11-05 the consumer is the boss: Marcus's number also points at Ruth's profile (never who he is)
+  eq(rows.filter(r => r.ref.startsWith('serves:')).map(r => r.phone10 + '|' + r.ref + '|' + r.detail),
+     ['4175550144|serves:consumer:c1|Attendant for Ruth Caldwell'], 'an attendant who works for a consumer also points at that consumer');
   eq(by('4175550131'), ['consumer:c1|consumer'], 'a lead already on Consumers is that consumer, once');
   eq(by('4175550177'), ['family:consumer:c1|family'], 'the responsible party number points at the consumer as family');
   ok(rows.find(r => r.phone10 === '4175550177').detail === 'Daughter of Ruth Caldwell', 'family detail');
@@ -58,6 +61,19 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + '\n   go
   ok(rows.find(r => r.phone10 === '4175550144').detail === 'Attendant for Ruth Caldwell', 'roster attendant detail');
   eq(by('4175550166'), ['pool:p2|applicant'], 'an applicant');
   eq(by('4175550100'), ['staff:krystal@mo-care.com|staff'], 'our team');
+}
+{
+  // whose profile an attendant's calls belong on: now (placed or on the roster) or past (payroll only)
+  const S = C.servesRows(
+    [{ id: 'c1', name: 'Ruth Caldwell' }, { id: 'c2', name: 'Gus Tolliver' }, { id: 'c3', name: 'Ann Bell' }],
+    [{ id: 'a1', name: 'Marcus Webb', phone: '4175550144', consumer: 'Ruth Caldwell' }],
+    [{ id: 'p1', first_name: 'Dee', last_name: 'Lawson', phone: '4175550155', placed_with: 'Gus Tolliver' },
+     { id: 'p9', first_name: 'Old', last_name: 'Gone', phone: '4175550199', placed_with: 'Ruth Caldwell', archived: true }],
+    [{ consumer: 'Ruth Caldwell', attendant: 'Lawson, Dee' }, { consumer: 'Ruth Caldwell', attendant: 'Webb, Marcus' }, { consumer: 'Ann Bell', attendant: 'Nobody Known' }]);
+  const k = S.map(r => r.phone10 + '|' + r.ref + '|' + r.detail).sort();
+  eq(k, ['4175550144|serves:consumer:c1|Attendant for Ruth Caldwell', '4175550155|serves:consumer:c1|Past attendant for Ruth Caldwell',
+    '4175550155|serves:consumer:c2|Attendant for Gus Tolliver'],
+    'now and past: Dee works for Gus now and was paid for Ruth (past), Marcus works for Ruth (not past though payroll has him too), payroll "Last, First" matches, archived and unknown names add nothing');
 }
 {
   const r = C.resolve([{ ref: 'lead:1', kind: 'lead', source: 'sync' }, { ref: 'pool:2', kind: 'applicant', source: 'sync' }]);
@@ -253,6 +269,22 @@ ok(qv.closedToday.length >= 3, 'closed today are listed');
 const h = await comms.history(['consumer:c1'], ['(417) 555-0131']);
 ok(h.items.some(i => i.phone10 === '4175550177' && i.family) && h.items.some(i => i.phone10 === '4175550131'), 'Ruth\'s calls and texts include Lena\'s, marked family');
 ok(h.items.length === 8, 'every call and text for Ruth and Lena, the old one too (' + h.items.length + ')');
+// 2026-11-05 Communication tab: with attendants, Ruth's history also holds Marcus's calls and texts, marked attendant
+const ha = await comms.history(['consumer:c1'], ['(417) 555-0131'], true);
+ok(ha.items.length === 11 && ha.items.filter(i => i.phone10 === '4175550144').every(i => i.attendant === 'now' && i.who === 'Marcus Webb'),
+   'with attendants: Ruth\'s 8 plus Marcus\'s 3, each named as her attendant (' + ha.items.length + ')');
+ok(ha.items.filter(i => i.phone10 === '4175550177').every(i => i.family && !i.attendant), 'Lena stays family');
+ok((await comms.history(['lead:l2'], [], true)).items.every(i => !i.attendant), 'only a consumer gathers attendants');
+ok(!(await comms.people()).people.some(p => String(p.ref).startsWith('serves:')), 'Who is this? never offers the extra attendant rows');
+{
+  await pg.query(`insert into cds_tasks (kind, title, dedupe_key, area, phone10, person_ref, due_at) values ('missed_call', 'Marcus called', 'fu:test:marcus', 'followup', '4175550144', 'attendant:a1', now())`);
+  const qa = await comms.queue();
+  const mc = qa.cards.find(c => c.phone10 === '4175550144');
+  ok(mc && (mc.role === 'Attendant' && mc.forConsumers.length === 1 && mc.forConsumers[0].name === 'Ruth Caldwell' && mc.forConsumers[0].phone10 === '4175550131'),
+     'an attendant card names the consumer they work for, with her number', mc);
+  ok(qa.cards.filter(c => c.phone10 !== '4175550144' && c.phone10).every(c => Array.isArray(c.forConsumers) && !c.forConsumers.length), 'nobody else gets a consumer on their card');
+  await pg.query(`delete from cds_tasks where dedupe_key='fu:test:marcus'`);
+}
 const hb = await comms.history([], ['4175550144']);
 ok(hb.items.length === 3, 'history by phone alone');
 ok((await comms.history(['staff:x'])).items.length === 0, 'cannot ask for our team\'s calls');
