@@ -21,10 +21,16 @@ async([OLD, on])=>{
   _store.authorizations = {}; _store.firstShifts = {}; _store.meRules = {}; _store.medicaidMessages = {};
   document.getElementById('header_user').textContent = 'samantha@caringcds.com';
   window.CALLS = []; window.POOL = [];
+  const K = k => CDSStarting.PRESCREEN_KEYS.find(x => x.includes(k));
+  window.FORM = [[K('help_with_any'), ['Bathing', 'Dressing and grooming', 'Companionship']], [K('direct_their_own'), 'Yes'], [K('live_at_home'), ['Yes']],
+    [K('specific_diagnosis'), 'Stroke in 2025'], [K('consumers_date_of_birth'), '03/04/1944'], [K('consumers_name'), 'Nell Example'],
+    [K('have_active_missouri'), 'Yes'], [K('in_which_county'), ['Greene County']], [K('used_the_cds'), "I'm new to CDS"],
+    [K('someone_you_would_like'), 'Yes'], [K('chosen_caregivers_name'), 'Pat Example'], [K('relationship_to_your'), 'Granddaughter']].map(([key, value]) => ({ key, value }));
   cdsMatchApi = async (a, b) => {
     CALLS.push([a, JSON.parse(JSON.stringify(b || {}))]);
     if (a === 'medicaidSend' || a === 'callFollowupSend') return { message: { id: 'm' + CALLS.length, channel: b.channel, to: '(***) ***-' + String(b.to).slice(-4), status: 'sent', at: new Date().toISOString(), by: 'samantha' } };
     if (a === 'medicaidSends') return { messages: [] };
+    if (a === 'prescreen') return (b.person.phones || []).includes('4175550188') ? { found: true, contactId: 'g1', at: '2026-10-30T15:00:00Z', answers: window.FORM } : { found: false, why: 'No GoHighLevel contact with that phone or email.' };
     if (a === 'enrollProfile') return { packet: null };
     if (a === 'enrollGet') return { packet: null, status: { label: 'Not sent' }, forms: [], messages: [] };
     return {};
@@ -80,6 +86,8 @@ with sync_playwright() as pw:
     ck('one question at a time: names', step() == 'names' and pg.locator(M).get_by_label('Their phone').count() == 0 and 'Can I get your first and last name?' in say())
     fill('First name', 'Opal'); fill('Last name', 'Test'); nxt()
     fill('Their phone', '4175550111'); nxt()
+    pg.wait_for_timeout(200)
+    ck('no online form for this caller: a quiet note, nothing filled', 'No online pre-screen found for this phone or email' in pg.inner_text('#stCallSide') and not pg.evaluate("()=>Object.keys(StartCall.state().fromForm||{}).length"))
     ck('date of birth is asked, with why', step() == 'dob' and 'date of birth' in say() and 'eMOMED' in pg.inner_text(M))
     fill('Date of birth', '1950-06-15'); pg.wait_for_timeout(100)
     ck('age shows, with the 65 and older note', 'Age 7' in pg.inner_text('#stAge') and '65 and older' in pg.inner_text('#stAge'))
@@ -271,6 +279,25 @@ with sync_playwright() as pw:
     to('Names'); pg.locator(M + ' a', has_text='Just a quick note instead').click(); pg.wait_for_timeout(150)
     ck('the quick Log a call is one click away', pg.evaluate("()=>document.getElementById('editPipelineModal').classList.contains('open')"))
     pg.evaluate("()=>closeModal('editPipelineModal')")
+
+    # ---- 10. A caller who filled the online pre-screen: the call fills in, the coordinator confirms (2026-11-05)
+    new_call(); chipc('Family, for a loved one'); nxt(); chipc('No, new to CDS'); nxt()
+    fill("Caller's name", 'Dee Example'); nxt()
+    fill("The caller's phone", '4175550188'); nxt(); pg.wait_for_timeout(300)
+    side = pg.inner_text('#stCallSide')
+    ck('their online pre-screen shows, word for word', 'Their online pre-screen' in side and 'Stroke in 2025' in side and 'Companionship' in side, side)
+    st = pg.evaluate("()=>StartCall.state()")
+    ck('clear answers filled in: name, birth date, county, Medicaid, help, self-direction, home, attendant', st['consumer']['first'] == 'Nell' and st['dob'] == '1944-03-04' and st['county'] == 'Greene' and st['medicaid'] == 'yes'
+       and st['help'] == ['bathing', 'dressing'] and st['helpNote'] == 'companionship' and st['selfDirect'] == 'yes' and st['living'] == 'home' and st['attName'] == 'Pat Example' and st['attRel'] == 'grandchild', st)
+    ck('what the coordinator chose stays: CDS now', st['cds'] == 'new')
+    ck('the birth date step says it came from the form', step() == 'dob' and 'from their online form, confirm it' in pg.inner_text(M + ' .st-step'))
+    shot(pg, 'c11-from-online-form-desktop')
+    fill('Date of birth', '1944-03-05'); pg.wait_for_timeout(80); to('Birth date')
+    ck('changed on the call: no longer marked from the form', 'from their online form' not in pg.inner_text(M + ' .st-step'))
+    to('Help at home'); ck('help step marked from the form', 'from their online form' in pg.inner_text(M + ' .st-step'))
+    ck('looked up once, read only', pg.evaluate("()=>CALLS.filter(c=>c[0]==='prescreen').length") >= 1 and not pg.evaluate("()=>CALLS.some(c=>/ghl|upsert|write/i.test(c[0]))"))
+    pg.set_viewport_size({'width': 390, 'height': 900}); pg.wait_for_timeout(150); shot(pg, 'c11b-from-online-form-mobile'); pg.set_viewport_size({'width': 1440, 'height': 1000})
+    pg.evaluate("()=>closeModal('stCallModal')")
 
     # ---- totals: nothing doubled
     names = [x['name'] for x in leads()]

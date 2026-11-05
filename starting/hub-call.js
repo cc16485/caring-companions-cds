@@ -32,6 +32,9 @@
   };
   const REL = ['daughter', 'son', 'spouse', 'sister', 'brother', 'grandchild', 'friend', 'other'];
   let call = null, dup = null, finish = null, savedAt = '', drawing = false;
+  // The online pre-screen in GoHighLevel (2026-11-05): null, { loading }, { found, shown, err }. formKey = the phones and
+  // emails last looked up, so the same caller is looked up once.
+  let form = null, formKey = '';
 
   document.body.insertAdjacentHTML('beforeend', '<div class="modal-overlay" id="stCallModal"><div class="modal st-call"><div class="modal-header">' +
     '<div class="modal-title cute-title" style="font-size:24px" id="stCallTitle">On a call</div><button class="modal-close" onclick="StartCall.close()" aria-label="Close">×</button></div>' +
@@ -51,6 +54,8 @@
     '.st-step{background:var(--white);border:2px solid var(--primary);border-radius:16px;padding:16px 18px;display:grid;gap:12px;font-size:14px}.st-step > *{min-width:0}' +
     '.st-step h3{margin:0;font:600 19px Poppins,sans-serif;color:var(--primary)}.st-why{font-size:12.5px;color:var(--gray-600)}' +
     '.st-nav{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.st-nav .grow{flex:1}' +
+    '.st-form{display:block;background:#eef6f1;border:1px solid #9fcfb2;border-radius:14px;padding:10px 12px;font-size:13px}.st-form > summary{display:list-item;cursor:pointer}.st-form dl{margin:6px 0 0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:3px 10px}.st-form dt{color:var(--gray-600)}.st-form dd{margin:0;overflow-wrap:anywhere}' +
+    '.st-fromform{font:500 11px Poppins,sans-serif;background:#e7f3ec;color:#24603d;border-radius:999px;padding:2px 8px;margin-left:8px;vertical-align:middle;white-space:nowrap}' +
     '.st-find{display:grid;gap:4px;margin-top:6px}.st-find button{text-align:left;font:inherit;font-size:13px;border:1px solid var(--gray-300);background:var(--white);border-radius:10px;padding:7px 10px;cursor:pointer}' +
     '@media (max-width:820px){.st-callgrid{grid-template-columns:minmax(0,1fr)}.st-side{position:static}.st-row{grid-template-columns:minmax(0,1fr)}}' +
     '</style>');
@@ -94,12 +99,13 @@
   function open(pid) {
     if (!(H() && H().on())) { if (pid) openPipelineEdit(pid); else openModal('addSomeoneModal'); return; }
     const p = pid && getData('pipeline').find(x => x.id === pid);
-    call = p ? fromLead(p) : blank(); call.area = AREA(); dup = null; finish = null; savedAt = '';
-    openModal('stCallModal'); draw();
+    call = p ? fromLead(p) : blank(); call.area = AREA(); call.fromForm = {}; dup = null; finish = null; savedAt = ''; form = null; formKey = '';
+    openModal('stCallModal'); draw(); lookForm();
   }
   function close() { closeModal('stCallModal'); if (call && call.leadId && document.getElementById('page-leadprofile') && document.getElementById('page-leadprofile').classList.contains('active')) renderLeadProfile(); if (typeof renderPipeline === 'function') renderPipeline(); }
 
   function pick(group, val, multi) {
+    if (call.fromForm) delete call.fromForm[group];
     if (group === 'dcnUnknown' || group === 'dobSkip') { call[group] = !call[group]; draw(); return; }
     if (multi) { const a = call[group] || []; call[group] = a.includes(val) ? a.filter(x => x !== val) : a.concat([val]); }
     else call[group] = call[group] === val ? '' : val;
@@ -112,6 +118,7 @@
   function set(path, v) {
     const [a, b] = path.split('.');
     if (b) call[a][b] = v; else call[a] = v;
+    if (call.fromForm) delete call.fromForm[b || a];
     if (a === 'dcn' && v) call.dcnUnknown = false;
     if (a === 'dob' && v) call.dobSkip = false;
     drawSide();
@@ -150,7 +157,7 @@
       default: return false;
     }
   }
-  function go(i) { const n = steps().length; call.step = Math.max(0, Math.min(n - 1, i)); draw(); const b = document.getElementById('stCallBody'); if (b && b.scrollIntoView) { const m = b.closest('.modal'); if (m) m.scrollTop = 0; } }
+  function go(i) { if (steps()[call.step] === 'phone') setTimeout(lookForm, 0); const n = steps().length; call.step = Math.max(0, Math.min(n - 1, i)); draw(); const b = document.getElementById('stCallBody'); if (b && b.scrollIntoView) { const m = b.closest('.modal'); if (m) m.scrollTop = 0; } }
   function next() { go(call.step + 1); }
   function back() { go(call.step - 1); }
   // Who the conversation is about, for the lines to say.
@@ -286,6 +293,7 @@
         (plan.missing.length ? why('Still missing: ' + plan.missing.join('; ') + '. Tap a step above to go back, or save anyway.') : '') +
         '<div><button type="button" class="btn btn-primary" onclick="StartCall.save(true)">Finish call</button></div>';
     }
+    body = body.replace('</h3>', fromFormTag(k) + '</h3>');
     const last = call.step === st.length - 1;
     const nav = '<div class="st-nav">' + (call.step > 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="StartCall.back()">Back</button>' : '') + '<span class="grow"></span>' +
       (!last && k !== 'who' && !answered(call, k) ? '<button type="button" class="btn btn-outline btn-sm" onclick="StartCall.next()">Skip for now</button>' : '') +
@@ -298,6 +306,53 @@
     drawBar(); drawSide();
   }
 
+  // ---- the online pre-screen (read only; the server finds the contact by phone or email, never by name)
+  function formPeople() {
+    const p = call.leadId && getData('pipeline').find(x => x.id === call.leadId);
+    const phones = [call.phone, call.consPhone], emails = [call.email, call.consEmail];
+    if (p) { phones.push(p.phone); emails.push(p.email); CDSRules.relatedPeople(p).forEach(r => { phones.push(r.phone); emails.push(r.email); }); }
+    return { phones: [...new Set(phones.map(digits).filter(x => x.length === 10))], emails: [...new Set(emails.map(x => String(x || '').trim().toLowerCase()).filter(x => /@/.test(x)))] };
+  }
+  async function lookForm() {
+    if (!call || call.who === 'solo') return;
+    const pp = formPeople(), key = pp.phones.concat(pp.emails).join('|');
+    if (!key || key === formKey || (form && form.found)) return;
+    formKey = key; form = { loading: true }; drawSide();
+    const mine = call;
+    try {
+      const r = await cdsMatchApi('prescreen', { person: { kind: call.leadId ? 'lead' : 'call', id: call.leadId || '', phones: pp.phones, emails: pp.emails } });
+      if (call !== mine) return;
+      if (!r || !r.found || !(r.answers || []).length) { form = { found: false, why: (r && r.why) || 'No online pre-screen answers.' }; drawSide(); return; }
+      const m = S.mapPrescreen(r.answers, AREA());
+      form = { found: true, shown: m.shown, at: r.at };
+      applyForm(m.set);
+      draw();
+    } catch (e) { if (call === mine) { form = { err: String(e && e.message || e) }; drawSide(); } }
+  }
+  // Fill only what is still empty; a coordinator's answer always wins. Filled fields carry "from their online form".
+  function applyForm(set) {
+    const mark = k => { call.fromForm[k] = true; };
+    const empty = v => v === '' || v == null || (Array.isArray(v) && !v.length);
+    if (set.who && !call.who) { call.who = set.who; mark('who'); }
+    if (set.first && !call.consumer.first && !call.consumer.last) { call.consumer.first = set.first; call.consumer.last = set.last || ''; mark('first'); mark('last'); }
+    ['dob', 'county', 'countyOther', 'medicaid', 'dcn', 'cds', 'condition', 'helpNote', 'selfDirect', 'living', 'attendant', 'attName', 'attPhone', 'attRel'].forEach(k => {
+      if (set[k] != null && empty(call[k])) { call[k] = set[k]; mark(k); }
+    });
+    if (set.help && empty(call.help)) { call.help = set.help.slice(); mark('help'); }
+  }
+  const STEP_FIELDS = { who: ['who'], names: ['first', 'last'], dob: ['dob'], county: ['county'], medicaid: ['medicaid', 'dcn'], cds: ['cds'],
+    help: ['condition', 'help', 'helpNote'], decide: ['selfDirect'], living: ['living'], attendant: ['attendant', 'attName', 'attPhone', 'attRel'] };
+  const fromFormTag = k => (STEP_FIELDS[k] || []).some(f => call.fromForm && call.fromForm[f]) ? '<span class="st-fromform">from their online form, confirm it</span>' : '';
+  function formHtml() {
+    if (!form) return '';
+    if (form.loading) return '<div class="st-form">Checking GoHighLevel for their online pre-screen...</div>';
+    if (form.err) return '<div class="st-form" style="background:#fdf1ef;border-color:#e3a59b">Could not check their online pre-screen: ' + esc(form.err) + '. Ask the questions as usual.</div>';
+    if (!form.found) return '<div class="field-note">No online pre-screen found for this phone or email.</div>';
+    return '<details class="st-form" open><summary><b>Their online pre-screen</b> (GoHighLevel' + (form.at ? ', ' + esc(_niceDay(String(form.at).slice(0, 10))) : '') + ')</summary>' +
+      '<div class="field-note" style="margin-top:4px">Filled in where the answer was clear. Confirm each one with them.</div>' +
+      '<dl>' + form.shown.map(x => '<dt>' + esc(x.label) + '</dt><dd>' + esc(x.value) + '</dd>').join('') + '</dl></details>';
+  }
+
   function drawSide() {
     const side = document.getElementById('stCallSide');
     if (!side || !call) return;
@@ -305,7 +360,7 @@
     const plan = S.callPlan(call);
     side.innerHTML = '<div class="st-sum"><b style="color:var(--primary)">The call so far</b><div style="margin-top:6px">' + esc(call.who ? plan.summary : 'Pick who is calling to start.') + '</div>' +
       (call.who && plan.missing.length ? '<div class="field-note" style="margin-top:8px">Still missing: ' + esc(plan.missing.join('; ')) + '. That is fine; save anyway.</div>' : '') + '</div>' +
-      (dup ? dupHtml() : '') +
+      (dup ? dupHtml() : '') + formHtml() +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline" onclick="StartCall.save(false)"' + (call.who ? '' : ' disabled') + '>Save</button>' +
       '<button type="button" class="btn btn-primary" onclick="StartCall.save(true)"' + (call.who ? '' : ' disabled') + '>Finish call</button></div>' +
       '<div class="field-note" id="stCallMsg">' + (savedAt ? 'Saved ' + esc(savedAt) + '.' : 'Nothing is saved until you press Save or Finish call.') + '</div>';
@@ -335,7 +390,8 @@
     if (keep && keep.help && keep.help.length) call.help = keep.help;
     if (keep && keep.phone) call.phone = keep.phone;
     if (keep && keep.caller && keep.caller.name) call.caller = keep.caller;
-    dup = null; draw();
+    call.fromForm = {}; form = null; formKey = '';
+    dup = null; draw(); lookForm();
   }
   // Same person already on Leads? Asked once before a new lead is added (no duplicates).
   function findDup() {
