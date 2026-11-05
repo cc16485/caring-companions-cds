@@ -105,10 +105,27 @@ export function plainMessage(m, conv) {
 // until someone in the office presses OK on the hub (her rule: draft first). Never sent to anyone.
 // Behind the switch call_notes.live (off until she turns it on). BAAs cover CDS (her words 2026-10-29).
 export const NOTE_MODEL = 'claude-opus-5-5';
+// Answers from the call (2026-11-05, her ask: "summarize the lead info that comes from calls"; mockup W47w6qkzLLB3FF91iEJ8J1):
+// the same questions as the hub's first call screen. Empty when it was not said. They wait with the note; the office ticks
+// which go on the lead when it presses OK. Nothing reaches a lead without that.
+export const ANSWER_HELP = ['bathing', 'dressing', 'eating', 'toileting', 'mobility', 'meals', 'meds', 'housekeeping', 'errands'];
+const ANSWERS_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['who', 'first', 'last', 'dob', 'county', 'medicaid', 'dcn', 'cds', 'agency', 'help', 'help_note', 'attendant', 'att_name', 'att_phone', 'att_relation'],
+  properties: {
+    who: { type: 'string', enum: ['self', 'family', 'pair', 'solo', ''] },
+    first: { type: 'string' }, last: { type: 'string' }, dob: { type: 'string' }, county: { type: 'string' },
+    medicaid: { type: 'string', enum: ['yes', 'no', 'applied', ''] }, dcn: { type: 'string' },
+    cds: { type: 'string', enum: ['new', 'move', ''] }, agency: { type: 'string' },
+    help: { type: 'array', items: { type: 'string', enum: ANSWER_HELP } }, help_note: { type: 'string' },
+    attendant: { type: 'string', enum: ['has', 'find', ''] }, att_name: { type: 'string' }, att_phone: { type: 'string' }, att_relation: { type: 'string' }
+  }
+};
 export const NOTE_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['about_person', 'new_lead', 'note', 'call_back', 'people'],
+  required: ['about_person', 'new_lead', 'note', 'call_back', 'people', 'answers'],
   properties: {
+    answers: ANSWERS_SCHEMA,
     about_person: { type: 'boolean' },
     new_lead: { type: 'boolean' },
     note: { type: 'string' },
@@ -126,7 +143,14 @@ const NOTE_SYSTEM = [
   'people: everyone named on the call other than the office staff and the person the hub thinks this is, who matters to their care (family, an attendant, a case manager): their name, how they relate to the client in one or two words, and a phone number only if it was said aloud (digits only, else empty).',
   'about_person: false only when the call is clearly not about that person (a wrong number, or a call about a different client). Otherwise true.',
   'new_lead: true only when the caller is someone new asking about getting care or CDS services for themselves or someone in their family, or a case manager or other referral source sending someone new. False for a current client, attendant or family member calling about existing care, a job seeker, a sales call, a wrong number, or anything unclear.',
-  'Some calls are a voicemail: nobody answered and the caller left a message. Then write what they asked for and how to reach them.'
+  'Some calls are a voicemail: nobody answered and the caller left a message. Then write what they asked for and how to reach them.',
+  'answers: the facts said on the call about the person who would get care (the client), for the office to check. Use an empty string (or an empty list) for anything not clearly said. Never guess.',
+  '  who: who was calling: self (the client, for themself), family (family or a friend calling for the client), pair (an attendant calling about a client they would care for), solo (someone who wants to be an attendant and has nobody to care for yet).',
+  '  first, last: the client\'s first and last name. dob: the client\'s date of birth as YYYY-MM-DD, only when the full date was said. county: the Missouri county the client lives in, without the word County.',
+  '  medicaid: yes (has Medicaid now), no (does not), applied (applied and waiting). dcn: the Medicaid DCN number, digits only, only when it was read out.',
+  '  cds: new (never had consumer directed services) or move (has CDS now with another agency); agency: that other agency\'s name.',
+  '  help: the kinds of help the client needs, from the list. help_note: anything else about their care needs, in a few words.',
+  '  attendant: has (they already have someone to be the attendant) or find (they need us to find one); att_name, att_phone (digits only, only if said), att_relation (how the attendant is related to the client, one or two words).'
 ].join('\n');
 // GoHighLevel's transcription: pieces with a speaker channel and the words (the same reading as the Staffing hub's call reader).
 export function transcriptText(t) {
@@ -164,7 +188,24 @@ export function cleanNote(resp, day) {
   const cb = /^\d{4}-\d{2}-\d{2}$/.test(String(j.call_back || '')) && !isNaN(Date.parse(j.call_back)) && j.call_back >= day ? j.call_back : '';
   const people = (Array.isArray(j.people) ? j.people : []).slice(0, 6).map(x => ({ name: noDash(x && x.name).slice(0, 80), relation: noDash(x && x.relation).slice(0, 40),
     phone: ten(x && x.phone) })).filter(x => x.name);
-  return { note, followup: cb, people, about: j.about_person !== false, newLead: j.new_lead === true };
+  return { note, followup: cb, people, about: j.about_person !== false, newLead: j.new_lead === true, answers: cleanAnswers(j.answers, day) };
+}
+// The answers, held in code: only known choices, a real birth date, a DCN of digits, a 10 digit phone. Empty ones left out.
+export function cleanAnswers(a, day) {
+  if (!a || typeof a !== 'object') return {};
+  const one = (v, ok) => { const t = noDash(v).slice(0, 120); return ok ? (ok.includes(t) ? t : '') : t; };
+  const out = {
+    who: one(a.who, ['self', 'family', 'pair', 'solo']), first: one(a.first).slice(0, 60), last: one(a.last).slice(0, 60),
+    dob: /^\d{4}-\d{2}-\d{2}$/.test(String(a.dob || '')) && !isNaN(Date.parse(a.dob)) && a.dob >= '1900-01-01' && a.dob <= (day || '9999') ? a.dob : '',
+    county: one(a.county).replace(/\s+county$/i, '').slice(0, 40), medicaid: one(a.medicaid, ['yes', 'no', 'applied']),
+    dcn: (d => d.length >= 6 && d.length <= 12 ? d : '')(String(a.dcn || '').replace(/\D/g, '')),
+    cds: one(a.cds, ['new', 'move']), agency: one(a.agency).slice(0, 80),
+    help: [...new Set((Array.isArray(a.help) ? a.help : []).filter(h => ANSWER_HELP.includes(h)))], help_note: one(a.help_note).slice(0, 200),
+    attendant: one(a.attendant, ['has', 'find']), att_name: one(a.att_name).slice(0, 80), att_phone: ten(a.att_phone), att_relation: one(a.att_relation).slice(0, 40)
+  };
+  if (out.cds !== 'move') out.agency = '';
+  for (const k of Object.keys(out)) if (out[k] === '' || (Array.isArray(out[k]) && !out[k].length)) delete out[k];
+  return out;
 }
 
 // ---------- the phone book ----------
@@ -623,13 +664,13 @@ export function createComms(deps) {
       const at = Date.parse(c.at);
       const who = c.phone10 ? resolve(await bookFor(c.phone10)) : { state: 'unknown', person: null };
       const vm = !c.answered && !!c.voicemail;
-      const save = async (status, f = {}) => q(`insert into cds_call_notes (comm_id, phone10, person_ref, status, note, followup, people, transcript, model, error, attempts, made_at, voicemail, new_lead)
-          values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11, now(), $12, $13)
+      const save = async (status, f = {}) => q(`insert into cds_call_notes (comm_id, phone10, person_ref, status, note, followup, people, transcript, model, error, attempts, made_at, voicemail, new_lead, answers)
+          values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11, now(), $12, $13, $14::jsonb)
           on conflict (comm_id) do update set person_ref=excluded.person_ref, status=excluded.status, note=excluded.note, followup=excluded.followup, people=excluded.people,
             transcript=coalesce(excluded.transcript, cds_call_notes.transcript), model=excluded.model, error=excluded.error, attempts=excluded.attempts, made_at=now(),
-            voicemail=excluded.voicemail, new_lead=excluded.new_lead`,
+            voicemail=excluded.voicemail, new_lead=excluded.new_lead, answers=excluded.answers`,
         [c.id, c.phone10 || null, who.person ? who.person.ref : null, status, f.note || null, f.followup || null, JSON.stringify(f.people || []),
-         f.transcript || null, f.model || null, f.error || null, (Number(c.attempts) || 0) + 1, vm, !!f.newLead]);
+         f.transcript || null, f.model || null, f.error || null, (Number(c.attempts) || 0) + 1, vm, !!f.newLead, JSON.stringify(f.answers || {})]);
       if (who.state === 'staff' || who.state === 'ignore') { await save('skipped', { error: who.state === 'staff' ? 'a call with our own team' : 'marked Not for CDS' }); continue; }
       let text = '';
       try { text = transcriptText(await deps.ghl.transcript(c.id)); }
@@ -650,7 +691,7 @@ export function createComms(deps) {
       const newLead = vm && r.newLead && (who.state === 'unknown' || (who.state === 'known' && who.person.kind === 'lead')
         || (who.state === 'several' && who.candidates.every(x => x.kind === 'lead')));
       if (newLead) leads++;
-      await save(r.about ? 'waiting' : 'not_about', { note: r.note, followup: r.followup, people: r.people, transcript: text, model: NOTE_MODEL, newLead });
+      await save(r.about ? 'waiting' : 'not_about', { note: r.note, followup: r.followup, people: r.people, transcript: text, model: NOTE_MODEL, newLead, answers: r.answers });
     }
     const state = JSON.stringify({ last_run: iso(nowMs()), last_made: made, last_failed: failed, last_no_transcript: none, last_waiting_for_transcript: waiting, last_new_leads: leads });
     await q(`update cds_match_settings set value = value || jsonb_build_object('state', $1::jsonb), updated_at=now() where key = any($2)`,
@@ -662,11 +703,11 @@ export function createComms(deps) {
   async function noteSelfTest() {
     if (!deps.ai) return { ok: false, error: 'not set up on the server' };
     const req = noteRequest({ who: 'Test Person', role: 'Lead', detail: '', day: chicago(nowMs()), weekday: weekdayOf(nowMs()), direction: 'inbound', staff: 'Test Staff', minutes: 2,
-      transcript: 'Speaker 1: Caring Companions CDS, this is Test Staff.\nSpeaker 2: Hi, this is Test Person. This is only a test call for the office system. Please call me back next Monday.\nSpeaker 1: Will do, talk Monday.' });
-    try { const r = cleanNote(await deps.ai(req), chicago(nowMs())); return r.error ? { ok: false, error: r.error } : { ok: true, note: r.note, followup: r.followup }; }
+      transcript: 'Speaker 1: Caring Companions CDS, this is Test Staff.\nSpeaker 2: Hi, this is Test Person. This is only a test call for the office system. I live in Greene County and I have Medicaid. Please call me back next Monday.\nSpeaker 1: Will do, talk Monday.' });
+    try { const r = cleanNote(await deps.ai(req), chicago(nowMs())); return r.error ? { ok: false, error: r.error } : { ok: true, note: r.note, followup: r.followup, answers: r.answers }; }
     catch (e) { return { ok: false, error: String(e && e.message || e).slice(0, 300) }; }
   }
-  const NOTE_COLS = `n.comm_id, n.status, n.note, n.followup, n.people, n.final_note, n.decided_by, n.decided_at, n.error`;
+  const NOTE_COLS = `n.comm_id, n.status, n.note, n.followup, n.people, n.answers, n.final_note, n.decided_by, n.decided_at, n.error`;
   // Waiting notes with who they are about now (the phone book can change after the call: a link, a pick).
   async function notesWaiting() {
     const rows = await q(`select ${NOTE_COLS}, c.at, c.seconds, c.direction, c.staff_name, c.phone10 from cds_call_notes n join cds_comms c on c.id = n.comm_id
@@ -685,15 +726,16 @@ export function createComms(deps) {
   }
   // OK (with the office's own words, if they fixed it) or "Not about them". The hub has already saved
   // the note to the person's record when this says ok; this only closes the waiting note.
-  async function noteDecide(email, { id, decision, note, followup }) {
+  async function noteDecide(email, { id, decision, note, followup, kept }) {
     const by = String(email || '').toLowerCase();
     if (!['ok', 'not_about'].includes(decision)) throw new CommsError('Unknown choice.');
-    const r = await one(`update cds_call_notes set status=$2, final_note=$3, final_followup=$4, decided_by=$5, decided_at=now()
+    const keep = decision === 'ok' && Array.isArray(kept) ? kept.map(String).filter(k => /^[a-z_]{2,20}$/.test(k)).slice(0, 20) : [];
+    const r = await one(`update cds_call_notes set status=$2, final_note=$3, final_followup=$4, decided_by=$5, decided_at=now(), kept=$6::jsonb
       where comm_id=$1 and status='waiting' returning comm_id`,
       [String(id || ''), decision === 'ok' ? 'ok' : 'not_about', decision === 'ok' ? noDash(note).slice(0, 2000) || null : null,
-       decision === 'ok' && /^\d{4}-\d{2}-\d{2}$/.test(String(followup || '')) ? followup : null, by]);
+       decision === 'ok' && /^\d{4}-\d{2}-\d{2}$/.test(String(followup || '')) ? followup : null, by, JSON.stringify(keep)]);
     if (!r) throw new CommsError('Someone already answered that note.', 409);
-    await audit(by, 'call_note_' + decision, String(id), {});
+    await audit(by, 'call_note_' + decision, String(id), keep.length ? { kept: keep } : {});
     return { ok: true };
   }
 
