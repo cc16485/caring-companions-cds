@@ -445,7 +445,81 @@
     if (C.ready === 'not_yet' && next.k !== 'medicaid' && next.k !== 'pool' && next.k !== 'review') { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling" + about + ". Take your time; we'll check back in with you."; }
     return { summary, missing, next, followDays: days, say, consumerName: cn, callerName: caller, flags };
   }
+  // ---- The online pre-screen in GoHighLevel (her 11-05 ask: "they probably are already custom fields"). The only CDS
+  // GHL contact fields the call screen may read, by exact field key (field list 1289, 2026-11-04). Never the two
+  // Workflow Trigger fields, never SSN, IDs, files or signatures. Read only: nothing is written back from here.
+  const PRESCREEN = [
+    ['contact.are_you_seeking_care_for_yourself_or_someone_else', 'seeking', 'Seeking care for'],
+    ['contact.are_you_the_patient', 'patient', 'Are you the patient?'],
+    ['contact.consumers_name', 'consumerName', "Consumer's name"],
+    ['contact.consumers_date_of_birth', 'dob', "Consumer's date of birth"],
+    ['contact.are_you_or_the_person_needing_care_18_or_older', 'adult', '18 or older?'],
+    ['contact.in_which_county_does_the_person_needing_care_live', 'county', 'County'],
+    ['contact.what_county_does_the_cosumer_live_in', 'county', 'County'],
+    ['contact.do_you_or_the_person_needing_care_have_active_missouri_medicaid', 'medicaid', 'Active Missouri Medicaid?'],
+    ['contact.does_the_patient_have_medicaid', 'medicaid', 'Has Medicaid?'],
+    ['contact.consumers_medicaid_number', 'dcn', 'Medicaid number'],
+    ['contact.have_you_used_the_cds_program_before_let_us_know_where_youre_starting_from', 'cds', 'Used CDS before?'],
+    ['contact.please_provide_the_specific_diagnosis_or_medical_condition_that_causes_the_need_for_daily_assistance_for_example_stroke_heart_condition_arthritis_dementia', 'condition', 'Diagnosis or condition'],
+    ['contact.does_the_person_needing_care_need_help_with_any_of_the_following_check_all_that_apply', 'help', 'Help needed'],
+    ['contact.the_cds_program_requires_the_person_needing_care_to_be_able_to_direct_their_own_services__this_means_managing_their_caregivers_schedule_making_sure_they_clock_in_and_out_and_asking_for_the_help_they_need_is_the_person_needing_care_able_to_do_this', 'selfDirect', 'Able to direct their own services?'],
+    ['contact.does_this_person_live_at_home_not_in_a_nursing_facility_or_residential_care_community', 'atHome', 'Lives at home (not a facility)?'],
+    ['contact.living_alone', 'alone', 'Living alone?'],
+    ['contact.do_you_already_have_someone_you_would_like_to_hire_as_your_caregiver', 'attendant', 'Someone in mind to hire?'],
+    ['contact.your_chosen_caregivers_name', 'attName', "Chosen caregiver's name"],
+    ['contact.please_share_their_phone_number_if_you_know_it', 'attPhone', "Chosen caregiver's phone"],
+    ['contact.what_is_your_relationship_to_your_caregiver', 'attRel', 'Relationship to the caregiver'],
+    ['contact.notes_on_initial_conversation', 'notes', 'Notes on initial conversation'],
+  ];
+  const PRESCREEN_KEYS = PRESCREEN.map(x => x[0]);
+  const txt = v => (Array.isArray(v) ? v.join(', ') : v == null ? '' : String(v)).trim();
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  // A typed birth date in any common form -> yyyy-mm-dd, or '' when it cannot be read for sure.
+  function parseDob(v) {
+    const t = txt(v).toLowerCase();
+    let y, m, d, x;
+    if ((x = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t))) [y, m, d] = [+x[1], +x[2], +x[3]];
+    else if ((x = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/.exec(t))) [m, d, y] = [+x[1], +x[2], +x[3]];
+    else if ((x = /^([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(t)) && MONTHS.includes(x[1])) [m, d, y] = [MONTHS.indexOf(x[1]) + 1, +x[2], +x[3]];
+    else return '';
+    if (y < 100) y += y > (new Date().getFullYear() % 100) ? 1900 : 2000;
+    const iso = y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const dt = new Date(iso + 'T12:00:00');
+    return isNaN(dt) || dt.getMonth() + 1 !== m || ageOn(iso) === null ? '' : iso;
+  }
+  const HELP_WORDS = [[/bath|shower/, 'bathing'], [/dress|groom|hygien/, 'dressing'], [/eat|feed/, 'eating'], [/toilet|incontin|bathroom/, 'toileting'],
+    [/mobil|walk|transfer|getting around/, 'mobility'], [/meal|cook/, 'meals'], [/medic/, 'meds'], [/house|clean|laundry|chore/, 'housekeeping'], [/errand|shop|transport|ride/, 'errands']];
+  const REL_WORDS = [[/spouse|husband|wife/, 'spouse'], [/guardian/, 'legal guardian'], [/grand/, 'grandchild'], [/daughter/, 'daughter'], [/\bson\b/, 'son'],
+    [/sister/, 'sister'], [/brother/, 'brother'], [/niece|nephew/, 'niece or nephew'], [/friend/, 'friend'], [/neighbo/, 'neighbor']];
+  const yes = t => /^(yes|y|true)\b/.test(t), no = t => /^(no|n|false)\b/.test(t);
+  // answers: [{ key, value }] as read from GoHighLevel. Returns { set: call fields a coordinator confirms, shown: [{ label, value }] }.
+  // Only clear answers fill a call field; everything is also shown word for word.
+  function mapPrescreen(answers, area) {
+    const set = {}, shown = [];
+    const byAs = {};
+    (answers || []).forEach(a => { const f = PRESCREEN.find(x => x[0] === a.key); const v = txt(a.value); if (!f || !v) return; shown.push({ label: f[2], value: v }); if (!byAs[f[1]]) byAs[f[1]] = a.value; });
+    const T = k => txt(byAs[k]).toLowerCase();
+    if (T('seeking')) { if (/self|myself|me\b/.test(T('seeking')) && !/else|someone|loved|family/.test(T('seeking'))) set.who = 'self'; else if (/else|someone|loved|family|parent/.test(T('seeking'))) set.who = 'family'; }
+    else if (T('patient')) { if (yes(T('patient'))) set.who = 'self'; else if (no(T('patient'))) set.who = 'family'; }
+    if (txt(byAs.consumerName)) { const bits = txt(byAs.consumerName).split(/\s+/); set.first = bits[0]; set.last = bits.slice(1).join(' '); }
+    const dob = parseDob(byAs.dob); if (dob) set.dob = dob;
+    if (T('county')) { const c = txt(byAs.county).split(',')[0].trim().replace(/\s+county$/i, ''); if (c) { if (Array.isArray(area) && area.length && !area.includes(c)) { set.county = 'Other'; set.countyOther = c; } else set.county = c; } }
+    if (T('medicaid')) { const t = T('medicaid'); set.medicaid = /pend|appl|wait/.test(t) ? 'applied' : yes(t) ? 'yes' : no(t) ? 'no' : /not sure|unsure|don/.test(t) ? 'unsure' : undefined; if (!set.medicaid) delete set.medicaid; }
+    if (txt(byAs.dcn)) set.dcn = txt(byAs.dcn);
+    if (T('cds')) { const t = T('cds'); if (/another agency|currently|transfer|switch|already (have|get|on)|yes/.test(t)) set.cds = 'move'; else if (/new|never|first|no\b|not yet/.test(t)) set.cds = 'new'; }
+    if (txt(byAs.condition)) set.condition = txt(byAs.condition);
+    if (byAs.help) { const items = (Array.isArray(byAs.help) ? byAs.help : txt(byAs.help).split(',')).map(x => txt(x).toLowerCase()).filter(Boolean); const h = [], other = [];
+      items.forEach(i => { const w = HELP_WORDS.find(([re]) => re.test(i)); if (w) { if (!h.includes(w[1])) h.push(w[1]); } else other.push(i); });
+      if (h.length) set.help = h; if (other.length) set.helpNote = other.join(', '); }
+    if (T('selfDirect')) { if (yes(T('selfDirect'))) set.selfDirect = 'yes'; else if (no(T('selfDirect'))) set.selfDirect = 'concern'; }
+    if (T('atHome')) { if (yes(T('atHome'))) set.living = T('alone') && no(T('alone')) ? 'family' : 'home'; else if (no(T('atHome'))) set.living = 'facility'; }
+    if (T('attendant')) { if (yes(T('attendant'))) set.attendant = 'has'; else if (no(T('attendant'))) set.attendant = 'find'; }
+    if (txt(byAs.attName)) { set.attName = txt(byAs.attName); set.attendant = 'has'; }
+    if (txt(byAs.attPhone).replace(/\D/g, '').length >= 10) set.attPhone = txt(byAs.attPhone);
+    if (T('attRel')) { const w = REL_WORDS.find(([re]) => re.test(T('attRel'))); if (w) set.attRel = w[1]; }
+    return { set, shown };
+  }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, HELP, startDateAlerts, ageOn };
+                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, parseDob, HELP, startDateAlerts, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
