@@ -102,7 +102,15 @@ ok(S.recentSends([{ at: '2026-11-02T00:00:00Z', status: 'sent' }, { at: '2026-10
 // The first call: summary, still missing, one next step, follow-up gap.
 const P = S.callPlan;
 let cp = P({ who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', medicaid: 'no', cds: 'new', help: ['bathing'], attendant: 'find' });
-ok(cp.summary.startsWith('Linda (daughter) called about Mae Example.') && cp.missing.length === 0 && cp.next.k === 'medicaid' && cp.followDays === 3, 'family, no Medicaid');
+ok(cp.summary.startsWith('Linda (daughter) called about Mae Example.') && cp.missing.join() === 'their date of birth,their county' && cp.next.k === 'medicaid' && cp.followDays === 3, 'family, no Medicaid');
+// Guided call (2026-11-05): date of birth, county, DCN and the application stage.
+cp = P({ who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', dob: '1940-03-04', county: 'Greene', medicaid: 'no', appStage: 'plans', cds: 'new', help: ['bathing'], attendant: 'find' });
+ok(cp.missing.length === 0 && cp.followDays === 7 && /Age \d+, lives in Greene County\./.test(cp.summary) && cp.summary.includes('No Medicaid yet, plans to apply.'), 'no Medicaid, plans to apply: 7 days, age and county in the summary');
+cp = P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', county: 'Greene', medicaid: 'yes', cds: 'new', help: ['meals'], attendant: 'find' });
+ok(cp.missing.includes('their date of birth') && cp.missing.includes('their DCN or birth date, to look up their Medicaid'), 'Medicaid yes, no DCN or birth date: asked for');
+cp = P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', dob: '1950-01-01', county: 'Greene', medicaid: 'yes', dcn: '12345678', cds: 'new', help: ['meals'], attendant: 'find' });
+ok(cp.missing.length === 0 && cp.summary.includes('Has Medicaid, DCN given.') && !cp.summary.includes('12345678'), 'DCN given: not missing, never written in the summary');
+ok(S.ageOn('2000-01-01') >= 26 && S.ageOn('') === null && S.ageOn('not a date') === null, 'age from the date of birth');
 ok(P({ who: 'family', medicaid: 'applied', consumer: { first: 'A' }, phone: '4175550100' }).followDays === 14, 'applied: two weeks');
 ok(P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', medicaid: 'yes', cds: 'new', ready: 'yes' }).next.k === 'start', 'ready: start the profile');
 ok(P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', medicaid: 'yes', cds: 'new', ready: 'not_yet' }).next.t === 'Call back to see if they are ready', 'not ready: call back');
