@@ -23,6 +23,9 @@
 
 export const ten = v => { const d = String(v ?? '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
 const normName = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+// Payroll writes "Lopez, Maria"; the roster writes "Maria Lopez". Both are the same person.
+const nameKeys = s => { const t = String(s || ''), k = new Set([normName(t)]); const m = t.match(/^\s*([^,]+),\s*(.+)$/); if (m) k.add(normName(m[2] + m[1])); k.delete(''); return k; };
+const sameName = (a, b) => { const B = nameKeys(b); return [...nameKeys(a)].some(x => B.has(x)); };
 const TRIVIAL = /^(ok|okay|k|kk|thanks|thank you|thank u|thx|ty|sounds good|great|perfect|got it|will do|you too|yw|welcome|bye)[.! ]*$/i;
 export const TEXT_QUIET_MIN = 10;
 
@@ -166,7 +169,7 @@ export function cleanNote(resp, day) {
 
 // ---------- the phone book ----------
 // agency = { pipeline, consumers, attendants } (agency_data), pool = attendant_pool rows, staff = [{name, phone}].
-export function phoneBookRows({ pipeline = [], consumers = [], attendants = [], pool = [], staff = [] }) {
+export function phoneBookRows({ pipeline = [], consumers = [], attendants = [], pool = [], staff = [], wages = [] }) {
   const rows = [];
   const add = (phone, ref, kind, name, detail) => { const p = ten(phone); if (p) rows.push({ phone10: p, ref, kind, name: name || '', detail: detail || '' }); };
   const consumerByName = new Map(consumers.filter(c => c && c.name).map(c => [normName(c.name), c]));
@@ -216,9 +219,36 @@ export function phoneBookRows({ pipeline = [], consumers = [], attendants = [], 
     add(a.phone, 'attendant:' + a.id, 'attendant', a.name, a.consumer ? 'Attendant for ' + a.consumer : '');
   }
   for (const s of staff) add(s.phone, 'staff:' + String(s.email || s.name || '').toLowerCase(), 'staff', s.name, 'Our team');
+  servesRows(consumers, attendants, pool, wages).forEach(r => rows.push(r));
   // one row per number per person
   const seen = new Set();
   return rows.filter(r => { const k = r.phone10 + '|' + r.ref; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+// The consumer is the boss (her rule 2026-10-21; 2026-11-05: "all calls from the Consumers contacts, their family,
+// attendants go onto the consumers profile"). Each attendant who works or worked for a consumer gets a row
+// serves:consumer:<id> for their number. These rows only say whose profile a call also belongs on: they never
+// decide who a number is (bookFor leaves them out), so an attendant never becomes "Who is this?" and never counts
+// as a check-in. Ties: Active Attendants placed with them, the attendant roster, and payroll (past attendants).
+export function servesRows(consumers = [], attendants = [], pool = [], wages = []) {
+  const out = [], seen = new Set();
+  const people = [];   // { name, phone, now: consumer name they work for now, or '' }
+  for (const a of pool) if (a && !a.archived && a.phone) people.push({ name: [a.first_name, a.last_name].filter(Boolean).join(' '), phone: a.phone, now: a.placed_with || '' });
+  for (const a of attendants) if (a && a.phone) people.push({ name: a.name || '', phone: a.phone, now: a.consumer || '' });
+  for (const c of consumers) {
+    if (!c || !c.id || !c.name) continue;
+    const ref = 'serves:consumer:' + c.id;
+    const add = (x, past) => { const p10 = ten(x.phone), k = p10 + '|' + ref; if (!p10 || seen.has(k)) return; seen.add(k);
+      out.push({ phone10: p10, ref, kind: 'attendant', name: x.name || 'Attendant', detail: (past ? 'Past attendant for ' : 'Attendant for ') + c.name }); };
+    // working for them now
+    for (const x of people) if (x.now && sameName(x.now, c.name)) add(x, false);
+    // paid for them in payroll: past, unless they still work for them
+    const paid = new Set(wages.filter(w => w && w.attendant && w.consumer && sameName(w.consumer, c.name)).map(w => w.attendant));
+    for (const nm of paid) for (const x of people) if (sameName(x.name, nm)) add(x, !(x.now && sameName(x.now, c.name)));
+  }
+  // a number that works for them now wins over the same number marked past
+  const now = new Set(out.filter(r => r.detail.startsWith('Attendant for')).map(r => r.phone10 + '|' + r.ref));
+  return out.filter(r => r.detail.startsWith('Attendant for') || !now.has(r.phone10 + '|' + r.ref));
 }
 
 // Who is this number? book = rows for that number. A staff answer wins. One person = known.
@@ -288,6 +318,12 @@ export function createComms(deps) {
     return r && Array.isArray(r.data_value) ? r.data_value : [];
   }
 
+  // payroll is kept as { entries: [...] }, not a list
+  async function agencyEntries(key) {
+    const r = await one(`select data_value from agency_data where agency_id='caring-companions-cds' and data_key=$1`, [key]);
+    const v = r && r.data_value; return v && Array.isArray(v.entries) ? v.entries : [];
+  }
+
   async function rebuildBook() {
     const staff = [];
     for (const key of ['lead_alerts', 'packet_alerts']) {
@@ -295,7 +331,8 @@ export function createComms(deps) {
       for (const x of (r && r.value && r.value.recipients) || []) staff.push({ name: x.name, phone: x.phone, email: x.email });
     }
     const pool = await q(`select id, first_name, last_name, phone, status, placed_with, archived from attendant_pool where agency_id='caring-companions-cds'`);
-    const rows = phoneBookRows({ pipeline: await agency('pipeline'), consumers: await agency('consumers'), attendants: await agency('attendants'), pool, staff });
+    const rows = phoneBookRows({ pipeline: await agency('pipeline'), consumers: await agency('consumers'), attendants: await agency('attendants'), pool, staff,
+      wages: await agencyEntries('attendantWages') });
     await q(`delete from cds_phone_book where source='sync'`);
     for (let i = 0; i < rows.length; i += 200) {
       const part = rows.slice(i, i + 200);
@@ -306,7 +343,9 @@ export function createComms(deps) {
     return rows.length;
   }
 
-  async function bookFor(phone10) { return q(`select * from cds_phone_book where phone10=$1`, [phone10]); }
+  async function bookFor(phone10) { return q(`select * from cds_phone_book where phone10=$1 and ref not like 'serves:%'`, [phone10]); }
+  // whose profile this number's calls also belong on (attendants -> the consumer)
+  async function servesFor(phone10) { return phone10 ? q(`select ref, name, detail from cds_phone_book where phone10=$1 and ref like 'serves:%'`, [phone10]) : []; }
 
   // Read GoHighLevel and save what is new. Overlaps the last run by 15 minutes; ids make it safe.
   // rescan: read the whole history window again (ids make it safe), e.g. after a fix.
@@ -609,6 +648,7 @@ export function createComms(deps) {
       urgent: !!t.urgent, urgentWhy: t.urgent ? (t.urgent_why || '') : '', later: dayOf(t.later_until) };
   }
   async function queue() {
+    let consumersNow = null;   // read once per queue, only when an attendant card needs it
     const s = await settings() || {};
     const open = await q(`select * from cds_tasks where area='followup' and done_at is null order by due_at`);
     const out = [];
@@ -621,6 +661,16 @@ export function createComms(deps) {
         continue;
       }
       const v = cardView(t, await bookFor(t.phone10));
+      // An attendant's call belongs to the consumer they work for (the consumer is the boss): the card names them.
+      v.forConsumers = (await servesFor(t.phone10)).map(r => ({ id: String(r.ref).replace(/^serves:consumer:/, ''), detail: r.detail || '', past: String(r.detail || '').startsWith('Past') }));
+      for (const fc of v.forConsumers) {
+        if (!consumersNow) consumersNow = await agency('consumers');
+        const c = consumersNow.find(x => x && String(x.id) === fc.id);
+        fc.name = c ? c.name : ''; fc.phone10 = c ? ten(c.phone) : '';
+        const g = fc.phone10 ? await one(`select ghl_contact_id from cds_comms where phone10=$1 and ghl_contact_id is not null order by at desc limit 1`, [fc.phone10]) : null;
+        fc.contactId = g ? g.ghl_contact_id : null;
+      }
+      v.forConsumers = v.forConsumers.filter(fc => fc.name);
       const c = await one(`select ghl_contact_id from cds_comms where phone10=$1 and ghl_contact_id is not null order by at desc limit 1`, [t.phone10]);
       v.contactId = c ? c.ghl_contact_id : null;
       // What their voicemail said (2026-10-29), once it has been read.
@@ -658,12 +708,16 @@ export function createComms(deps) {
   }
   // Calls and texts for a person: every number whose phone book row points at one of these refs.
   // phones: numbers on the record itself, so history shows even before the phone book is rebuilt.
-  async function history(refs, extraPhones) {
+  // withAttendants (her Communication tab, 2026-11-05): a consumer's history also holds the calls and texts of every
+  // attendant who works or worked for them. Their own rows come first so a number that is also family keeps that name.
+  async function history(refs, extraPhones, withAttendants) {
     refs = (Array.isArray(refs) ? refs : []).map(String).filter(r => /^(lead|consumer|attendant|pool|family):/.test(r)).slice(0, 20);
     const own = [...new Set((Array.isArray(extraPhones) ? extraPhones : []).map(ten).filter(Boolean))].slice(0, 10);
     if (!refs.length && !own.length) return { items: [], phones: [] };
     const fam = refs.map(r => 'family:' + r);
-    const phones = (await q(`select distinct phone10, ref, kind, name, detail from cds_phone_book where ref = any($1) or ref = any($2)`, [refs, fam]));
+    const serves = withAttendants ? refs.filter(r => r.startsWith('consumer:')).map(r => 'serves:' + r) : [];
+    const att = serves.length ? await q(`select distinct phone10, ref, kind, name, detail from cds_phone_book where ref = any($1)`, [serves]) : [];
+    const phones = att.concat(await q(`select distinct phone10, ref, kind, name, detail from cds_phone_book where ref = any($1) or ref = any($2)`, [refs, fam]));
     for (const p of own) if (!phones.some(x => x.phone10 === p)) phones.push({ phone10: p, ref: '', kind: '', name: '' });
     if (!phones.length) return { items: [], phones: [] };
     const items = await q(`select c.id, c.channel, c.direction, c.at, c.phone10, c.status, c.seconds, c.answered, c.voicemail, c.staff_name, c.body,
@@ -673,8 +727,10 @@ export function createComms(deps) {
       where c.phone10 = any($1) order by c.at desc limit 60`, [[...new Set(phones.map(p => p.phone10))]]);
     const whoByPhone = new Map(phones.map(p => [p.phone10, p]));
     const viaContact = p => String(p.ref || '').startsWith('family:');
+    const viaWork = p => String(p.ref || '').startsWith('serves:');
     return { items: items.map(i => { const w = whoByPhone.get(i.phone10) || {};
-               return { ...i, who: w.name || '', family: w.kind === 'family', contact: viaContact(w), detail: viaContact(w) ? (w.detail || '') : '' }; }),
+               return { ...i, who: w.name || '', family: w.kind === 'family', contact: viaContact(w), detail: viaContact(w) ? (w.detail || '') : '',
+                 attendant: viaWork(w) ? (String(w.detail || '').startsWith('Past') ? 'past' : 'now') : '' }; }),
              phones: phones.map(p => ({ phone10: p.phone10, name: p.name, kind: p.kind })) };
   }
   // Phones the office has called (answered or not), texted, or talked to when they called in, with
@@ -688,7 +744,7 @@ export function createComms(deps) {
   }
   // Everyone who can be picked for "Who is this?".
   async function people() {
-    const rows = await q(`select distinct on (ref) ref, kind, name, detail from cds_phone_book where source='sync' and kind <> 'staff' order by ref, name`);
+    const rows = await q(`select distinct on (ref) ref, kind, name, detail from cds_phone_book where source='sync' and kind <> 'staff' and ref not like 'serves:%' order by ref, name`);
     const extra = [];
     for (const c of await agency('consumers')) if (c && c.id) extra.push({ ref: 'consumer:' + c.id, kind: 'consumer', name: c.name, detail: '' });
     for (const p of await agency('pipeline')) if (p && p.id && p.status !== 'closed_linked') extra.push({ ref: 'lead:' + p.id, kind: 'lead', name: p.name, detail: '' });
@@ -805,7 +861,7 @@ export function createComms(deps) {
   async function handle(email, body) {
     const a = String(body && body.action || 'queue');
     if (a === 'queue') return queue();
-    if (a === 'history') return history(body.refs, body.phones);
+    if (a === 'history') return history(body.refs, body.phones, body.with_attendants === true);
     if (a === 'reached') { const r = await reached(body.since); return { phones: r.map(x => x.phone10), last: Object.fromEntries(r.map(x => [x.phone10, x.last])),
       talk: Object.fromEntries(r.filter(x => x.last_talk).map(x => [x.phone10, x.last_talk])) }; }
     if (a === 'people') return people();
