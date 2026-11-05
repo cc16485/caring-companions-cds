@@ -28,6 +28,7 @@
 <script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=7"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="followups-table.js?v=1"></script><!-- 2026-11-05 Follow-ups as one table (switch followupsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=2"></script>
@@ -866,6 +867,37 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
 .lt-empty { padding:18px; color:#55677a; } .lt-key { font-size:12px; color:#55677a; }
 .lt-link { font:inherit; font-size:12px; color:#0f5f61; background:none; border:none; padding:0; text-decoration:underline; cursor:pointer; }
 .lt-cards { display:none; }
+/* 2026-11-05 Follow-ups as one table (followups-table.js, switch followupsTable): the Leads table look, plus these */
+.fut-glance { grid-column:1/-1; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)) minmax(0,1.6fr); gap:12px; }
+.fut-glance .fu-tile { cursor:pointer; } .fut-glance .fu-tile.fut-on { border-color:#0f5f61; }
+.fut-chart { background:#fff; border-radius:20px; box-shadow:var(--cute-shadow); padding:12px 16px; display:flex; flex-direction:column; gap:5px; min-width:0; }
+.fut-ct { font-size:12.5px; font-weight:700; color:#55677a; }
+.fut-bar { display:grid; grid-template-columns:150px 1fr 24px; gap:8px; align-items:center; font-size:12.5px; }
+.fut-bar b { text-align:right; font-variant-numeric:tabular-nums; }
+.fut-tr { height:10px; background:#edf1f3; border-radius:5px; overflow:hidden; }
+.fut-f { display:block; height:100%; border-radius:5px; background:#0f5f61; } .fut-f.fut-g { background:#c99a2e; } .fut-f.fut-r { background:#b42318; }
+#fuFilters .lt-bar { margin-bottom:4px; }
+table.lt-t.fut-t { min-width:1120px; }
+.fut-ev { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:2px; max-width:300px; }
+.fut-ev li span { color:#55677a; margin-right:6px; white-space:nowrap; }
+.fut-said { font-size:12.5px; margin-top:4px; max-width:300px; background:#F1F5F9; border-radius:6px; padding:4px 7px; }
+.fut-why { font-size:12px; color:#b42318; font-weight:700; margin-top:3px; max-width:300px; }
+.fut-boss { font-size:12px; color:#7a2e8c; margin-top:4px; max-width:220px; }
+.fut-sel { font:inherit; font-size:12.5px; font-weight:600; color:#16283a; background:#fff; border:1px solid #d6dfe3; border-radius:7px; padding:2px 4px; max-width:160px; }
+.fut-pill { display:inline-block; font-size:11.5px; font-weight:800; border-radius:999px; padding:1px 8px; white-space:nowrap; }
+.fut-red { background:#fdecea; color:#b42318; } .fut-gold { background:#f6e7b8; color:#6b4e00; } .fut-blue { background:#e4edf6; color:#2b5c8a; }
+.fut-acts { display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+a.lt-b { display:inline-block; text-decoration:none; }
+.fut-days { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.fut-days button { font:inherit; font-size:12px; font-weight:700; cursor:pointer; background:#fff; color:#0f5f61; border:1px solid #c9d6db; border-radius:7px; padding:2px 8px; }
+.fut-whocell .fu-who { padding:8px 10px; gap:6px; min-width:300px; }
+.fut-whocell .fu-who input[type=text] { min-height:34px; } .fut-whocell .fu-who button { min-height:32px; }
+.fut-more { display:flex; flex-direction:column; gap:6px; font-size:12.5px; font-weight:700; color:#55677a; }
+.fut-more label { display:flex; gap:6px; align-items:center; }
+table.fut-one { width:100%; border-collapse:collapse; } table.fut-one tr, table.fut-one td { display:block; padding:2px 0; border:none; }
+table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !important; max-width:none; border-left:none; }
+.lt-card-top .fut-pill { align-self:flex-start; }
+@media (max-width: 1000px) { .fut-glance { grid-template-columns:repeat(2, minmax(0,1fr)); } .fut-chart { grid-column:1/-1; } }
 @media (max-width:760px) {
   .lt-wrap { display:none; } .lt-cards { display:flex; flex-direction:column; gap:8px; } .lt-ql { min-width:100%; }
   .lt-card { background:#fff; border-radius:14px; box-shadow:var(--cute-shadow); padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
@@ -9446,7 +9478,8 @@ async function renderFollowups(reload) {
   banner.innerHTML =
     (st.last_error ? '<div class="fu-banner bad"><b>Reading GoHighLevel failed ' + esc(_commWhen(st.last_error_at)) + '.</b> ' + esc(st.last_error) + ' Calls and texts since then may be missing here, so check GoHighLevel too.</div>'
       : stale ? '<div class="fu-banner bad"><b>' + (lastRun ? 'The hub has not read GoHighLevel since ' + esc(_commWhen(st.last_run)) + '.' : 'The hub has not read GoHighLevel yet.') + '</b> Check GoHighLevel for calls and texts until this clears.</div>' : '') +
-    (!d.live ? '<div class="fu-banner practice"><b>Practice.</b> Today and the 8am email do not list these yet. Turn on "Follow-ups on Today and the 8am email" on the Switches page when they look right.</div>' : '');
+    (!d.live ? '<div class="fu-banner practice"><b>Practice.</b> Today and the 8am email do not list these yet. Turn on "Follow-ups on Today and the 8am email" on the Switches page when they look right.</div>' : '')
+    + (window.FUT ? FUT.switchHtml() : '');   // 2026-11-05 Follow-ups as a table: the owner's preview row
   const cards = d.cards || [];
   const who = cards.filter(c => c.kind === 'who_is_this');
   if (who.length && !_commPeople) { try { _commPeople = (await _commCall({ action: 'people' })).people || []; } catch (e) { _commPeople = []; } }
@@ -9467,6 +9500,9 @@ async function renderFollowups(reload) {
   const active = getData('consumers').filter(CDSRules.isActive);
   const doneN = active.filter(c => ongoingRequirements(c).monthly.doneThisMonth).length;
   const monthWord = new Date().toLocaleDateString('en-US', { month: 'long' });
+  // 2026-11-05 Follow-ups as one table (followups-table.js, her switch followupsTable): the same cards, one row each.
+  if (window.FUT && FUT.on()) FUT.draw({ d, cards, step2, secOf, myName, todayIso, doneN, total: active.length, monthWord });
+  else {
   document.getElementById('fuTiles').innerHTML =
     '<div class="fu-tile urgent"><b>' + count('urgent') + '</b><span>Care or safety today</span></div>' +
     '<div class="fu-tile today"><b>' + count('today') + '</b><span>Call or text back today</span></div>' +
@@ -9549,6 +9585,7 @@ async function renderFollowups(reload) {
         return '<h2 class="fu-sec ' + k + '">' + esc(t) + '</h2><div class="ld-grid">' +
           (list.length ? list.map(card).join('') : '<div class="ld-empty">Nothing here for this filter.</div>') + '</div>';
       }).join('');
+  }
   if (_fuCheckOpen && step2) fuCheckinsDraw(); else document.getElementById('fuCheckins').hidden = true;
   const closed = d.closedToday || [];
   const box = document.getElementById('fuClosedBox');
@@ -10661,6 +10698,8 @@ const HUB_SWITCHES = [
     does: 'On: a lead who says yes becomes a Starting consumer right away, with seven enrollment steps, one Next step, a Medicaid tab (eMOMED check, the required PDF, what the ME code means, the ME code review), Medicaid application instructions by text or email (sent only when someone presses Send, and only while Medicaid application texts is on), follow-ups on Today, and the Ready for first shift checklist. They move to Active the day WellSky shows the first shift. Off: Move to Consumers as before.' },
   { key: 'consumerComms', label: 'Communication tab on the consumer profile',
     does: 'On: Communication is the second tab on every consumer profile. It holds every call and text with the consumer, their representative, family and contacts, and every attendant who works or worked for them, each named, with Listen and Show the words. A follow-up from an attendant\'s call names the consumer they work for and points to the consumer, except Pay and Clock-in & EVV. Documents keeps its own tab. Off: Calls and texts as before.' },
+  { key: 'followupsTable', label: 'Follow-ups as a table',
+    does: 'On: Today > Follow-ups is one table instead of cards: care or safety first, then today, then later this week, with columns for who, what came in, need, owner, when, how long they have waited, and the Call or text, Move it and Done buttons. On top: the tiles (tap one to show only those) and a bar of how long people have waited. Who is this? and Is this the attendant? are answered right in their row. Phones get short cards with a More button. Anyone can go back to the cards on their own computer. Off: the cards as before (you can preview the table on the Follow-ups page, only you).' },
   { key: 'changes', label: 'Something changed checklist',
     does: 'On: every active consumer profile has a Something changed button for a hospital or rehab stay, a move to a new address, or a health change. Each one lists the steps (tell DSDS within 10 days, stop or restart WellSky shifts, call when they are home) and puts what is left on Today. Off: hidden; the hospital pause in Ending or pausing services still works.' },
   { key: 'faxLive', label: 'One-click fax',
@@ -10690,6 +10729,7 @@ function hubSwitch(key, on) {
   if (key === 'moManager') renderManagerCard();
   if (key === 'moForms' || key === 'moStaffOig') renderOfficeCard();
   if (key === 'starting' && window.StartHub) StartHub.renderAdmin();
+  if (key === 'followupsTable' && document.getElementById('page-followups')?.classList.contains('active')) renderFollowups(false);
   if (key === 'authSlim') { _hx = null; renderMainTabs(PAGE_TO_SECTION.automations); renderSectionNav(PAGE_TO_SECTION.automations, 'automations'); }
 }
 
