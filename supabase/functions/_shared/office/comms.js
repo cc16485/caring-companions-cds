@@ -253,6 +253,30 @@ export function servesRows(consumers = [], attendants = [], pool = [], wages = [
   return out.filter(r => r.detail.startsWith('Attendant for') || !now.has(r.phone10 + '|' + r.ref));
 }
 
+// Confirm-once cards (her pick 2026-11-05: "Build the confirm-once cards from payroll names, plus the Who is this? choice").
+// Payroll knows who works for whom but has no phone numbers. When GoHighLevel names a number's contact the same as an attendant
+// in payroll, the office is asked ONCE: is this them? Nothing is tied until a person says Yes. Payroll months are 'YYYY-MM';
+// a consumer they were not paid for in the last two payroll months is a past one.
+export function payrollMatch(contactName, wages = [], consumers = []) {
+  const keys = nameKeys(contactName);
+  if (!keys.size) return null;
+  const mine = wages.filter(w => w && w.attendant && w.consumer && [...nameKeys(w.attendant)].some(k => keys.has(k)));
+  if (!mine.length) return null;
+  const months = wages.map(w => String(w && w.period || '')).filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
+  const newest = months[months.length - 1] || '';
+  const recent = newest ? (([y, m]) => { const d = new Date(Date.UTC(+y, +m - 2, 1)); return d.toISOString().slice(0, 7); })(newest.split('-')) : '';
+  const byConsumer = new Map();
+  for (const w of mine) { const k = normName(w.consumer), was = byConsumer.get(k); if (!was || String(w.period || '') > was.last) byConsumer.set(k, { consumer: w.consumer, last: String(w.period || '') }); }
+  const ties = [];
+  for (const { consumer, last } of byConsumer.values()) {
+    const c = consumers.find(x => x && x.id && sameName(x.name, consumer));
+    if (c) ties.push({ id: String(c.id), name: c.name, past: !!recent && last < recent, last });
+  }
+  if (!ties.length) return null;
+  ties.sort((a, b) => (a.past - b.past) || b.last.localeCompare(a.last));
+  return { name: String(mine[0].attendant).replace(/^\s*([^,]+),\s*(.+)$/, '$2 $1').trim(), ties };
+}
+
 // Who is this number? book = rows for that number. A staff answer wins. One person = known.
 export function resolve(book) {
   const mine = book.filter(r => r.source === 'staff');
@@ -417,9 +441,9 @@ export function createComms(deps) {
     let opened = 0, updated = 0, closed = 0;
     for (const phone10 of phones) {
       const comms = await q(`select * from cds_comms where phone10=$1 and at >= $2 order by at`, [phone10, from]);
-      const open = await one(`select * from cds_tasks where area='followup' and phone10=$1 and done_at is null order by created_at desc limit 1`, [phone10]);
+      const open = await one(`select * from cds_tasks where area='followup' and phone10=$1 and done_at is null and kind <> 'attendant_confirm' order by created_at desc limit 1`, [phone10]);
       // after a close, only what came later counts
-      const lastDone = await one(`select done_at from cds_tasks where area='followup' and phone10=$1 and done_at is not null order by done_at desc limit 1`, [phone10]);
+      const lastDone = await one(`select done_at from cds_tasks where area='followup' and phone10=$1 and done_at is not null and kind <> 'attendant_confirm' order by done_at desc limit 1`, [phone10]);
       const after = lastDone ? comms.filter(c => Date.parse(c.at) > Date.parse(lastDone.done_at)) : comms;
       const who = resolve(await bookFor(phone10));
       if (who.state === 'staff' || who.state === 'ignore') continue;
@@ -470,8 +494,9 @@ export function createComms(deps) {
         if (t) { await closeTask(t.id, later.channel === 'sms' ? 'texted' : later.direction === 'outbound' ? 'called' : 'talked', later.staff_name || 'GoHighLevel', later.at); closed++; }
       }
     }
+    const confirm = await confirmCards(owners);
     const sorted = await sortAll(s);
-    return { opened, updated, closed, sorted };
+    return { opened, updated, closed, sorted, confirm };
   }
 
   // Step 2: need, owner and care or safety for every open card. A person's choice always wins.
@@ -502,6 +527,63 @@ export function createComms(deps) {
     return n;
   }
 
+  // Only while the hub switch "Communication tab on the consumer profile" is on. One card per number, ever (dedupe att:<phone>).
+  async function commTabOn() {
+    const r = await one(`select data_value from agency_data where agency_id='caring-companions-cds' and data_key='consumerComms'`);
+    return !!(r && r.data_value && r.data_value.live === true);
+  }
+  async function confirmCards(owners) {
+    if (!(await commTabOn())) return 0;
+    const wages = await agencyEntries('attendantWages');
+    if (!wages.length) return 0;
+    const consumers = await agency('consumers');
+    const seen = await q(`select distinct on (phone10) phone10, contact_name, at from cds_comms where phone10 is not null and coalesce(contact_name,'') <> ''
+      and at >= $1 order by phone10, at desc`, [iso(nowMs() - 90 * 86400000)]);
+    let made = 0;
+    for (const r of seen) {
+      if (await one(`select 1 from cds_phone_book where phone10=$1 and ref like 'serves:%' limit 1`, [r.phone10])) continue;
+      if (await one(`select 1 from cds_tasks where dedupe_key=$1`, ['att:' + r.phone10])) continue;
+      const who = resolve(await bookFor(r.phone10));
+      if (who.state === 'staff' || who.state === 'ignore' || (who.person && ['consumer', 'family', 'lead'].includes(who.person.kind))) continue;
+      const m = payrollMatch(r.contact_name, wages, consumers);
+      if (!m) continue;
+      const ev = [{ at: r.at, kind: 'confirm', text: 'GoHighLevel names this number ' + r.contact_name + '. Payroll pays ' + m.name + ' as the attendant for '
+        + m.ties.map(t => t.name + (t.past ? ' (before)' : '')).join(', ') + '.', suggest: { ...m, contact: r.contact_name } }];
+      const id = (await one(`insert into cds_tasks (kind, title, area, phone10, owner, events, due_at, dedupe_key, updated_at)
+        values ('attendant_confirm', $1, 'followup', $2, $3, $4::jsonb, $5, $6, $5) on conflict (dedupe_key) do nothing returning id`,
+        [m.name, r.phone10, owners.not_sure || null, JSON.stringify(ev), r.at, 'att:' + r.phone10]))?.id;
+      if (id) made++;
+    }
+    return made;
+  }
+  // Tie a number to the consumer(s) an attendant works for. Staff rows: the nightly phone book rebuild keeps them.
+  async function tieAttendant(phone10, name, ties, by, identity) {
+    for (const t of ties)
+      await q(`insert into cds_phone_book (phone10, ref, kind, name, detail, source, set_by) values ($1,$2,'attendant',$3,$4,'staff',$5)
+        on conflict (phone10, ref) do update set name=excluded.name, detail=excluded.detail, source='staff', set_by=excluded.set_by, set_at=now()`,
+        [phone10, 'serves:consumer:' + t.id, name, (t.past ? 'Past attendant for ' : 'Attendant for ') + t.name, by]);
+    // who the number is, when the hub did not know: an attendant (so it never becomes Who is this? again)
+    if (identity) {
+      await q(`delete from cds_phone_book where phone10=$1 and source='staff' and ref not like 'serves:%'`, [phone10]);
+      await q(`insert into cds_phone_book (phone10, ref, kind, name, detail, source, set_by) values ($1,$2,'attendant',$3,$4,'staff',$5)`,
+        [phone10, 'attendant:office-' + phone10, name, 'Attendant for ' + ties.filter(t => !t.past).concat(ties).slice(0, 1).map(t => t.name).join(''), by]);
+    }
+  }
+  async function attendantAnswer(email, { id, yes }) {
+    const by = String(email || '').toLowerCase();
+    const t = await one(`select * from cds_tasks where id=$1 and kind='attendant_confirm' and done_at is null`, [String(id || '')]);
+    if (!t) throw new CommsError('That question is already answered.');
+    const m = ((t.events || [])[0] || {}).suggest;
+    if (yes === true) {
+      if (!m || !Array.isArray(m.ties) || !m.ties.length) throw new CommsError('That card has nothing to tie. Press No.');
+      const who = resolve(await bookFor(t.phone10));
+      await tieAttendant(t.phone10, m.name, m.ties, by, who.state !== 'known');
+    }
+    await closeTask(t.id, yes === true ? 'attendant_yes' : 'attendant_no', by, iso(nowMs()));
+    await audit(by, 'comm_attendant', t.phone10, { yes: yes === true, consumers: (m && m.ties || []).map(x => x.id) });
+    await sortAll(await settings());
+    return { ok: true };
+  }
   async function closeTask(id, reason, by, at) {
     await q(`update cds_tasks set done_at=$2, done_by=$3, closed_reason=$4 where id=$1 and done_at is null`, [id, at || iso(nowMs()), by, reason]);
   }
@@ -755,12 +837,12 @@ export function createComms(deps) {
     return { people: all.filter(r => r.name).map(r => ({ ref: r.ref, name: r.name, role: KIND_LABEL[r.kind] || r.kind, detail: r.detail || '' }))
       .sort((a, b) => a.name.localeCompare(b.name)) };
   }
-  async function pick(email, { phone10, ref, family }) {
+  async function pick(email, { phone10, ref, family, attendant, name }) {
     phone10 = ten(phone10);
     if (!phone10) throw new CommsError('That is not a phone number.');
     const by = String(email || '').toLowerCase();
     if (ref === 'ignore') {
-      await q(`delete from cds_phone_book where phone10=$1 and source='staff'`, [phone10]);
+      await q(`delete from cds_phone_book where phone10=$1 and source='staff' and ref not like 'serves:%'`, [phone10]);
       await q(`insert into cds_phone_book (phone10, ref, kind, name, detail, source, set_by) values ($1, 'ignore', 'ignore', 'Not for CDS', '', 'staff', $2)`, [phone10, by]);
       await q(`update cds_tasks set done_at=now(), done_by=$2, closed_reason='not_cds' where area='followup' and phone10=$1 and done_at is null`, [phone10, by]);
       await audit(by, 'comm_pick', phone10, { ref: 'ignore' });
@@ -770,12 +852,23 @@ export function createComms(deps) {
     const all = (await people()).people;
     const p = all.find(x => x.ref === ref);
     if (!p) throw new CommsError('That person is not in the hub.');
+    // Who is this? > their attendant (2026-11-05, Communication tab on): the number is that consumer's attendant
+    if (attendant === true) {
+      if (!String(ref).startsWith('consumer:')) throw new CommsError('Pick the consumer they work for.');
+      const nm = String(name || '').trim().slice(0, 80) || 'Attendant';
+      await tieAttendant(phone10, nm, [{ id: String(ref).slice(9), name: p.name, past: false }], by, true);
+      await q(`update cds_tasks set kind='followup', title=$2, person_ref=$3 where area='followup' and phone10=$1 and done_at is null and kind <> 'attendant_confirm'`,
+        [phone10, nm, 'attendant:office-' + phone10]);
+      await audit(by, 'comm_pick', phone10, { ref: 'attendant_for:' + ref });
+      await sortAll(await settings());
+      return { ok: true };
+    }
     const finalRef = family ? 'family:' + ref : ref;
-    await q(`delete from cds_phone_book where phone10=$1 and source='staff'`, [phone10]);
+    await q(`delete from cds_phone_book where phone10=$1 and source='staff' and ref not like 'serves:%'`, [phone10]);
     await q(`insert into cds_phone_book (phone10, ref, kind, name, detail, source, set_by) values ($1,$2,$3,$4,$5,'staff',$6)`,
       [phone10, finalRef, family ? 'family' : String(ref).split(':')[0] === 'pool' ? 'attendant' : String(ref).split(':')[0], family ? 'Family' : p.name,
        family ? 'Family of ' + p.name : p.detail, by]);
-    await q(`update cds_tasks set kind='followup', title=$2, person_ref=$3 where area='followup' and phone10=$1 and done_at is null`, [phone10, family ? 'Family of ' + p.name : p.name, finalRef]);
+    await q(`update cds_tasks set kind='followup', title=$2, person_ref=$3 where area='followup' and phone10=$1 and done_at is null and kind <> 'attendant_confirm'`, [phone10, family ? 'Family of ' + p.name : p.name, finalRef]);
     await audit(by, 'comm_pick', phone10, { ref: finalRef });
     await sortAll(await settings());   // the need and owner follow who it is, right away
     return { ok: true };
@@ -870,6 +963,7 @@ export function createComms(deps) {
     if (a === 'people') return people();
     if (a === 'pick') return pick(email, body);
     if (a === 'done') return done(email, body);
+    if (a === 'attendant_answer') return attendantAnswer(email, body);
     if (a === 'set_need') return setNeed(email, body);
     if (a === 'set_owner') return setOwner(email, body);
     if (a === 'urgent') return setUrgent(email, body);

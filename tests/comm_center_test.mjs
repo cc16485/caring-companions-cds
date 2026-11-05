@@ -63,6 +63,17 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + '\n   go
   eq(by('4175550100'), ['staff:krystal@mo-care.com|staff'], 'our team');
 }
 {
+  // confirm once (2026-11-05): who payroll says a GoHighLevel contact name is; never ties anything by itself
+  const W = [{ period: '2026-09', consumer: 'Ruth Caldwell', attendant: 'Worker, Pat' }, { period: '2026-10', consumer: 'Ruth Caldwell', attendant: 'Worker, Pat' },
+    { period: '2026-05', consumer: 'Gus Tolliver', attendant: 'Worker, Pat' }, { period: '2026-10', consumer: 'Nobody Here', attendant: 'Solo, Sam' }];
+  const CS = [{ id: 'c1', name: 'Ruth Caldwell' }, { id: 'c2', name: 'Gus Tolliver' }];
+  const m = C.payrollMatch('Pat Worker', W, CS);
+  eq(m && [m.name, m.ties.map(t => t.id + (t.past ? ':past' : ':now'))], ['Pat Worker', ['c1:now', 'c2:past']], 'payroll "Worker, Pat" is Pat Worker: Ruth now, Gus before (paid 5 months ago)');
+  ok(C.payrollMatch('Pat  Worker', W, CS) && C.payrollMatch('Worker, Pat', W, CS), 'spacing and Last, First both match');
+  ok(C.payrollMatch('Patricia Worker', W, CS) === null && C.payrollMatch('', W, CS) === null, 'a different name, or none: no question');
+  ok(C.payrollMatch('Sam Solo', W, CS) === null, 'paid for someone who is not a consumer in the hub: no question');
+}
+{
   // whose profile an attendant's calls belong on: now (placed or on the roster) or past (payroll only)
   const S = C.servesRows(
     [{ id: 'c1', name: 'Ruth Caldwell' }, { id: 'c2', name: 'Gus Tolliver' }, { id: 'c3', name: 'Ann Bell' }],
@@ -545,6 +556,56 @@ ok((await pg.query(`select value->'state'->>'last_error' e from cds_match_settin
   ok(!/sendMessage|\/conversations\/messages'/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8')), 'the server function never sends');
   // The one POST before Deno.serve is the call note request to Claude (2026-10-29), not GoHighLevel.
   ok(!/method: 'POST'|method: "POST"/.test(readFileSync(ROOT + '/supabase/functions/cds-comms/index.ts', 'utf8').split('Deno.serve')[0].replace(/async function ai\([\s\S]*?\n}\n/, '')), 'it only reads GoHighLevel (no POST to it)');
+}
+
+// ---------- confirm-once cards and Who is this? > their attendant (2026-11-05) ----------
+{
+  await put('attendantWages', { entries: [{ period: '2026-10', consumer: 'Ruth Caldwell', attendant: 'Worker, Pat' }, { period: '2026-10', consumer: 'Ruth Caldwell', attendant: 'Nope, Ned' }] });
+  call('4175550133', 'Pat Worker', 300, 'inbound', 'completed', 200);
+  call('4175550134', 'Ned Nope', 300, 'inbound', 'completed', 90);
+  await tick(301);
+  const conf = async () => (await pg.query(`select * from cds_tasks where kind='attendant_confirm' order by phone10`)).rows;
+  ok(!(await conf()).length, 'switch off: no confirm cards');
+  await put('consumerComms', { live: true });
+  await tick(306);
+  let cf = await conf();
+  eq(cf.map(t => t.phone10 + '|' + t.title + '|' + (t.done_at ? 'done' : 'open')), ['4175550133|Pat Worker|open', '4175550134|Ned Nope|open'], 'switch on: one question per number GoHighLevel names like an attendant in payroll');
+  ok(!(await pg.query(`select 1 from cds_phone_book where phone10 in ('4175550133','4175550134') and ref like 'serves:%'`)).rows.length, 'nothing is tied before someone says Yes');
+  const qv = await comms.queue();
+  const pc = qv.cards.find(c => c.kind === 'attendant_confirm' && c.phone10 === '4175550133');
+  ok(pc && pc.events[0].suggest.name === 'Pat Worker' && pc.events[0].suggest.contact === 'Pat Worker' && pc.events[0].suggest.ties[0].id === 'c1', 'the card carries who and for whom', pc);
+  ok(qv.cards.filter(c => c.phone10 === '4175550133').length >= 1, 'it shows on Follow-ups');
+  await comms.handle('krystal@mo-care.com', { action: 'attendant_answer', id: pc.id, yes: true });
+  eq((await pg.query(`select ref, kind, detail, source from cds_phone_book where phone10='4175550133' order by ref`)).rows.map(r => r.ref + '|' + r.detail + '|' + r.source),
+     ['attendant:office-4175550133|Attendant for Ruth Caldwell|staff', 'serves:consumer:c1|Attendant for Ruth Caldwell|staff'], 'Yes: the number is Pat, Ruth\'s attendant');
+  const nc = (await conf()).find(t => t.phone10 === '4175550134');
+  await comms.handle('krystal@mo-care.com', { action: 'attendant_answer', id: nc.id, yes: false });
+  ok(!(await pg.query(`select 1 from cds_phone_book where phone10='4175550134' and ref like 'serves:%'`)).rows.length, 'No: nothing tied');
+  call('4175550134', 'Ned Nope', 320, 'inbound', 'completed', 90);
+  await tick(325);
+  ok((await conf()).filter(t => t.phone10 === '4175550134').length === 1, 'never asked twice, even after No and a new call');
+  ok((await pg.query(`select 1 from cds_phone_book where phone10='4175550133' and ref like 'serves:%' and source='staff'`)).rows.length === 1, 'the nightly phone book rebuild keeps her Yes');
+  const hp = await comms.history(['consumer:c1'], [], true);
+  ok(hp.items.some(i => i.phone10 === '4175550133' && i.attendant === 'now' && i.who === 'Pat Worker'), 'Pat\'s call is on Ruth\'s Communication tab');
+  threw = false; try { await comms.handle('krystal@mo-care.com', { action: 'attendant_answer', id: pc.id, yes: true }); } catch (e) { threw = true; }
+  ok(threw, 'answering twice says it is already answered');
+  ok((await pg.query(`select count(*)::int n from cds_audit where action='comm_attendant'`)).rows[0].n === 2, 'both answers recorded');
+
+  // Who is this? > their attendant
+  call('4175550135', '', 330, 'inbound', 'no-answer', 0);
+  await tick(336);
+  const wc = (await open()).find(t => t.phone10 === '4175550135');
+  ok(wc && wc.kind === 'who_is_this', 'an unknown number asks Who is this?');
+  threw = false; try { await comms.pick('krystal@mo-care.com', { phone10: '4175550135', ref: 'lead:l2', attendant: true }); } catch (e) { threw = /consumer they work for/.test(e.message); }
+  ok(threw, 'their attendant needs the consumer they work for');
+  await comms.pick('krystal@mo-care.com', { phone10: '4175550135', ref: 'consumer:c1', attendant: true, name: 'Sam Helper' });
+  eq((await pg.query(`select ref, name, detail from cds_phone_book where phone10='4175550135' order by ref`)).rows.map(r => r.ref + '|' + r.name + '|' + r.detail),
+     ['attendant:office-4175550135|Sam Helper|Attendant for Ruth Caldwell', 'serves:consumer:c1|Sam Helper|Attendant for Ruth Caldwell'], 'picked: Sam, Ruth\'s attendant');
+  const after = (await open()).find(t => t.phone10 === '4175550135');
+  ok(after && after.kind === 'followup' && after.title === 'Sam Helper', 'the card becomes Sam\'s follow-up');
+  await comms.pick('krystal@mo-care.com', { phone10: '4175550135', ref: 'consumer:c1', family: true });
+  ok((await pg.query(`select 1 from cds_phone_book where phone10='4175550135' and ref='serves:consumer:c1'`)).rows.length === 1, 'a later Who is this? answer never wipes the attendant tie');
+  await put('consumerComms', {});
 }
 
 console.log(pass + ' passed, ' + failN + ' failed');

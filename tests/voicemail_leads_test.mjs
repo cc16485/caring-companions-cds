@@ -44,6 +44,7 @@ await pg.exec(`create table agency_data (id uuid primary key default gen_random_
     consumer text, attendant text, visitdate date, sig_attendant text, sig_consumer text);`);
 await pg.exec(strip(readFileSync(ROOT + '/cds_lead_alerts.sql', 'utf8')));
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
+await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));   // the phone book reads cds_packets (2026-11-05)
 await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/comm_center.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8')));
