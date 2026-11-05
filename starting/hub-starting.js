@@ -314,7 +314,8 @@
 
   // Called from renderProfile: draws the whole profile for a Starting consumer. Returns true when it did.
   function renderProfile(c, host) {
-    if (!on() || !S.isStarting(c)) return false;
+    // Drawn for any Starting person, even if the switch was turned off later (so they never look Inactive).
+    if (!S.isStarting(c)) return false;
     if (promote(c)) return false;   // WellSky shows the first shift: they are Active now; the usual profile draws
     if (typeof profPacketFetch === 'function') profPacketFetch(c);
     const ctx = ctxFor(c), st = S.startingSteps(c, ctx), med = st.medicaid;
@@ -327,7 +328,7 @@
     const actBtn = { medicaid: btn('Open Medicaid', "_profTab='medicaid';renderProfile()"), state: btn('Open State and authorization', "_profTab='state';renderProfile()"),
                      ready: btn('Open the checklist', "_profTab='ready';renderProfile()"), paperwork: btn('Open their lead for the packet', "StartHub.openLead('" + q(c.id) + "')"),
                      attendant: btn('Open Attendants', "showPage('attendants')"), active: '' }[st.next.act] || '';
-    const next = '<div class="cp-next warn"><div style="flex:1 1 300px"><div style="font-weight:600;color:#0D365F">Next step: ' + esc(st.next.t) + '</div>' +
+    const next = '<div class="cp-next warn"' + (st.next.urgent ? ' style="outline:2px solid var(--danger)"' : '') + '><div style="flex:1 1 300px"><div style="font-weight:600;color:#0D365F">Next step: ' + esc(st.next.t) + '</div>' +
       '<div style="font-size:13px;color:#55677a">' + esc(st.next.d) + '</div></div>' + actBtn + '</div>';
     const also = st.also.length ? '<div class="st-also"><b>You can also do now, while you wait</b><ul>' + st.also.map(a => '<li>' + esc(a.t) + '</li>').join('') + '</ul></div>' : '';
     let body = '';
@@ -360,6 +361,7 @@
       line('DSDS', ctx.auth ? 'Authorization on file' : st.transfer ? '<span style="color:#9C6410">Transfer: confirm the current authorization</span>' : c.starting && c.starting.referralSent ? 'Referral sent ' + esc(day(c.starting.referralSent)) + ', waiting' : '<span style="color:#9C6410">Referral needed</span>') +
       line('Attendant', ctx.attendant.linked ? esc(ctx.attendant.name || '') + (ctx.attendant.ready ? ', on the roster' : ', onboarding') : '<span style="color:#9C6410">Nobody linked yet</span>') +
       line('Consumer packet', P ? esc(P.status || '') : '<span style="color:#9C6410">Not sent</span>') +
+      line('Start date from the state', c.cdsStartDate ? esc(day(c.cdsStartDate)) + (st.startAlert && st.startAlert.soon ? ' <span style="color:var(--danger);font-weight:600">' + (st.startAlert.late ? 'passed, not ready' : st.startAlert.days + ' days left, not ready') + '</span>' : '') : '<span style="color:#9C6410">not on file yet</span>') +
       line('First shift', ctx.firstShift ? esc(day(ctx.firstShift)) : 'Not yet in WellSky') +
       line('Coordinator', ownerSelect('stCoordC', c.coordinator || meName(), "StartHub.setCoordinator('consumer','" + q(c.id) + "',this.value)")) +
       '<h4 style="margin:14px 0 4px;color:var(--primary)">About them</h4>' +
@@ -536,6 +538,7 @@
     const s = c.starting || {}, move = s.kind === 'move';
     return '<div class="alert alert-info" style="font-size:13.5px;margin:10px 0"><div><b>Medicaid eligibility is not authorization.</b> A good ME code means Medicaid can pay for CDS. Only DSDS decides whether they get CDS, after its assessment.</div></div>' +
       (move ? line('Transfer entered in the state portal', dateField(c, 'transferEntered')) : line('Referral sent to DSDS', dateField(c, 'referralSent')) + line('DSDS assessment', dateField(c, 'assessment'))) +
+      line('Start date from the state', '<input type="date" value="' + esc(c.cdsStartDate || '') + '" onchange="StartHub.setStart(\'' + q(c.id) + '\',this.value)" style="font-size:13px"> <span class="field-note">The consumer and the attendant must be ready to clock in that day.</span>') +
       line('Authorization', ctx.auth ? '<span style="color:var(--success)">On file' + (ctx.authRec && ctx.authRec.planEnd ? ', ends ' + esc(day(ctx.authRec.planEnd)) : '') + '</span>'
         : '<span style="color:#9C6410">Not uploaded yet</span> ' + btn('Upload it on Authorizations', "showPage('authorizations')", true));
   }
@@ -543,6 +546,7 @@
     const v = (c.starting || {})[k] || '';
     return '<input type="date" value="' + esc(v) + '" onchange="StartHub.setDate(\'' + q(c.id) + "','" + k + '\',this.value)" style="font-size:13px">';
   }
+  function setStart(cid, v) { edit('consumer', cid, c => { const was = c.cdsStartDate || ''; c.cdsStartDate = v; logTo(c, 'Start date from the state ' + (was ? 'changed from ' + day(was) + ' to ' : 'set to ') + day(v) + '.'); }); auditQuiet('consumer', getData('consumers').find(x => x.id === cid) || { id: cid }, 'start_date', { date: v }); rerender(); }
   function setDate(cid, k, v) { edit('consumer', cid, c => { c.starting = Object.assign({}, c.starting, { [k]: v }); }); rerender(); }
   function readyHtml(c, st) {
     return '<div class="field-note" style="margin:10px 0">Ready for first shift stays locked until every line is true. The Hub checks each one from the profile.</div>' +
@@ -550,7 +554,8 @@
       '<div style="margin-top:10px">' + (c.starting && c.starting.readyAt ? '<span style="color:var(--success);font-weight:600">Marked ready ' + esc(day(c.starting.readyAt)) + '. They move to Active by themselves when WellSky shows the first shift.</span>'
         : btn('Mark ready for first shift', "StartHub.markReady('" + q(c.id) + "')", false, st.gateOk ? '' : ' disabled')) + '</div>' +
       '<div class="field-note" style="margin-top:8px">Authorization and tasks in WellSky are the two WellSky lines from the first-shift checklist; tick them on the usual checklist once they are in.</div>' +
-      btn('WellSky: authorization is in', "StartHub.prep('" + q(c.id) + "','authWellSky')", true) + ' ' + btn('WellSky: tasks are in', "StartHub.prep('" + q(c.id) + "','tasksWellSky')", true);
+      btn('WellSky: authorization is in', "StartHub.prep('" + q(c.id) + "','authWellSky')", true) + ' ' + btn('WellSky: tasks are in', "StartHub.prep('" + q(c.id) + "','tasksWellSky')", true) + ' ' +
+      btn('Told the consumer how to clock in', "StartHub.prep('" + q(c.id) + "','toldClockIn')", true) + ' ' + btn('The attendant can clock in (WellSky app set up)', "StartHub.attClock('" + q(c.id) + "')", true);
   }
   function markReady(cid) {
     const c = getData('consumers').find(x => x.id === cid);
@@ -558,17 +563,18 @@
     edit('consumer', cid, x => { x.starting = Object.assign({}, x.starting, { readyAt: today(), readyBy: meName() }); logTo(x, 'Marked ready for first shift.'); });
     rerender();
   }
+  function attClock(cid) { edit('consumer', cid, x => { x.starting = Object.assign({}, x.starting, { attClockIn: { at: nowIso(), by: meName() } }); logTo(x, 'The attendant can clock in (WellSky app set up).'); }); rerender(); }
   function prep(cid, k) { edit('consumer', cid, x => { x.firstShiftPrep = Object.assign({}, x.firstShiftPrep, { [k]: { at: nowIso(), by: meName() } }); }); rerender(); }
 
   // WellSky shows the first shift: Starting becomes Active (her pick, approved with version 5).
   function promote(c) {
-    if (!on() || !S.isStarting(c)) return false;
+    if (!S.isStarting(c)) return false;   // also with the switch off, so nobody stays Starting after their first shift
     const fs = typeof firstShiftOf === 'function' ? firstShiftOf(c) : '';
     if (!fs) return false;
     edit('consumer', c.id, x => { x.status = 'active'; x.starting = Object.assign({}, x.starting, { activeAt: today(), firstShift: fs }); logTo(x, 'WellSky shows the first shift ' + day(fs) + '. Moved to Active.'); });
     return true;
   }
-  function promoteAll() { if (!on()) return; getData('consumers').filter(S.isStarting).forEach(promote); }
+  function promoteAll() { getData('consumers').filter(S.isStarting).forEach(promote); }
 
   // ---------------------------------------------------------------- Consumers list, Today
   function startingRows() {
@@ -588,9 +594,12 @@
     if (!on()) return '';
     const f = S.applicationFollowups({ consumers: getData('consumers'), pipeline: getData('pipeline') }, today());
     const sup = getData('consumers').filter(S.isStarting).filter(c => S.medicaidState(c).needsSupervisor);
-    if (!f.length && !sup.length) return '';
+    const sd = S.startDateAlerts({ consumers: getData('consumers') }, today(), c => Object.assign(ctxFor(c), _profPacket[c.id] && 'packet' in _profPacket[c.id] ? {} : { skipKeys: ['packet'] }));
+    if (!f.length && !sup.length && !sd.length) return '';
     const open = (x) => x.kind === 'lead' ? "openLeadProfile('" + q(x.id) + "')" : "openProfile('" + q(x.id) + "')";
     return '<div class="card" style="padding:16px 18px;margin-bottom:12px"><b style="color:var(--primary)">Starting</b>' +
+      sd.map(x => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(x.name) + '</b>: ' + esc(x.why) + '. <span style="color:var(--danger)">' + (x.late ? 'Start date was ' : 'Start date ') + esc(day(x.due)) + '</span> · ' + esc(x.owner || 'no owner') +
+        ' <a href="#" onclick="_profTab=\'ready\';openProfile(\'' + q(x.id) + '\');return false">Open</a></div>').join('') +
       sup.map(c => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(c.name) + '</b>: Medicaid waiting on supervisor review. ' +
         '<a href="#" onclick="_profTab=\'medicaid\';openProfile(\'' + q(c.id) + '\');return false">Open</a></div>').join('') +
       f.map(x => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(x.name) + '</b>: ' + esc(x.why) + '. ' +
@@ -689,5 +698,5 @@
   function rerender() { const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
 
   window.StartHub = { on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs };
 })();

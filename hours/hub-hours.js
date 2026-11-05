@@ -181,7 +181,7 @@ export function monthView({ W, check, reviewed, corrections, submissions, dsdsEn
   // Hours from the daily WellSky email when it has the approved hours, else the Chrome report (2026-11-01).
   const auths = W && W.hoursAuths ? W.hoursAuths(check) : check.auths;
   const pulledOn = auths && auths.at ? isoLocal(new Date(auths.at)) : today;
-  const hours = W && auths ? W.hoursThisMonth(auths, auths.email ? null : check.shifts, pulledOn) : [];
+  const hours = W && auths ? W.hoursThisMonth(auths, auths.email ? null : check.shifts, pulledOn, typeof startingSkip === 'function' ? startingSkip() : null) : [];   // Starting skipped (2026-11-04)
   const shifts = mergedShifts(check), eo = emailOpen(check);
   const long = W && shifts ? W.longShifts(shifts, reviewed, today) : [];
   const open = W && (eo || check.open) ? W.openShifts(eo || check.open, reviewed) : [];

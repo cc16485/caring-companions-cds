@@ -57,15 +57,27 @@ ok(s.also.length === 2, 'also-do-now list');
 const c1 = { status: 'starting', starting: { kind: 'new' }, medicaid: { checks: [chk()] } };
 s = S.startingSteps(c1, {});
 ok(s.count === 2 && s.next.t === 'Send the DSDS referral', 'verified: send the referral');
-s = S.startingSteps(c1, { auth: true, packet: { done: true }, attendant: { linked: true, ready: true } });
+s = S.startingSteps(Object.assign({}, c1, { cdsStartDate: '2026-12-20' }), { auth: true, packet: { done: true }, attendant: { linked: true, ready: true } });
 ok(s.next.t.startsWith('Finish the Ready') && !s.gateOk, 'gate waits for WellSky');
-const c2 = Object.assign({}, c1, { firstShiftPrep: { authWellSky: { at: 1 }, tasksWellSky: { at: 1 } } });
+const c2 = Object.assign({}, c1, { cdsStartDate: '2026-11-20', firstShiftPrep: { authWellSky: { at: 1 }, tasksWellSky: { at: 1 }, toldClockIn: { at: 1 } }, starting: { kind: 'new', attClockIn: { at: 1 } } });
 s = S.startingSteps(c2, { auth: true, packet: { done: true }, attendant: { linked: true, ready: true } });
 ok(s.gateOk && s.next.t === 'Mark ready for first shift', 'gate done');
-s = S.startingSteps(Object.assign({}, c2, { starting: { kind: 'new', readyAt: '2026-11-20' } }), { auth: true, packet: { done: true }, attendant: { ready: true }, firstShift: '2026-11-24' });
+s = S.startingSteps(Object.assign({}, c2, { starting: { kind: 'new', readyAt: '2026-11-20', attClockIn: { at: 1 } } }), { auth: true, packet: { done: true }, attendant: { ready: true }, firstShift: '2026-11-24' });
 ok(s.count === 7, 'all seven');
 ok(S.startingSteps({ status: 'starting', starting: { kind: 'move' }, medicaid: { checks: [chk()] } }, {}).next.t.startsWith('Transfer'), 'transfer path');
 ok(S.readyGate(c1, {}).find(g => g.k === 'auth').ok === false, 'authorization separate from Medicaid');
+// The state's start date (her rule 2026-11-04): needed for State approval, counted down, both must be able to clock in.
+let sd = S.startingSteps(c1, { auth: true, today: '2026-11-15' });
+ok(sd.next.t === 'Add the start date the state gave' && sd.steps[2].state !== 'done', 'authorization without a start date: ask for it');
+const cS = Object.assign({}, c1, { cdsStartDate: '2026-11-20' });
+sd = S.startingSteps(cS, { auth: true, today: '2026-11-15', attendant: { linked: true, ready: true } });
+ok(sd.startAlert && sd.startAlert.days === 5 && sd.next.urgent && /^Start date in 5 days: /.test(sd.next.t), 'five days out and not ready: urgent next step');
+ok(sd.gate.find(g => g.k === 'consumerClock').ok === false && sd.gate.find(g => g.k === 'attendantClock').ok === false, 'both clock-in lines start unticked');
+const al = S.startDateAlerts({ consumers: [Object.assign({ id: 'x', name: 'Pat', status: 'starting', coordinator: 'Krystal' }, cS)] }, '2026-11-15', () => ({ auth: true, skipKeys: ['packet'] }));
+ok(al.length === 1 && al[0].owner === 'Krystal' && !/packet/i.test(al[0].why), 'Today and email alert, owner, unknown lines left out');
+ok(S.startDateAlerts({ consumers: [Object.assign({ id: 'x', name: 'Pat', status: 'starting' }, cS)] }, '2026-11-01', () => ({})).length === 0, 'more than a week out: no alert yet');
+ok(S.startingSteps(cS, { auth: true, today: '2026-11-22' }).startAlert.late, 'start date passed: late');
+
 
 // Follow-ups go to the person's coordinator (safeguard 3).
 const data = { consumers: [{ id: 'c', name: 'Pat Example', status: 'starting', coordinator: 'krystal', medicaid: { application: { stage: 'help' }, followup: { date: '2026-11-07' } } }],
@@ -99,6 +111,12 @@ cp = P({ who: 'family', caller: { name: 'Bea' } });
 ok(cp.missing.includes("the consumer's name") && cp.missing.includes('a phone number') && cp.next.k === 'callback', 'incomplete call: missing list, call back');
 ok(P({ who: 'pair', consumer: { first: 'Hal' }, caller: { name: 'Sam' }, phone: '4175550144', medicaid: 'yes', cds: 'new' }).summary.includes('Sam would be the attendant'), 'attendant with a consumer');
 ok(['self', 'family', 'pair', 'solo'].every(w => S.identifierProblems(P({ who: w, consumer: { first: 'X' }, caller: { name: 'Y' }, phone: '4175550100', medicaid: 'no' }).say, {}).length === 0), 'after-call words carry no identifiers');
+
+// Audit fix (2026-11-04): a Starting person's authorization is not a "protect the money" warning.
+const dr = CR.dailyRoutine({ consumers: [{ id: '1', name: 'Pat Start', status: 'starting' }, { id: '2', name: 'Ann Active', status: 'active', cdsStartDate: '2026-01-01', contacts: {} }],
+  pipeline: [], authorizations: { records: { a: { consumer: 'Pat Start', planEnd: '2026-10-01' }, b: { consumer: 'Ann Active', planEnd: '2026-10-01' } } } }, new Date('2026-11-04T17:00:00Z'));
+const drTxt = JSON.stringify(dr);
+ok(drTxt.includes('Ann Active') && !drTxt.includes('Pat Start'), 'dailyRoutine leaves Starting out of authorizations, calls, EIN and DES');
 
 // The active rule leaves Starting out.
 ok(!CR.isActive({ status: 'starting' }) && CR.isActive({ status: 'active' }) && CR.isActive({ status: 'pending' }), 'isActive');

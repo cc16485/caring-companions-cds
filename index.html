@@ -25,12 +25,12 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=33"></script>
-<script src="supabase/functions/_shared/office/starting-rules.js?v=1"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
+<script src="supabase/functions/_shared/office/cds-rules.js?v=34"></script>
+<script src="supabase/functions/_shared/office/starting-rules.js?v=2"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=6"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
-<script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
+<script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
-<script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
+<script src="supabase/functions/_shared/office/cds-attendant-check.js?v=2"></script>
 <!-- Tax Setup in stages (2026-10-25, her switch 'taxStages'). -->
 <script src="tax/tax-stages.js?v=3"></script>
 <!-- Splits the signed enrollment packet into its separate forms, in the browser,
@@ -5574,7 +5574,7 @@ async function renderHoursMonth() {
   const root = document.getElementById('hx_root');
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading this month…</div>';
   try {
-    const { mountHours } = await import('./hours/hub-hours.js?v=9');
+    const { mountHours } = await import('./hours/hub-hours.js?v=10');
     root.innerHTML = '';
     _hx = mountHours(root, { W: typeof CDSWellSky === 'object' ? CDSWellSky : null,
       check: () => getObj('wellskyCheck'), reviewed: () => getObj('wellskyReviewed'), corrections: () => getData('evvCorrections'),
@@ -5800,8 +5800,8 @@ function addConsumer() {
 }
 
 function renderConsumers() {
-  // Starting people whose first shift is in WellSky move to Active first (2026-11-04, switch starting).
-  if (window.StartHub && StartHub.on()) StartHub.promoteAll();
+  // Starting people whose first shift is in WellSky move to Active first (2026-11-04).
+  if (window.StartHub) StartHub.promoteAll();
   const consumers = getData('consumers');
   const tbody = document.getElementById('consumerTableBody');
   const now = new Date();
@@ -6757,7 +6757,7 @@ function renderAttendantCheck(note) {
   const host = document.getElementById('attendantCheck');
   if (!host || typeof CDSAttendantCheck !== 'object') return;
   const A = CDSAttendantCheck;
-  const r = _acLast = A.compare({ attendants: getData('attendants'), shifts: getObj('wellskyCheck').shifts,
+  const r = _acLast = A.compare({ attendants: getData('attendants'), shifts: getObj('wellskyCheck').shifts, starting: getData('consumers').filter(c => window.CDSStarting && CDSStarting.isStarting(c)).map(c => c.name),
                                   reviewed: getObj('attendantCheckReviewed'), now: new Date() });
   const btn = (label, call, cls) => '<button class="btn btn-sm ' + (cls || 'btn-outline') + '" style="font-size:11.5px;margin:2px 4px 2px 0" onclick="' + call + '">' + esc(label) + '</button>';
   const row = (text, buttons) => '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;padding:7px 0;border-top:1px solid var(--gray-200);font-size:13px">' +
@@ -7410,6 +7410,8 @@ function addPipelineContact() {
   }
 }
 
+// Starting consumers (2026-11-04) as WellSky name keys: their WellSky authorization is not counted as hours, money or warnings.
+function startingSkip() { return typeof CDSWellSky === 'object' && typeof CDSStarting === 'object' ? new Set(getData('consumers').filter(CDSStarting.isStarting).map(c => CDSWellSky.nameKey(c.name))) : null; }
 // Log a call: the first-call screen while the Starting switch is on (2026-11-04), else the quick Log a call as before.
 function ldLogCall(id) { if (window.StartCall && window.StartHub && StartHub.on()) StartCall.open(id); else openPipelineEdit(id); }
 function openPipelineEdit(id) {
@@ -11714,8 +11716,10 @@ async function importAuthorizations(event) {
     catch (e) { bad.push(files[i].name + ' (' + e.message + ')'); continue; }
     if (r.error) { bad.push(files[i].name + ' (' + r.error + ')'); continue; }
     // Match on DCN first, which is exact; fall back to the name on the document.
-    const hit = consumers.find(c => (c.dcn || '').replace(/^0+/, '') === (r.dcn || '').replace(/^0+/, '')) ||
-                consumers.find(c => prNorm(c.name) === prNorm(r.name));
+    // An old inactive record with the same DCN or name never wins over a current or Starting one (2026-11-04).
+    const live1 = f => consumers.filter(f).sort((x, y) => ((CDSRules.isActive(y) || (window.CDSStarting && CDSStarting.isStarting(y))) ? 1 : 0) - ((CDSRules.isActive(x) || (window.CDSStarting && CDSStarting.isStarting(x))) ? 1 : 0))[0];
+    const hit = live1(c => (c.dcn || '').replace(/^0+/, '') === (r.dcn || '').replace(/^0+/, '')) ||
+                live1(c => prNorm(c.name) === prNorm(r.name));
     if (hit) r.consumer = hit.name; else unmatched.push(r.name || r.dcn || files[i].name);
     // Keep the PDF itself in the consumer's file ((5)(H)2, her yes 2026-10-23).
     if (hit && _db) {
@@ -11773,12 +11777,12 @@ function renderWellSky() {
   }
   const now = new Date();
   const today = W.isoLocal(now);
-  const problems = W.items(check, reviewed, now).filter(i => /has not run|did not finish/.test(i.t));
+  const problems = W.items(check, reviewed, now, { skip: startingSkip() }).filter(i => /has not run|did not finish/.test(i.t));
   const longs = W.longShifts(check.shifts, reviewed, today);
   const opens = W.openShifts(check.open, reviewed);
   const HA = W.hoursAuths(check);   // the daily email when it has the approved hours (2026-11-01)
   const pulledOn = HA && HA.at ? W.isoLocal(new Date(HA.at)) : today;
-  const hours = W.hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn);
+  const hours = W.hoursThisMonth(HA, HA && HA.email ? null : check.shifts, pulledOn, startingSkip());
   const unread = ((check.shifts && check.shifts.unread) || []).length + ((check.auths && check.auths.unread) || []).length;
   const statusColor = { over: 'var(--danger)', 'booked-over': 'var(--danger)', 'pace-over': '#b54708', low: '#b54708', ok: 'var(--success)' };
 
@@ -12428,7 +12432,7 @@ function renderUnmappedAttendants() {
   const un = aw.unmapped || {};
   const ids = Object.keys(un);
   if (!ids.length) { el.innerHTML = ''; return; }
-  const opts = getData('consumers').filter(CDSRules.isActive)
+  const opts = getData('consumers').filter(c => CDSRules.isActive(c) || (window.CDSStarting && CDSStarting.isStarting(c)))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('');
   const total = ids.reduce((s, i) => s + un[i].net, 0);
@@ -15403,7 +15407,7 @@ function renderDailyRoutine() {
   // uses, so the Dashboard and the email always say the same thing.
   // 2026-10-22 (her ask, for Zach): problems with the WellSky check itself go to the
   // owner only; everyone else gets one grey line saying how old the numbers are.
-  const wsAll = CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date());
+  const wsAll = CDSWellSky.items(getObj('wellskyCheck'), getObj('wellskyReviewed'), new Date(), { skip: startingSkip() });
   const wsSystem = wsAll.filter(i => i.system);
   const steps = CDSRules.dailyRoutine({
     consumers: getData('consumers'), pipeline: getData('pipeline'),
@@ -15594,6 +15598,7 @@ async function _loadDashOig() {
   } catch (e) { console.error('dashboard OIG:', e); }
 }
 function updateDashboard() {
+  if (window.StartHub) StartHub.promoteAll();   // first shift in WellSky: Starting moves to Active (2026-11-04)
   // keep the morning list in step with everything else the dashboard shows
   try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   try { renderCdsGoal(); } catch (e) { console.error('cds goal:', e); }
@@ -15608,7 +15613,7 @@ function updateDashboard() {
     consumers: getData('consumers'), attendants: getData('attendants'), now: new Date(),
     wsPeople: _activePeople(), nameKey: CDSWellSky.nameKey,
     oigPeople: _dashOig, checks: getObj('complianceChecks'), checklistIds, checklistTotal: checklistIds.length,
-    hours: authOn ? CDSWellSky.hoursThisMonth(HA, HA.email ? null : check.shifts, authOn) : [], rates: getRates(), payRange: [15, 16] });
+    hours: authOn ? CDSWellSky.hoursThisMonth(HA, HA.email ? null : check.shifts, authOn, startingSkip()) : [], rates: getRates(), payRange: [15, 16] });
   _loadDashOig();
   const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
   const bar = (id, n, of) => { const el = document.getElementById(id); if (el) el.style.width = (of ? Math.min(100, Math.round(n / of * 100)) : 0) + '%'; };
@@ -16036,7 +16041,7 @@ function openComplaintModal(editId) {
   const consumers = getData('consumers');
   const sel = document.getElementById('cmp_consumer');
   sel.innerHTML = '<option value="">— General / Unknown —</option>' +
-    consumers.filter(CDSRules.isActive).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    consumers.filter(c => CDSRules.isActive(c) || (window.CDSStarting && CDSStarting.isStarting(c))).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
   if (editId) {
     const complaints = getData('complaints');
@@ -17327,7 +17332,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=3"></script>
+<script src="starting/hub-starting.js?v=4"></script>
 <script src="starting/hub-call.js?v=2"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>

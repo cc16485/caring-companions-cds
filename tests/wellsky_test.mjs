@@ -93,6 +93,7 @@ eq(A.unread, [], 'nothing left unread in the authorizations report');
 
 // ---------- hours this month (pulled the morning of Oct 19: 18 days worked) ----------
 const H = W.hoursThisMonth(A, S, '2026-10-19');
+ok(H.length > 0 && W.hoursThisMonth(A, S, '2026-10-19', new Set(H.map(x => W.nameKey(x.consumer)))).length === 0, 'Starting consumers give no hours rows (2026-11-04)');
 const by = n => H.find(x => x.consumer === n);
 eq(H.map(x => x.consumer), ['Able, Ann', 'Carr, Cal', 'Dove, Di', 'Eads, Em', 'Ford, Fay'], 'only personal care is paced (ILW case management left out)');
 eq([by('Able, Ann').status, by('Able, Ann').note], ['over', 'Over by 1.75 hrs already'], 'already over');

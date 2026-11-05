@@ -368,7 +368,8 @@ export function createLeadAlerts(deps) {
     const W = globalThis.CDSWellSky;
     const ws = wcfg && wcfg.live === true ? await store(['wellskyCheck', 'wellskyReviewed', 'firstShifts', 'cdsGoal']) : {};
     const wsAll = wcfg && wcfg.live === true
-      ? W.items(Object.assign({}, ws.wellskyCheck || { lastRun: { ok: false, why: 'never ran' } }, { live: true }), ws.wellskyReviewed || {}, noon)
+      ? W.items(Object.assign({}, ws.wellskyCheck || { lastRun: { ok: false, why: 'never ran' } }, { live: true }), ws.wellskyReviewed || {}, noon,
+          { skip: new Set((s.consumers || []).filter(c => String(c.status || '').toLowerCase() === 'starting').map(c => W.nameKey(c.name))) })
       : [];
     // 2026-10-22 (her ask, for Zach): problems with the WellSky check itself go to the owners only,
     // and the email counts active consumers the same way as Today (CDSRules.activeNow).
@@ -428,6 +429,7 @@ export function createLeadAlerts(deps) {
     if (acfg && acfg.live === true) {
       const ac = await store(['attendants', 'wellskyCheck', 'attendantCheckReviewed']);
       attendantItems = globalThis.CDSAttendantCheck.items(globalThis.CDSAttendantCheck.compare({ attendants: ac.attendants || [],
+        starting: (s.consumers || []).filter(c => String(c.status || '').toLowerCase() === 'starting').map(c => c.name),
         shifts: (ac.wellskyCheck || {}).shifts, reviewed: ac.attendantCheckReviewed || {}, now: noon }));
     }
     // Starting (her decision 2026-11-04): only follow-ups due today or late, and reviews waiting on Samantha or
@@ -438,9 +440,19 @@ export function createLeadAlerts(deps) {
       const ST = globalThis.CDSStarting, todayIso = R.isoLocal(new Date(noon));
       const fu = ST.applicationFollowups({ consumers: s.consumers || [], pipeline }, todayIso);
       const sup = (s.consumers || []).filter(ST.isStarting).filter(c => ST.medicaidState(c).needsSupervisor);
+      // Start dates within 7 days, or passed, with something not ready (her rule 2026-11-04). The email has no packet,
+      // roster or authorization context, so it only lists dates with the checklist as the hub last saw it.
+      const authRecs = Object.values((s.authorizations || {}).records || {});
+      const att = (await store(['attendants'])).attendants || [];
+      const sdA = ST.startDateAlerts({ consumers: s.consumers || [] }, todayIso, c => ({
+        auth: authRecs.some(a => String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase()),
+        attendant: { ready: att.some(a => a.status !== 'inactive' && String(a.consumer || '').toUpperCase().split(',').map(x => x.trim()).includes(String(c.name).toUpperCase())) },
+        skipKeys: ['packet'] }));
       startingItems = [
         fu.length && { t: fu.length + ' Medicaid application follow-up' + (fu.length !== 1 ? 's' : '') + ' due', go: 'consumers',
                        people: fu.map(x => ({ name: x.name, why: 'check the application with ' + (x.owner || 'no owner set'), due: x.due })) },
+        sdA.length && { t: sdA.length + ' Starting start date' + (sdA.length !== 1 ? 's' : '') + ' coming up, not ready to clock in', go: 'consumers', bad: true,
+                        people: sdA.map(x => ({ name: x.name, why: x.why + (x.owner ? ', with ' + x.owner : ''), due: x.due })) },
         sup.length && { t: sup.length + ' Starting Medicaid review' + (sup.length !== 1 ? 's' : '') + ' waiting on Samantha or Zach', go: 'consumers', bad: true,
                         people: sup.map(c => ({ name: c.name, why: ST.medicaidState(c).label })) }
       ].filter(Boolean);

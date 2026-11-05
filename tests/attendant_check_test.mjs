@@ -41,6 +41,7 @@ eq(r.missing.map(m => [m.name, m.what, m.inactive]), [
   ['Maria Lopez', 'worked for Pat Q on Oct 18', false],
   ['Nina New', 'is scheduled for Bo Clark on Oct 28', false]], 'missing: not on the list, or marked inactive but working');
 eq(r.quiet.map(q => q.name), ['John Doe'], 'quiet: active on the list, no WellSky shifts (inactive ones are not nagged)');
+eq(A.compare({ attendants, shifts, reviewed: {}, now: NOW, starting: ['Jo Dee'] }).quiet.length, 0, 'the attendant of a Starting consumer is not quiet (no first shift yet, 2026-11-04)');
 eq(r.different.map(d => [d.name, d.listSays, d.wellsky, d.extra]), [['Lee Park', 'Ann Brown', ['Ann Brown', 'Pat Q'], ['Pat Q']]], 'different consumer');
 ok(!r.different.some(d => d.name === 'Nuong Pham'), 'Nuong works for the consumer the list names: no flag');
 

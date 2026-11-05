@@ -216,7 +216,9 @@
     });
 
     const records = (data.authorizations && data.authorizations.records) || {};
-    const auths = Object.values(records).filter(a => !data.wsPeople || nowNames.has(String(a.consumer || a.name || '').toUpperCase()));
+    // Starting people (2026-11-04) are not served yet: their authorization is enrollment work, not "protect the money".
+    const startingNames = new Set((data.consumers || []).filter(c => String(c.status || '').toLowerCase() === 'starting').map(c => String(c.name).toUpperCase()));
+    const auths = Object.values(records).filter(a => !startingNames.has(String(a.consumer || a.name || '').toUpperCase()) && (!data.wsPeople || nowNames.has(String(a.consumer || a.name || '').toUpperCase())));
     const authWho = (a, why) => { const n = String(a.consumer || a.name || ''), c = byName.get(n.toUpperCase());
       const due = /ended/.test(why) ? '' : (a.planEnd || '');
       return c ? who(c, why, due, 'profile') : { name: n, why, due, act: '' }; };

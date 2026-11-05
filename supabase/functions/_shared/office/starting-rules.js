@@ -170,7 +170,7 @@
     const done = {
       conversation: true,
       medicaid: med.verified,
-      state: !!ctx.auth,
+      state: !!ctx.auth && !!(c && c.cdsStartDate),   // her rule 2026-11-04: the state gives a start date
       paperwork: !!packet.done,
       attendant: !!att.ready,
       ready: !!s.readyAt && gateOk,
@@ -188,6 +188,8 @@
       else if (med.needsSupervisor) next = { t: 'Waiting on supervisor review of Medicaid', d: med.label + '.', act: 'medicaid' };
       else if (med.application && !med.last) next = { t: 'Medicaid application follow-up' + (med.followup && med.followup.date ? ', ' + med.followup.date : ''), d: 'Check how the application is going. When the family says it is approved, verify it in eMOMED.', act: 'medicaid' };
       else next = { t: 'Medicaid verification', d: 'Look them up in eMOMED, upload the eligibility page, and type the ME code and Lock Ins. The Hub says what the code means.', act: 'medicaid' };
+    } else if (first === 'state' && ctx.auth && !(c && c.cdsStartDate)) {
+      next = { t: 'Add the start date the state gave', d: 'The consumer and the attendant must be ready to clock in on that day.', act: 'state' };
     } else if (first === 'state') {
       next = transfer
         ? { t: 'Transfer: confirm the current authorization', d: 'Enter the transfer in the state portal and upload the authorization when it comes.', act: 'state' }
@@ -199,12 +201,18 @@
     else if (first === 'ready') next = gateOk ? { t: 'Mark ready for first shift', d: 'Every item on the checklist is done.', act: 'ready' } : { t: 'Finish the Ready for first shift checklist', d: gate.filter(g => !g.ok).map(g => g.t).join('; ') + '.', act: 'ready' };
     else if (first === 'active') next = { t: 'Waiting for the first shift in WellSky', d: 'They move to Active by themselves the day WellSky shows their first shift.', act: 'active' };
     else next = { t: 'Ready to move to Active', d: 'WellSky shows the first shift.', act: 'active' };
+    // The start date (her rule 2026-11-04): both must be able to clock in that day. Counted down until they are ready.
+    const sd = c && c.cdsStartDate, today = ctx.today || '';
+    const daysLeft = sd && today ? Math.round((Date.parse(sd + 'T12:00:00') - Date.parse(today + 'T12:00:00')) / 864e5) : null;
+    const startAlert = sd && !(s.readyAt && gateOk) && !done.active ? { date: sd, days: daysLeft, late: daysLeft !== null && daysLeft < 0, soon: daysLeft !== null && daysLeft <= 7,
+      missing: gate.filter(g => !g.ok).map(g => g.t) } : null;
+    if (startAlert && startAlert.soon) next = Object.assign({}, next, { t: (startAlert.late ? 'Start date passed ' : 'Start date in ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ': ') + next.t, urgent: true });
     const also = [];
     if (first === 'medicaid' || first === 'state') {
       if (!done.paperwork) also.push({ t: packet.signed ? 'Sign the enrollment packet as agent' : 'Send the enrollment packet', act: 'paperwork' });
       if (!done.attendant) also.push({ t: att.linked ? 'Start ' + (att.name || 'the attendant') + "'s onboarding" : 'Link or find an attendant', act: 'attendant' });
     }
-    return { steps, count, of: keys.length, next, also, gate, gateOk, medicaid: med, transfer };
+    return { steps, count, of: keys.length, next, also, gate, gateOk, medicaid: med, transfer, startAlert };
   }
 
   // Ready for first shift: every line must be true (her safeguard list).
@@ -218,9 +226,12 @@
       { k: 'pdf',      t: 'eMOMED eligibility PDF uploaded', ok: !!(last && last.pdf) },
       { k: 'flags',    t: 'No open eligibility flags or questions', ok: !med.openFlag && !med.needsSupervisor },
       { k: 'auth',     t: 'DSDS authorization confirmed and uploaded', ok: !!ctx.auth },
+      { k: 'start',    t: 'Start date from the state on file', ok: !!(c && c.cdsStartDate) },
       { k: 'packet',   t: 'Enrollment packet signed, and signed as agent', ok: !!packet.done },
       { k: 'attendant',t: 'Attendant onboarding finished', ok: !!att.ready },
-      { k: 'wellsky',  t: 'Authorization and tasks in WellSky', ok: !!(c && c.firstShiftPrep && c.firstShiftPrep.authWellSky && c.firstShiftPrep.tasksWellSky) }
+      { k: 'wellsky',  t: 'Authorization and tasks in WellSky', ok: !!(c && c.firstShiftPrep && c.firstShiftPrep.authWellSky && c.firstShiftPrep.tasksWellSky) },
+      { k: 'consumerClock', t: 'The consumer can clock in on the start date (EVV set up, told how)', ok: !!(c && c.firstShiftPrep && c.firstShiftPrep.toldClockIn) },
+      { k: 'attendantClock', t: 'The attendant can clock in on the start date (WellSky app set up)', ok: !!att.ready && !!(c && c.starting && c.starting.attClockIn) }
     ];
   }
 
@@ -238,6 +249,15 @@
     (data.consumers || []).filter(isStarting).forEach(c => add(c, 'consumer'));
     (data.pipeline || []).filter(p => p.medicaid && !p.movedToConsumers).forEach(p => add(p, 'lead'));
     return out.filter(x => x.due <= todayIso).sort((a, b) => a.due.localeCompare(b.due));
+  }
+  // Start dates close and not ready (Today and the 8am email): within 7 days or passed, owner = coordinator.
+  function startDateAlerts(data, todayIso, ctxOf) {
+    return (data.consumers || []).filter(isStarting).filter(c => c.cdsStartDate).map(c => {
+      const cx = ctxOf ? ctxOf(c) : {}, skip = cx.skipKeys || [];   // lines the caller cannot know are left out, never guessed
+      const st = startingSteps(c, Object.assign({ today: todayIso }, cx));
+      const a = st.startAlert, miss = st.gate.filter(g => !g.ok && !skip.includes(g.k)).map(g => g.t);
+      return a && a.soon && miss.length ? { name: c.name, id: c.id, due: a.date, late: a.late, owner: c.coordinator || '', why: 'start date, not ready: ' + miss.slice(0, 3).join('; ') + (miss.length > 3 ? '; and more' : '') } : null;
+    }).filter(Boolean).sort((a, b) => a.due.localeCompare(b.due));
   }
   const STAGES = { applied: 'already applied', help: 'needs help applying', plans: 'plans to apply' };
   // Her default follow-up gaps (mockup version 5): days after today.
@@ -354,5 +374,5 @@
   }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, HELP };
+                       fillTemplate, identifierProblems, recentSends, callPlan, HELP, startDateAlerts };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
