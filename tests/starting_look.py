@@ -111,6 +111,10 @@ with sync_playwright() as pw:
     ck('profile: Medicaid shows the family report, not Verified', 'Family reports Medicaid approved. Verification needed' in body)
     shot(pg, '04-starting-profile-overview-desktop')
     pg.set_viewport_size({'width': 390, 'height': 900}); pg.wait_for_timeout(200); shot(pg, '04b-starting-profile-overview-mobile'); pg.set_viewport_size({'width': 1440, 'height': 1000})
+    ck('profile: Contacts is a tab, not a card above the tabs', 'These are the people who call about them' not in body and 'Contacts' in pg.inner_text('#prof_body .cp-tabs'))
+    pg.evaluate("()=>{_profTab='contacts'; renderProfile();}"); pg.wait_for_timeout(200)
+    ck('Contacts tab: the people who call about them', 'These are the people who call about them' in pg.inner_text('#prof_body'))
+    shot(pg, '04c-starting-profile-contacts-tab'); pg.evaluate("()=>{_profTab='overview'; renderProfile();}")
 
     # ---- 3. Medicaid tab: verify in eMOMED
     pg.evaluate("()=>{_profTab='medicaid'; renderProfile();}"); pg.wait_for_timeout(300)
