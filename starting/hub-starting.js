@@ -346,12 +346,89 @@
         '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><div class="cute-title" style="font-size:30px">' + esc(c.name) + '</div>' + (typeof nameEditLink === 'function' ? nameEditLink(c) : '') +
         '<span class="badge" style="background:var(--success-pale);color:var(--success)">Starting</span><span class="badge" style="background:var(--gray-100)">' + (st.transfer ? 'Moving from another agency' : 'New to CDS') + '</span></div>' +
         '<div style="font-size:13.5px;color:#55677a;margin-top:4px">' + [c.county ? esc(c.county) + ' County' : '', 'Coordinator ' + esc(c.coordinator || 'not set'), 'said yes ' + esc(day(c.starting && c.starting.at))].filter(Boolean).join(' · ') + '</div></div>' +
-        '<div style="text-align:right"><div class="field-note">Enrollment progress</div><b style="color:var(--primary);font-size:18px">' + st.count + ' of ' + st.of + '</b></div></div>' +
-      bar + next + also +
+        '<div style="text-align:right"><div class="field-note">Enrollment progress</div><b style="color:var(--primary);font-size:18px">' + st.count + ' of ' + st.of + '</b>' +
+        /* hidden while the ME code review box (its own Did not start, with proof) is on screen, so there is one button by that name */
+        (tab === 'medicaid' && med.needsSupervisor && isSup() ? '' : '<div style="margin-top:6px">' + btn('Did not start', "StartHub.dnsOpen('" + q(c.id) + "')", true) + '</div>') + '</div></div>' +
+      dnsHtml(c) + bar + next + also +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body + '</div>';
     if (tab === 'medicaid') { preview(c.id); if (!med.verified) noMedicaidAfter('consumer', c); }
     if (window.cdsCommHistory) window.cdsCommHistory(host);
     return true;
+  }
+  // ---------------------------------------------------------------- Did not start (her ask 2026-11-05)
+  // On every Starting profile: the state said no, or they fell off. The same reasons as the Leads Close window; the
+  // profile goes Inactive (Did not start) and their lead goes back to Leads, closed with that reason, so they land on the
+  // matching Leads tab (No Medicaid, Needs an Attendant, State Said No, Inactive Leads, Closed for Good). Their Contacts go
+  // back to the lead. Nothing is sent to anyone. Reopen on Leads makes them a lead again.
+  const DNS = [
+    ['closed_no_medicaid', 'No Medicaid', 'Never had it or lost it.', 'No Medicaid'],
+    ['closed_state_no', 'The state said no', 'Then pick why.', 'State Said No'],
+    ['closed_no_attendant', 'No attendant', 'Nobody to be their attendant yet.', 'Needs an Attendant'],
+    ['closed_more_care', 'Needs more care than CDS', 'Skilled or round-the-clock care.', 'Inactive Leads'],
+    ['closed_ni', 'Changed their mind', 'They do not want CDS right now.', 'Inactive Leads'],
+    ['closed_other', 'Went with another agency', 'Chose someone else.', 'Inactive Leads'],
+    ['closed_facility', 'Moved to a facility', 'Nursing home, assisted living or a long hospital stay.', 'Inactive Leads'],
+    ['closed_inactive', 'Stopped answering', 'We talked, then they stopped answering.', 'Inactive Leads'],
+    ['closed_passed', 'Passed away', 'Closed quietly so nobody calls the family.', 'Closed for Good'],
+  ];
+  const DNS_STATE_NO = { reach: 'The state could not reach them', level: 'They did not meet the level of care', other: 'Another reason (say it in the note)' };
+  let _dns = null;   // { id, why, stateNo, applying, check, note, err }
+  const plusDays = n => { const t = new Date(); t.setDate(t.getDate() + n); return t.toLocaleDateString('en-CA'); };
+  function dnsOpen(cid) { _dns = _dns && _dns.id === cid ? null : { id: cid, why: '', stateNo: '', applying: '', check: plusDays(30), note: '' }; rerender(); }
+  function dnsSet(k, v) { if (!_dns) return; _dns[k] = v; _dns.err = ''; if (k !== 'note' && k !== 'check') rerender(); }
+  function dnsHtml(c) {
+    if (!_dns || _dns.id !== c.id) return '';
+    const d = _dns, pick = DNS.find(r => r[0] === d.why);
+    const choice = r => '<button type="button" class="ld-choice' + (d.why === r[0] ? ' on' : '') + '" aria-pressed="' + (d.why === r[0]) + '" onclick="StartHub.dnsSet(\'why\',\'' + r[0] + '\')"' + (d.why === r[0] ? ' style="outline:2px solid var(--primary)"' : '') + '><b>' + esc(r[1]) + '</b><span>' + esc(r[2]) + ' Goes to ' + esc(r[3]) + '.</span></button>';
+    const radio = (k, v, label) => '<label style="display:inline-flex;gap:6px;align-items:center;margin-right:14px"><input type="radio" name="stDns_' + k + '"' + (d[k] === v ? ' checked' : '') + ' onchange="StartHub.dnsSet(\'' + k + '\',\'' + v + '\')">' + esc(label) + '</label>';
+    const more = d.why === 'closed_no_medicaid' ? '<div class="cl-sub"><b>Are they applying for Medicaid?</b><div style="margin:6px 0">' + radio('applying', 'yes', 'Yes, they are applying') + radio('applying', 'no', 'Not right now') + '</div>' +
+        '<label style="font-size:13px">Check back on <input type="date" id="stDnsCheck" value="' + esc(d.check) + '" onchange="StartHub.dnsSet(\'check\',this.value)"></label></div>'
+      : d.why === 'closed_state_no' ? '<div class="cl-sub"><b>Why did the state say no?</b><div style="margin-top:6px">' + Object.keys(DNS_STATE_NO).map(k => radio('stateNo', k, DNS_STATE_NO[k])).join('') + '</div></div>' : '';
+    return '<div class="st-dns" style="margin:14px 0;padding:16px;border:1.5px solid var(--gray-300);border-radius:14px;background:var(--cute-cream, #fbf8f1)">' +
+      '<div style="font-weight:700;color:#0D365F;font-size:16px">' + esc(c.name || 'They') + ' did not start. Why?</div>' +
+      '<div class="field-note" style="margin:2px 0 10px">Their profile goes to Inactive and their lead goes back to Leads, on the tab for that reason. You can reopen them on Leads any time. Nothing is sent to them.</div>' +
+      '<div class="cl-grid">' + DNS.map(choice).join('') + '</div>' + more +
+      '<label class="field-note" for="stDnsNote" style="display:block;margin-top:10px">Note (optional)</label><textarea id="stDnsNote" rows="2" style="width:100%;font:inherit;font-size:13px;padding:8px;border:1.5px solid var(--gray-300);border-radius:10px" oninput="StartHub.dnsSet(\'note\',this.value)">' + esc(d.note) + '</textarea>' +
+      (d.err ? '<div style="color:var(--danger);font-size:13px;margin-top:6px">' + esc(d.err) + '</div>' : '') +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' + btn(pick ? 'Move back to Leads: ' + pick[3] : 'Pick a reason first', "StartHub.dnsSave('" + q(c.id) + "')") + btn('Cancel', "StartHub.dnsOpen('" + q(c.id) + "')", true) + '</div></div>';
+  }
+  function dnsSave(cid) {
+    const d = _dns;
+    if (!d || d.id !== cid) return;
+    const r = DNS.find(x => x[0] === d.why);
+    if (!r) { d.err = 'Pick why they did not start.'; return rerender(); }
+    if (d.why === 'closed_state_no' && !d.stateNo) { d.err = 'Pick why the state said no.'; return rerender(); }
+    if (d.why === 'closed_no_medicaid' && !d.applying) { d.err = 'Say if they are applying for Medicaid.'; return rerender(); }
+    const why = r[1] + (d.why === 'closed_state_no' ? ' (' + DNS_STATE_NO[d.stateNo].replace(' (say it in the note)', '').toLowerCase() + ')' : '')
+      + (d.why === 'closed_no_medicaid' ? ' (' + (d.applying === 'yes' ? 'applying for Medicaid' : 'not applying right now') + (d.check ? '; check back ' + d.check : '') + ')' : '');
+    const note = String(d.note || '').trim().replace(/[.\s]+$/, '');   // the saved line adds its own period
+    let back = [];
+    const c = edit('consumer', cid, c => {
+      c.status = 'inactive'; c.inactiveAt = today(); c.inactiveReason = 'Did not start: ' + r[1];
+      c.starting = Object.assign({}, c.starting, { closedAt: nowIso(), closedBy: meName(), closedWhy: r[1], closedStatus: d.why });
+      if (c.medicaid && c.medicaid.followup) c.medicaid.followup.done = true;
+      back = Array.isArray(c.relatedPeople) ? c.relatedPeople : [];
+      logTo(c, 'Did not start (' + why + ') by ' + meName() + (note ? ': ' + note : '') + '. Back to Leads.');
+    });
+    if (!c) return;
+    auditQuiet('consumer', c, 'did_not_start', { why: d.why, stateNo: d.stateNo || undefined });
+    const lid = c.starting && c.starting.leadId;
+    if (lid) {
+      const pipeline = getData('pipeline'), p = pipeline.find(x => String(x.id) === String(lid));
+      if (p) {
+        p.status = d.why; p.closedAt = nowIso(); p.followup = '';
+        if (d.why === 'closed_state_no') p.stateNoWhy = d.stateNo;
+        if (d.why === 'closed_no_medicaid') { p.medicaidApplying = d.applying === 'yes'; p.medicaidCheck = d.check || ''; }
+        if (back.length && !(p.relatedPeople || []).length) p.relatedPeople = back;   // their Contacts come back with them
+        pipeline.forEach(x => { if (x.linkedTo && x.linkedTo.kind === 'consumer' && String(x.linkedTo.id) === String(cid)) x.linkedTo = Object.assign({}, x.linkedTo, { kind: 'lead', id: p.id }); });
+        (p.notes = p.notes || []).push({ date: today(), text: 'Did not start: ' + why + (note ? '. ' + note : '') + '. Back from Starting.' });
+        setData('pipeline', pipeline);
+      }
+    }
+    _dns = null;
+    const tabKey = { 'No Medicaid': 'med', 'State Said No': 'stateno', 'Needs an Attendant': 'att', 'Inactive Leads': 'inactive', 'Closed for Good': 'gone' }[r[3]];
+    if (lid && typeof showPage === 'function') { showPage('pipeline'); if (window.LDT && LDT.tab) LDT.tab(tabKey); }
+    else rerender();
   }
   function openLead(cid) { const c = getData('consumers').find(x => x.id === cid); const lid = c && c.starting && c.starting.leadId; if (lid) openLeadProfile(lid); }
 
@@ -861,5 +938,5 @@
   }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
 })();
