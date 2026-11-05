@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=34"></script>
-<script src="supabase/functions/_shared/office/starting-rules.js?v=3"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
+<script src="supabase/functions/_shared/office/starting-rules.js?v=4"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=6"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
@@ -6573,7 +6573,7 @@ function markBackupReviewed(cid) {
 }
 // (5)(H)4 and (5)(H)8: letters, emails and other papers kept in the consumer's file. Files go in the
 // same private bucket as the EIN proof (signed links only). kind: letter | careplan | other.
-const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['emomed', 'eMOMED eligibility page'], ['review', 'Supervisor review proof'], ['other', 'Other document']];
+const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['emomed', 'eMOMED eligibility page'], ['review', 'ME code review proof'], ['other', 'Other document']];
 function consumerDocsHtml(c) {
   const docs = (c.docs || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const open = d => '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' + esc(d.path).replace(/'/g, "\\'") + '\')">View</button>';
@@ -10359,7 +10359,7 @@ const HUB_SWITCHES = [
   { key: 'packetOnProfile', label: 'Enrollment packet on the consumer profile',
     does: 'On: Overview says where their Hub enrollment packet stands, and Tax and EIN shows the same packet card as their lead (each form signed, Sign as agent, Download the signed forms). Off: the packet shows on their lead only.' },
   { key: 'starting', label: 'Starting profile',
-    does: 'On: a lead who says yes becomes a Starting consumer right away, with seven enrollment steps, one Next step, a Medicaid tab (eMOMED check, the required PDF, what the ME code means, supervisor review), Medicaid application instructions by text or email (sent only when someone presses Send, and only while Medicaid application texts is on), follow-ups on Today, and the Ready for first shift checklist. They move to Active the day WellSky shows the first shift. Off: Move to Consumers as before.' },
+    does: 'On: a lead who says yes becomes a Starting consumer right away, with seven enrollment steps, one Next step, a Medicaid tab (eMOMED check, the required PDF, what the ME code means, the ME code review), Medicaid application instructions by text or email (sent only when someone presses Send, and only while Medicaid application texts is on), follow-ups on Today, and the Ready for first shift checklist. They move to Active the day WellSky shows the first shift. Off: Move to Consumers as before.' },
   { key: 'faxLive', label: 'One-click fax',
     does: 'On: the SS-4, 2643A and 2827 steps on Tax Setup get a Fax it now button (the SS-4 only when there is no EIN yet and, for a transfer, after the existing-EIN check) (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
@@ -17332,7 +17332,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=4"></script>
-<script src="starting/hub-call.js?v=4"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
+<script src="starting/hub-starting.js?v=5"></script>
+<script src="starting/hub-call.js?v=5"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>

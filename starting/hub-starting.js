@@ -1,7 +1,7 @@
 // CDS Hub · Starting profile (2026-11-04, her approved mockup version 5, built behind the hub
 // switch 'starting', off). A lead who says yes becomes a consumer with status 'starting' and opens
 // to one screen: seven enrollment steps, one Next step, what can happen at the same time, a
-// Medicaid tab (eMOMED check, the required PDF, the ME code answer, supervisor review, history),
+// Medicaid tab (eMOMED check, the required PDF, the ME code answer, the ME code review, history),
 // the No Medicaid yet flow (instructions by text or email, sent only when a person presses Send,
 // a follow-up owned by the coordinator), the Ready for first shift checklist, and Did not start.
 // They move to Active by themselves the day WellSky shows their first shift.
@@ -18,12 +18,12 @@
   const me = () => String(_acWho() || '').trim().toLowerCase();
   const cap = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
   const meName = () => cap(me().split('@')[0]) || 'Office';
-  // Her decision 2026-11-04: Samantha and Zach resolve supervisor reviews; coordinators can only ask for one.
-  // The ME code rules and messages in Admin stay Samantha's (isOwner). The server checks the same list.
-  const SUPERVISORS = ['samantha@mo-care.com', 'samantha@caringcds.com', 'zach@caringcds.com'];
-  const isSup = () => SUPERVISORS.includes(me());
+  // Her rule 2026-11-05: any care coordinator resolves an ME code review (note + supporting document + server audit
+  // record still required); 11-04 it was Samantha and Zach only. The ME code rules and messages in Admin stay
+  // Samantha's (isOwner).
+  const isSup = () => !!me();
   const isOwner = () => LD_WHO_OWNERS.includes(me());
-  // Every Starting decision goes into the server's audit record (cds_audit). Supervisor resolutions wait for it.
+  // Every Starting decision goes into the server's audit record (cds_audit). Review resolutions wait for it.
   function auditLog(kind, x, action, detail) {
     return cdsMatchApi('startingAudit', { person: { kind, id: String(x.id), name: x.name || '' }, action, detail: detail || {} });
   }
@@ -399,7 +399,7 @@
         (med.verified ? '' : '<div id="stNoMedWrap"' + (showNoMed(c, med) ? '' : ' hidden') + '>' + noMedicaidHtml('consumer', c) + '</div>') +
       '</div><div style="display:grid;gap:10px;align-content:start">' +
         '<div id="' + verdictId + '"></div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">' + btn('Save: verified by ' + esc(meName()) + ' today', "StartHub.saveCheck('" + q(c.id) + "')") + btn('Ask for supervisor review', "StartHub.flag('" + q(c.id) + "')", true) + '</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' + btn('Save: verified by ' + esc(meName()) + ' today', "StartHub.saveCheck('" + q(c.id) + "')") + btn('Flag for a second look', "StartHub.flag('" + q(c.id) + "')", true) + '</div>' +
         '<div id="stSaveMsg" class="field-note"></div>' +
         supervisorHtml(c, med) +
         '<div class="st-box"><b>History</b>' + historyHtml(c) + '</div>' +
@@ -422,7 +422,7 @@
     el.innerHTML = '<div class="st-verdict" style="background:' + tone[0] + ';border-color:' + tone[1] + '"><span class="badge" style="background:var(--white);color:' + tone[1] + '">' + esc(d.label) + '</span>' +
       '<div style="margin-top:8px;font-size:13.5px"><b>Why:</b> ' + esc(d.why) + '</div><div style="margin-top:6px;font-size:13.5px"><b>Next action:</b> ' + esc(d.next) + '</div>' +
       (d.k === 'ok' ? '<div style="margin-top:8px;font-weight:600;color:var(--primary);font-size:13px">Medicaid looks right for CDS. This is not DSDS approval: the state still has to assess them and authorize CDS.</div>' : '') +
-      (d.k === 'no' ? '<div style="margin-top:8px;font-weight:600;color:var(--primary);font-size:13px">They stay in Starting. Nothing closes without a supervisor.</div>' : '') +
+      (d.k === 'no' ? '<div style="margin-top:8px;font-weight:600;color:var(--primary);font-size:13px">They stay in Starting. Nothing closes without a review with a note and a document.</div>' : '') +
       '<div style="margin-top:10px;padding:10px 12px;background:var(--white);border-radius:10px;font-size:13px"><b>What we say to families</b><div style="margin-top:4px">' + esc(d.fam) + '</div><div class="field-note" style="margin-top:4px">A starting point. Say it in your own words.</div></div></div>';
   }
   async function saveCheck(cid) {
@@ -449,10 +449,10 @@
     rerender();
   }
   function flag(cid) {
-    const note = prompt('What should the supervisor look at?');
+    const note = prompt('What should get a second look?');
     if (note === null) return;
     edit('consumer', cid, c => { c.medicaid = c.medicaid || {}; (c.medicaid.flags = c.medicaid.flags || []).push({ at: nowIso(), by: meName(), note: String(note).slice(0, 300), open: true });
-      logTo(c, 'Supervisor review asked' + (note ? ': ' + note : '') + '.'); });
+      logTo(c, 'Second look asked' + (note ? ': ' + note : '') + '.'); });
     auditQuiet('consumer', getData('consumers').find(x => x.id === cid), 'review_requested', { note: String(note).slice(0, 300) });
     rerender();
   }
@@ -460,8 +460,8 @@
     if (!med.needsSupervisor) return '';
     const last = med.last, flags = ((c.medicaid || {}).flags || []).filter(f => f.open);
     const why = [last && last.result && last.result.sup && !med.review ? last.result.label + (last.codes && last.codes.length ? ' (code ' + last.codes.join(', ') + ')' : '') : '', ...flags.map(f => 'Review asked by ' + f.by + ': ' + (f.note || ''))].filter(Boolean).join('. ');
-    if (!isSup()) return '<div class="st-sup"><b>Waiting on supervisor review</b><div class="field-note" style="margin-top:4px">' + esc(why) + '. Samantha or Zach sees this on Today. Only they can resolve it.</div></div>';
-    return '<div class="st-sup"><b>Supervisor review</b><div style="font-size:13px;margin:4px 0 8px">' + esc(why) + '.</div>' +
+    if (!isSup()) return '<div class="st-sup"><b>Waiting on supervisor review</b><div class="field-note" style="margin-top:4px">' + esc(why) + '. Sign in to resolve it.</div></div>';
+    return '<div class="st-sup"><b>ME code review</b><div style="font-size:13px;margin:4px 0 8px">' + esc(why) + '.</div>' +
       '<label class="field-note" for="stSupNote">Note (required, goes in the history and the audit record)</label><input type="text" id="stSupNote" style="width:100%;font-size:13px">' +
       '<label class="field-note" for="stSupFile" style="display:block;margin-top:6px">Supporting document (required): the eMOMED page, a letter, or a screenshot of what you checked</label><input type="file" id="stSupFile" accept="application/pdf,image/*" style="font-size:12px">' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' + btn('Approve and continue', "StartHub.supAct('" + q(c.id) + "','approve')") + btn('Keep in Starting, follow up', "StartHub.supAct('" + q(c.id) + "','hold')", true) +
@@ -479,7 +479,7 @@
     const c0 = getData('consumers').find(x => x.id === cid);
     msg.textContent = 'Saving the document and the audit record…';
     let doc;
-    try { doc = await _saveConsumerDoc(c0, file, { kind: 'review', date: today(), note: 'Supervisor review: ' + note.slice(0, 80) }); }
+    try { doc = await _saveConsumerDoc(c0, file, { kind: 'review', date: today(), note: 'ME code review: ' + note.slice(0, 80) }); }
     catch (e) { msg.innerHTML = '<span style="color:var(--danger)">The document did not save: ' + esc(e.message || e) + '. Nothing was resolved.</span>'; return null; }
     const med = S.medicaidState(c0);
     try { await auditLog('consumer', c0, 'supervisor_' + action, Object.assign({ note, doc: doc.path, checkAt: med.last ? med.last.at : null, codes: med.last ? med.last.codes : [] }, extra || {})); }
@@ -589,7 +589,7 @@
       '<td colspan="3"><div class="st-mini">' + st.steps.map(s => '<i class="' + s.state + '"></i>').join('') + '</div><div style="font-size:12.5px;margin-top:3px">' + esc(st.next.t) + '</div></td>' +
       '<td>' + btn('Open', "openProfile('" + q(c.id) + "')", true) + '</td></tr>').join('');
   }
-  // Today: Medicaid application follow-ups (owner shown) and Starting people waiting on a supervisor.
+  // Today: Medicaid application follow-ups (owner shown) and Starting people waiting on an ME code review.
   function todayHtml() {
     if (!on()) return '';
     const f = S.applicationFollowups({ consumers: getData('consumers'), pipeline: getData('pipeline') }, today());
@@ -600,7 +600,7 @@
     return '<div class="card" style="padding:16px 18px;margin-bottom:12px"><b style="color:var(--primary)">Starting</b>' +
       sd.map(x => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(x.name) + '</b>: ' + esc(x.why) + '. <span style="color:var(--danger)">' + (x.late ? 'Start date was ' : 'Start date ') + esc(day(x.due)) + '</span> · ' + esc(x.owner || 'no owner') +
         ' <a href="#" onclick="_profTab=\'ready\';openProfile(\'' + q(x.id) + '\');return false">Open</a></div>').join('') +
-      sup.map(c => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(c.name) + '</b>: Medicaid waiting on supervisor review. ' +
+      sup.map(c => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(c.name) + '</b>: Medicaid waiting on an ME code review. ' +
         '<a href="#" onclick="_profTab=\'medicaid\';openProfile(\'' + q(c.id) + '\');return false">Open</a></div>').join('') +
       f.map(x => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(x.name) + '</b>: ' + esc(x.why) + '. ' +
         '<span style="color:' + (x.late ? 'var(--danger)' : '#9C6410') + '">' + (x.late ? 'Was due ' : 'Due ') + esc(day(x.due)) + '</span> · ' + esc(x.owner || 'no owner') +

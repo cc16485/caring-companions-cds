@@ -94,7 +94,7 @@
   const R = (k, label, why, next, famKey, name, sup) => ({ k, label, why, next, fam: fam(famKey, name), sup: !!sup });
 
   // What eMOMED shows -> the answer. input: { status: active|nomed|pending|inactive, codes: [], managedCare: no|yes|unsure,
-  // lockIn: none|sd_met|sd_not|tw_paid|tw_not, name }. Never a final no: k 'no' always waits for a supervisor.
+  // lockIn: none|sd_met|sd_not|tw_paid|tw_not, name }. Never a final no: k 'no' always waits for a review (any care coordinator since 11-05).
   function decide(input, rules) {
     const i = input || {}, name = i.name || '';
     const by = Object.fromEntries(((rules || DEFAULT_RULES).codes || []).map(r => [r.code, r]));
@@ -104,26 +104,26 @@
     if (i.status !== 'active') return R('pend', 'Medicaid inactive', 'eMOMED shows no active Medicaid. New eligibility can take up to 48 hours to show.', 'Set a follow-up to check eMOMED again. They stay in Starting.', 'pend', name);
     if (!codes.length) return R('rev', 'Needs review', 'No ME code typed yet.', 'Type the code exactly as eMOMED shows it.', 'review', name);
     const unknown = codes.filter(c => !by[c]);
-    if (unknown.length) return R('rev', 'Needs review', 'Code ' + unknown.join(', ') + ' is not on the DHSS chart.', 'Supervisor review. The Hub never guesses a code.', 'review', name, 1);
+    if (unknown.length) return R('rev', 'Needs review', 'Code ' + unknown.join(', ') + ' is not on the DHSS chart.', 'A care coordinator reviews it. The Hub never guesses a code.', 'review', name, 1);
     const rv = codes.find(c => by[c].kind === 'review');   // a code set to "always review" in Admin
-    if (rv) return R('rev', 'Needs review', 'Code ' + rv + ': ' + by[rv].why, 'Supervisor review.', 'review', name, 1);
+    if (rv) return R('rev', 'Needs review', 'Code ' + rv + ': ' + by[rv].why, 'A care coordinator reviews it.', 'review', name, 1);
     if (codes.includes('E2')) {
-      if (codes.length > 1) return R('rev', 'Needs review', 'E2 together with another code. Policy: DSDS refers people with E2 and dual codes to ' + FSD + ' to sort out the right code.', 'Supervisor review, and ask the family to call ' + FSD + '.', 'e2dual', name, 1);
+      if (codes.length > 1) return R('rev', 'Needs review', 'E2 together with another code. Policy: DSDS refers people with E2 and dual codes to ' + FSD + ' to sort out the right code.', 'A care coordinator reviews it, and asks the family to call ' + FSD + '.', 'e2dual', name, 1);
       return R('ok', 'Eligible ME code', by.E2.why, 'Send the DSDS referral, then add the date.', 'ok', name);
     }
     const kid = codes.find(c => by[c].kind === 'child');
-    if (kid) return R('no', 'Not eligible for CDS: CDS is for adults', 'Code ' + kid + ': ' + by[kid].why, 'Supervisor review before closing. Talk with the family about other options.', 'child', name, 1);
-    if (i.managedCare === 'yes') return R('no', 'Not eligible for CDS under current coverage', 'eMOMED shows Managed Care in Lock Ins, and none of the codes is E2. Policy: DSDS does not act for someone in a managed care health plan and refers them to the plan.', 'Supervisor review. Then call the family with the words below. They stay in Starting.', 'mc', name, 1);
-    if (i.managedCare === 'unsure') return R('rev', 'Needs review', 'Managed care could not be confirmed from eMOMED.', 'Look at the Lock Ins line in eMOMED again. If it is still unclear, a supervisor reviews it.', 'review', name, 1);
+    if (kid) return R('no', 'Not eligible for CDS: CDS is for adults', 'Code ' + kid + ': ' + by[kid].why, 'A care coordinator reviews it before closing. Talk with the family about other options.', 'child', name, 1);
+    if (i.managedCare === 'yes') return R('no', 'Not eligible for CDS under current coverage', 'eMOMED shows Managed Care in Lock Ins, and none of the codes is E2. Policy: DSDS does not act for someone in a managed care health plan and refers them to the plan.', 'A care coordinator reviews it. Then call the family with the words below. They stay in Starting.', 'mc', name, 1);
+    if (i.managedCare === 'unsure') return R('rev', 'Needs review', 'Managed care could not be confirmed from eMOMED.', 'Look at the Lock Ins line in eMOMED again. If it is still unclear, a care coordinator reviews it.', 'review', name, 1);
     const mcCode = codes.find(c => by[c].kind === 'mc');
-    if (mcCode) return R('rev', 'Needs review', 'Code ' + mcCode + ' usually comes with a managed care health plan, but eMOMED does not show managed care today.', 'Supervisor confirms they are not in a health plan today, then continue to the DSDS referral.', 'review', name, 1);
+    if (mcCode) return R('rev', 'Needs review', 'Code ' + mcCode + ' usually comes with a managed care health plan, but eMOMED does not show managed care today.', 'A care coordinator confirms they are not in a health plan today, then continue to the DSDS referral.', 'review', name, 1);
     const good = codes.find(c => by[c].kind === 'ok');
     if (!good) {
       const r = codes.find(c => by[c].kind === 'rcf');
-      if (r) return R('no', 'Not eligible for standard in-home CDS under this ME category', 'Code ' + r + ': ' + by[r].why, 'Supervisor review before the enrollment can close. The family asks ' + FSD + ' whether another category fits.', 'rcf', name, 1);
-      return R('no', 'Not eligible for CDS under this ME category', 'Code ' + codes[0] + ': ' + by[codes[0]].why, 'Supervisor review before closing. The family asks ' + FSD + ' about full Medicaid.', 'notsp', name, 1);
+      if (r) return R('no', 'Not eligible for standard in-home CDS under this ME category', 'Code ' + r + ': ' + by[r].why, 'A care coordinator reviews it before the enrollment can close. The family asks ' + FSD + ' whether another category fits.', 'rcf', name, 1);
+      return R('no', 'Not eligible for CDS under this ME category', 'Code ' + codes[0] + ': ' + by[codes[0]].why, 'A care coordinator reviews it before closing. The family asks ' + FSD + ' about full Medicaid.', 'notsp', name, 1);
     }
-    if (i.lockIn === 'sd_not') return R('rev', 'Needs review', 'Spenddown is not met for today. Policy: a referral cannot be processed until it is.', 'Set a follow-up to check eMOMED again. Supervisor review if it stays unmet.', 'sd', name, 1);
+    if (i.lockIn === 'sd_not') return R('rev', 'Needs review', 'Spenddown is not met for today. Policy: a referral cannot be processed until it is.', 'Set a follow-up to check eMOMED again. A care coordinator reviews it if it stays unmet.', 'sd', name, 1);
     if (i.lockIn === 'tw_not' || (good === '85' && i.lockIn !== 'tw_paid')) return R('rev', 'Needs review', 'Ticket to Work premium is not shown as paid for today. Policy: it must be paid before a referral.', 'Set a follow-up to check again once it is paid.', 'tw', name, 1);
     return R('ok', 'Eligible ME code', 'Code ' + good + ': ' + by[good].why + (i.lockIn === 'sd_met' ? ' Spenddown is met for today; Medicaid pays only in months it is met.' : ''), 'Send the DSDS referral, then add the date.', 'ok', name);
   }
@@ -146,9 +146,9 @@
     const ruleChanged = !!(last && rulesVersion && last.rulesVersion && last.rulesVersion !== rulesVersion);
     let label, tone;
     if (reported) { label = 'Family reports Medicaid approved. Verification needed'; tone = 'warn'; }
-    else if (verified) { label = 'Verified Active' + (approved && last.result.k !== 'ok' ? ', approved by a supervisor' : ''); tone = 'ok'; }
+    else if (verified) { label = 'Verified Active' + (approved && last.result.k !== 'ok' ? ', approved on review' : ''); tone = 'ok'; }
     else if (!last) { label = m.application && m.application.stage ? 'No Medicaid yet' : 'Not yet verified'; tone = 'warn'; }
-    else if (last.result && last.result.sup && !review) { label = last.result.label + '. Waiting on a supervisor'; tone = 'warn'; }
+    else if (last.result && last.result.sup && !review) { label = last.result.label + '. Waiting on an ME code review'; tone = 'warn'; }
     else { label = (last.result && last.result.label) || 'Not yet verified'; tone = 'warn'; }
     return { last, review, verified, reported: !!reported, openFlag, ruleChanged, label, tone,
              application: m.application || null, followup: m.followup || null,
@@ -185,7 +185,7 @@
     let next;
     if (first === 'medicaid') {
       if (med.reported) next = { t: 'Verify the new Medicaid in eMOMED', d: 'The family says Medicaid is approved. Look it up, upload the eligibility page, type the ME code and Lock Ins, and save.', act: 'medicaid' };
-      else if (med.needsSupervisor) next = { t: 'Waiting on supervisor review of Medicaid', d: med.label + '.', act: 'medicaid' };
+      else if (med.needsSupervisor) next = { t: 'Waiting on an ME code review', d: med.label + '.', act: 'medicaid' };
       else if (med.application && !med.last) next = { t: 'Medicaid application follow-up' + (med.followup && med.followup.date ? ', ' + med.followup.date : ''), d: 'Check how the application is going. When the family says it is approved, verify it in eMOMED.', act: 'medicaid' };
       else next = { t: 'Medicaid verification', d: 'Look them up in eMOMED, upload the eligibility page, and type the ME code and Lock Ins. The Hub says what the code means.', act: 'medicaid' };
     } else if (first === 'state' && ctx.auth && !(c && c.cdsStartDate)) {
@@ -222,7 +222,7 @@
     const last = med.last, packet = ctx.packet || {}, att = ctx.attendant || {};
     return [
       { k: 'active',   t: 'Active Medicaid verified in eMOMED', ok: !!(last && last.status === 'active') && !med.reported },
-      { k: 'code',     t: 'ME code reviewed: eligible, or approved by a supervisor', ok: med.verified },
+      { k: 'code',     t: 'ME code reviewed: eligible, or approved on review', ok: med.verified },
       { k: 'pdf',      t: 'eMOMED eligibility PDF uploaded', ok: !!(last && last.pdf) },
       { k: 'flags',    t: 'No open eligibility flags or questions', ok: !med.openFlag && !med.needsSupervisor },
       { k: 'auth',     t: 'DSDS authorization confirmed and uploaded', ok: !!ctx.auth },
@@ -332,17 +332,28 @@
   //       condition, handsOn: hands|reminders|unsure, selfDirect: yes|concern|unsure, guardian: no|yes|unsure,
   //       living: home|family|hospital|facility|unsure, other: none|agency|dmh|unsure,
   //       attRel (how the attendant is related), attCds: no|yes|unsure, consPhone, consEmail }
-  // A transfer (cds 'move') is already approved by the state: only names, birth date, contacts and the attendant.
+  //       area: our service-area counties (the hub's CDS_COUNTIES, same 27 as caringcds.com/service-area, checked 11-05),
+  //       county 'Other' + countyOther = somewhere else.
+  // A transfer (cds 'move') is already approved by the state: only names, birth date, county, contacts and the attendant.
   // Unknown answers are fine; they become "still missing". Returns the Finish call plan.
   // Close to the state assessment's areas (policy 4.10): bathing, dressing and grooming, eating, toileting, mobility, meal prep, medications.
   const HELP = { bathing: 'bathing', dressing: 'dressing and grooming', eating: 'eating', toileting: 'toileting', mobility: 'getting around and transfers', meals: 'meals', meds: 'medications', housekeeping: 'housekeeping', errands: 'errands and rides' };
-  // Answers that need a second look before a referral (her 11-05 decision: Samantha or Zach decides; nothing is told to the family here).
-  // k: 'review' = Samantha or Zach looks first; 'att' = the attendant in mind cannot be the paid attendant.
+  // Answers that need a second look before a referral; nothing is told to the family on the call. Her 11-05 rule: the care
+  // coordinator looks into these (every coordinator is trained for it), not Samantha or Zach.
+  // k: 'review' = look into it before the referral; 'att' = the attendant in mind cannot be the paid attendant.
+  const countyName = C => C.county === 'Other' ? String(C.countyOther || '').trim() : String(C.county || '').trim();
+  function outsideArea(C) {
+    if (!C.county) return false;
+    if (C.county === 'Other') return true;
+    return Array.isArray(C.area) && C.area.length > 0 && !C.area.includes(C.county);
+  }
   function callFlags(C) {
     C = C || {};
     const f = [];
     if (C.who === 'solo') return f;
     const age = ageOn(C.dob);
+    // Our service area (her 11-05 ask) counts for transfers too.
+    if (outsideArea(C)) f.push({ k: 'review', t: 'Lives outside our 27-county service area' + (countyName(C) ? ' (' + countyName(C) + ')' : '') + '.' });
     if (C.cds !== 'move') {
       if (age !== null && age < 18) f.push({ k: 'review', t: 'Under 18. CDS is for adults 18 and older (policy 3.25).' });
       if (C.living === 'facility') f.push({ k: 'review', t: 'Lives in a nursing home, RCF or assisted living. People living there are not eligible for CDS (policy 3.25).' });
@@ -372,7 +383,8 @@
       parts.push(C.who === 'self' ? (cn || 'The consumer') + ' called for themself.'
         : (caller || 'Someone') + (C.caller && C.caller.relation ? ' (' + C.caller.relation + ')' : '') + (C.who === 'pair' ? ', who would be the attendant,' : '') + ' called about ' + (cn || 'someone') + '.');
       const age = ageOn(C.dob);
-      if (age !== null || C.county) parts.push([age !== null ? 'Age ' + age : '', C.county ? 'lives in ' + C.county + ' County' : ''].filter(Boolean).join(', ').replace(/^l/, 'L') + '.');
+      const cty = countyName(C);
+      if (age !== null || C.county) parts.push([age !== null ? 'Age ' + age : '', cty ? 'lives in ' + cty.replace(/ County$/i, '') + ' County' : C.county === 'Other' ? 'lives outside our counties' : ''].filter(Boolean).join(', ').replace(/^l/, 'L') + '.');
       parts.push({ yes: 'Has Medicaid' + (C.dcn ? ', DCN given.' : '.'), no: 'No Medicaid yet' + (STAGES[C.appStage] ? ', ' + STAGES[C.appStage] + '.' : '.'), applied: 'Applied for Medicaid, waiting.', unsure: 'Not sure about Medicaid.' }[C.medicaid] || (C.cds === 'move' ? '' : 'Medicaid not asked.'));
       parts.push({ new: 'New to CDS.', move: 'Has CDS now' + (C.agency ? ' with ' + C.agency : '') + ' and wants to switch.', unsure: 'Not sure if they have CDS.' }[C.cds] || '');
       if (C.condition) parts.push('Why they need help: ' + String(C.condition).trim().replace(/\.$/, '') + '.');
@@ -395,6 +407,7 @@
       if (!cn) missing.push("the consumer's name");
       if (C.who !== 'self' && !caller) missing.push("the caller's name");
       if (!C.dob) missing.push('their date of birth');
+      if (!C.county) missing.push('their county');
       if (!String((C.who === 'self' ? C.phone : C.consPhone) || '').replace(/\D/g, '')) missing.push("the consumer's phone");
       if (C.who !== 'self' && !String(C.phone || '').replace(/\D/g, '')) missing.push("the caller's phone");
       if (!C.agency) missing.push('the agency they are leaving');
@@ -428,11 +441,11 @@
     else if (!cn || !String(C.phone || '').replace(/\D/g, '')) { next = { k: 'callback', t: 'Call back for ' + (!cn ? "the consumer's name" : 'a phone number') }; days = 1; say = ''; }
     else if (!C.medicaid || C.medicaid === 'unsure' || C.medicaid === 'yes') { next = { k: 'emomed', t: 'Look ' + first + ' up in eMOMED' }; days = 2; say = "Thank you for calling" + about + ". We'll check a few things on our end and call you back."; }
     else { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling" + about + ". Take your time; we'll check back in with you."; }
-    if (C.who !== 'solo' && flags.some(x => x.k === 'review') && next.k !== 'pool') { next = { k: 'review', t: 'Samantha or Zach looks at this before anything is sent to the state' }; days = 1; say = "Thank you for calling" + about + ". We'll look at a few things on our end and call you back."; }
+    if (C.who !== 'solo' && flags.some(x => x.k === 'review') && next.k !== 'pool') { next = { k: 'review', t: 'Look into the items below before anything is sent to the state' }; days = 1; say = "Thank you for calling" + about + ". We'll look at a few things on our end and call you back."; }
     if (C.ready === 'not_yet' && next.k !== 'medicaid' && next.k !== 'pool' && next.k !== 'review') { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling" + about + ". Take your time; we'll check back in with you."; }
     return { summary, missing, next, followDays: days, say, consumerName: cn, callerName: caller, flags };
   }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, HELP, startDateAlerts, ageOn };
+                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, HELP, startDateAlerts, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
