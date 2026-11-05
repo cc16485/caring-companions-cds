@@ -308,7 +308,7 @@
     try {
       const r = await cdsMatchApi('callFollowupSend', { person: { kind: 'lead', id: String(p.id), name: p.name }, channel: finish.ch, to, subject: finish.ch === 'email' ? 'Thank you for calling Caring Companions' : '', body: finish.body, ids: { dcn: p.dcn } });
       const m = r.message;
-      finish.sent = { sent: 'Sent.', held: 'Saved, waiting: the Starting texts to families switch is off.', practice: 'Practice only, not sent.', failed: 'FAILED: ' + (m.error || '') + ' It is on Today under Needs attention.' }[m.status] || m.status;
+      finish.sent = { sent: 'Sent. Delivery not confirmed yet.', held: 'Saved, waiting: the Starting texts to families switch is off.', practice: 'Practice only, not sent.', failed: 'FAILED: ' + (m.error || '') + ' It is on Today under Needs attention.' }[m.status] || m.status;
       edit(p.id, x => { x.notes = (x.notes || []).concat({ date: _todayIso(), text: (finish.ch === 'sms' ? 'Text' : 'Email') + ' after the call: ' + finish.sent.split(':')[0], by: meName() }); });
     } catch (e) { finish.sent = 'FAILED: ' + (e.message || e); }
     drawSide();

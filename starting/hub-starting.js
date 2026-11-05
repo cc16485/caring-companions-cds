@@ -18,7 +18,16 @@
   const me = () => String(_acWho() || '').trim().toLowerCase();
   const cap = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
   const meName = () => cap(me().split('@')[0]) || 'Office';
-  const isSup = () => LD_WHO_OWNERS.includes(me());
+  // Her decision 2026-11-04: Samantha and Zach resolve supervisor reviews; coordinators can only ask for one.
+  // The ME code rules and messages in Admin stay Samantha's (isOwner). The server checks the same list.
+  const SUPERVISORS = ['samantha@mo-care.com', 'samantha@caringcds.com', 'zach@caringcds.com'];
+  const isSup = () => SUPERVISORS.includes(me());
+  const isOwner = () => LD_WHO_OWNERS.includes(me());
+  // Every Starting decision goes into the server's audit record (cds_audit). Supervisor resolutions wait for it.
+  function auditLog(kind, x, action, detail) {
+    return cdsMatchApi('startingAudit', { person: { kind, id: String(x.id), name: x.name || '' }, action, detail: detail || {} });
+  }
+  const auditQuiet = (kind, x, action, detail) => { try { auditLog(kind, x, action, detail).catch(e => console.warn('Starting audit:', e && e.message)); } catch (e) {} };
   const nowIso = () => new Date().toISOString();
   const today = () => _todayIso();
   const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return d.toLocaleDateString('en-CA'); };
@@ -125,6 +134,7 @@
       relatedPeople: CDSRules.relatedPeople(p)
     };
     logTo(c, 'Started from their lead (' + (kind === 'move' ? 'moving from another agency' : 'new to CDS') + ').');
+    auditQuiet('consumer', c, 'starting_started', { lead: p.id, kind });
     consumers.push(c);
     // Contacts move over, like Move to Consumers does; leads linked to this lead now point at the consumer.
     p.relatedPeople = [];
@@ -185,6 +195,7 @@
     edit(kind, id, r => { r.medicaid = r.medicaid || {}; r.medicaid.familyReport = { at: nowIso(), by: meName() };
       if (r.medicaid.followup) r.medicaid.followup.done = true;
       logTo(r, 'Family reports Medicaid approved. Verification needed.'); });
+    auditQuiet(kind, (kind === 'lead' ? getData('pipeline') : getData('consumers')).find(x => String(x.id) === String(id)) || { id }, 'family_reports_approved', {});
     if (kind === 'consumer') { _profTab = 'medicaid'; rerender(); }
     else { const n = document.getElementById('stFuNote_lead'); if (n) n.textContent = 'Saved: the family reports Medicaid approved. Verify it in eMOMED once they say yes and their profile opens.'; }
   }
@@ -267,16 +278,26 @@
       if (m.status !== 'failed') { const s = document.getElementById(sendsId); if (s) s.insertAdjacentHTML('afterbegin', '<div style="font-size:13px;color:var(--success);margin-bottom:6px">' + esc(label) + '.</div>'); }
     } catch (e) { drawCmp(kind, 'Not sent: ' + (e.message || e)); }
   }
+  // Her decision 2026-11-04: Sent, Delivered, Failed or Unknown; Delivered only when GoHighLevel confirms it.
+  function deliveryLabel(m) {
+    const d = String(m.delivery || '').toLowerCase();
+    if (m.status === 'failed' || ['failed', 'undelivered', 'bounced', 'rejected'].includes(d)) return 'Failed';
+    if (['delivered', 'read', 'opened'].includes(d)) return 'Delivered';
+    if (m.status === 'held') return 'Waiting (switch off)';
+    if (m.status === 'practice') return 'Practice, not sent';
+    if (m.status === 'sent') return 'Sent, delivery unknown';
+    return 'Unknown';
+  }
   async function loadSends(kind, x, hostId) {
     const host = document.getElementById(hostId || 'stSends_' + kind);
     if (!host || !x) return;
     try {
       const r = await cdsMatchApi('medicaidSends', { person: { kind, id: String(x.id), name: x.name } });
-      const L = { sent: 'Sent', held: 'Waiting (switch off)', practice: 'Practice', failed: 'FAILED' };
-      host.innerHTML = (r.messages || []).length ? '<div style="font-size:13px;font-weight:600;margin-bottom:4px">Instructions sent</div>' + r.messages.map(m =>
-        '<div style="font-size:12.5px;padding:2px 0">' + esc(day(m.at)) + ' · ' + (m.channel === 'sms' ? 'Text' : 'Email') + ' to ' + esc(m.to || '') + ' · <b style="color:' +
-        (m.status === 'failed' || ['failed', 'undelivered', 'bounced'].includes(m.delivery) ? 'var(--danger)' : 'inherit') + '">' + esc(m.delivery ? cap(m.delivery) : L[m.status] || m.status) + '</b>' +
-        (m.by ? ' · by ' + esc(cap(String(m.by).split('@')[0])) : '') + (m.error ? '<div class="field-note">' + esc(m.error) + '</div>' : '') + '</div>').join('') : '';
+      host.innerHTML = (r.messages || []).length ? '<div style="font-size:13px;font-weight:600;margin-bottom:4px">Instructions sent</div>' + r.messages.map(m => {
+        const st = deliveryLabel(m);
+        return '<div style="font-size:12.5px;padding:2px 0">' + esc(day(m.at)) + ' · ' + (m.channel === 'sms' ? 'Text' : 'Email') + ' to ' + esc(m.to || '') + ' · <b style="color:' + (st === 'Failed' ? 'var(--danger)' : 'inherit') + '">' + esc(st) + '</b>' +
+          (m.by ? ' · by ' + esc(cap(String(m.by).split('@')[0])) : '') + (m.error ? '<div class="field-note">' + esc(m.error) + '</div>' : '') + '</div>';
+      }).join('') : '';
     } catch (e) { host.innerHTML = '<div class="field-note" style="color:var(--danger)">Could not read the sent messages: ' + esc(e.message || e) + '</div>'; }
   }
 
@@ -376,7 +397,7 @@
         (med.verified ? '' : '<div id="stNoMedWrap"' + (showNoMed(c, med) ? '' : ' hidden') + '>' + noMedicaidHtml('consumer', c) + '</div>') +
       '</div><div style="display:grid;gap:10px;align-content:start">' +
         '<div id="' + verdictId + '"></div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">' + btn('Save: verified by ' + esc(meName()) + ' today', "StartHub.saveCheck('" + q(c.id) + "')") + btn('Flag for supervisor review', "StartHub.flag('" + q(c.id) + "')", true) + '</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">' + btn('Save: verified by ' + esc(meName()) + ' today', "StartHub.saveCheck('" + q(c.id) + "')") + btn('Ask for supervisor review', "StartHub.flag('" + q(c.id) + "')", true) + '</div>' +
         '<div id="stSaveMsg" class="field-note"></div>' +
         supervisorHtml(c, med) +
         '<div class="st-box"><b>History</b>' + historyHtml(c) + '</div>' +
@@ -422,54 +443,81 @@
       if (input.status === 'active' && c.medicaid.followup) c.medicaid.followup.done = d.k === 'ok';
       logTo(c, 'eMOMED check: ' + d.label + (input.codes.length ? ', code ' + input.codes.join(', ') : '') + '. Checked by ' + meName() + '.');
     });
+    auditQuiet('consumer', c0, 'emomed_check', { status: input.status, codes: input.codes, managedCare: input.managedCare, lockIn: input.lockIn, result: d.label, pdf: doc.path, rules: rules().version });
     rerender();
   }
   function flag(cid) {
     const note = prompt('What should the supervisor look at?');
     if (note === null) return;
     edit('consumer', cid, c => { c.medicaid = c.medicaid || {}; (c.medicaid.flags = c.medicaid.flags || []).push({ at: nowIso(), by: meName(), note: String(note).slice(0, 300), open: true });
-      logTo(c, 'Flagged for supervisor review' + (note ? ': ' + note : '') + '.'); });
+      logTo(c, 'Supervisor review asked' + (note ? ': ' + note : '') + '.'); });
+    auditQuiet('consumer', getData('consumers').find(x => x.id === cid), 'review_requested', { note: String(note).slice(0, 300) });
     rerender();
   }
   function supervisorHtml(c, med) {
     if (!med.needsSupervisor) return '';
     const last = med.last, flags = ((c.medicaid || {}).flags || []).filter(f => f.open);
-    const why = [last && last.result && last.result.sup && !med.review ? last.result.label + (last.codes && last.codes.length ? ' (code ' + last.codes.join(', ') + ')' : '') : '', ...flags.map(f => 'Flag from ' + f.by + ': ' + (f.note || ''))].filter(Boolean).join('. ');
-    if (!isSup()) return '<div class="st-sup"><b>Waiting on supervisor review</b><div class="field-note" style="margin-top:4px">' + esc(why) + '. Samantha sees this on Today.</div></div>';
-    return '<div class="st-sup"><b>Supervisor approval</b><div style="font-size:13px;margin:4px 0 8px">' + esc(why) + '.</div>' +
-      '<label class="field-note" for="stSupNote">Note (required, goes in the history)</label><input type="text" id="stSupNote" style="width:100%;font-size:13px">' +
+    const why = [last && last.result && last.result.sup && !med.review ? last.result.label + (last.codes && last.codes.length ? ' (code ' + last.codes.join(', ') + ')' : '') : '', ...flags.map(f => 'Review asked by ' + f.by + ': ' + (f.note || ''))].filter(Boolean).join('. ');
+    if (!isSup()) return '<div class="st-sup"><b>Waiting on supervisor review</b><div class="field-note" style="margin-top:4px">' + esc(why) + '. Samantha or Zach sees this on Today. Only they can resolve it.</div></div>';
+    return '<div class="st-sup"><b>Supervisor review</b><div style="font-size:13px;margin:4px 0 8px">' + esc(why) + '.</div>' +
+      '<label class="field-note" for="stSupNote">Note (required, goes in the history and the audit record)</label><input type="text" id="stSupNote" style="width:100%;font-size:13px">' +
+      '<label class="field-note" for="stSupFile" style="display:block;margin-top:6px">Supporting document (required): the eMOMED page, a letter, or a screenshot of what you checked</label><input type="file" id="stSupFile" accept="application/pdf,image/*" style="font-size:12px">' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' + btn('Approve and continue', "StartHub.supAct('" + q(c.id) + "','approve')") + btn('Keep in Starting, follow up', "StartHub.supAct('" + q(c.id) + "','hold')", true) +
         btn('Did not start', "StartHub.supAct('" + q(c.id) + "','close')", true) + '</div>' +
       '<div id="stCloseAsk" hidden style="margin-top:8px;font-size:13px">Reason <select id="stCloseWhy">' + ['No Medicaid', 'The state said no', 'Needs more care than CDS', 'Not interested', 'Went with another agency', 'Other'].map(r => '<option>' + r + '</option>').join('') + '</select> ' +
         btn('Close the profile', "StartHub.closeStarting('" + q(c.id) + "')") + '</div><div id="stSupMsg" class="field-note"></div></div>';
   }
-  function supAct(cid, action) {
-    if (!isSup()) return;
+  // Note + document + audit record first; nothing is resolved unless all three are in (her decision 2026-11-04).
+  async function supProof(cid, action, extra) {
+    const msg = document.getElementById('stSupMsg');
     const note = ((document.getElementById('stSupNote') || {}).value || '').trim();
-    if (!note) { document.getElementById('stSupMsg').innerHTML = '<span style="color:var(--danger)">Add a note first. It goes in the history.</span>'; return; }
-    if (action === 'close') { document.getElementById('stCloseAsk').hidden = false; return; }
+    const f = document.getElementById('stSupFile'), file = f && f.files && f.files[0];
+    if (!note) { msg.innerHTML = '<span style="color:var(--danger)">Add a note first. It goes in the history.</span>'; return null; }
+    if (!file) { msg.innerHTML = '<span style="color:var(--danger)">Attach the supporting document first.</span>'; return null; }
+    const c0 = getData('consumers').find(x => x.id === cid);
+    msg.textContent = 'Saving the document and the audit record…';
+    let doc;
+    try { doc = await _saveConsumerDoc(c0, file, { kind: 'review', date: today(), note: 'Supervisor review: ' + note.slice(0, 80) }); }
+    catch (e) { msg.innerHTML = '<span style="color:var(--danger)">The document did not save: ' + esc(e.message || e) + '. Nothing was resolved.</span>'; return null; }
+    const med = S.medicaidState(c0);
+    try { await auditLog('consumer', c0, 'supervisor_' + action, Object.assign({ note, doc: doc.path, checkAt: med.last ? med.last.at : null, codes: med.last ? med.last.codes : [] }, extra || {})); }
+    catch (e) { msg.innerHTML = '<span style="color:var(--danger)">The audit record did not save: ' + esc(e.message || e) + '. Nothing was resolved.</span>'; return null; }
+    return { note, doc, med };
+  }
+  async function supAct(cid, action) {
+    if (!isSup()) return;
+    if (action === 'close') {
+      const n = ((document.getElementById('stSupNote') || {}).value || '').trim();
+      if (!n) { document.getElementById('stSupMsg').innerHTML = '<span style="color:var(--danger)">Add a note first. It goes in the history.</span>'; return; }
+      document.getElementById('stCloseAsk').hidden = false; return;
+    }
+    const p = await supProof(cid, action);
+    if (!p) return;
     edit('consumer', cid, c => {
-      const med = S.medicaidState(c);
-      (c.medicaid.reviews = c.medicaid.reviews || []).push({ at: nowIso(), by: meName(), action, note, checkAt: med.last ? med.last.at : null });
+      c.docs = (c.docs || []).concat([p.doc]);
+      (c.medicaid.reviews = c.medicaid.reviews || []).push({ at: nowIso(), by: meName(), action, note: p.note, doc: p.doc.path, checkAt: p.med.last ? p.med.last.at : null });
       (c.medicaid.flags || []).forEach(f => { if (f.open && action === 'approve') { f.open = false; f.closedBy = meName(); f.closedAt = nowIso(); } });
-      logTo(c, (action === 'approve' ? 'Approved and continued' : 'Kept in Starting') + ' by ' + meName() + ': ' + note);
+      logTo(c, (action === 'approve' ? 'Approved and continued' : 'Kept in Starting') + ' by ' + meName() + ': ' + p.note + ' (document attached)');
     });
     rerender();
   }
   const CLOSE_LEAD = { 'No Medicaid': 'closed_no_medicaid', 'The state said no': 'closed_state_no', 'Needs more care than CDS': 'closed_more_care', 'Not interested': 'closed_ni', 'Went with another agency': 'closed_other' };
-  function closeStarting(cid) {
+  async function closeStarting(cid) {
     if (!isSup()) return;
-    const note = ((document.getElementById('stSupNote') || {}).value || '').trim(), why = (document.getElementById('stCloseWhy') || {}).value || 'Other';
-    if (!note) return;
+    const why = (document.getElementById('stCloseWhy') || {}).value || 'Other';
+    const p = await supProof(cid, 'close', { why });
+    if (!p) return;
+    const note = p.note;
     const c = edit('consumer', cid, c => {
+      c.docs = (c.docs || []).concat([p.doc]);
       c.status = 'inactive'; c.inactiveAt = today(); c.inactiveReason = 'Did not start: ' + why;
       c.starting = Object.assign({}, c.starting, { closedAt: nowIso(), closedBy: meName(), closedWhy: why });
-      (c.medicaid = c.medicaid || {}).reviews = (c.medicaid.reviews || []).concat([{ at: nowIso(), by: meName(), action: 'close', note }]);
+      (c.medicaid = c.medicaid || {}).reviews = (c.medicaid.reviews || []).concat([{ at: nowIso(), by: meName(), action: 'close', note, doc: p.doc.path }]);
       if (c.medicaid.followup) c.medicaid.followup.done = true;
-      logTo(c, 'Did not start (' + why + ') by ' + meName() + ': ' + note);
+      logTo(c, 'Did not start (' + why + ') by ' + meName() + ': ' + note + ' (document attached)');
     });
     const lid = c && c.starting && c.starting.leadId;
-    if (lid) edit('lead', lid, p => { p.status = CLOSE_LEAD[why] || 'closed_other'; p.closedAt = today(); (p.notes = p.notes || []).push({ date: today(), text: 'Did not start: ' + why + '. ' + note }); });
+    if (lid) edit('lead', lid, p2 => { p2.status = CLOSE_LEAD[why] || 'closed_other'; p2.closedAt = today(); (p2.notes = p2.notes || []).push({ date: today(), text: 'Did not start: ' + why + '. ' + note }); });
     rerender();
   }
   function historyHtml(c) {
@@ -565,7 +613,7 @@
                        child: 'Not eligible: under 18', e2: 'E2 exception (CDS only)', review: 'Always needs review' };
   let _adm = { code: null, msg: '' };
   function adminHtml() {
-    const R = rules(), M = messages(), can = isSup(), log = (getObj('meRules').log || []).concat(M.log).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const R = rules(), M = messages(), can = isOwner(), log = (getObj('meRules').log || []).concat(M.log).sort((a, b) => String(b.at).localeCompare(String(a.at)));
     const edit = _adm.code ? R.codes.find(r => r.code === _adm.code) || { code: _adm.code === '+' ? '' : _adm.code, kind: 'review', why: '', what: '', src: 'chart' } : null;
     return '<div class="card" style="padding:18px 20px;margin-top:14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">' +
         '<b style="color:var(--primary)">Starting: ME code rules</b><span class="field-note">Version ' + esc(R.version) + (can ? '' : '. Only Samantha can change them.') + '</span></div>' +
@@ -599,10 +647,10 @@
       (log.length ? log.slice(0, 40).map(e => '<div class="st-hist"><span>' + esc(day(e.at)) + '</span><span>' + esc(e.text) + ' <span class="field-note">by ' + esc(e.by) + '. Reason: ' + esc(e.reason || '') + '</span></span></div>').join('')
         : '<div class="field-note">No changes yet. The first version is the DHSS pages read Nov 4, 2026.</div>') + '</div>';
   }
-  function renderAdmin() { const h = document.getElementById('startingAdmin'); if (h) h.innerHTML = (on() || isSup()) ? adminHtml() : ''; }
+  function renderAdmin() { const h = document.getElementById('startingAdmin'); if (h) h.innerHTML = (on() || isOwner()) ? adminHtml() : ''; }
   function admEdit(code) { _adm = { code, msg: '' }; renderAdmin(); }
   function admSaveRule() {
-    if (!isSup()) return;
+    if (!isOwner()) return;
     const v = id => ((document.getElementById(id) || {}).value || '').trim();
     const reason = v('admReason');
     if (!reason) { _adm.msg = 'Add the reason for this change.'; renderAdmin(); return; }
@@ -616,10 +664,11 @@
     const o = getObj('meRules'), log = (o.log || []).concat([{ at: nowIso(), by: meName(), reason,
       text: (before ? 'Code ' + code + ': ' + (KIND_LABEL[before.kind] || before.kind) + ' to ' + (KIND_LABEL[r.kind] || r.kind) : 'Added code ' + code + ' as ' + (KIND_LABEL[r.kind] || r.kind)) + '. Source: ' + r.src + '.' }]);
     setObj('meRules', { version: today() + '.' + (log.length), codes, log });
+    auditQuiet('admin', { id: 'meRules', name: 'ME code rules' }, 'rule_changed', log[log.length - 1]);
     _adm = { code: null, msg: '' }; renderAdmin();
   }
   function admSaveMsgs() {
-    if (!isSup()) return;
+    if (!isOwner()) return;
     const v = id => ((document.getElementById(id) || {}).value || '');
     const reason = v('admMsgReason').trim(), note = document.getElementById('admMsgNote');
     if (!reason) { note.innerHTML = '<span style="color:var(--danger)">Add the reason for this change.</span>'; return; }
@@ -633,11 +682,12 @@
     resources.forEach((r, i) => { if (r.value !== M.resources[i].value) changed.push(r.label + ' (was ' + M.resources[i].value + ')'); });
     if (!changed.length) { note.textContent = 'Nothing changed.'; return; }
     setObj('medicaidMessages', { templates, resources, log: M.log.concat([{ at: nowIso(), by: meName(), reason, text: 'Changed ' + changed.join(', ') + '.' }]) });
+    auditQuiet('admin', { id: 'medicaidMessages', name: 'Medicaid messages' }, 'messages_changed', { reason, changed });
     renderAdmin();
   }
   // window.renderProfile is the hub's; renderProfile inside this file is the Starting one.
   function rerender() { const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
 
   window.StartHub = { on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, renderAdmin, admEdit, admSaveRule, admSaveMsgs };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs };
 })();

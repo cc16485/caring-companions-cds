@@ -72,6 +72,17 @@
 
   /* HEADER */
   .header { background: var(--primary); color: white; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+  /* Phones (2026-11-04): the header wrapped off the right edge with a long sign-in email, so every page scrolled
+     sideways. Under 600px the buttons wrap and the email shortens; wider screens are unchanged. */
+  @media (max-width: 600px) {
+    .header { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+    .header > div:last-child { flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+    #header_user { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Consumers (where the Starting tab lives): the search and Bulk contacts row wraps too. */
+    #csub-active > .section-header { flex-wrap: wrap; gap: 8px; }
+    #csub-active > .section-header .ld-search { flex: 1 1 100%; min-width: 0; max-width: 100%; }
+    #csub-active > .section-header .ld-search input { width: 100%; min-width: 0; }
+  }
   .header h1 { font-size: 20px; font-weight: 700; }
   .header .subtitle { font-size: 12px; opacity: 0.8; margin-top: 2px; }
   .header-badge { background: rgba(255,255,255,0.2); border-radius: 20px; padding: 4px 12px; font-size: 12px; }
@@ -6562,7 +6573,7 @@ function markBackupReviewed(cid) {
 }
 // (5)(H)4 and (5)(H)8: letters, emails and other papers kept in the consumer's file. Files go in the
 // same private bucket as the EIN proof (signed links only). kind: letter | careplan | other.
-const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['emomed', 'eMOMED eligibility page'], ['other', 'Other document']];
+const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['emomed', 'eMOMED eligibility page'], ['review', 'Supervisor review proof'], ['other', 'Other document']];
 function consumerDocsHtml(c) {
   const docs = (c.docs || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const open = d => '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' + esc(d.path).replace(/'/g, "\\'") + '\')">View</button>';

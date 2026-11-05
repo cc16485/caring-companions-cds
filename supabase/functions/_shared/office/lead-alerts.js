@@ -19,6 +19,7 @@
 import './cds-rules.js';
 import './wellsky.js';
 import './cds-attendant-check.js';
+import './starting-rules.js';
 import { maskPhone, maskEmail } from '../match/rules.js';
 const R = globalThis.CDSRules;
 
@@ -137,6 +138,7 @@ export function morningEmail(steps, extra, nowMs) {
                                    people: extra.ghlFailures.map(f => ({ name: f.name, why: f.why })) },
     extra.voicemails && { t: extra.voicemails + ' voicemail' + (extra.voicemails !== 1 ? 's' : '') + ' could not be read or its text did not send. Listen to ' + (extra.voicemails !== 1 ? 'them' : 'it'), go: 'followups', bad: true },
     ...(extra.attendantItems || []),   // the daily attendant check against WellSky, once live (2026-10-20)
+    ...(extra.startingItems || []),    // Starting: Medicaid follow-ups due or late, reviews waiting (2026-11-04, switch starting)
     extra.evv        && { t: extra.evv + ' EVV correction form' + (extra.evv !== 1 ? 's' : '') + ' to review', go: 'evvcorrections' },
     extra.signups    && { t: extra.signups + ' caregiver sign-up' + (extra.signups !== 1 ? 's' : '') + ' to call', go: 'caregivermatch' },
     extra.heldFailed && { t: extra.heldFailed + ' message' + (extra.heldFailed !== 1 ? 's' : '') + ' held or failed', go: 'caregivermatch', bad: true },
@@ -428,9 +430,25 @@ export function createLeadAlerts(deps) {
       attendantItems = globalThis.CDSAttendantCheck.items(globalThis.CDSAttendantCheck.compare({ attendants: ac.attendants || [],
         shifts: (ac.wellskyCheck || {}).shifts, reviewed: ac.attendantCheckReviewed || {}, now: noon }));
     }
+    // Starting (her decision 2026-11-04): only follow-ups due today or late, and reviews waiting on Samantha or
+    // Zach. Never a list of everyone Starting. Only while the hub switch 'starting' is on.
+    let startingItems = [];
+    const stw = (await store(['starting'])).starting;
+    if (stw && stw.live === true && globalThis.CDSStarting) {
+      const ST = globalThis.CDSStarting, todayIso = R.isoLocal(new Date(noon));
+      const fu = ST.applicationFollowups({ consumers: s.consumers || [], pipeline }, todayIso);
+      const sup = (s.consumers || []).filter(ST.isStarting).filter(c => ST.medicaidState(c).needsSupervisor);
+      startingItems = [
+        fu.length && { t: fu.length + ' Medicaid application follow-up' + (fu.length !== 1 ? 's' : '') + ' due', go: 'consumers',
+                       people: fu.map(x => ({ name: x.name, why: 'check the application with ' + (x.owner || 'no owner set'), due: x.due })) },
+        sup.length && { t: sup.length + ' Starting Medicaid review' + (sup.length !== 1 ? 's' : '') + ' waiting on Samantha or Zach', go: 'consumers', bad: true,
+                        people: sup.map(c => ({ name: c.name, why: ST.medicaidState(c).label })) }
+      ].filter(Boolean);
+    }
     const extra = {
       people: comm && Array.isArray(comm.people) ? comm.people : [],
       attendantItems,
+      startingItems,
       evv: (await one(`select count(*)::int n from evv_submissions where agency_id=$1 and not coalesce(processed,false)`, [AGENCY_ID])).n,
       signups: (await one(`select count(*)::int n from cds_tasks where kind='cg_signup' and done_at is null`)).n,
       // Same rule as the red line on Today (comms.js voicemailProblems).

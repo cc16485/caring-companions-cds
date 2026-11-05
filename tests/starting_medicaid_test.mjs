@@ -83,6 +83,20 @@ await refuses(() => S('medicaidSend', { person, channel: 'sms', to: '4175550177'
 await refuses(() => S('medicaidSend', { person, channel: 'sms', to: '123', body }), /cell phone/, 'bad phone');
 await refuses(() => S('medicaidSend', { person: { kind: 'x' }, channel: 'sms', to: '4175550177', body }), /Pick the lead/, 'needs a person');
 await refuses(() => M.handle('staff', 'medicaidSend', { person, channel: 'sms', to: '4175550177', body }), /sign in|staff list/i, 'staff only');
+// The audit record and who may resolve a review (her decision 2026-11-04: Samantha and Zach).
+await pg.query(`insert into cds_match_settings (key, value, updated_by) values ('staff_emails', '["samantha@mo-care.com","zach@caringcds.com","krystal@mo-care.com"]', 't')
+  on conflict (key) do update set value=excluded.value`);
+const A = (who, i) => M.handle('staff', 'startingAudit', { staff: who, ...i });
+await refuses(() => A('krystal@mo-care.com', { person, action: 'supervisor_approve', detail: { note: 'ok', doc: 'x.pdf' } }), /Only Samantha or Zach/, 'a coordinator cannot resolve a review');
+await refuses(() => A('zach@caringcds.com', { person, action: 'supervisor_approve', detail: { note: 'ok' } }), /supporting document/, 'a resolution needs its document');
+await refuses(() => A('zach@caringcds.com', { person, action: 'supervisor_approve', detail: { doc: 'x.pdf' } }), /note/, 'a resolution needs a note');
+ok((await A('zach@caringcds.com', { person, action: 'supervisor_approve', detail: { note: 'Checked eMOMED again', doc: 'c/docs/review_1.pdf' } })).ok, 'Zach resolves with note and document');
+ok((await A('krystal@mo-care.com', { person, action: 'review_requested', detail: { note: 'Lock Ins unclear' } })).ok, 'a coordinator can ask for a review');
+await refuses(() => A('zach@caringcds.com', { person: { kind: 'admin', id: 'meRules' }, action: 'rule_changed', detail: {} }), /Only Samantha changes/, 'rules stay Samantha\'s');
+await refuses(() => A('samantha@mo-care.com', { person, action: 'anything' }), /Unknown action/, 'only known actions');
+const au = (await pg.query(`select actor, action, target, detail from cds_audit where action='starting_supervisor_approve'`)).rows;
+ok(au.length === 1 && au[0].actor === 'staff:zach@caringcds.com' && au[0].target === 'consumer:c-fict-1' && au[0].detail.doc === 'c/docs/review_1.pdf', 'audit row: who, what, which person, the document');
+
 // Practice mode never sends.
 M = createMatch(base);
 r = await M.handle('staff', 'medicaidSend', { staff: 'samantha@mo-care.com', person: { kind: 'lead', id: 'l-3', name: 'X' }, channel: 'sms', to: '4175550199', body });

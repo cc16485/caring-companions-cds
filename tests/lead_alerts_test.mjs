@@ -336,5 +336,29 @@ ok(!/plain (language|english)/i.test(all), 'no "plain language"');
 const html = LA.leadEmail({ first_name: '<b>X</b>', submitted_at: new Date().toISOString() }).html;
 ok(!html.includes('<b>X</b>') && html.includes('&lt;b&gt;X&lt;/b&gt;'), 'what a family typed is escaped in the email');
 
+// Starting (2026-11-04): due and late Medicaid follow-ups and waiting reviews, only while the hub switch is on; never everyone Starting.
+{
+  const startC = [
+    { id: 's1', name: 'Fic One', status: 'starting', coordinator: 'Krystal', medicaid: { application: { stage: 'help' }, followup: { date: '2026-12-08' } } },
+    { id: 's2', name: 'Fic Two', status: 'starting', coordinator: 'Zach', medicaid: { application: { stage: 'plans' }, followup: { date: '2026-12-20' } } },
+    { id: 's3', name: 'Fic Three', status: 'starting', medicaid: { checks: [{ at: '2026-10-27T15:00:00Z', status: 'active', codes: ['05'], pdf: 'x', result: { k: 'rev', label: 'Needs review', sup: true } }] } }];
+  const cur = (await pg.query(`select data_value from agency_data where data_key='consumers'`)).rows[0].data_value;
+  await pg.query(`update agency_data set data_value=$1::jsonb where data_key='consumers'`, [JSON.stringify(cur.concat(startC))]);
+  at('2026-12-08T14:00:00Z');
+  await jobs.morning();
+  let b2 = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
+  ok(!/Fic One|Fic Two|Fic Three|Medicaid application follow-up/.test(b2), 'Starting switch off: the email is as before');
+  const calls1 = (b2.match(/(\d+) monthly check-in calls? not yet logged/) || [])[1];
+  ok(calls1 === '2', 'Starting consumers are not counted as active consumers (2 active need a call, not 5): ' + calls1);
+  await pg.query(`insert into agency_data (agency_id, data_key, data_value) values ('caring-companions-cds','starting','{"live": true}'::jsonb)`);
+  at('2026-12-09T14:00:00Z');
+  await jobs.morning();
+  b2 = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
+  ok(b2.includes('1 Medicaid application follow-up due') && b2.includes('Fic One (check the application with Krystal, late, was due Dec 8)'), 'late follow-up with its owner');
+  ok(!b2.includes('Fic Two'), 'a follow-up not due yet is left out');
+  ok(b2.includes('1 Starting Medicaid review waiting on Samantha or Zach') && b2.includes('Fic Three'), 'a review waiting on a supervisor');
+  ok((b2.match(/(\d+) monthly check-in calls? not yet logged/) || [])[1] === '2', 'still not counted as active with the switch on');
+}
+
 console.log(`\n${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);
