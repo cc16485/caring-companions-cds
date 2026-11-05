@@ -184,8 +184,15 @@ const match = createMatch({
   async send({ channel, to, subject, body }: { channel: string; to: string; subject?: string; body: string }) {
     const contact = await ghlFetch('/contacts/upsert', { method: 'POST', body: JSON.stringify({ locationId: GHL_LOC,
       ...(channel === 'sms' ? { phone: to } : { email: to }) }) });
-    await ghlFetch('/conversations/messages', { method: 'POST', body: JSON.stringify({ type: channel === 'sms' ? 'SMS' : 'Email',
+    const sent = await ghlFetch('/conversations/messages', { method: 'POST', body: JSON.stringify({ type: channel === 'sms' ? 'SMS' : 'Email',
       contactId: contact.contact?.id, message: body, ...(channel === 'email' ? { subject, html: body.replace(/\n/g, '<br>') } : {}) }) });
+    // The message id (2026-11-04) lets the Starting profile read the real delivery status back. Older callers ignore it.
+    return { id: String(sent?.messageId || sent?.emailMessageId || sent?.id || '') || null };
+  },
+  // Delivery status of one sent message, read back from GoHighLevel (Starting profile, 2026-11-04).
+  async messageStatus(id: string) {
+    const r = await ghlFetch('/conversations/messages/' + encodeURIComponent(id));
+    return String((r?.message || r)?.status || '');
   },
   links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}`,
            packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}`,
