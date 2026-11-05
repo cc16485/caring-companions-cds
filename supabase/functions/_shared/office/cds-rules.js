@@ -314,7 +314,12 @@
                                bad: notReady.some(x => x.p.start && x.p.start <= todayIso),
                                people: notReady.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.start, id: x.c.id, act: 'profile', due: x.p.start || '' })) },
           why.length && { t: plural(why.length, 'late start needs', 'late starts need') + ' a reason written down', go: 'consumers', bad: true,
-                          people: why.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.firstShift, id: x.c.id, act: 'profile' })) }
+                          people: why.map(x => ({ name: x.c.name, county: x.c.county || '', at: x.p.firstShift, id: x.c.id, act: 'profile' })) },
+          // Starting people (2026-11-05): their Ready for first shift checklist, so this one step covers everyone new.
+          Array.isArray(data.startingReady) && data.startingReady.length &&
+            { t: plural(data.startingReady.length, 'Starting consumer', 'Starting consumers') + ' getting ready for the first shift', go: 'consumers',
+              bad: data.startingReady.some(x => x.start && x.start <= todayIso),
+              people: data.startingReady.map(x => ({ name: x.name, county: x.county, why: x.ok + ' of ' + x.total + ' ready' + (x.next ? '; next: ' + x.next.charAt(0).toLowerCase() + x.next.slice(1) : ''), at: x.start, id: x.id, act: 'profile', due: x.start || '' })) }
         ].filter(Boolean),
         clear: 'New consumers are ready.'
       });

@@ -358,6 +358,37 @@ ok(!html.includes('<b>X</b>') && html.includes('&lt;b&gt;X&lt;/b&gt;'), 'what a 
   ok(!b2.includes('Fic Two'), 'a follow-up not due yet is left out');
   ok(b2.includes('1 Starting ME code review waiting') && b2.includes('Fic Three'), 'a review waiting on a supervisor');
   ok((b2.match(/(\d+) monthly check-in calls? not yet logged/) || [])[1] === '2', 'still not counted as active with the switch on');
+
+  // 2026-11-05: waiting on the state, ready to move to Active, and the packet line read from the packet itself.
+  const okMed = { checks: [{ at: '2026-11-27T15:00:00Z', status: 'active', codes: ['13'], pdf: 'x', result: { k: 'ok', label: 'Eligible', sup: false } }] };
+  const more = [
+    { id: 's4', name: 'Fic Four', status: 'starting', starting: { kind: 'new', referralSent: '2026-11-01', requestId: 'R-44' } },
+    { id: 's5', name: 'Fic Five', status: 'starting', starting: { kind: 'new' } },
+    { id: 's6', name: 'Fic Six', status: 'starting', cdsStartDate: '2026-12-12', starting: { kind: 'new', leadId: 'L6' }, medicaid: okMed },
+    { id: 's7', name: 'Fic Seven', status: 'starting', cdsStartDate: '2026-12-12', starting: { kind: 'new', leadId: 'L7' }, medicaid: okMed },
+    { id: 's8', name: 'Fic Eight', status: 'active', cdsStartDate: '2025-01-06', contacts: {}, changes: [{ id: 'x8', kind: 'moved', startedAt: '2026-12-08', eventDate: '2026-12-07', steps: {} }] }];
+  const cur2 = (await pg.query(`select data_value from agency_data where data_key='consumers'`)).rows[0].data_value;
+  await pg.query(`update agency_data set data_value=$1::jsonb where data_key='consumers'`, [JSON.stringify(cur2.concat(more))]);
+  const au = (await pg.query(`select data_value from agency_data where data_key='authorizations'`)).rows[0].data_value;
+  au.records = Object.assign({}, au.records, { f6: { consumer: 'Fic Six', planStart: '2026-12-01', planEnd: '2027-05-31' }, f7: { consumer: 'Fic Seven', planStart: '2026-12-01', planEnd: '2027-05-31' } });
+  await pg.query(`update agency_data set data_value=$1::jsonb where data_key='authorizations'`, [JSON.stringify(au)]);
+  await pg.query(`delete from agency_data where agency_id='caring-companions-cds' and data_key='firstShifts'`);
+  await pg.query(`insert into agency_data (agency_id, data_key, data_value) values ('caring-companions-cds','firstShifts',$1::jsonb)`, [JSON.stringify({ from: '2026-11-01', people: { 'Five, Fic': { date: '2026-12-05', attendant: 'Pat Helper' } } })]);
+  await pg.query(`create table if not exists cds_enroll_packets (id uuid primary key default gen_random_uuid(), consumer_id text, lead_id text, office_signed_at timestamptz)`);
+  await pg.query(`insert into cds_enroll_packets (lead_id, office_signed_at) values ('L6', now())`);
+  at('2026-12-10T14:00:00Z');
+  await jobs.morning();
+  b2 = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
+  ok(b2.includes('1 waiting on the state with no authorization yet') && b2.includes('Fic Four (Referral sent 39 days ago, no authorization yet. Check with DSDS (request R-44))'), 'waiting on the state, with the request ID');
+  ok(b2.includes('Fic Eight: moved to a new address in our area. Tell DSDS by Dec 17.'), 'something changed reaches the email (closings step)');
+  ok(b2.includes('1 Starting consumer had the first shift: open the Hub to move them to Active') && b2.includes('Fic Five (first shift 2026-12-05)'), 'ready to move to Active from the WellSky first shift');
+  const six = (b2.split('\n').find(l => l.includes('Fic Six')) || ''), seven = (b2.split('\n').find(l => l.includes('Fic Seven')) || '');
+  ok(six && !six.includes('Enrollment packet') && seven.includes('Enrollment packet signed'), 'packet line read from the packet: done for Six, missing for Seven\n   ' + six + '\n   ' + seven);
+  await pg.query(`drop table cds_enroll_packets`);
+  at('2026-12-11T14:00:00Z');
+  await jobs.morning();
+  b2 = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
+  ok(!(b2.split('\n').find(l => l.includes('Fic Seven')) || '').includes('Enrollment packet'), 'packets unreadable: the packet line is left out, never guessed');
 }
 
 console.log(`\n${pass} passed, ${failN} failed`);

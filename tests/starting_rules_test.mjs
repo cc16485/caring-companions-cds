@@ -146,6 +146,16 @@ sw = S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-10-01', as
 ok(sw.length === 1 && sw[0].why.startsWith('DSDS assessment 19 days ago'), 'past assessment restarts the count');
 ok(S.stateWaits({ consumers: [SC({ kind: 'move', transferEntered: '2026-11-12' })] }, T0, () => ({})).length === 1 && S.stateWaits({ consumers: [SC({ kind: 'move', transferEntered: '2026-11-15' })] }, T0, () => ({})).length === 0, 'transfer: 7 days');
 ok(S.stateWaits({ consumers: [SC({ kind: 'new' }), Object.assign(SC({ kind: 'new', referralSent: '2026-10-01' }), { status: 'active' })] }, T0, () => ({})).length === 0, 'not sent yet, or already Active: nothing');
+// Loose ends (2026-11-05): Today step 5 covers Starting people; ready to move to Active from the WellSky first shift.
+const RL = S.readyList({ consumers: [SC({ kind: 'new' }, { name: 'Kit Ready', cdsStartDate: '2026-12-01' }), SC({ kind: 'new', readyAt: '2026-11-01' }, { name: 'Done Already' }), { id: 'a', name: 'Act Ive', status: 'active' }] }, T0, () => ({ auth: true }));
+ok(RL.length === 1 && RL[0].name === 'Kit Ready' && RL[0].total === 11 && RL[0].ok >= 1 && RL[0].start === '2026-12-01' && /eMOMED/.test(RL[0].next), 'ready list: Starting, not marked ready, with the count and the next line');
+ok(S.readyList({ consumers: [SC({ kind: 'new' })] }, T0, () => ({ skipKeys: ['packet'] }))[0].total === 10, 'a line the caller cannot know is left out of the count');
+const nk = n => String(n || '').toLowerCase().replace(/[^a-z\s,'-]/g, '').split(/[\s,]+/).filter(Boolean).sort().join(' ');
+const RA = S.readyForActive({ consumers: [SC({ kind: 'new' }, { name: 'Fay Shift' }), SC({ kind: 'new' }, { name: 'No Shift' }), { id: 'z', name: 'Act Ive', status: 'active' }] }, { people: { 'Shift, Fay': { date: '2026-11-18' }, 'Ive, Act': { date: '2026-01-01' } } }, nk);
+ok(RA.length === 1 && RA[0].name === 'Fay Shift' && RA[0].firstShift === '2026-11-18', 'ready to move to Active: Starting with a WellSky first shift only');
+const st5 = CR.dailyRoutine({ consumers: [], pipeline: [], firstShiftOf: () => null, startingReady: [{ id: 'k', name: 'Kit Ready', county: 'Greene', start: '2026-11-04', ok: 6, total: 11, next: 'Attendant onboarding finished' }] }, new Date('2026-11-05T17:00:00Z')).find(x => x.n === 5);
+const ln5 = st5 && st5.items.find(i => /Starting consumer/.test(i.t));
+ok(ln5 && ln5.t === '1 Starting consumer getting ready for the first shift' && ln5.bad && ln5.people[0].why === '6 of 11 ready; next: attendant onboarding finished', 'Today step 5 lists Starting people (red: start date passed)');
 ok(S.ageOn('2000-01-01') >= 26 && S.ageOn('') === null && S.ageOn('not a date') === null, 'age from the date of birth');
 ok(P({ who: 'family', medicaid: 'applied', consumer: { first: 'A' }, phone: '4175550100' }).followDays === 14, 'applied: two weeks');
 ok(P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', medicaid: 'yes', cds: 'new', ready: 'yes' }).next.k === 'start', 'ready: start the profile');

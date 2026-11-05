@@ -603,6 +603,8 @@
       '<td>' + btn('Open', "openProfile('" + q(c.id) + "')", true) + '</td></tr>').join('');
   }
   // Today: Medicaid application follow-ups (owner shown) and Starting people waiting on an ME code review.
+  // Today step 5 (2026-11-05): Starting people not marked ready, with their checklist count.
+  function readyList() { return on() ? S.readyList({ consumers: getData('consumers') }, today(), c => Object.assign(ctxFor(c), _profPacket[c.id] && 'packet' in _profPacket[c.id] ? {} : { skipKeys: ['packet'] })) : null; }
   function todayHtml() {
     if (!on()) return '';
     const f = S.applicationFollowups({ consumers: getData('consumers'), pipeline: getData('pipeline') }, today());
@@ -732,5 +734,5 @@
   function rerender() { const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
 
   window.StartHub = { on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
 })();
