@@ -133,6 +133,19 @@ ok(flagOf({ area: AREA, county: 'Boone' }).flags.length === 1, 'a saved county n
 cp = P(Object.assign({}, tr, { county: 'Other', countyOther: 'St. Louis County', area: AREA }));
 ok(cp.next.k === 'review' && cp.flags.length === 1 && cp.missing.length === 0 && cp.flags[0].t.includes('(St. Louis County)'), 'transfer outside our counties: flagged too');
 ok(P(Object.assign({}, tr, { county: '' })).missing.includes('their county'), 'transfer: county asked');
+// Waiting on the state (2026-11-05): referral or transfer sent, no authorization back after the Admin days.
+const SC = (st, extra) => Object.assign({ id: 'w' + Math.random(), name: 'Wes Example', status: 'starting', starting: st }, extra || {});
+const T0 = '2026-11-20';
+let sw = S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-01', requestId: 'R-123' })] }, T0, () => ({ auth: false }));
+ok(sw.length === 1 && sw[0].days === 19 && sw[0].why === 'Referral sent 19 days ago, no authorization yet. Check with DSDS (request R-123)', 'referral 19 days, no authorization: on Today, with the request ID');
+ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-10' })] }, T0, () => ({})).length === 0, 'referral 10 days: not yet (14)');
+ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-10' })] }, T0, () => ({}), { referral: 7 }).length === 1, 'Admin days count');
+ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-01' })] }, T0, () => ({ auth: true })).length === 0, 'authorization on file: nothing');
+ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-10-01', assessment: '2026-11-25' })] }, T0, () => ({})).length === 0, 'assessment still ahead: wait for it');
+sw = S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-10-01', assessment: '2026-11-01' })] }, T0, () => ({}));
+ok(sw.length === 1 && sw[0].why.startsWith('DSDS assessment 19 days ago'), 'past assessment restarts the count');
+ok(S.stateWaits({ consumers: [SC({ kind: 'move', transferEntered: '2026-11-12' })] }, T0, () => ({})).length === 1 && S.stateWaits({ consumers: [SC({ kind: 'move', transferEntered: '2026-11-15' })] }, T0, () => ({})).length === 0, 'transfer: 7 days');
+ok(S.stateWaits({ consumers: [SC({ kind: 'new' }), Object.assign(SC({ kind: 'new', referralSent: '2026-10-01' }), { status: 'active' })] }, T0, () => ({})).length === 0, 'not sent yet, or already Active: nothing');
 ok(S.ageOn('2000-01-01') >= 26 && S.ageOn('') === null && S.ageOn('not a date') === null, 'age from the date of birth');
 ok(P({ who: 'family', medicaid: 'applied', consumer: { first: 'A' }, phone: '4175550100' }).followDays === 14, 'applied: two weeks');
 ok(P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', medicaid: 'yes', cds: 'new', ready: 'yes' }).next.k === 'start', 'ready: start the profile');
