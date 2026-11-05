@@ -9448,7 +9448,7 @@ function commWhoHtml(c) {
     '<input type="text" id="fuWho_' + id + '" list="fuPeople_' + id + '" placeholder="Start typing a name">' +
     '<datalist id="fuPeople_' + id + '">' + opts + '</datalist>' +
     '<label class="row" style="font-size:14px"><input type="checkbox" id="fuFam_' + id + '" onchange="if(this.checked){const a=document.getElementById(\'fuAtt_' + id + '\');if(a)a.checked=false;}"> It is their family, not them</label>' +
-    (hubSwitchOn('consumerComms') ? '<label class="row" style="font-size:14px"><input type="checkbox" id="fuAtt_' + id + '" onchange="document.getElementById(\'fuAttName_' + id + '\').hidden=!this.checked;if(this.checked)document.getElementById(\'fuFam_' + id + '\').checked=false;"> It is their attendant (pick the consumer they work for)</label>' +
+    (hubSwitchOn('consumerComms') ? '<label class="row" style="font-size:14px;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="fuAtt_' + id + '" style="margin-top:3px" onchange="document.getElementById(\'fuAttName_' + id + '\').hidden=!this.checked;if(this.checked)document.getElementById(\'fuFam_' + id + '\').checked=false;"><span>It is their attendant (pick the consumer they work for)</span></label>' +
       '<input type="text" id="fuAttName_' + id + '" hidden placeholder="Attendant\'s name (if you know it)" aria-label="Attendant\'s name">' : '') +
     '<div class="row"><button type="button" class="go" onclick="commPickTyped(\'' + id + '\',\'' + esc(c.phone10) + '\')">Save</button>' +
     '<button type="button" onclick="commPick(\'' + esc(c.phone10) + '\',\'ignore\',false)">Not for CDS</button></div>' +
