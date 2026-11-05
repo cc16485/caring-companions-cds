@@ -35,6 +35,18 @@
   // The online pre-screen in GoHighLevel (2026-11-05): null, { loading }, { found, shown, err }. formKey = the phones and
   // emails last looked up, so the same caller is looked up once.
   let form = null, formKey = '';
+  // Save as you go (2026-11-05, her test calls were lost): every answer is kept as a draft on this computer or phone
+  // until Save or Finish call, so a dropped call, a closed tab or a second phone line loses nothing. One draft per
+  // person signed in. Browser storage can be missing (private window): then it simply does not keep a draft.
+  const DRAFT = () => 'stCallDraft:' + me();
+  let draftOffer = null;
+  function readDraft() { try { const d = JSON.parse(localStorage.getItem(DRAFT()) || 'null'); return d && d.call && d.call.who ? d : null; } catch (e) { return null; } }
+  function keepDraft() {
+    if (!call || !call.who || !call._dirty) return;
+    try { const c = Object.assign({}, call); delete c.area; localStorage.setItem(DRAFT(), JSON.stringify({ at: new Date().toISOString(), call: c })); } catch (e) {}
+  }
+  function dropDraft() { try { localStorage.removeItem(DRAFT()); } catch (e) {} }
+  const draftName = c => [c.consumer && c.consumer.first, c.consumer && c.consumer.last].filter(Boolean).join(' ') || (c.caller && c.caller.name) || 'someone';
 
   document.body.insertAdjacentHTML('beforeend', '<div class="modal-overlay" id="stCallModal"><div class="modal st-call"><div class="modal-header">' +
     '<div class="modal-title cute-title" style="font-size:24px" id="stCallTitle">On a call</div><button class="modal-close" onclick="StartCall.close()" aria-label="Close">×</button></div>' +
@@ -58,6 +70,11 @@
     '.st-fromform{font:500 11px Poppins,sans-serif;background:#e7f3ec;color:#24603d;border-radius:999px;padding:2px 8px;margin-left:8px;vertical-align:middle;white-space:nowrap}' +
     '.st-find{display:grid;gap:4px;margin-top:6px}.st-find button{text-align:left;font:inherit;font-size:13px;border:1px solid var(--gray-300);background:var(--white);border-radius:10px;padding:7px 10px;cursor:pointer}' +
     '@media (max-width:820px){.st-callgrid{grid-template-columns:minmax(0,1fr)}.st-side{position:static}.st-row{grid-template-columns:minmax(0,1fr)}}' +
+    // Phone during a call (2026-11-05): big answer buttons, Back and Next pinned to the bottom of the screen.
+    '@media (max-width:600px){.st-chip{min-height:46px;font-size:15px;padding:10px 14px}.st-step{padding:14px 14px 0}' +
+    '.st-nav{position:sticky;bottom:0;background:var(--white);margin:0 -14px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--gray-300);border-radius:0 0 14px 14px;z-index:2}' +
+    '.st-nav{flex-wrap:nowrap}.st-nav .grow{display:none}.st-nav .btn{flex:1 1 0;min-width:0;min-height:46px;font-size:15px;padding:10px 8px}.st-row input,.st-row select{font-size:16px;padding:10px}}' +
+    '.st-draft{background:#fbf1dc;border:1px solid #e8c98a;border-radius:14px;padding:10px 12px;font-size:13.5px;display:grid;gap:8px}' +
     '</style>');
 
   function blank() {
@@ -100,12 +117,23 @@
     if (!(H() && H().on())) { if (pid) openPipelineEdit(pid); else openModal('addSomeoneModal'); return; }
     const p = pid && getData('pipeline').find(x => x.id === pid);
     call = p ? fromLead(p) : blank(); call.area = AREA(); call.fromForm = {}; dup = null; finish = null; savedAt = ''; form = null; formKey = '';
+    const d = readDraft();
+    draftOffer = d && (pid ? d.call.leadId === pid : true) ? d : null;   // on a lead, only that lead's own draft
     openModal('stCallModal'); draw(); lookForm();
   }
-  function close() { closeModal('stCallModal'); if (call && call.leadId && document.getElementById('page-leadprofile') && document.getElementById('page-leadprofile').classList.contains('active')) renderLeadProfile(); if (typeof renderPipeline === 'function') renderPipeline(); }
+  function resume() {
+    const d = draftOffer || readDraft();
+    if (!d) return;
+    call = Object.assign(blank(), d.call); call.area = AREA(); call.fromForm = call.fromForm || {}; call._dirty = true;
+    draftOffer = null; dup = null; finish = null; form = null; formKey = '';
+    draw(); lookForm();
+  }
+  function discard() { dropDraft(); draftOffer = null; draw(); }
+  function close() { keepDraft(); closeModal('stCallModal'); if (call && call.leadId && document.getElementById('page-leadprofile') && document.getElementById('page-leadprofile').classList.contains('active')) renderLeadProfile(); if (typeof renderPipeline === 'function') renderPipeline(); }
 
   function pick(group, val, multi) {
     if (call.fromForm) delete call.fromForm[group];
+    call._dirty = true; draftOffer = null;
     if (group === 'dcnUnknown' || group === 'dobSkip') { call[group] = !call[group]; draw(); return; }
     if (multi) { const a = call[group] || []; call[group] = a.includes(val) ? a.filter(x => x !== val) : a.concat([val]); }
     else call[group] = call[group] === val ? '' : val;
@@ -113,12 +141,13 @@
     if (group === 'who' && val === 'self') call.caller = { name: '', relation: '' };
     if (group === 'medicaid') { if (call.medicaid !== 'yes') call.dcnUnknown = false; if (call.medicaid !== 'no') call.appStage = ''; }
     if (group === 'who') call.step = Math.min(call.step, steps(call).length - 1);
-    draw();
+    keepDraft(); draw();
   }
   function set(path, v) {
     const [a, b] = path.split('.');
     if (b) call[a][b] = v; else call[a] = v;
     if (call.fromForm) delete call.fromForm[b || a];
+    call._dirty = true; draftOffer = null; keepDraft();
     if (a === 'dcn' && v) call.dcnUnknown = false;
     if (a === 'dob' && v) call.dobSkip = false;
     drawSide();
@@ -157,7 +186,7 @@
       default: return false;
     }
   }
-  function go(i) { if (steps()[call.step] === 'phone') setTimeout(lookForm, 0); const n = steps().length; call.step = Math.max(0, Math.min(n - 1, i)); draw(); const b = document.getElementById('stCallBody'); if (b && b.scrollIntoView) { const m = b.closest('.modal'); if (m) m.scrollTop = 0; } }
+  function go(i) { if (steps()[call.step] === 'phone') setTimeout(lookForm, 0); const n = steps().length; call.step = Math.max(0, Math.min(n - 1, i)); keepDraft(); draw(); const b = document.getElementById('stCallBody'); if (b && b.scrollIntoView) { const m = b.closest('.modal'); if (m) m.scrollTop = 0; } }
   function next() { go(call.step + 1); }
   function back() { go(call.step - 1); }
   // Who the conversation is about, for the lines to say.
@@ -298,7 +327,11 @@
     const nav = '<div class="st-nav">' + (call.step > 0 ? '<button type="button" class="btn btn-outline btn-sm" onclick="StartCall.back()">Back</button>' : '') + '<span class="grow"></span>' +
       (!last && k !== 'who' && !answered(call, k) ? '<button type="button" class="btn btn-outline btn-sm" onclick="StartCall.next()">Skip for now</button>' : '') +
       (!last || k === 'who' ? '<button type="button" class="btn btn-primary btn-sm" onclick="StartCall.next()"' + (k === 'who' && !who ? ' disabled' : '') + '>Next</button>' : '') + '</div>';
-    let left = (st.length > 1 ? '<div class="field-note">Question ' + (call.step + 1) + ' of ' + st.length + '</div><div class="st-steps" id="stBar"></div>' : '') +
+    const offer = draftOffer && !call._dirty ? '<div class="st-draft"><div><b>You have an unfinished call</b> about ' + esc(draftName(draftOffer.call)) + ', from ' +
+        esc(new Date(draftOffer.at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })) + '. Nothing from it was saved to Leads yet.</div>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-primary btn-sm" onclick="StartCall.resume()">Pick up where I left off</button>' +
+        '<button type="button" class="btn btn-outline btn-sm" onclick="StartCall.discard()">Discard it</button></div></div>' : '';
+    let left = offer + (st.length > 1 ? '<div class="field-note">Question ' + (call.step + 1) + ' of ' + st.length + '</div><div class="st-steps" id="stBar"></div>' : '') +
       '<div class="st-step" data-step="' + k + '">' + body + nav + '</div>';
     left += '<div class="field-note">' + (p ? '<a href="#" onclick="closeModal(\'stCallModal\');openPipelineEdit(\'' + q(p.id) + '\');return false">Just a quick note instead (Log a call)</a>'
       : '<a href="#" onclick="closeModal(\'stCallModal\');openModal(\'addSomeoneModal\');return false">Use the full Add someone form instead</a>') + '</div>';
@@ -363,7 +396,7 @@
       (dup ? dupHtml() : '') + formHtml() +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-outline" onclick="StartCall.save(false)"' + (call.who ? '' : ' disabled') + '>Save</button>' +
       '<button type="button" class="btn btn-primary" onclick="StartCall.save(true)"' + (call.who ? '' : ' disabled') + '>Finish call</button></div>' +
-      '<div class="field-note" id="stCallMsg">' + (savedAt ? 'Saved ' + esc(savedAt) + '.' : 'Nothing is saved until you press Save or Finish call.') + '</div>';
+      '<div class="field-note" id="stCallMsg">' + (savedAt ? 'Saved ' + esc(savedAt) + '.' : (call._dirty ? 'Kept as a draft on this device. Press Save or Finish call to put it on Leads.' : 'Nothing is on Leads until you press Save or Finish call.')) + '</div>';
   }
 
   // ---- returning caller
@@ -465,6 +498,7 @@
     } else if (call.note.trim()) { p.notes = (p.notes || []).concat({ date: today, text: call.note.trim(), by }); call.note = ''; }
     call.leadId = p.id;
     setData('pipeline', pipeline);
+    call._dirty = false; dropDraft();
     if (isNew && typeof syncOneToGhl === 'function') try { syncOneToGhl('pipeline', p.id, p.name); } catch (e) {}
     savedAt = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     dup = null;
@@ -555,5 +589,5 @@
   }
   function done() { const id = call && call.leadId; closeModal('stCallModal'); if (id) openLeadProfile(id); else if (typeof renderPipeline === 'function') renderPipeline(); }
 
-  window.StartCall = { open, close, pick, set, changed, go, next, back, draw, find, useLead, notDup, save, ch, body, saveFollow, send, startProfile, toPool, done, state: () => call, finishState: () => finish };
+  window.StartCall = { open, close, pick, set, changed, go, next, back, draw, resume, discard, find, useLead, notDup, save, ch, body, saveFollow, send, startProfile, toPool, done, state: () => call, finishState: () => finish };
 })();

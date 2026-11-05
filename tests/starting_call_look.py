@@ -280,6 +280,40 @@ with sync_playwright() as pw:
     ck('the quick Log a call is one click away', pg.evaluate("()=>document.getElementById('editPipelineModal').classList.contains('open')"))
     pg.evaluate("()=>closeModal('editPipelineModal')")
 
+    # ---- 11. Save as you go (2026-11-05): a dropped call loses nothing
+    pg.evaluate("()=>{ try { localStorage.clear(); } catch (e) {} }")
+    new_call(); chipc('Family, for a loved one'); nxt(); chipc('No, new to CDS'); nxt()
+    fill('First name', 'Ida'); fill('Last name', 'Example'); fill("Caller's name", 'Bo Example'); nxt()
+    ck('the side says it is kept as a draft, not on Leads yet', 'Kept as a draft on this device' in pg.inner_text('#stCallSide'))
+    n0 = len(leads())
+    pg.evaluate("()=>{ closeModal('stCallModal'); }")   # the call dropped, the window closed, no Save
+    ck('closing without Save adds nothing to Leads', len(leads()) == n0)
+    new_call()
+    ck('the next call offers the unfinished one', 'You have an unfinished call' in pg.inner_text(M) and 'Ida Example' in pg.inner_text(M))
+    shot(pg, 'c12-unfinished-call-desktop')
+    pg.locator(M + ' button', has_text='Pick up where I left off').click(); pg.wait_for_timeout(150)
+    st = pg.evaluate("()=>StartCall.state()")
+    ck('picked up where it was left: answers and the step', st['consumer']['first'] == 'Ida' and st['caller']['name'] == 'Bo Example' and st['cds'] == 'new' and step() == 'phone', [st['consumer'], step()])
+    fill("The caller's phone", '4175550122'); pg.locator(M + ' #stCallSide button', has_text='Save').first.click(); pg.wait_for_timeout(150)
+    ck('Save puts it on Leads and clears the draft', any(x['name'] == 'Ida Example' for x in leads()) and pg.evaluate("()=>Object.keys(localStorage).filter(k=>k.startsWith('stCallDraft')).length") == 0)
+    pg.evaluate("()=>closeModal('stCallModal')"); new_call()
+    ck('nothing to pick up after Save', 'You have an unfinished call' not in pg.inner_text(M))
+    chipc('Consumer, for themself'); pg.evaluate("()=>closeModal('stCallModal')"); new_call()
+    pg.locator(M + ' button', has_text='Discard it').click(); pg.wait_for_timeout(100)
+    ck('Discard it removes the draft', 'You have an unfinished call' not in pg.inner_text(M) and pg.evaluate("()=>Object.keys(localStorage).filter(k=>k.startsWith('stCallDraft')).length") == 0)
+    pg.evaluate("()=>closeModal('stCallModal')")
+    ida = [x for x in leads() if x['name'] == 'Ida Example'][0]
+    pg.evaluate("id=>{ try { localStorage.setItem('stCallDraft:samantha@caringcds.com', JSON.stringify({ at: new Date().toISOString(), call: { who: 'family', consumer: { first: 'Zed', last: 'Other' }, caller: { name: '', relation: '' } } })); } catch (e) {} ldLogCall(id); }", ida['id']); pg.wait_for_timeout(150)
+    ck("on a lead, someone else's unfinished call is not offered", 'You have an unfinished call' not in pg.inner_text(M))
+    pg.evaluate("()=>{ closeModal('stCallModal'); try { localStorage.clear(); } catch (e) {} }")
+
+    # ---- 12. On a phone: big answer buttons, Back and Next pinned to the bottom
+    pg.set_viewport_size({'width': 390, 'height': 760}); new_call(); chipc('Family, for a loved one'); nxt(); pg.wait_for_timeout(100)
+    ph = pg.evaluate("()=>{const n=document.querySelector('#stCallModal .st-nav'), c=document.querySelector('#stCallModal .st-chip'); return [getComputedStyle(n).position, c.getBoundingClientRect().height, document.querySelector('#stCallModal .st-nav .btn').getBoundingClientRect().height]}")
+    ck('phone: Next pinned, answer and Next buttons at least 44px tall', ph[0] == 'sticky' and ph[1] >= 44 and ph[2] >= 44, ph)
+    shot(pg, 'c13-phone-layout-mobile')
+    pg.evaluate("()=>{ closeModal('stCallModal'); try { localStorage.clear(); } catch (e) {} }"); pg.set_viewport_size({'width': 1440, 'height': 1000})
+
     # ---- 10. A caller who filled the online pre-screen: the call fills in, the coordinator confirms (2026-11-05)
     new_call(); chipc('Family, for a loved one'); nxt(); chipc('No, new to CDS'); nxt()
     fill("Caller's name", 'Dee Example'); nxt()

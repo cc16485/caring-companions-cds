@@ -537,7 +537,10 @@
   function stateHtml(c, ctx) {
     const s = c.starting || {}, move = s.kind === 'move';
     return '<div class="alert alert-info" style="font-size:13.5px;margin:10px 0"><div><b>Medicaid eligibility is not authorization.</b> A good ME code means Medicaid can pay for CDS. Only DSDS decides whether they get CDS, after its assessment.</div></div>' +
-      (move ? line('Transfer entered in the state portal', dateField(c, 'transferEntered')) : line('Referral sent to DSDS', dateField(c, 'referralSent')) + line('DSDS assessment', dateField(c, 'assessment'))) +
+      (move ? line('Transfer entered in the state portal', dateField(c, 'transferEntered')) : line('Referral sent to DSDS', dateField(c, 'referralSent'))) +
+      line(move ? 'Provider change request ID' : 'Referral request ID', '<input type="text" value="' + esc((c.starting || {}).requestId || '') + '" placeholder="From the state portal" onchange="StartHub.setReq(\'' + q(c.id) + '\',this.value)" style="font-size:13px;width:min(220px,100%)">') +
+      (move ? '' : line('DSDS assessment', dateField(c, 'assessment'))) +
+      (((c.starting || {})[move ? 'transferEntered' : 'referralSent']) && !ctx.auth ? '<div class="field-note" style="margin:4px 0 8px">If no authorization comes back within ' + esc(String(waits()[move ? 'transfer' : 'referral'])) + ' days' + (move ? '' : ' (counted from the assessment once it has happened)') + ', it shows on Today to check with DSDS.</div>' : '') +
       line('Start date from the state', '<input type="date" value="' + esc(c.cdsStartDate || '') + '" onchange="StartHub.setStart(\'' + q(c.id) + '\',this.value)" style="font-size:13px"> <span class="field-note">The consumer and the attendant must be ready to clock in that day.</span>') +
       line('Authorization', ctx.auth ? '<span style="color:var(--success)">On file' + (ctx.authRec && ctx.authRec.planEnd ? ', ends ' + esc(day(ctx.authRec.planEnd)) : '') + '</span>'
         : '<span style="color:#9C6410">Not uploaded yet</span> ' + btn('Upload it on Authorizations', "showPage('authorizations')", true));
@@ -547,7 +550,17 @@
     return '<input type="date" value="' + esc(v) + '" onchange="StartHub.setDate(\'' + q(c.id) + "','" + k + '\',this.value)" style="font-size:13px">';
   }
   function setStart(cid, v) { edit('consumer', cid, c => { const was = c.cdsStartDate || ''; c.cdsStartDate = v; logTo(c, 'Start date from the state ' + (was ? 'changed from ' + day(was) + ' to ' : 'set to ') + day(v) + '.'); }); auditQuiet('consumer', getData('consumers').find(x => x.id === cid) || { id: cid }, 'start_date', { date: v }); rerender(); }
-  function setDate(cid, k, v) { edit('consumer', cid, c => { c.starting = Object.assign({}, c.starting, { [k]: v }); }); rerender(); }
+  const DATE_LABEL = { referralSent: 'Referral sent to DSDS', transferEntered: 'Transfer entered in the state portal', assessment: 'DSDS assessment' };
+  function setDate(cid, k, v) { edit('consumer', cid, c => { const was = (c.starting || {})[k] || ''; c.starting = Object.assign({}, c.starting, { [k]: v }); if (DATE_LABEL[k] && was !== v) logTo(c, DATE_LABEL[k] + ': ' + (v ? day(v) : 'cleared') + (was ? ' (was ' + day(was) + ')' : '') + '.'); }); rerender(); }
+  function setReq(cid, v) {
+    v = String(v || '').trim().slice(0, 60);
+    const c0 = getData('consumers').find(x => x.id === cid), was = ((c0 && c0.starting) || {}).requestId || '';
+    if (!c0 || was === v) return;
+    edit('consumer', cid, c => { c.starting = Object.assign({}, c.starting, { requestId: v }); logTo(c, 'Request ID ' + (v ? v : 'cleared') + (was ? ' (was ' + was + ')' : '') + '.'); });
+    setTimeout(rerender, 0);   // after the box loses focus, so typing and tabbing out never trip the redraw
+  }
+  // How many days to wait on the state before Today asks to check with DSDS (Admin, 2026-11-05).
+  function waits() { const w = getObj('startingWaits') || {}; return { referral: +w.referral || S.STATE_WAIT_DAYS.referral, transfer: +w.transfer || S.STATE_WAIT_DAYS.transfer }; }
   function readyHtml(c, st) {
     return '<div class="field-note" style="margin:10px 0">Ready for first shift stays locked until every line is true. The Hub checks each one from the profile.</div>' +
       st.gate.map(g => '<div style="padding:4px 0;font-size:13.5px;' + (g.ok ? 'color:var(--success);font-weight:600' : '') + '">' + (g.ok ? '✓' : '○') + ' ' + esc(g.t) + '</div>').join('') +
@@ -595,11 +608,14 @@
     const f = S.applicationFollowups({ consumers: getData('consumers'), pipeline: getData('pipeline') }, today());
     const sup = getData('consumers').filter(S.isStarting).filter(c => S.medicaidState(c).needsSupervisor);
     const sd = S.startDateAlerts({ consumers: getData('consumers') }, today(), c => Object.assign(ctxFor(c), _profPacket[c.id] && 'packet' in _profPacket[c.id] ? {} : { skipKeys: ['packet'] }));
-    if (!f.length && !sup.length && !sd.length) return '';
+    const sw = S.stateWaits({ consumers: getData('consumers') }, today(), ctxFor, waits());
+    if (!f.length && !sup.length && !sd.length && !sw.length) return '';
     const open = (x) => x.kind === 'lead' ? "openLeadProfile('" + q(x.id) + "')" : "openProfile('" + q(x.id) + "')";
     return '<div class="card" style="padding:16px 18px;margin-bottom:12px"><b style="color:var(--primary)">Starting</b>' +
       sd.map(x => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(x.name) + '</b>: ' + esc(x.why) + '. <span style="color:var(--danger)">' + (x.late ? 'Start date was ' : 'Start date ') + esc(day(x.due)) + '</span> · ' + esc(x.owner || 'no owner') +
         ' <a href="#" onclick="_profTab=\'ready\';openProfile(\'' + q(x.id) + '\');return false">Open</a></div>').join('') +
+      sw.map(x => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(x.name) + '</b>: <span style="color:#9C6410">' + esc(x.why) + '.</span>' +
+        ' <a href="#" onclick="_profTab=\'state\';openProfile(\'' + q(x.id) + '\');return false">Open</a></div>').join('') +
       sup.map(c => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(c.name) + '</b>: Medicaid waiting on an ME code review. ' +
         '<a href="#" onclick="_profTab=\'medicaid\';openProfile(\'' + q(c.id) + '\');return false">Open</a></div>').join('') +
       f.map(x => '<div style="font-size:13.5px;padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(x.name) + '</b>: ' + esc(x.why) + '. ' +
@@ -622,7 +638,7 @@
                        child: 'Not eligible: under 18', e2: 'E2 exception (CDS only)', review: 'Always needs review' };
   let _adm = { code: null, msg: '' };
   function adminHtml() {
-    const R = rules(), M = messages(), can = isOwner(), log = (getObj('meRules').log || []).concat(M.log).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    const R = rules(), M = messages(), can = isOwner(), log = (getObj('meRules').log || []).concat(M.log, getObj('startingWaits').log || []).sort((a, b) => String(b.at).localeCompare(String(a.at)));
     const edit = _adm.code ? R.codes.find(r => r.code === _adm.code) || { code: _adm.code === '+' ? '' : _adm.code, kind: 'review', why: '', what: '', src: 'chart' } : null;
     return '<div class="card" style="padding:18px 20px;margin-top:14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">' +
         '<b style="color:var(--primary)">Starting: ME code rules</b><span class="field-note">Version ' + esc(R.version) + (can ? '' : '. Only Samantha can change them.') + '</span></div>' +
@@ -652,6 +668,14 @@
       (can ? '<div class="st-form" style="margin-top:8px"><label style="grid-column:1/-1">Reason for this change (required)<input id="admMsgReason" type="text"></label></div>' +
         '<div style="display:flex;gap:8px;margin-top:8px">' + btn('Save the messages', 'StartHub.admSaveMsgs()') + '</div><div id="admMsgNote" class="field-note"></div>' : '') +
     '</div>' +
+    // Waiting on the state (2026-11-05): days before Today asks to check with DSDS. Anyone who sees this card can change it,
+    // with a reason; it goes in the change history.
+    '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Starting: waiting on the state</b>' +
+      '<div class="field-note" style="margin:4px 0 8px">When a referral or transfer has no authorization back after this many days, it shows on Today to check with DSDS. A past assessment date restarts the count for a referral.</div>' +
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;font-size:13px"><label style="display:grid;gap:3px">Referral (days)<input type="number" min="1" max="120" id="admWaitRef" value="' + waits().referral + '" style="width:90px;font-size:13px"></label>' +
+      '<label style="display:grid;gap:3px">Transfer (days)<input type="number" min="1" max="120" id="admWaitTr" value="' + waits().transfer + '" style="width:90px;font-size:13px"></label>' +
+      '<label style="display:grid;gap:3px;flex:1;min-width:180px">Reason for the change<input type="text" id="admWaitReason" style="font-size:13px"></label>' +
+      btn('Save', 'StartHub.admSaveWaits()') + '</div><div class="field-note" id="admWaitNote"></div></div>' +
     '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Starting: change history</b>' +
       (log.length ? log.slice(0, 40).map(e => '<div class="st-hist"><span>' + esc(day(e.at)) + '</span><span>' + esc(e.text) + ' <span class="field-note">by ' + esc(e.by) + '. Reason: ' + esc(e.reason || '') + '</span></span></div>').join('')
         : '<div class="field-note">No changes yet. The first version is the DHSS pages read Nov 4, 2026.</div>') + '</div>';
@@ -676,6 +700,16 @@
     auditQuiet('admin', { id: 'meRules', name: 'ME code rules' }, 'rule_changed', log[log.length - 1]);
     _adm = { code: null, msg: '' }; renderAdmin();
   }
+  function admSaveWaits() {
+    const v = id => ((document.getElementById(id) || {}).value || '').trim(), note = document.getElementById('admWaitNote');
+    const ref = Math.round(+v('admWaitRef')), tr = Math.round(+v('admWaitTr')), reason = v('admWaitReason'), cur = waits();
+    if (!(ref >= 1 && ref <= 120 && tr >= 1 && tr <= 120)) { note.innerHTML = '<span style="color:var(--danger)">Use 1 to 120 days.</span>'; return; }
+    if (ref === cur.referral && tr === cur.transfer) { note.textContent = 'Nothing changed.'; return; }
+    if (!reason) { note.innerHTML = '<span style="color:var(--danger)">Add the reason for this change.</span>'; return; }
+    const o = getObj('startingWaits');
+    setObj('startingWaits', { referral: ref, transfer: tr, log: (o.log || []).concat([{ at: nowIso(), by: meName(), reason, text: 'Waiting on the state: referral ' + cur.referral + ' to ' + ref + ' days, transfer ' + cur.transfer + ' to ' + tr + ' days.' }]) });
+    renderAdmin();
+  }
   function admSaveMsgs() {
     if (!isOwner()) return;
     const v = id => ((document.getElementById(id) || {}).value || '');
@@ -698,5 +732,5 @@
   function rerender() { const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
 
   window.StartHub = { on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits };
 })();

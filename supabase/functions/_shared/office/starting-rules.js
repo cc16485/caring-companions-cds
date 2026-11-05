@@ -251,6 +251,31 @@
     return out.filter(x => x.due <= todayIso).sort((a, b) => a.due.localeCompare(b.due));
   }
   // Start dates close and not ready (Today and the 8am email): within 7 days or passed, owner = coordinator.
+  // Waiting on the state (2026-11-05): a referral or transfer sent, and no authorization back after the days set in
+  // Admin (STATE_WAIT_DAYS until changed). A past assessment date restarts the count; a future one waits for it.
+  // ctxOf(c) -> { auth } as the hub knows it. Returns [{ id, name, why, since, days, requestId }], longest wait first.
+  const STATE_WAIT_DAYS = { referral: 14, transfer: 7 };
+  function stateWaits(data, todayIso, ctxOf, waitDays) {
+    const W = Object.assign({}, STATE_WAIT_DAYS, waitDays || {});
+    const dayN = d => Math.floor(Date.parse(todayIso + 'T12:00:00') / 864e5) - Math.floor(Date.parse(String(d).slice(0, 10) + 'T12:00:00') / 864e5);
+    const out = [];
+    (data.consumers || []).filter(isStarting).forEach(c => {
+      const st = c.starting || {}, move = st.kind === 'move';
+      const sent = move ? st.transferEntered : st.referralSent;
+      if (!sent || isNaN(Date.parse(sent))) return;
+      if ((ctxOf ? ctxOf(c) : {}).auth) return;
+      let since = sent, what = move ? 'Transfer entered' : 'Referral sent';
+      if (!move && st.assessment && !isNaN(Date.parse(st.assessment))) {
+        if (dayN(st.assessment) < 0) return;            // the assessment is still ahead
+        since = st.assessment; what = 'DSDS assessment';
+      }
+      const n = dayN(since), limit = move ? W.transfer : W.referral;
+      if (n < limit) return;
+      out.push({ id: c.id, name: c.name, since, days: n, requestId: st.requestId || '',
+        why: what + ' ' + n + ' days ago, no authorization yet. Check with DSDS' + (st.requestId ? ' (request ' + st.requestId + ')' : '') });
+    });
+    return out.sort((a, b) => b.days - a.days);
+  }
   function startDateAlerts(data, todayIso, ctxOf) {
     return (data.consumers || []).filter(isStarting).filter(c => c.cdsStartDate).map(c => {
       const cx = ctxOf ? ctxOf(c) : {}, skip = cx.skipKeys || [];   // lines the caller cannot know are left out, never guessed
@@ -521,5 +546,5 @@
   }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, parseDob, HELP, startDateAlerts, ageOn };
+                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, parseDob, HELP, startDateAlerts, stateWaits, STATE_WAIT_DAYS, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
