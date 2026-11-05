@@ -570,7 +570,7 @@
   // The eMOMED Eligibility Response page, saved as a PDF (2026-11-05, her ask: "it would be nice if things
   // fill in from the eMOMED upload"). Takes the PDF's text, one piece per line, and returns what the page
   // says about the person, or null when it is not that page. It never decides Medicaid: a person still
-  // reads the page and presses Save. Plan Code is passed along as shown; it is not typed in as an ME code.
+  // reads the page and presses Save. Plan Code is the ME code (her word, 2026-11-05); the hub fills it into the ME code box.
   const EM_LABEL = /^(Participant |Eligibility \/ Benefit|Third Party Liability|Reference Information)/;
   function niceName(s) {
     return String(s || '').toLowerCase().replace(/(^|[\s\-'])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\bMc([a-z])/g, (m, a) => 'Mc' + a.toUpperCase());

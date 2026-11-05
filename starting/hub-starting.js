@@ -445,6 +445,9 @@
     const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
     set('stDcn', E.dcn);
     if (E.active) set('stStatus', 'active');
+    // eMOMED's Plan Code is the ME code (her word, 2026-11-05). A code already typed is kept.
+    const codesEl = document.getElementById('stCodes');
+    if (codesEl && !codesEl.value.trim() && E.planCodes.length) codesEl.value = E.planCodes.join(', ');
     preview(cid);
     const F = typeof consumerFacts === 'function' ? consumerFacts(c) : null;
     const name = [E.name.first, E.name.last].filter(Boolean).join(' ');
@@ -454,7 +457,7 @@
     box.innerHTML = '<div class="st-box" style="margin-top:8px;background:var(--white)"><b>Read from the eMOMED page</b>' +
       (E.death ? '<div class="alert alert-warn" style="margin:6px 0;font-size:13.5px"><div><b>eMOMED shows a date of death: ' + esc(day(E.death)) + '.</b> Check before doing anything else.</div></div>' : '') +
       row('Medicaid', E.active ? '<span style="color:var(--success)">Active Coverage, MO HealthNet</span>' : '<span style="color:#9C6410">The page does not show Active Coverage for MO HealthNet. Pick the status yourself.</span>') +
-      (E.planCodes.length ? row('Plan Code shown', esc(E.planCodes.join(', ')) + ' <span class="field-note">(the ME code is still typed by you)</span>') : '') +
+      (E.planCodes.length ? row('ME code (Plan Code)', esc(E.planCodes.join(', '))) : '') +
       row('DCN', esc(E.dcn || 'not shown') + differs(E.dcn, c.dcn)) +
       row('Date of birth', esc(E.dob ? day(E.dob) : 'not shown') + (F && F.dob.v ? differs(E.dob, F.dob.v) : '')) +
       row('Address', esc(addr || 'not shown') + (F && F.address.v && E.address ? differs(E.address.street, F.address.v.split(',')[0]) : '')) +

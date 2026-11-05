@@ -58,8 +58,8 @@ with sync_playwright() as pw:
     # ---- the PDF fills in
     pg.set_input_files('#stPdf', PDF); pg.wait_for_timeout(500)
     found = pg.inner_text('#stFound')
-    ck('box shows what eMOMED says', all(x in found for x in ['Active Coverage, MO HealthNet', '01234567', '22 NE Oak Ridge Dr', 'Medicare Part A', 'Plan Code shown', 'Profile says Margie Sample']), found)
-    ck('DCN and status filled on the form, ME code left for a person', pg.input_value('#stDcn') == '01234567' and pg.input_value('#stStatus') == 'active' and pg.input_value('#stCodes') == '')
+    ck('box shows what eMOMED says', all(x in found for x in ['Active Coverage, MO HealthNet', '01234567', '22 NE Oak Ridge Dr', 'Medicare Part A', 'ME code (Plan Code)', 'Profile says Margie Sample']), found)
+    ck('DCN, status and ME code filled on the form', pg.input_value('#stDcn') == '01234567' and pg.input_value('#stStatus') == 'active' and pg.input_value('#stCodes') == '11', pg.input_value('#stCodes'))
     ck('name box has the eMOMED name', pg.input_value('#stFoundName') == 'Margaret McDonald')
     shot(pg, '01-emomed-read-desktop')
     pg.set_viewport_size({'width': 390, 'height': 900}); pg.wait_for_timeout(200); shot(pg, '02-emomed-read-mobile')
@@ -67,7 +67,7 @@ with sync_playwright() as pw:
     pg.set_viewport_size({'width': 1440, 'height': 1000})
 
     # ---- Save: check saved, profile filled
-    pg.fill('#stCodes', '11'); pg.click('#prof_body button:has-text("Save: verified by")'); pg.wait_for_timeout(600)
+    pg.click('#prof_body button:has-text("Save: verified by")'); pg.wait_for_timeout(600)
     c = pg.evaluate("()=>getData('consumers').find(x=>x.id==='c1')")
     ck('saved check and filled the profile', c['name'] == 'Margaret McDonald' and c['dcn'] == '01234567' and c['facts']['dob'] == '1940-04-12' and c['facts']['street'] == '22 NE Oak Ridge Dr' and c['facts']['city'] == 'Republic' and c['facts']['zip'] == '65738' and c['facts'].get('apt', '') == '' and len(c['medicaid']['checks']) == 1, c)
     ck('history says it was filled from eMOMED', any('filled in from the eMOMED page' in e['text'] for e in c['medicaid']['log']))
@@ -76,10 +76,16 @@ with sync_playwright() as pw:
 
     # ---- unchecked: check saves, profile left alone
     pg.evaluate(SETUP, [TEXT]); pg.evaluate("()=>{openProfile('c1'); _profTab='medicaid'; renderProfile();}"); pg.wait_for_timeout(300)
-    pg.set_input_files('#stPdf', PDF); pg.wait_for_timeout(500); pg.uncheck('#stUseFound'); pg.fill('#stCodes', '11')
+    pg.set_input_files('#stPdf', PDF); pg.wait_for_timeout(500); pg.uncheck('#stUseFound')
     pg.click('#prof_body button:has-text("Save: verified by")'); pg.wait_for_timeout(600)
     c = pg.evaluate("()=>getData('consumers').find(x=>x.id==='c1')")
+    ck('saved check carries ME code 11', c['medicaid']['checks'][-1].get('codes') == ['11'], c['medicaid']['checks'][-1])
     ck('unchecked: name and address untouched', c['name'] == 'Margie Sample' and c['facts']['street'] == '1 Old Rd' and len(c['medicaid']['checks']) == 1, c)
+
+    # ---- a code already typed is kept
+    pg.evaluate(SETUP, [TEXT]); pg.evaluate("()=>{openProfile('c1'); _profTab='medicaid'; renderProfile();}"); pg.wait_for_timeout(300)
+    pg.fill('#stCodes', '13'); pg.set_input_files('#stPdf', PDF); pg.wait_for_timeout(500)
+    ck('a typed ME code is not replaced', pg.input_value('#stCodes') == '13', pg.input_value('#stCodes'))
 
     # ---- an active consumer: Edit name box, matched records move
     pg.evaluate("()=>{openProfile('c2'); _profTab='overview'; renderProfile();}"); pg.wait_for_timeout(400)
