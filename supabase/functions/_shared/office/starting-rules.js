@@ -326,37 +326,96 @@
 
   // ---- The first call (2026-11-04, her ask: one connected workflow from the moment someone calls) ----
   // C = { who: self|family|pair|solo|unsure, consumer: {first, last}, caller: {name, relation}, phone, medicaid: yes|no|applied|unsure,
-  //       cds: new|move|unsure, agency, help: [], helpNote, attendant: has|find|unsure, attName, ready: yes|not_yet|'' }
+  //       cds: new|move|unsure, agency, help: [], helpNote, attendant: has|find|unsure, attName, ready: yes|not_yet|'',
+  //       dob (yyyy-mm-dd), dobSkip, dcn, dcnUnknown, county, appStage: help|plans (no Medicaid yet),   (guided call 2026-11-05)
+  //       new to CDS only (her 11-05 ask, policy 3.25 Jan 2026, RSMo 208.900-.909, policy 4.10 Sept 2024):
+  //       condition, handsOn: hands|reminders|unsure, selfDirect: yes|concern|unsure, guardian: no|yes|unsure,
+  //       living: home|family|hospital|facility|unsure, other: none|agency|dmh|unsure,
+  //       attRel (how the attendant is related), attCds: no|yes|unsure, consPhone, consEmail }
+  // A transfer (cds 'move') is already approved by the state: only names, birth date, contacts and the attendant.
   // Unknown answers are fine; they become "still missing". Returns the Finish call plan.
-  const HELP = { bathing: 'bathing', dressing: 'dressing', meals: 'meals', housekeeping: 'housekeeping', meds: 'medication reminders', errands: 'errands and rides', toileting: 'toileting', mobility: 'getting around' };
+  // Close to the state assessment's areas (policy 4.10): bathing, dressing and grooming, eating, toileting, mobility, meal prep, medications.
+  const HELP = { bathing: 'bathing', dressing: 'dressing and grooming', eating: 'eating', toileting: 'toileting', mobility: 'getting around and transfers', meals: 'meals', meds: 'medications', housekeeping: 'housekeeping', errands: 'errands and rides' };
+  // Answers that need a second look before a referral (her 11-05 decision: Samantha or Zach decides; nothing is told to the family here).
+  // k: 'review' = Samantha or Zach looks first; 'att' = the attendant in mind cannot be the paid attendant.
+  function callFlags(C) {
+    C = C || {};
+    const f = [];
+    if (C.who === 'solo') return f;
+    const age = ageOn(C.dob);
+    if (C.cds !== 'move') {
+      if (age !== null && age < 18) f.push({ k: 'review', t: 'Under 18. CDS is for adults 18 and older (policy 3.25).' });
+      if (C.living === 'facility') f.push({ k: 'review', t: 'Lives in a nursing home, RCF or assisted living. People living there are not eligible for CDS (policy 3.25).' });
+      if (C.selfDirect === 'concern') f.push({ k: 'review', t: 'May not be able to direct their own care (hire, train and supervise the attendant). Policy 3.25.' });
+      if (C.guardian === 'yes') f.push({ k: 'review', t: 'Has a guardian or conservator. The law and policy 3.25 read differently here.' });
+      if (C.other === 'dmh') f.push({ k: 'review', t: 'Gets DMH services. DMH self-directed services and CDS do not go together (policy 3.25).' });
+      if (C.handsOn === 'reminders') f.push({ k: 'review', t: 'Mostly reminders or someone nearby. The state pays only for hands-on help (policy 3.25).' });
+    }
+    if (C.who !== 'pair' && C.attendant === 'has' || C.who === 'pair') {
+      if (C.attRel === 'spouse') f.push({ k: 'att', t: 'The attendant in mind is their spouse. A spouse cannot be the paid attendant (RSMo 208.900).' });
+      if (C.attRel === 'legal guardian') f.push({ k: 'att', t: 'The attendant in mind is their legal guardian. A legal guardian cannot be the attendant (policy 3.25).' });
+      if (C.attCds === 'yes') f.push({ k: 'att', t: 'The attendant in mind gets CDS services too. A CDS consumer cannot be an attendant (policy 3.25).' });
+    }
+    return f;
+  }
+  const ageOn = dob => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dob || '')); if (!m) return null; const t = new Date(), a = t.getFullYear() - +m[1] - ((t.getMonth() + 1 < +m[2] || (t.getMonth() + 1 === +m[2] && t.getDate() < +m[3])) ? 1 : 0); return a >= 0 && a < 125 ? a : null; };
   function callPlan(C) {
     C = C || {};
     const cn = [C.consumer && C.consumer.first, C.consumer && C.consumer.last].filter(Boolean).join(' ');
     const first = (C.consumer && C.consumer.first) || 'them';
     const caller = C.who === 'self' ? cn : (C.caller && C.caller.name) || '';
     const help = (C.help || []).map(h => HELP[h] || h);
+    const about = C.who === 'self' ? '' : ' about ' + first;   // the consumer calling for themself is thanked, not told about themself
     const parts = [];
     if (C.who === 'solo') parts.push((caller || 'A caller') + ' wants to be a paid attendant and has no one to care for yet.');
     else {
       parts.push(C.who === 'self' ? (cn || 'The consumer') + ' called for themself.'
         : (caller || 'Someone') + (C.caller && C.caller.relation ? ' (' + C.caller.relation + ')' : '') + (C.who === 'pair' ? ', who would be the attendant,' : '') + ' called about ' + (cn || 'someone') + '.');
-      parts.push({ yes: 'Has Medicaid.', no: 'No Medicaid yet.', applied: 'Applied for Medicaid, waiting.', unsure: 'Not sure about Medicaid.' }[C.medicaid] || 'Medicaid not asked.');
+      const age = ageOn(C.dob);
+      if (age !== null || C.county) parts.push([age !== null ? 'Age ' + age : '', C.county ? 'lives in ' + C.county + ' County' : ''].filter(Boolean).join(', ').replace(/^l/, 'L') + '.');
+      parts.push({ yes: 'Has Medicaid' + (C.dcn ? ', DCN given.' : '.'), no: 'No Medicaid yet' + (STAGES[C.appStage] ? ', ' + STAGES[C.appStage] + '.' : '.'), applied: 'Applied for Medicaid, waiting.', unsure: 'Not sure about Medicaid.' }[C.medicaid] || (C.cds === 'move' ? '' : 'Medicaid not asked.'));
       parts.push({ new: 'New to CDS.', move: 'Has CDS now' + (C.agency ? ' with ' + C.agency : '') + ' and wants to switch.', unsure: 'Not sure if they have CDS.' }[C.cds] || '');
+      if (C.condition) parts.push('Why they need help: ' + String(C.condition).trim().replace(/\.$/, '') + '.');
+      parts.push({ hands: 'Needs hands-on help.', reminders: 'Mostly needs reminders or someone nearby.' }[C.handsOn] || '');
+      parts.push({ yes: 'Can direct their own care.', concern: 'May not be able to direct their own care.' }[C.selfDirect] || '');
+      parts.push({ yes: 'Has a guardian or conservator.' }[C.guardian] || '');
+      parts.push({ home: 'Lives at home.', family: 'Lives with family.', hospital: 'In the hospital or rehab now.', facility: 'Lives in a nursing home, RCF or assisted living.' }[C.living] || '');
+      parts.push({ agency: 'Gets help from another agency now.', dmh: 'Gets DMH services now.' }[C.other] || '');
       if (help.length || C.helpNote) parts.push('Needs help with ' + help.join(', ') + (help.length && C.helpNote ? '; ' : '') + (C.helpNote || '') + '.');
       if (C.who === 'pair') parts.push((caller || 'The caller') + ' would be the attendant.');
       else parts.push({ has: (C.attName || 'Someone') + ' may be the attendant.', find: 'Needs us to find an attendant.', unsure: 'Not sure about an attendant yet.' }[C.attendant] || '');
+      if (C.attRel && (C.who === 'pair' || C.attendant === 'has')) parts.push('Attendant is their ' + C.attRel + '.');
       parts.push({ yes: 'They want to go ahead.', not_yet: 'Not ready to go ahead yet.' }[C.ready] || '');
     }
     const summary = parts.filter(Boolean).join(' ');
     const missing = [];
-    if (C.who !== 'solo') {
+    const flags = callFlags(C);
+    if (C.who !== 'solo' && C.cds === 'move') {
+      // A transfer: the state already approved them. Names, birth date, contacts, the attendant.
+      if (!cn) missing.push("the consumer's name");
+      if (C.who !== 'self' && !caller) missing.push("the caller's name");
+      if (!C.dob) missing.push('their date of birth');
+      if (!String((C.who === 'self' ? C.phone : C.consPhone) || '').replace(/\D/g, '')) missing.push("the consumer's phone");
+      if (C.who !== 'self' && !String(C.phone || '').replace(/\D/g, '')) missing.push("the caller's phone");
+      if (!C.agency) missing.push('the agency they are leaving');
+      if (C.who === 'pair' || C.attendant === 'has') { if (!(C.who === 'pair' ? caller : C.attName)) missing.push("the attendant's name"); }
+      else if (!C.attendant || C.attendant === 'unsure') missing.push('whether they have an attendant');
+    } else if (C.who !== 'solo') {
       if (!cn) missing.push("the consumer's name");
       if (C.who !== 'self' && !caller) missing.push("the caller's name");
       if (!String(C.phone || '').replace(/\D/g, '')) missing.push('a phone number');
+      if (!C.dob) missing.push('their date of birth');
+      if (!C.county) missing.push('their county');
       if (!C.medicaid || C.medicaid === 'unsure') missing.push('Medicaid (look them up in eMOMED by name and birth date)');
+      else if (C.medicaid === 'yes' && !C.dcn) missing.push(C.dob ? 'their DCN (or look them up in eMOMED by name and birth date)' : 'their DCN or birth date, to look up their Medicaid');
       if (!C.cds || C.cds === 'unsure') missing.push('new to CDS or moving from another agency');
       if (!help.length && !C.helpNote) missing.push('the help they need at home');
       if (C.who !== 'pair' && (!C.attendant || C.attendant === 'unsure')) missing.push('whether they have an attendant in mind');
+      if (!C.condition) missing.push('why they need help');
+      if (!C.handsOn || C.handsOn === 'unsure') missing.push('hands-on help or reminders');
+      if (!C.selfDirect || C.selfDirect === 'unsure') missing.push('whether they can direct their own care');
+      if (!C.guardian || C.guardian === 'unsure') missing.push('guardian or conservator');
+      if (!C.living || C.living === 'unsure') missing.push('where they live');
     } else {
       if (!caller) missing.push('their name');
       if (!String(C.phone || '').replace(/\D/g, '')) missing.push('a phone number');
@@ -364,15 +423,16 @@
     // One recommended next step, most important first.
     let next, days, say;
     if (C.who === 'solo') { next = { k: 'pool', t: 'Move them to the Caregiver Pool' }; days = 0; say = "Thank you for calling Caring Companions CDS about being an attendant. We'll keep your name and number and reach out when a family near you needs someone."; }
-    else if (C.ready === 'yes') { next = { k: 'start', t: 'Start ' + first + "'s profile" }; days = 1; say = "Thank you for calling about " + first + ". We'll get started on the next steps and call you with what comes next."; }
-    else if (C.medicaid === 'no' || C.medicaid === 'applied') { next = { k: 'medicaid', t: 'Send the Medicaid application instructions' }; days = C.medicaid === 'applied' ? 14 : 3; say = "Thank you for calling about " + first + ". CDS is paid for by Medicaid, so I'm sending you the steps to apply in a separate message."; }
+    else if (C.ready === 'yes') { next = { k: 'start', t: 'Start ' + first + "'s profile" }; days = 1; say = "Thank you for calling" + about + ". We'll get started on the next steps and call you with what comes next."; }
+    else if (C.medicaid === 'no' || C.medicaid === 'applied') { next = { k: 'medicaid', t: 'Send the Medicaid application instructions' }; days = FOLLOWUP_DAYS[C.medicaid === 'applied' ? 'applied' : (C.appStage || 'help')] || 3; say = "Thank you for calling" + about + ". CDS is paid for by Medicaid, so I'm sending you the steps to apply in a separate message."; }
     else if (!cn || !String(C.phone || '').replace(/\D/g, '')) { next = { k: 'callback', t: 'Call back for ' + (!cn ? "the consumer's name" : 'a phone number') }; days = 1; say = ''; }
-    else if (!C.medicaid || C.medicaid === 'unsure' || C.medicaid === 'yes') { next = { k: 'emomed', t: 'Look ' + first + ' up in eMOMED' }; days = 2; say = "Thank you for calling about " + first + ". We'll check a few things on our end and call you back."; }
-    else { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling about " + first + ". Take your time; we'll check back in with you."; }
-    if (C.ready === 'not_yet' && next.k !== 'medicaid' && next.k !== 'pool') { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling about " + first + ". Take your time; we'll check back in with you."; }
-    return { summary, missing, next, followDays: days, say, consumerName: cn, callerName: caller };
+    else if (!C.medicaid || C.medicaid === 'unsure' || C.medicaid === 'yes') { next = { k: 'emomed', t: 'Look ' + first + ' up in eMOMED' }; days = 2; say = "Thank you for calling" + about + ". We'll check a few things on our end and call you back."; }
+    else { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling" + about + ". Take your time; we'll check back in with you."; }
+    if (C.who !== 'solo' && flags.some(x => x.k === 'review') && next.k !== 'pool') { next = { k: 'review', t: 'Samantha or Zach looks at this before anything is sent to the state' }; days = 1; say = "Thank you for calling" + about + ". We'll look at a few things on our end and call you back."; }
+    if (C.ready === 'not_yet' && next.k !== 'medicaid' && next.k !== 'pool' && next.k !== 'review') { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling" + about + ". Take your time; we'll check back in with you."; }
+    return { summary, missing, next, followDays: days, say, consumerName: cn, callerName: caller, flags };
   }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, HELP, startDateAlerts };
+                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, HELP, startDateAlerts, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
