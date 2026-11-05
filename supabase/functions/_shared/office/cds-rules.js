@@ -971,7 +971,8 @@
     const closed = CLOSED.includes(p.status);
     const done = DONE.includes(p.status);
     const sent = !done && (p.type === 'referral' || p.type === 'pccp') && (p.status === 'submitted' || p.status === 'processing');
-    const step = closed || (done && moved) ? 'closed' : done ? 'ready' : sent ? 'state' : 'call';
+    const starting = !!(p.startingId && moved);   // said yes: on Consumers as Starting (2026-11-04)
+    const step = closed || starting || (done && moved) ? 'closed' : done ? 'ready' : sent ? 'state' : 'call';
 
     let who = form ? formWho(form.text) : '';
     if (!who) who = formAbout(p);
@@ -1020,9 +1021,9 @@
       due = 'Approved'; tone = 'ready'; sort = 1;
       next = 'Move them to Consumers to start the first shift checklist.';
     } else {
-      due = done ? 'On the Consumers list' : p.status === 'closed_linked' && p.linkedTo ? 'Linked to ' + (p.linkedTo.name || 'someone')
+      due = starting && !closed ? 'Starting' : done ? 'On the Consumers list' : p.status === 'closed_linked' && p.linkedTo ? 'Linked to ' + (p.linkedTo.name || 'someone')
         : 'Closed: ' + (CLOSED_LABELS[p.status] || 'closed'); tone = 'none'; sort = 5;
-      next = done ? 'Nothing to do here.' : 'Nothing to do. Press Reopen if they come back.';
+      next = starting && !closed ? 'On Consumers as Starting. Open their profile.' : done ? 'Nothing to do here.' : 'Nothing to do. Press Reopen if they come back.';
     }
     // needsToday: a call that should happen today (the Leads summary line).
     const needsToday = (step === 'call' && (tone === 'late' || tone === 'today')) || (step === 'state' && tone === 'late');

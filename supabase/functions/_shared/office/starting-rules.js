@@ -105,6 +105,8 @@
     if (!codes.length) return R('rev', 'Needs review', 'No ME code typed yet.', 'Type the code exactly as eMOMED shows it.', 'review', name);
     const unknown = codes.filter(c => !by[c]);
     if (unknown.length) return R('rev', 'Needs review', 'Code ' + unknown.join(', ') + ' is not on the DHSS chart.', 'Supervisor review. The Hub never guesses a code.', 'review', name, 1);
+    const rv = codes.find(c => by[c].kind === 'review');   // a code set to "always review" in Admin
+    if (rv) return R('rev', 'Needs review', 'Code ' + rv + ': ' + by[rv].why, 'Supervisor review.', 'review', name, 1);
     if (codes.includes('E2')) {
       if (codes.length > 1) return R('rev', 'Needs review', 'E2 together with another code. Policy: DSDS refers people with E2 and dual codes to ' + FSD + ' to sort out the right code.', 'Supervisor review, and ask the family to call ' + FSD + '.', 'e2dual', name, 1);
       return R('ok', 'Eligible ME code', by.E2.why, 'Send the DSDS referral, then add the date.', 'ok', name);
