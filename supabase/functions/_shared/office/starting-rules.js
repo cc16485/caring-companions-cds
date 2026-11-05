@@ -332,17 +332,27 @@
   //       condition, handsOn: hands|reminders|unsure, selfDirect: yes|concern|unsure, guardian: no|yes|unsure,
   //       living: home|family|hospital|facility|unsure, other: none|agency|dmh|unsure,
   //       attRel (how the attendant is related), attCds: no|yes|unsure, consPhone, consEmail }
-  // A transfer (cds 'move') is already approved by the state: only names, birth date, contacts and the attendant.
+  //       area: our service-area counties (the hub's CDS_COUNTIES, same 27 as caringcds.com/service-area, checked 11-05),
+  //       county 'Other' + countyOther = somewhere else.
+  // A transfer (cds 'move') is already approved by the state: only names, birth date, county, contacts and the attendant.
   // Unknown answers are fine; they become "still missing". Returns the Finish call plan.
   // Close to the state assessment's areas (policy 4.10): bathing, dressing and grooming, eating, toileting, mobility, meal prep, medications.
   const HELP = { bathing: 'bathing', dressing: 'dressing and grooming', eating: 'eating', toileting: 'toileting', mobility: 'getting around and transfers', meals: 'meals', meds: 'medications', housekeeping: 'housekeeping', errands: 'errands and rides' };
   // Answers that need a second look before a referral (her 11-05 decision: Samantha or Zach decides; nothing is told to the family here).
   // k: 'review' = Samantha or Zach looks first; 'att' = the attendant in mind cannot be the paid attendant.
+  const countyName = C => C.county === 'Other' ? String(C.countyOther || '').trim() : String(C.county || '').trim();
+  function outsideArea(C) {
+    if (!C.county) return false;
+    if (C.county === 'Other') return true;
+    return Array.isArray(C.area) && C.area.length > 0 && !C.area.includes(C.county);
+  }
   function callFlags(C) {
     C = C || {};
     const f = [];
     if (C.who === 'solo') return f;
     const age = ageOn(C.dob);
+    // Our service area (her 11-05 ask) counts for transfers too.
+    if (outsideArea(C)) f.push({ k: 'review', t: 'Lives outside our 27-county service area' + (countyName(C) ? ' (' + countyName(C) + ')' : '') + '.' });
     if (C.cds !== 'move') {
       if (age !== null && age < 18) f.push({ k: 'review', t: 'Under 18. CDS is for adults 18 and older (policy 3.25).' });
       if (C.living === 'facility') f.push({ k: 'review', t: 'Lives in a nursing home, RCF or assisted living. People living there are not eligible for CDS (policy 3.25).' });
@@ -372,7 +382,8 @@
       parts.push(C.who === 'self' ? (cn || 'The consumer') + ' called for themself.'
         : (caller || 'Someone') + (C.caller && C.caller.relation ? ' (' + C.caller.relation + ')' : '') + (C.who === 'pair' ? ', who would be the attendant,' : '') + ' called about ' + (cn || 'someone') + '.');
       const age = ageOn(C.dob);
-      if (age !== null || C.county) parts.push([age !== null ? 'Age ' + age : '', C.county ? 'lives in ' + C.county + ' County' : ''].filter(Boolean).join(', ').replace(/^l/, 'L') + '.');
+      const cty = countyName(C);
+      if (age !== null || C.county) parts.push([age !== null ? 'Age ' + age : '', cty ? 'lives in ' + cty.replace(/ County$/i, '') + ' County' : C.county === 'Other' ? 'lives outside our counties' : ''].filter(Boolean).join(', ').replace(/^l/, 'L') + '.');
       parts.push({ yes: 'Has Medicaid' + (C.dcn ? ', DCN given.' : '.'), no: 'No Medicaid yet' + (STAGES[C.appStage] ? ', ' + STAGES[C.appStage] + '.' : '.'), applied: 'Applied for Medicaid, waiting.', unsure: 'Not sure about Medicaid.' }[C.medicaid] || (C.cds === 'move' ? '' : 'Medicaid not asked.'));
       parts.push({ new: 'New to CDS.', move: 'Has CDS now' + (C.agency ? ' with ' + C.agency : '') + ' and wants to switch.', unsure: 'Not sure if they have CDS.' }[C.cds] || '');
       if (C.condition) parts.push('Why they need help: ' + String(C.condition).trim().replace(/\.$/, '') + '.');
@@ -395,6 +406,7 @@
       if (!cn) missing.push("the consumer's name");
       if (C.who !== 'self' && !caller) missing.push("the caller's name");
       if (!C.dob) missing.push('their date of birth');
+      if (!C.county) missing.push('their county');
       if (!String((C.who === 'self' ? C.phone : C.consPhone) || '').replace(/\D/g, '')) missing.push("the consumer's phone");
       if (C.who !== 'self' && !String(C.phone || '').replace(/\D/g, '')) missing.push("the caller's phone");
       if (!C.agency) missing.push('the agency they are leaving');
@@ -434,5 +446,5 @@
   }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, HELP, startDateAlerts, ageOn };
+                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, HELP, startDateAlerts, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

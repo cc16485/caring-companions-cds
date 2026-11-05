@@ -59,7 +59,7 @@
     return { leadId: '', who: '', consumer: { first: '', last: '' }, caller: { name: '', relation: '' }, phone: '', email: '', medicaid: '', cds: '', agency: '',
              help: [], helpNote: '', attendant: '', attName: '', attPhone: '', county: '', note: '', ready: '',
              dob: '', dobSkip: false, dcn: '', dcnUnknown: false, appStage: '', step: 0,
-             condition: '', handsOn: '', selfDirect: '', guardian: '', living: '', other: '', attRel: '', attEmail: '', attCds: '', consPhone: '', consEmail: '' };
+             countyOther: '', condition: '', handsOn: '', selfDirect: '', guardian: '', living: '', other: '', attRel: '', attEmail: '', attCds: '', consPhone: '', consEmail: '' };
   }
   // A returning caller's lead fills the screen (nothing typed twice).
   function fromLead(p) {
@@ -81,6 +81,7 @@
     const sc = p.screening || {};
     ['condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other', 'attCds'].forEach(k => { if (sc[k]) c[k] = sc[k]; });
     c.county = p.county || '';
+    if (c.county && AREA().length && !AREA().includes(c.county)) { c.countyOther = c.county; c.county = 'Other'; }
     c.dob = typeof ldtIsoDay === 'function' ? ldtIsoDay(p.dob || (p.referral || {}).dob) || '' : String(p.dob || '').slice(0, 10);
     c.dcn = p.dcn || (p.referral || {}).dcn || '';
     c.appStage = (p.medicaid && p.medicaid.application && p.medicaid.application.stage !== 'applied' && p.medicaid.application.stage) || '';
@@ -93,7 +94,7 @@
   function open(pid) {
     if (!(H() && H().on())) { if (pid) openPipelineEdit(pid); else openModal('addSomeoneModal'); return; }
     const p = pid && getData('pipeline').find(x => x.id === pid);
-    call = p ? fromLead(p) : blank(); dup = null; finish = null; savedAt = '';
+    call = p ? fromLead(p) : blank(); call.area = AREA(); dup = null; finish = null; savedAt = '';
     openModal('stCallModal'); draw();
   }
   function close() { closeModal('stCallModal'); if (call && call.leadId && document.getElementById('page-leadprofile') && document.getElementById('page-leadprofile').classList.contains('active')) renderLeadProfile(); if (typeof renderPipeline === 'function') renderPipeline(); }
@@ -125,10 +126,12 @@
     if (!c.who) return ['who'];
     if (c.who === 'solo') return ['who', 'names', 'wrap'];
     // Already in CDS with another agency: the state approved them, so only who they are and how to reach them (her 11-05 ask).
-    if (c.cds === 'move') return ['who', 'cds', 'names', 'dob', 'phone', 'attendant', 'ready', 'wrap'];
+    if (c.cds === 'move') return ['who', 'cds', 'names', 'dob', 'county', 'phone', 'attendant', 'ready', 'wrap'];
     return ['who', 'cds', 'names', 'phone', 'dob', 'county', 'medicaid', 'help', 'decide', 'living'].concat(['attendant', 'ready', 'wrap']);
   }
   const STEP_LABEL = { who: 'Who', names: 'Names', phone: 'Phone', dob: 'Birth date', county: 'County', medicaid: 'Medicaid', cds: 'CDS now', help: 'Help at home', decide: 'Their decisions', living: 'Where they live', attendant: 'Attendant', ready: 'Go ahead', wrap: 'Wrap up' };
+  // Our service area: the hub's CDS_COUNTIES (the same 27 counties as caringcds.com/service-area, checked 2026-11-05).
+  const AREA = () => (typeof CDS_COUNTIES !== 'undefined' ? CDS_COUNTIES : []);
   const ATT_REL = ['daughter', 'son', 'grandchild', 'sister', 'brother', 'niece or nephew', 'friend', 'neighbor', 'other family', 'spouse', 'legal guardian', 'other'];
   function answered(c, k) {
     switch (k) {
@@ -136,7 +139,7 @@
       case 'names': return c.who === 'solo' ? !!(c.caller.name && digits(c.phone)) : !!(c.consumer.first && (c.who === 'self' || c.caller.name));
       case 'phone': return !!digits(c.phone) && (c.cds !== 'move' || c.who === 'self' || !!digits(c.consPhone));
       case 'dob': return !!(c.dob || c.dobSkip);
-      case 'county': return !!c.county;
+      case 'county': return !!c.county && (c.county !== 'Other' || !!String(c.countyOther || '').trim());
       case 'medicaid': return !!c.medicaid && (c.medicaid !== 'yes' || !!(c.dcn || c.dcnUnknown)) && (c.medicaid !== 'no' || !!c.appStage);
       case 'cds': return !!c.cds;
       case 'help': return !!((c.help || []).length || c.helpNote) && !!c.condition && !!c.handsOn;
@@ -204,10 +207,16 @@
         '<div class="st-chips">' + chip('dobSkip', 'yes', "They don't know or would rather not say", call.dobSkip) + '</div>' +
         why('With first name, last name and date of birth we can look them up in eMOMED when there is no DCN.');
     } else if (k === 'county') {
-      const list = (typeof CDS_COUNTIES !== 'undefined' ? CDS_COUNTIES : []).slice().sort();
-      if (call.county && !list.includes(call.county)) list.unshift(call.county);
+      const list = AREA().slice().sort();
+      const listed = call.county && call.county !== 'Other' && !list.includes(call.county);
+      if (listed) list.unshift(call.county);
       body = '<h3>Where do they live?</h3>' + say('What county ' + (who === 'self' ? 'do you' : 'does ' + them()) + ' live in?') +
-        '<div class="st-row"><label>County<select onchange="StartCall.set(\'county\',this.value);StartCall.changed()"><option value="">pick one</option>' + list.map(c => '<option' + (call.county === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '<option value="Other"' + (call.county === 'Other' ? ' selected' : '') + '>Another county</option></select></label><div></div></div>';
+        '<div class="st-row"><label>County<select onchange="StartCall.set(\'county\',this.value);StartCall.changed();StartCall.draw()"><option value="">pick one</option>' + list.map(c => '<option' + (call.county === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '<option value="Other"' + (call.county === 'Other' ? ' selected' : '') + '>Another county</option></select></label>' +
+        (call.county === 'Other' ? inp('countyOther', call.countyOther, 'For example, Jackson', 'text', 'Which county?') : '<div></div>') + '</div>' +
+        (S.outsideArea(Object.assign({}, call, { area: AREA() }))
+          ? '<div class="alert alert-warn" style="font-size:13px;display:block">Outside our 27 counties in Southwest Missouri. Samantha or Zach looks at this before anything is sent to the state.</div>' +
+            say('We serve 27 counties in Southwest Missouri. Let me check with our team, and we will call you back either way.')
+          : why('The list is our service area: the same 27 counties as caringcds.com/service-area.'));
     } else if (k === 'medicaid') {
       body = '<h3>Medicaid</h3>' + say((who === 'self' ? 'Do you' : 'Does ' + them()) + ' have Medicaid right now?') +
         '<div class="st-chips">' + chip('medicaid', 'yes', 'Yes', call.medicaid === 'yes') + chip('medicaid', 'no', 'No', call.medicaid === 'no') + chip('medicaid', 'applied', 'Applied, waiting', call.medicaid === 'applied') + unk('medicaid') + '</div>';
@@ -320,9 +329,9 @@
     if (!p) return;
     if (p.startingId) { closeModal('stCallModal'); openProfile(p.startingId); return; }
     const keep = call;
-    call = fromLead(p);
+    call = fromLead(p); call.area = AREA();
     // what was already typed on this call wins over the old lead
-    ['who', 'medicaid', 'cds', 'attendant', 'ready', 'note', 'helpNote', 'agency', 'attName', 'attPhone', 'dob', 'dcn', 'county', 'appStage', 'dobSkip', 'dcnUnknown', 'condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other', 'attRel', 'attEmail', 'attCds', 'consPhone', 'consEmail'].forEach(k => { if (keep && keep[k]) call[k] = keep[k]; });
+    ['who', 'medicaid', 'cds', 'attendant', 'ready', 'note', 'helpNote', 'agency', 'attName', 'attPhone', 'dob', 'dcn', 'county', 'appStage', 'dobSkip', 'dcnUnknown', 'condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other', 'attRel', 'attEmail', 'attCds', 'consPhone', 'consEmail', 'countyOther'].forEach(k => { if (keep && keep[k]) call[k] = keep[k]; });
     if (keep && keep.help && keep.help.length) call.help = keep.help;
     if (keep && keep.phone) call.phone = keep.phone;
     if (keep && keep.caller && keep.caller.name) call.caller = keep.caller;
@@ -377,6 +386,7 @@
     else if (call.attendant === 'has') { if (call.attName) p.attendant = attMore(Object.assign({}, p.attendant, { name: call.attName.trim(), phone: call.attPhone.trim() || null })); p.caregiverPlan = 'has'; }
     else if (call.attendant === 'find') p.caregiverPlan = 'find';
     if (call.county && call.county !== 'Other') p.county = call.county;
+    else if (call.county === 'Other' && call.countyOther.trim()) p.county = call.countyOther.trim().replace(/\s+county$/i, '');
     if (call.dob) { p.dob = call.dob; if (p.referral) p.referral.dob = call.dob; }
     if (call.dcn.trim()) { p.dcn = call.dcn.trim(); if (p.referral) p.referral.dcn = p.dcn; }
     if (call.medicaid === 'no' || call.medicaid === 'applied') {
@@ -385,7 +395,7 @@
       if (!p.medicaid.application || p.medicaid.application.stage !== stage) p.medicaid.application = { stage, at: now, by };
     }
     // The eligibility answers (new to CDS), with what needs a second look. Kept on the lead, never sent anywhere.
-    if (call.who !== 'solo' && call.cds !== 'move' && ['condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other'].some(k => call[k])) {
+    if (call.who !== 'solo' && ((call.cds !== 'move' && ['condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other'].some(k => call[k])) || S.callFlags(call).length)) {
       const sc = { at: now, by }; ['condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other'].forEach(k => { if (call[k]) sc[k] = typeof call[k] === 'string' ? call[k].trim() : call[k]; });
       sc.flags = S.callFlags(call).map(x => x.t);
       p.screening = sc;
