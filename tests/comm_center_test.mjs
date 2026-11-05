@@ -68,12 +68,13 @@ const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + '\n   go
     [{ id: 'c1', name: 'Ruth Caldwell' }, { id: 'c2', name: 'Gus Tolliver' }, { id: 'c3', name: 'Ann Bell' }],
     [{ id: 'a1', name: 'Marcus Webb', phone: '4175550144', consumer: 'Ruth Caldwell' }],
     [{ id: 'p1', first_name: 'Dee', last_name: 'Lawson', phone: '4175550155', placed_with: 'Gus Tolliver' },
-     { id: 'p9', first_name: 'Old', last_name: 'Gone', phone: '4175550199', placed_with: 'Ruth Caldwell', archived: true }],
+     { id: 'p9', first_name: 'Old', last_name: 'Gone', phone: '4175550199', placed_with: 'Ruth Caldwell', archived: true },
+     { id: 'p8', first_name: 'Pat', last_name: 'Packet', phone: '4175550188', placed_with: null, consumer_name: 'ann bell' }],
     [{ consumer: 'Ruth Caldwell', attendant: 'Lawson, Dee' }, { consumer: 'Ruth Caldwell', attendant: 'Webb, Marcus' }, { consumer: 'Ann Bell', attendant: 'Nobody Known' }]);
   const k = S.map(r => r.phone10 + '|' + r.ref + '|' + r.detail).sort();
   eq(k, ['4175550144|serves:consumer:c1|Attendant for Ruth Caldwell', '4175550155|serves:consumer:c1|Past attendant for Ruth Caldwell',
-    '4175550155|serves:consumer:c2|Attendant for Gus Tolliver'],
-    'now and past: Dee works for Gus now and was paid for Ruth (past), Marcus works for Ruth (not past though payroll has him too), payroll "Last, First" matches, archived and unknown names add nothing');
+    '4175550155|serves:consumer:c2|Attendant for Gus Tolliver', '4175550188|serves:consumer:c3|Attendant for Ann Bell'],
+    'now and past: Dee works for Gus now and was paid for Ruth (past), Marcus works for Ruth (not past though payroll has him too), payroll "Last, First" matches, archived and unknown names add nothing; the consumer named on an attendant packet counts (any capitals)');
 }
 {
   const r = C.resolve([{ ref: 'lead:1', kind: 'lead', source: 'sync' }, { ref: 'pool:2', kind: 'applicant', source: 'sync' }]);
@@ -95,6 +96,8 @@ await pg.exec(SQL); await pg.exec(SQL);
 await pg.exec(strip(readFileSync(ROOT + '/call_notes.sql', 'utf8')));
 // voicemail leads (2026-10-29): voicemails get notes too; links can point at a voicemail
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
+// the attendant packet (2026-11-05: the consumer an attendant names on it ties them to that consumer)
+await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/voicemail_leads.sql', 'utf8')));
 ok(true, 'comm_center.sql runs twice');
@@ -126,6 +129,10 @@ await put('pipeline', [{ id: 'l2', name: 'Tom Hensley', phone: '4175550188', sit
   { id: 'l3', name: 'Ruth Caldwell', phone: '4175550131', referral: { responsiblePartyName: 'Lena', responsiblePartyRelationship: 'Daughter', responsiblePartyPhone: '4175550177' } }]);
 await put('attendants', [{ id: 'a1', name: 'Marcus Webb', phone: '4175550144', consumer: 'Ruth Caldwell' }]);
 await pg.query(`insert into attendant_pool (agency_id, first_name, last_name, phone, status) values ($1,'Bev','Carter','(417) 555-0166','new')`, [AG]);
+{ // Ann named Ruth on her attendant packet: the reader's phone book ties her number to Ruth
+  const r = await pg.query(`insert into attendant_pool (agency_id, first_name, last_name, phone, status) values ($1,'Ann','Packet','(417) 555-0122','new') returning id`, [AG]);
+  await pg.query(`insert into cds_packets (pool_id, consumer_name) values ($1, 'Ruth Caldwell')`, [r.rows[0].id]);
+}
 await pg.query(`insert into cds_match_settings (key, value) values ('lead_alerts', $1::jsonb) on conflict (key) do update set value=excluded.value`,
   [JSON.stringify({ recipients: [{ name: 'Krystal', email: 'krystal@mo-care.com', phone: '4175550100' }] })]);
 // a Caregiver Match to-do already on the list
@@ -172,6 +179,8 @@ call('4175550188', 'Tom Hensley', 54, 'inbound', 'completed', 300, 'u-s');
 // unknown number
 call('4175550190', '', 55, 'inbound', 'no-answer', 0);
 let r = await tick(60);
+ok((await pg.query(`select ref, detail from cds_phone_book where phone10='4175550122' and ref like 'serves:%'`)).rows.map(x => x.ref + '|' + x.detail).join() === 'serves:consumer:c1|Attendant for Ruth Caldwell',
+   'the reader ties an attendant to the consumer named on their attendant packet');
 ok(r.ok && r.saved === 5, 'saved 5 calls (the old one included)');
 let o = await open();
 eq(o.map(t => t.title + '|' + t.kind).sort(), ['Ruth Caldwell|followup', 'Unknown number|who_is_this'], 'cards: Ruth, and Who is this');

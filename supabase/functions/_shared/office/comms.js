@@ -229,11 +229,13 @@ export function phoneBookRows({ pipeline = [], consumers = [], attendants = [], 
 // attendants go onto the consumers profile"). Each attendant who works or worked for a consumer gets a row
 // serves:consumer:<id> for their number. These rows only say whose profile a call also belongs on: they never
 // decide who a number is (bookFor leaves them out), so an attendant never becomes "Who is this?" and never counts
-// as a check-in. Ties: Active Attendants placed with them, the attendant roster, and payroll (past attendants).
+// as a check-in. Ties: Active Attendants placed with them, the consumer named on their attendant packet (2026-11-05: 1300 found
+// only 1 link without it), the attendant roster, and payroll (past attendants).
 export function servesRows(consumers = [], attendants = [], pool = [], wages = []) {
   const out = [], seen = new Set();
   const people = [];   // { name, phone, now: consumer name they work for now, or '' }
-  for (const a of pool) if (a && !a.archived && a.phone) people.push({ name: [a.first_name, a.last_name].filter(Boolean).join(' '), phone: a.phone, now: a.placed_with || '' });
+  // now = placed with them in Active Attendants, or the consumer they named on their attendant packet (cds_packets.consumer_name)
+  for (const a of pool) if (a && !a.archived && a.phone) people.push({ name: [a.first_name, a.last_name].filter(Boolean).join(' '), phone: a.phone, now: a.placed_with || a.consumer_name || '' });
   for (const a of attendants) if (a && a.phone) people.push({ name: a.name || '', phone: a.phone, now: a.consumer || '' });
   for (const c of consumers) {
     if (!c || !c.id || !c.name) continue;
@@ -330,7 +332,8 @@ export function createComms(deps) {
       const r = await one(`select value from cds_match_settings where key=$1`, [key]);
       for (const x of (r && r.value && r.value.recipients) || []) staff.push({ name: x.name, phone: x.phone, email: x.email });
     }
-    const pool = await q(`select id, first_name, last_name, phone, status, placed_with, archived from attendant_pool where agency_id='caring-companions-cds'`);
+    const pool = await q(`select p.id, p.first_name, p.last_name, p.phone, p.status, p.placed_with, p.archived, k.consumer_name
+      from attendant_pool p left join cds_packets k on k.pool_id = p.id where p.agency_id='caring-companions-cds'`);
     const rows = phoneBookRows({ pipeline: await agency('pipeline'), consumers: await agency('consumers'), attendants: await agency('attendants'), pool, staff,
       wages: await agencyEntries('attendantWages') });
     await q(`delete from cds_phone_book where source='sync'`);
