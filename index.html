@@ -27,7 +27,7 @@
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
-<script src="leads-table.js?v=7"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="leads-table.js?v=8"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="followups-table.js?v=1"></script><!-- 2026-11-05 Follow-ups as one table (switch followupsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
@@ -851,6 +851,9 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
 .lt-t .lt-n { position:sticky; left:0; z-index:1; min-width:190px; max-width:230px; box-shadow:1px 0 0 #edf1f3; }
 .lt-t thead .lt-n { z-index:3; }
 .lt-t .lt-sep { border-left:2px solid #e3eaed; }
+/* 2026-11-05 the closed-reason tabs on Leads: a shorter table, and the No Medicaid check back date you can change in place */
+table.lt-t.lt-t-closed { min-width:760px; } .lt-t-closed td.lt-sub { max-width:320px; }
+.lt-date { font:inherit; font-size:13px; padding:3px 6px; border:1px solid #d6dfe3; border-radius:8px; background:#fff; } .lt-date.lt-red { border-color:#c0392b; }
 .lt-r.lt-now .lt-n { box-shadow:inset 3px 0 0 #b42318, 1px 0 0 #edf1f3; } .lt-r.lt-today .lt-n { box-shadow:inset 3px 0 0 #c99a2e, 1px 0 0 #edf1f3; }
 .lt-r.lt-closed td { color:#7a8794; }
 .lt-t td.lt-hi { background:#f3fafa; }
@@ -4164,21 +4167,29 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       <button class="modal-close" onclick="closeModal('closeLeadModal')" aria-label="Close">×</button>
     </div>
     <input type="hidden" id="cl_id">
-    <p style="margin:0 0 12px;font-size:14.5px;color:#55677a">Why are they leaving the list? They move to Show closed, and you can reopen them any time. Nothing is sent to them.</p>
+    <p style="margin:0 0 12px;font-size:14.5px;color:#55677a">Why are they leaving the list? They move to the Leads tab for that reason, and you can reopen them any time. Nothing is sent to them.</p>
     <!-- 2026-11-04 her ask: close out a lead with no Medicaid, outside our service area, and the other reasons she picked -->
     <div class="cl-grp">They can't get CDS</div>
     <div class="cl-grid">
-      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_no_medicaid')"><b>No Medicaid</b><span>CDS needs active Medicaid.</span></button>
+      <button type="button" class="ld-choice" onclick="clNoMedicaid()"><b>No Medicaid</b><span>CDS needs active Medicaid. Then set when to check back.</span></button>
       <button type="button" class="ld-choice" onclick="closeLeadAs('closed_area')"><b>Outside our service area</b><span>They live where we don't serve.</span></button>
       <button type="button" class="ld-choice" onclick="clStateNo()"><b>The state said no</b><span>Then pick why.</span></button>
       <button type="button" class="ld-choice" onclick="closeLeadAs('closed_more_care')"><b>Needs more care than CDS</b><span>Skilled or round-the-clock care.</span></button>
-      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_no_attendant')"><b>No attendant</b><span>Nobody to be their attendant, and they don't want us to find one.</span></button>
+      <button type="button" class="ld-choice" onclick="closeLeadAs('closed_no_attendant')"><b>No attendant</b><span>Nobody to be their attendant yet. They wait on the Needs an Attendant tab.</span></button>
     </div>
     <div id="cl_stateno" class="cl-sub" hidden>
       <b>Why did the state say no?</b>
       <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_state_no','reach')">The state could not reach them</button>
       <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_state_no','level')">They did not meet the level of care</button>
       <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_state_no','other')">Another reason (say it in the note)</button>
+    </div>
+    <!-- 2026-11-05 her ask: follow up with people who still want to apply for Medicaid (No Medicaid tab on Leads) -->
+    <div id="cl_med" class="cl-sub" hidden>
+      <b>Are they applying for Medicaid?</b>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0">Check back on <input type="date" id="cl_medDate" style="font:inherit;padding:4px 6px;border:1.5px solid var(--gray-300);border-radius:8px"></label>
+      <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_no_medicaid','yes')">Yes, they are applying</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="closeLeadAs('closed_no_medicaid','no')">Not right now</button>
+      <div class="field-note" style="margin-top:4px">They wait on the No Medicaid tab. On the check back day they show on Active Leads for a call.</div>
     </div>
     <div class="cl-grp">They are not going ahead</div>
     <div class="cl-grid">
@@ -7624,7 +7635,7 @@ function openPipelineEdit(id) {
   document.getElementById('ep_id').value = id;
   document.getElementById('editPipelineTitle').textContent = 'Log a call: ' + p.name;
   document.getElementById('ep_status').value = p.status || 'new';
-  document.getElementById('ep_followup').value = p.followup || '';
+  document.getElementById('ep_followup').value = (p.status === 'closed_no_medicaid' ? p.medicaidCheck : p.followup) || '';
   document.getElementById('ep_statesubmit').value = p.stateSubmit || '';
   document.getElementById('ep_dcn').value = p.dcn || '';
   document.getElementById('ep_notes').value = '';
@@ -7638,6 +7649,8 @@ function savePipelineUpdate() {
   if (!p) return;
   p.status = document.getElementById('ep_status').value;
   p.followup = document.getElementById('ep_followup').value;
+  // Still No Medicaid (2026-11-05): the call back date moves their check back, and nothing else comes due for a closed lead
+  if (p.status === 'closed_no_medicaid') { p.medicaidCheck = p.followup; p.followup = ''; }
   p.stateSubmit = document.getElementById('ep_statesubmit').value || p.stateSubmit;
   p.dcn = document.getElementById('ep_dcn').value || p.dcn;
   const noteText = document.getElementById('ep_notes').value.trim();
@@ -7662,12 +7675,19 @@ function openCloseLead(id) {
   document.getElementById('closeLeadTitle').textContent = 'Close ' + (p.name || 'this lead');
   document.getElementById('cl_note').value = '';
   document.getElementById('cl_stateno').hidden = true;
+  document.getElementById('cl_med').hidden = true;
+  document.getElementById('cl_medDate').value = '';
   document.getElementById('cl_ccpp').checked = false;
   openModal('closeLeadModal');
 }
 
 // The state said no: one more tap for why (her ask 2026-11-04: "could the state not reach them or did they not meet the level of care")
 function clStateNo() { const b = document.getElementById('cl_stateno'); b.hidden = !b.hidden; }
+// No Medicaid (2026-11-05): are they applying, and when to check back (30 days unless changed)
+function clNoMedicaid() {
+  const b = document.getElementById('cl_med'); b.hidden = !b.hidden;
+  const d = document.getElementById('cl_medDate'); if (!d.value) { const t = new Date(); t.setDate(t.getDate() + 30); d.value = t.toLocaleDateString('en-CA'); }
+}
 const CL_STATE_NO = { reach: 'the state could not reach them', level: 'they did not meet the level of care', other: 'another reason' };
 function closeLeadAs(status, why) {
   const id = document.getElementById('cl_id').value;
@@ -7682,6 +7702,11 @@ function closeLeadAs(status, why) {
   const extra = [];
   if (status === 'closed_state_no') { p.stateNoWhy = why || 'other'; extra.push(CL_STATE_NO[p.stateNoWhy]); }
   if (status === 'closed_area' && p.county) extra.push(p.county + ' County');
+  if (status === 'closed_no_medicaid') {
+    p.medicaidApplying = why === 'yes';
+    p.medicaidCheck = document.getElementById('cl_medDate').value || '';
+    extra.push((p.medicaidApplying ? 'applying for Medicaid' : 'not applying right now') + (p.medicaidCheck ? '; check back ' + p.medicaidCheck : ''));
+  }
   if (document.getElementById('cl_ccpp')?.checked) extra.push('told them about Caring Companions private pay');
   p.notes.push({ date: new Date().toLocaleDateString('en-CA'),
                  text: 'Closed: ' + (CDSRules.CLOSED_LABELS[status] || status) + (extra.length ? ' (' + extra.join('; ') + ')' : '') + (note ? '. ' + note : '') });
@@ -7701,6 +7726,7 @@ function reopenLead(id) {
   p.status = 'nurturing';
   delete p.closedAt;
   delete p.stateNoWhy;
+  delete p.medicaidCheck;
   if (!p.notes) p.notes = [];
   p.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: 'Reopened.' });
   setData('pipeline', pipeline);
@@ -9015,8 +9041,9 @@ function renderPipeline() {
   const cn = { now: 0, today: 0, wait: 0 }; open.forEach(x => { cn[ldCalmTone(x.c)]++; });
   const calmLine = [cn.now ? '<strong>' + cn.now + (cn.now === 1 ? ' needs' : ' need') + ' you now</strong>' : '',
     cn.today ? '<strong class="ldw-today">' + cn.today + ' today</strong>' : '', cn.wait ? cn.wait + ' can wait' : ''].filter(Boolean).join(' · ');
-  if (sum) sum.innerHTML = (cnLeads ? '<strong style="color:#7A4E0B">' + cnLeads + (cnLeads === 1 ? ' call note is' : ' call notes are') + ' waiting for your OK.</strong> ' : '') +
-    (_cnError ? '<span style="color:var(--danger)">Call notes could not be loaded: ' + esc(_cnError) + '</span> ' : '') +
+  const alertHtml = (cnLeads ? '<strong style="color:#7A4E0B">' + cnLeads + (cnLeads === 1 ? ' call note is' : ' call notes are') + ' waiting for your OK.</strong> ' : '') +
+    (_cnError ? '<span style="color:var(--danger)">Call notes could not be loaded: ' + esc(_cnError) + '</span> ' : '');
+  if (sum) sum.innerHTML = alertHtml +
     open.length + (open.length === 1 ? ' person' : ' people') + ' right now. ' +
     (calm ? calmLine : !urgent.length ? 'Nobody needs a call today.'
       : urgent.length <= 3 ? '<strong>' + (firstNames.length > 1 ? firstNames.slice(0, -1).join(', ') + ' and ' + firstNames.slice(-1) : firstNames[0]) + '</strong> ' + (urgent.length === 1 ? 'needs' : 'need') + ' you today.'
@@ -9048,7 +9075,7 @@ function renderPipeline() {
   let shown = q || _ldStep === 'all' ? open.filter(match) : open.filter(x => x.c.step === _ldStep);
   try { renderLdWho(shown, wcOn); } catch (e) { console.error('who called:', e); }
   // 2026-11-03 Leads as one table (leads-table.js, her switch leadsTable): the same people, one row each, instead of the cards.
-  if (window.LDT && LDT.on()) { LDT.draw({ open, closed, showClosed, match, today, calls: _leadCalls, cardsEl, stepsEl, pager: document.getElementById('ldPager'), who: wcOn ? _ldWhoFilter : 'all', whoOn: wcOn }); return; }
+  if (window.LDT && LDT.on()) { LDT.draw({ open, closed, showClosed, match, today, calls: _leadCalls, cardsEl, stepsEl, pager: document.getElementById('ldPager'), who: wcOn ? _ldWhoFilter : 'all', whoOn: wcOn, alertHtml }); return; }
   if (window.LDT) LDT.restore(stepsEl, cardsEl);
   if (wcOn && _ldWhoFilter !== 'all') shown = shown.filter(x => x.c.whoCalled === _ldWhoFilter);
   if (showClosed) shown = shown.concat(closed.filter(match));
