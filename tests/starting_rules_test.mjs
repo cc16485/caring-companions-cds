@@ -176,5 +176,23 @@ ok(drTxt.includes('Ann Active') && !drTxt.includes('Pat Start'), 'dailyRoutine l
 ok(!CR.isActive({ status: 'starting' }) && CR.isActive({ status: 'active' }) && CR.isActive({ status: 'pending' }), 'isActive');
 ok(S.isStarting({ status: 'Starting' }), 'isStarting');
 
+// The eMOMED Eligibility Response page, read from its PDF text (2026-11-05). A made-up person.
+{
+  const { readFileSync } = await import('fs');
+  const txt = readFileSync(ROOT + '/tests/fixtures/emomed_sample.txt', 'utf8');
+  const E = S.parseEmomed(txt);
+  ok(E && E.name.first === 'Margaret' && E.name.middle === 'L' && E.name.last === 'McDonald', 'eMOMED name from Participant Information, not the typed search');
+  ok(E.dcn === '01234567' && E.dob === '1940-04-12' && E.death === '', 'eMOMED DCN keeps its leading zero, birthday, no death');
+  ok(E.address && E.address.street === '22 NE Oak Ridge Dr' && E.address.city === 'Republic' && E.address.state === 'MO' && E.address.zip === '65738', 'eMOMED address');
+  ok(E.active === true && E.planCodes.join() === '11', 'Active Coverage with MO HealthNet, plan code passed along');
+  ok(E.other.includes('Medicare Part A') && E.other.includes('Sample Health Plans') && !E.other.some(x => /MO HealthNet/.test(x)), 'other insurance listed, never MO HealthNet');
+  const copay = txt.replace(/1 - Active Coverage/, '6 - Inactive');
+  ok(S.parseEmomed(copay).active === false, 'a co-payment line alone is not Active Coverage');
+  const dead = txt.replace('Participant Date Of Death\n', 'Participant Date Of Death\n10/01/2026\n');
+  ok(S.parseEmomed(dead).death === '2026-10-01', 'date of death is read');
+  ok(S.parseEmomed('An authorization letter\nParticipant Name\nX') === null && S.parseEmomed('') === null, 'not the eMOMED page: null');
+  ok(S.parseEmomed(txt.replace('JUNK', '').replace('MCDONALD', 'MCDONALD\nJR')).name.last === 'McDonald Jr', 'suffix stays with the last name');
+}
+
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);
