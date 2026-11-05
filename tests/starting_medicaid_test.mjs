@@ -71,6 +71,12 @@ r = await S('medicaidSend', { person: { kind: 'lead', id: 'l-fict-2', name: 'Lee
 ok(r.message.status === 'failed' && /invalid phone/.test(r.message.error), 'failed send recorded with the reason');
 tasks = (await S('tasks', {})).tasks.filter(t => t.kind === 'medicaid_failed');
 ok(tasks.length === 2, 'failed send is a Needs attention task');
+// The after-call message: same sender and records, no duplicate warning.
+r = await S('callFollowupSend', { person, channel: 'sms', to: '4175550177', body: "Hi Linda, thank you for calling about Pat. We'll call you back." });
+ok(r.message.status === 'sent' && (await pg.query(`select template from cds_outbox where id=$1`, [r.message.id])).rows[0].template === 'call_followup', 'after-call text sent and recorded');
+r = await S('callFollowupSend', { person, channel: 'sms', to: '4175550177', body: "Hi Linda, thank you again. We'll call you back." });
+ok(r.message.status === 'sent', 'after-call texts never warn as duplicates');
+await refuses(() => S('callFollowupSend', { person, channel: 'sms', to: '4175550177', body: 'Her ME code is 13.' }), /ME code/, 'after-call: identifiers stopped');
 // Safeguard 6 and input checks.
 await refuses(() => S('medicaidSend', { person, channel: 'sms', to: '4175550177', body: body + '\nHer DCN is 12345678', ids: { dcn: '12345678' }, force: true }), /DCN|Medicaid number/, 'DCN stopped');
 await refuses(() => S('medicaidSend', { person, channel: 'sms', to: '4175550177', body: body + '\nShe is not eligible because of managed care.', force: true }), /eligibility details/, 'eligibility details stopped');

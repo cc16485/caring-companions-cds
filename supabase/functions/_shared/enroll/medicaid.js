@@ -68,6 +68,36 @@ export function createMedicaidMessages(h) {
       return { message: pub(row) };
     },
 
+    // The after-call text or email from Finish call (2026-11-04): same sender, switch, identifier check and
+    // records as the instructions; no duplicate warning (each call is its own message).
+    async callFollowupSend({ staff, person, channel, to, subject, body, ids }) {
+      who(staff);
+      if (!['sms', 'email'].includes(channel)) fail('Pick Text or Email.');
+      const dest = String(to || '').trim();
+      if (channel === 'sms' && dest.replace(/\D/g, '').length < 10) fail('Add a cell phone number first.');
+      if (channel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(dest)) fail('Add an email address first.');
+      const text = String(body || '').trim();
+      if (text.length < 10) fail('The message is empty.');
+      if (text.length > (channel === 'sms' ? 1200 : 12000)) fail('The message is too long.');
+      const bad = S.identifierProblems((subject ? subject + '\n' : '') + text, ids || {});
+      if (bad.length) fail('Take out ' + bad.join(' and ') + '. Texts and emails never carry Medicaid numbers or eligibility details.');
+      const key = ref(person).replace(/^medicaid:/, 'call:');
+      const sw = await setting('medicaid_messages', { live: false });
+      let status, error = null, ghlId = null;
+      if (deps.mode === 'practice') status = 'practice';
+      else if (!sw.live && !(isTestRecipient && await isTestRecipient(channel, dest))) { status = 'held'; error = 'Starting texts to families are switched off (Switches card).'; }
+      else {
+        try { const r = await deps.send({ channel, to: dest, subject: channel === 'email' ? String(subject || 'Thank you for calling Caring Companions') : null, body: text }); status = 'sent'; ghlId = (r && r.id) || null; }
+        catch (e) { status = 'failed'; error = String(e && e.message || e).slice(0, 300); }
+      }
+      const row = await one(`insert into cds_outbox (audience, channel, template, to_display, body, status, error, automatic, created_by, ghl_id)
+        values ('family',$1,'call_followup',$2,$3,$4,$5,false,$6,$7) returning *`,
+        [channel, channel === 'sms' ? R.maskPhone(dest) : R.maskEmail(dest), (subject && channel === 'email' ? subject + '\n\n' : '') + text, status, error, key + ':' + staff, ghlId]);
+      if (status === 'failed') await task('medicaid_failed', 'The after-call message to ' + (person.name || 'a family') + ' did not go through. ' + (error || ''), {}, 'medicaid_failed:' + row.id, null);
+      await audit('staff:' + staff, 'call_followup_' + status, key, { channel });
+      return { message: pub(row) };
+    },
+
     async medicaidSends({ staff, person }) {
       who(staff);
       const key = ref(person);

@@ -44,6 +44,7 @@ async([LEAD, LEAD2, on])=>{
     return {};
   };
   window._saveConsumerDoc = async (c, file, meta) => Object.assign({ id: 'd' + Date.now(), path: c.id + '/docs/emomed_test.pdf', name: file.name, at: _todayIso(), by: _acWho() }, meta);
+  window.syncOneToGhl = async () => {};   // offline: GoHighLevel tagging is not part of this test
   const lo = document.getElementById('loginOverlay'); if (lo) lo.style.display = 'none';
   return true;
 }"""

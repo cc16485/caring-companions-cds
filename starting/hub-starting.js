@@ -106,8 +106,8 @@
   }
 
   // They said yes: the same record becomes a Starting consumer (her design: no retyping, no lost history).
-  function startFromLead(pid) {
-    const kind = (document.querySelector('input[name="stKind"]:checked') || {}).value || 'new';
+  function startFromLead(pid, kindArg) {
+    const kind = kindArg || (document.querySelector('input[name="stKind"]:checked') || {}).value || 'new';
     const pipeline = getData('pipeline'), p = pipeline.find(x => x.id === pid);
     if (!p || p.startingId) return;
     const consumers = getData('consumers');
@@ -119,7 +119,7 @@
       id, name: p.name, phone: p.phone || '', email: p.email || '', dcn: p.dcn || R.dcn || '', county: p.county || '', hours: p.hours || '',
       plandate: '', status: 'starting', trained: 'no', notes: '', contacts: {}, homeVisitDate: '', backupPlan: false,
       facts: { street: p.street || R.street || '', apt: p.apt || R.apt || '', city: p.city || R.city || '', zip: p.zip || R.zip || '', dob: p.dob || R.dob || '' },
-      starting: { kind, at: nowIso(), by: meName(), leadId: p.id },
+      starting: { kind, at: nowIso(), by: meName(), leadId: p.id, attendantName: (p.attendant && p.attendant.name) || '' },
       coordinator: p.coordinator || meName(),
       medicaid: p.medicaid ? JSON.parse(JSON.stringify(p.medicaid)) : {},
       relatedPeople: CDSRules.relatedPeople(p)
@@ -197,12 +197,12 @@
     out.push({ name: x.name, rel: 'themself', phone: x.phone || '', email: x.email || '' });
     return out.filter(r => r.phone || r.email || r.rel !== 'themself');
   }
-  function compose(kind, id) {
+  function compose(kind, id, host) {
     const x = (kind === 'lead' ? getData('pipeline') : getData('consumers')).find(r => String(r.id) === String(id));
     if (!x) return;
     const age = ageOf((x.facts && x.facts.dob) || x.dob || (x.referral || {}).dob);
     const rec = recipients(x);
-    cmp[kind] = { id, ch: 'sms', abd: age !== null ? age >= 65 : false, age, rec, to: 0, body: {}, dirty: {}, name: x.name, coord: x.coordinator || meName() };
+    cmp[kind] = { host: host || 'stCmp_' + kind, sends: host ? host.replace('stCmp_', 'stSends_') : 'stSends_' + kind, id, ch: 'sms', abd: age !== null ? age >= 65 : false, age, rec, to: 0, body: {}, dirty: {}, name: x.name, coord: meName() };   // signed by whoever sends it
     build(kind, 'sms'); build(kind, 'email');
     drawCmp(kind);
   }
@@ -214,7 +214,7 @@
     c.dirty[ch] = false;
   }
   function drawCmp(kind, msg, dup) {
-    const c = cmp[kind], host = document.getElementById('stCmp_' + kind);
+    const c = cmp[kind], host = c && document.getElementById(c.host);
     if (!c || !host) return;
     const r = c.rec[c.to] || {}, dest = c.ch === 'sms' ? r.phone : r.email, t = c.body[c.ch] || '';
     host.innerHTML = '<div class="st-cmp">' +
@@ -243,7 +243,7 @@
   }
   function cmpEdit(kind, v) { const c = cmp[kind]; c.body[c.ch] = v; c.dirty[c.ch] = true; }
   function cmpReset(kind) { build(kind, cmp[kind].ch); drawCmp(kind); }
-  function cmpClose(kind) { const h = document.getElementById('stCmp_' + kind); if (h) h.innerHTML = ''; delete cmp[kind]; }
+  function cmpClose(kind) { const c = cmp[kind], h = document.getElementById(c ? c.host : 'stCmp_' + kind); if (h) h.innerHTML = ''; delete cmp[kind]; }
   async function cmpSend(kind, force) {
     const c = cmp[kind]; if (!c) return;
     const x = (kind === 'lead' ? getData('pipeline') : getData('consumers')).find(r => String(r.id) === String(c.id));
@@ -260,14 +260,15 @@
       }
       const m = res.message, label = { sent: 'Sent', held: 'Saved, waiting: the Medicaid application texts switch is off', practice: 'Practice only, not sent', failed: 'FAILED: ' + (m.error || '') }[m.status] || m.status;
       edit(kind, c.id, rr => logTo(rr, (c.ch === 'sms' ? 'Text' : 'Email') + ' to ' + (r.name || '') + ': Medicaid application instructions' + (c.abd ? ' with IM-1ABD' : '') + '. ' + label.split(':')[0] + '.'));
+      const sendsId = c.sends;
       if (m.status === 'failed') { drawCmp(kind, label + ' It is on Today under Needs attention.'); }
       else { cmpClose(kind); }
-      loadSends(kind, x);
-      if (m.status !== 'failed') { const s = document.getElementById('stSends_' + kind); if (s) s.insertAdjacentHTML('afterbegin', '<div style="font-size:13px;color:var(--success);margin-bottom:6px">' + esc(label) + '.</div>'); }
+      await loadSends(kind, x, sendsId);
+      if (m.status !== 'failed') { const s = document.getElementById(sendsId); if (s) s.insertAdjacentHTML('afterbegin', '<div style="font-size:13px;color:var(--success);margin-bottom:6px">' + esc(label) + '.</div>'); }
     } catch (e) { drawCmp(kind, 'Not sent: ' + (e.message || e)); }
   }
-  async function loadSends(kind, x) {
-    const host = document.getElementById('stSends_' + kind);
+  async function loadSends(kind, x, hostId) {
+    const host = document.getElementById(hostId || 'stSends_' + kind);
     if (!host || !x) return;
     try {
       const r = await cdsMatchApi('medicaidSends', { person: { kind, id: String(x.id), name: x.name } });
@@ -584,7 +585,8 @@
     '</div>' +
     '<div class="card" style="padding:18px 20px;margin-top:14px"><b style="color:var(--primary)">Starting: Medicaid application messages</b>' +
       '<div class="field-note" style="margin:4px 0 8px">The text and email a coordinator sends from a lead or Starting profile. {caller}, {consumer} and {coordinator} fill in by themselves; {apply_online} and the other words in braces come from the list below. Lines between [[abd]] and [[/abd]] appear only when the Aged, Blind and Disabled form applies.</div>' +
-      '<div class="st-form"><label style="grid-column:1/-1">Text<textarea id="admText" rows="7"' + (can ? '' : ' readonly') + '>' + esc(M.templates.text) + '</textarea></label>' +
+      '<div class="st-form"><label style="grid-column:1/-1">After-call text ({next} is the sentence Finish call picks)<textarea id="admCallText" rows="3"' + (can ? '' : ' readonly') + '>' + esc(M.templates.callText) + '</textarea></label>' +
+        '<label style="grid-column:1/-1">Medicaid instructions, text<textarea id="admText" rows="7"' + (can ? '' : ' readonly') + '>' + esc(M.templates.text) + '</textarea></label>' +
         '<label style="grid-column:1/-1">Email subject<input id="admSubject" type="text" value="' + esc(M.templates.emailSubject) + '"' + (can ? '' : ' readonly') + '></label>' +
         '<label style="grid-column:1/-1">Email<textarea id="admEmail" rows="12"' + (can ? '' : ' readonly') + '>' + esc(M.templates.email) + '</textarea></label></div>' +
       '<div style="font-weight:600;font-size:13px;margin:10px 0 4px">Application resources</div>' +
@@ -622,12 +624,12 @@
     const reason = v('admMsgReason').trim(), note = document.getElementById('admMsgNote');
     if (!reason) { note.innerHTML = '<span style="color:var(--danger)">Add the reason for this change.</span>'; return; }
     const M = messages();
-    const templates = { text: v('admText'), emailSubject: v('admSubject'), email: v('admEmail') };
+    const templates = { callText: v('admCallText'), text: v('admText'), emailSubject: v('admSubject'), email: v('admEmail') };
     const resources = M.resources.map((r, i) => Object.assign({}, r, { value: v('admRes' + i).trim() || r.value }));
     const bad = S.identifierProblems(templates.text + '\n' + templates.email, {});
     if (bad.length) { note.innerHTML = '<span style="color:var(--danger)">Take out ' + esc(bad.join(' and ')) + '. These messages never carry Medicaid numbers or eligibility details.</span>'; return; }
     const changed = [];
-    ['text', 'emailSubject', 'email'].forEach(k => { if (templates[k] !== M.templates[k]) changed.push(k === 'text' ? 'the text' : k === 'email' ? 'the email' : 'the email subject'); });
+    ['callText', 'text', 'emailSubject', 'email'].forEach(k => { if (templates[k] !== M.templates[k]) changed.push({ callText: 'the after-call text', text: 'the instructions text', email: 'the instructions email', emailSubject: 'the email subject' }[k]); });
     resources.forEach((r, i) => { if (r.value !== M.resources[i].value) changed.push(r.label + ' (was ' + M.resources[i].value + ')'); });
     if (!changed.length) { note.textContent = 'Nothing changed.'; return; }
     setObj('medicaidMessages', { templates, resources, log: M.log.concat([{ at: nowIso(), by: meName(), reason, text: 'Changed ' + changed.join(', ') + '.' }]) });

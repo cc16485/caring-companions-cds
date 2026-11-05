@@ -263,6 +263,7 @@
     { key: 'cds_phone',    label: 'Our CDS line', value: '417-218-2888' }
   ];
   const DEFAULT_TEMPLATES = {
+    callText: "Hi {caller}, it's {coordinator} with Caring Companions CDS. {next} Questions? Call or text us at {cds_phone}.",
     text: "Hi {caller}, it's {coordinator} with Caring Companions CDS. Here's how to apply for Missouri Medicaid for {consumer}:\n" +
       'Online: {apply_online}\nBy phone: {apply_phone}\n' +
       '[[abd]]Because {consumer} is 65 or older, blind or disabled, also ask for the Aged, Blind and Disabled form (IM-1ABD).\n[[/abd]]' +
@@ -302,7 +303,56 @@
     return (sends || []).filter(s => s.status !== 'failed' && String(s.at) >= since);
   }
 
+
+  // ---- The first call (2026-11-04, her ask: one connected workflow from the moment someone calls) ----
+  // C = { who: self|family|pair|solo|unsure, consumer: {first, last}, caller: {name, relation}, phone, medicaid: yes|no|applied|unsure,
+  //       cds: new|move|unsure, agency, help: [], helpNote, attendant: has|find|unsure, attName, ready: yes|not_yet|'' }
+  // Unknown answers are fine; they become "still missing". Returns the Finish call plan.
+  const HELP = { bathing: 'bathing', dressing: 'dressing', meals: 'meals', housekeeping: 'housekeeping', meds: 'medication reminders', errands: 'errands and rides', toileting: 'toileting', mobility: 'getting around' };
+  function callPlan(C) {
+    C = C || {};
+    const cn = [C.consumer && C.consumer.first, C.consumer && C.consumer.last].filter(Boolean).join(' ');
+    const first = (C.consumer && C.consumer.first) || 'them';
+    const caller = C.who === 'self' ? cn : (C.caller && C.caller.name) || '';
+    const help = (C.help || []).map(h => HELP[h] || h);
+    const parts = [];
+    if (C.who === 'solo') parts.push((caller || 'A caller') + ' wants to be a paid attendant and has no one to care for yet.');
+    else {
+      parts.push(C.who === 'self' ? (cn || 'The consumer') + ' called for themself.'
+        : (caller || 'Someone') + (C.caller && C.caller.relation ? ' (' + C.caller.relation + ')' : '') + (C.who === 'pair' ? ', who would be the attendant,' : '') + ' called about ' + (cn || 'someone') + '.');
+      parts.push({ yes: 'Has Medicaid.', no: 'No Medicaid yet.', applied: 'Applied for Medicaid, waiting.', unsure: 'Not sure about Medicaid.' }[C.medicaid] || 'Medicaid not asked.');
+      parts.push({ new: 'New to CDS.', move: 'Has CDS now' + (C.agency ? ' with ' + C.agency : '') + ' and wants to switch.', unsure: 'Not sure if they have CDS.' }[C.cds] || '');
+      if (help.length || C.helpNote) parts.push('Needs help with ' + help.join(', ') + (help.length && C.helpNote ? '; ' : '') + (C.helpNote || '') + '.');
+      if (C.who === 'pair') parts.push((caller || 'The caller') + ' would be the attendant.');
+      else parts.push({ has: (C.attName || 'Someone') + ' may be the attendant.', find: 'Needs us to find an attendant.', unsure: 'Not sure about an attendant yet.' }[C.attendant] || '');
+      parts.push({ yes: 'They want to go ahead.', not_yet: 'Not ready to go ahead yet.' }[C.ready] || '');
+    }
+    const summary = parts.filter(Boolean).join(' ');
+    const missing = [];
+    if (C.who !== 'solo') {
+      if (!cn) missing.push("the consumer's name");
+      if (C.who !== 'self' && !caller) missing.push("the caller's name");
+      if (!String(C.phone || '').replace(/\D/g, '')) missing.push('a phone number');
+      if (!C.medicaid || C.medicaid === 'unsure') missing.push('Medicaid (look them up in eMOMED by name and birth date)');
+      if (!C.cds || C.cds === 'unsure') missing.push('new to CDS or moving from another agency');
+      if (!help.length && !C.helpNote) missing.push('the help they need at home');
+      if (C.who !== 'pair' && (!C.attendant || C.attendant === 'unsure')) missing.push('whether they have an attendant in mind');
+    } else {
+      if (!caller) missing.push('their name');
+      if (!String(C.phone || '').replace(/\D/g, '')) missing.push('a phone number');
+    }
+    // One recommended next step, most important first.
+    let next, days, say;
+    if (C.who === 'solo') { next = { k: 'pool', t: 'Move them to the Caregiver Pool' }; days = 0; say = "Thank you for calling Caring Companions CDS about being an attendant. We'll keep your name and number and reach out when a family near you needs someone."; }
+    else if (C.ready === 'yes') { next = { k: 'start', t: 'Start ' + first + "'s profile" }; days = 1; say = "Thank you for calling about " + first + ". We'll get started on the next steps and call you with what comes next."; }
+    else if (C.medicaid === 'no' || C.medicaid === 'applied') { next = { k: 'medicaid', t: 'Send the Medicaid application instructions' }; days = C.medicaid === 'applied' ? 14 : 3; say = "Thank you for calling about " + first + ". CDS is paid for by Medicaid, so I'm sending you the steps to apply in a separate message."; }
+    else if (!cn || !String(C.phone || '').replace(/\D/g, '')) { next = { k: 'callback', t: 'Call back for ' + (!cn ? "the consumer's name" : 'a phone number') }; days = 1; say = ''; }
+    else if (!C.medicaid || C.medicaid === 'unsure' || C.medicaid === 'yes') { next = { k: 'emomed', t: 'Look ' + first + ' up in eMOMED' }; days = 2; say = "Thank you for calling about " + first + ". We'll check a few things on our end and call you back."; }
+    else { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling about " + first + ". Take your time; we'll check back in with you."; }
+    if (C.ready === 'not_yet' && next.k !== 'medicaid' && next.k !== 'pool') { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling about " + first + ". Take your time; we'll check back in with you."; }
+    return { summary, missing, next, followDays: days, say, consumerName: cn, callerName: caller };
+  }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends };
+                       fillTemplate, identifierProblems, recentSends, callPlan, HELP };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

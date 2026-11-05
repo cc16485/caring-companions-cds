@@ -87,6 +87,19 @@ ok(S.identifierProblems('ME code 13 looks fine', {}).length === 1, 'ME code stop
 ok(S.identifierProblems('She is not eligible because of managed care', {}).length === 1, 'eligibility details stopped');
 ok(S.recentSends([{ at: '2026-11-02T00:00:00Z', status: 'sent' }, { at: '2026-10-01T00:00:00Z', status: 'sent' }, { at: '2026-11-03T00:00:00Z', status: 'failed' }], '2026-11-04T12:00:00Z').length === 1, 'recent sends');
 
+// The first call: summary, still missing, one next step, follow-up gap.
+const P = S.callPlan;
+let cp = P({ who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', medicaid: 'no', cds: 'new', help: ['bathing'], attendant: 'find' });
+ok(cp.summary.startsWith('Linda (daughter) called about Mae Example.') && cp.missing.length === 0 && cp.next.k === 'medicaid' && cp.followDays === 3, 'family, no Medicaid');
+ok(P({ who: 'family', medicaid: 'applied', consumer: { first: 'A' }, phone: '4175550100' }).followDays === 14, 'applied: two weeks');
+ok(P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', medicaid: 'yes', cds: 'new', ready: 'yes' }).next.k === 'start', 'ready: start the profile');
+ok(P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', medicaid: 'yes', cds: 'new', ready: 'not_yet' }).next.t === 'Call back to see if they are ready', 'not ready: call back');
+ok(P({ who: 'solo', caller: { name: 'Jo' }, phone: '4175550155' }).next.k === 'pool', 'attendant only: Caregiver Pool');
+cp = P({ who: 'family', caller: { name: 'Bea' } });
+ok(cp.missing.includes("the consumer's name") && cp.missing.includes('a phone number') && cp.next.k === 'callback', 'incomplete call: missing list, call back');
+ok(P({ who: 'pair', consumer: { first: 'Hal' }, caller: { name: 'Sam' }, phone: '4175550144', medicaid: 'yes', cds: 'new' }).summary.includes('Sam would be the attendant'), 'attendant with a consumer');
+ok(['self', 'family', 'pair', 'solo'].every(w => S.identifierProblems(P({ who: w, consumer: { first: 'X' }, caller: { name: 'Y' }, phone: '4175550100', medicaid: 'no' }).say, {}).length === 0), 'after-call words carry no identifiers');
+
 // The active rule leaves Starting out.
 ok(!CR.isActive({ status: 'starting' }) && CR.isActive({ status: 'active' }) && CR.isActive({ status: 'pending' }), 'isActive');
 ok(S.isStarting({ status: 'Starting' }), 'isStarting');

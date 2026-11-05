@@ -27,7 +27,7 @@
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=33"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=1"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
-<script src="leads-table.js?v=5"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="leads-table.js?v=6"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=13"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=1"></script>
@@ -1097,7 +1097,7 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
         <h1 class="cute-title ld-title">Leads</h1>
         <p class="ld-sum" id="ldSummary"></p>
       </div>
-      <button type="button" class="ld-add" onclick="openModal('addSomeoneModal')">
+      <button type="button" class="ld-add" onclick="window.StartCall && StartHub.on() ? StartCall.open() : openModal('addSomeoneModal')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         Add someone
       </button>
@@ -7399,6 +7399,8 @@ function addPipelineContact() {
   }
 }
 
+// Log a call: the first-call screen while the Starting switch is on (2026-11-04), else the quick Log a call as before.
+function ldLogCall(id) { if (window.StartCall && window.StartHub && StartHub.on()) StartCall.open(id); else openPipelineEdit(id); }
 function openPipelineEdit(id) {
   const pipeline = getData('pipeline');
   const p = pipeline.find(x => x.id === id);
@@ -7966,7 +7968,7 @@ function renderLeadProfile(){
     (card ? '<div class="ld-next" style="margin-bottom:12px"><span class="ld-due t-' + card.tone + '">' + esc(card.due) + '</span>' +
       '<span class="ld-nexttext"><strong>Next:</strong> ' + esc(card.next) + '</span></div>' : '') +
     '<div style="display:flex;flex-wrap:wrap;gap:8px">' +
-      '<button class="btn btn-primary" onclick="openPipelineEdit(\'' + pid + '\')">Log a call</button>' +
+      '<button class="btn btn-primary" onclick="ldLogCall(\'' + pid + '\')">Log a call</button>' +
       (p.status !== 'closed_linked' ? '<button class="btn btn-outline" onclick="openLinkLead(\'' + pid + '\')">Called for someone else?</button>' : '') +
       (card && card.step === 'ready' && !(window.StartHub && StartHub.on()) ? '<button class="btn btn-outline" onclick="convertToConsumer(\'' + pid + '\')">Move to Consumers</button>' : '') +
       (PIPELINE_CLOSED_STATUSES.includes(p.status)
@@ -8824,7 +8826,7 @@ function renderPipeline() {
       ? '<button type="button" class="ld-move" onclick="convertToConsumer(\'' + id + '\')">Move to Consumers</button>'
       : c.step === 'closed' ? (PIPELINE_CLOSED_STATUSES.includes(p.status) ? '<button type="button" class="ld-open" onclick="reopenLead(\'' + id + '\')">Reopen</button>' : '')
       : c.whoCalled === 'solo' ? '<button type="button" class="ld-pool" onclick="ldPoolAsk(\'' + id + '\')">Move to Caregiver Pool</button>'
-      : '<button type="button" class="ld-log" onclick="openPipelineEdit(\'' + id + '\')">Log a call</button>';
+      : '<button type="button" class="ld-log" onclick="ldLogCall(\'' + id + '\')">Log a call</button>';
     const shut = c.step !== 'closed'
       ? '<button type="button" class="ld-shut" onclick="openCloseLead(\'' + id + '\')" aria-label="Close ' + esc(p.name || 'this lead') + '" title="Close this lead"' + (calm ? ' hidden' : '') + '>Close</button>' : '';
     // The calm look: Close waits behind ···, like Caring Companions.
@@ -17314,6 +17316,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=1"></script><!-- 2026-11-04 Starting profile (switch starting) -->
+<script src="starting/hub-starting.js?v=3"></script>
+<script src="starting/hub-call.js?v=2"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>
