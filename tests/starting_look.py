@@ -166,6 +166,8 @@ with sync_playwright() as pw:
     pg.evaluate("d=>StartHub.setStart(getData('consumers')[0].id, d)", day(5)); pg.wait_for_timeout(200)
     ck('start date saved; five days out and not ready shows urgent', 'Start date in 5 days' in pg.inner_text('#prof_body'))
     ck('Today lists the start date that is not ready, with its owner', 'start date, not ready' in pg.evaluate("()=>StartHub.todayHtml()"))
+    t5 = pg.evaluate("()=>{ try { renderDailyRoutine(); return (document.getElementById('dailyRoutine')||{}).textContent || ''; } catch (e) { return 'error: ' + e.message; } }")
+    ck('Today step 5 lists Starting people getting ready, with the checklist count (2026-11-05)', 'Starting consumer getting ready for the first shift' in t5 and 'of 11 ready' in t5, t5[:600])
 
     # ---- 5. paperwork, attendant, WellSky, ready
     pg.evaluate("()=>{ PKT = { packet: { status: 'Done', signed_at: new Date().toISOString(), answers: {} } }; delete _profPacket[getData('consumers')[0].id]; _store.attendants = [{ id: 'a1', name: 'Amy Example', consumer: 'Pat Example', status: 'active' }]; _profTab='ready'; renderProfile(); }"); pg.wait_for_timeout(400)

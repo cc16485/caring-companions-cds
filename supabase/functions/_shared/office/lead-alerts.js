@@ -416,7 +416,7 @@ export function createLeadAlerts(deps) {
     catch (e) { evvSubs = [{ consumer: 'EVV forms sent in online could not be read: ' + String((e && e.message) || e).slice(0, 120), sig_attendant: true, sig_consumer: true }]; }
     const steps = R.dailyRoutine({ consumers: s.consumers || [], pipeline: s.pipeline || [], authorizations: s.authorizations || {},
                                    attendantWages: s.attendantWages || {}, siteLeads, calls, wellskyItems, followups,
-                                   wsPeople, nameKey: W.nameKey, attendantWork, noShift, wsAuth,
+                                   wsPeople, nameKey: W.nameKey, attendantWork, noShift, wsAuth, wsShifts: wsc.shifts,
                                    quarterStatus: due.quarterStatus || {},
                                    evv: { corrections: Array.isArray(due.evvCorrections) ? due.evvCorrections : [], submissions: evvSubs },
                                    payroll: { runs: (due.payrollTotals || {}).runs || [], registers: (s.attendantWages || {}).registers || [] },
@@ -434,6 +434,8 @@ export function createLeadAlerts(deps) {
     }
     // Starting (her decision 2026-11-04): only follow-ups due today or late, and ME code reviews waiting (any care
     // coordinator resolves them since 11-05). Never a list of everyone Starting. Only while the hub switch 'starting' is on.
+    // 2026-11-05: also waiting on the state (Admin days), ready to move to Active (WellSky first shift), and the packet
+    // line of the start-date check read from the packet itself (Done = the office signature is saved).
     let startingItems = [];
     const stw = (await store(['starting'])).starting;
     if (stw && stw.live === true && globalThis.CDSStarting) {
@@ -444,17 +446,33 @@ export function createLeadAlerts(deps) {
       // roster or authorization context, so it only lists dates with the checklist as the hub last saw it.
       const authRecs = Object.values((s.authorizations || {}).records || {});
       const att = (await store(['attendants'])).attendants || [];
+      const sx = await store(['startingWaits', 'firstShifts']);
+      let packetDone = null;
+      try {
+        packetDone = new Set();
+        for (const r of await q(`select consumer_id, lead_id from cds_enroll_packets where office_signed_at is not null`)) {
+          if (r.consumer_id) packetDone.add('c:' + r.consumer_id);
+          if (r.lead_id) packetDone.add('l:' + r.lead_id);
+        }
+      } catch (e) { packetDone = null; }   // unreadable: the packet line is left out, as before, never guessed
+      const authOf = c => authRecs.some(a => String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase());
+      const sw = ST.stateWaits({ consumers: s.consumers || [] }, todayIso, c => ({ auth: authOf(c) }), sx.startingWaits || {});
+      const toActive = ST.readyForActive({ consumers: s.consumers || [] }, sx.firstShifts || {}, W.nameKey);
       const sdA = ST.startDateAlerts({ consumers: s.consumers || [] }, todayIso, c => ({
         auth: authRecs.some(a => String(a.consumer || a.name || '').toUpperCase() === String(c.name).toUpperCase()),
         attendant: { ready: att.some(a => a.status !== 'inactive' && String(a.consumer || '').toUpperCase().split(',').map(x => x.trim()).includes(String(c.name).toUpperCase())) },
-        skipKeys: ['packet'] }));
+        ...(packetDone ? { packet: { done: packetDone.has('c:' + c.id) || packetDone.has('l:' + ((c.starting || {}).leadId || '')) } } : { skipKeys: ['packet'] }) }));
       startingItems = [
         fu.length && { t: fu.length + ' Medicaid application follow-up' + (fu.length !== 1 ? 's' : '') + ' due', go: 'consumers',
                        people: fu.map(x => ({ name: x.name, why: 'check the application with ' + (x.owner || 'no owner set'), due: x.due })) },
         sdA.length && { t: sdA.length + ' Starting start date' + (sdA.length !== 1 ? 's' : '') + ' coming up, not ready to clock in', go: 'consumers', bad: true,
                         people: sdA.map(x => ({ name: x.name, why: x.why + (x.owner ? ', with ' + x.owner : ''), due: x.due })) },
         sup.length && { t: sup.length + ' Starting ME code review' + (sup.length !== 1 ? 's' : '') + ' waiting', go: 'consumers', bad: true,
-                        people: sup.map(c => ({ name: c.name, why: ST.medicaidState(c).label })) }
+                        people: sup.map(c => ({ name: c.name, why: ST.medicaidState(c).label })) },
+        sw.length && { t: sw.length + ' waiting on the state with no authorization yet', go: 'consumers',
+                       people: sw.map(x => ({ name: x.name, why: x.why })) },
+        toActive.length && { t: toActive.length + ' Starting consumer' + (toActive.length !== 1 ? 's' : '') + ' had the first shift: open the Hub to move them to Active', go: 'consumers',
+                             people: toActive.map(x => ({ name: x.name, why: 'first shift ' + x.firstShift })) }
       ].filter(Boolean);
     }
     const extra = {

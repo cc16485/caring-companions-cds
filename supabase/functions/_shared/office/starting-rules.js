@@ -284,6 +284,29 @@
       return a && a.soon && miss.length ? { name: c.name, id: c.id, due: a.date, late: a.late, owner: c.coordinator || '', why: 'start date, not ready: ' + miss.slice(0, 3).join('; ') + (miss.length > 3 ? '; and more' : '') } : null;
     }).filter(Boolean).sort((a, b) => a.due.localeCompare(b.due));
   }
+  // Today step 5 (2026-11-05, loose end): every Starting person not marked ready yet, with how much of the Ready for
+  // first shift checklist is done, so one step on Today covers old and new consumers. Lines the caller cannot know
+  // (ctx.skipKeys) are left out of the count, never guessed.
+  function readyList(data, todayIso, ctxOf) {
+    return (data.consumers || []).filter(isStarting).filter(c => !(c.starting && c.starting.readyAt)).map(c => {
+      const cx = ctxOf ? ctxOf(c) : {}, skip = cx.skipKeys || [];
+      const g = startingSteps(c, Object.assign({ today: todayIso }, cx)).gate.filter(x => !skip.includes(x.k));
+      const ok = g.filter(x => x.ok).length, next = g.find(x => !x.ok);
+      return { id: c.id, name: c.name, county: c.county || '', start: c.cdsStartDate || '', ok, total: g.length, next: next ? next.t : '' };
+    }).sort((a, b) => (a.start || '9999').localeCompare(b.start || '9999'));
+  }
+  // Ready to move to Active (2026-11-05, loose end): WellSky shows a worked first shift, and the profile still says
+  // Starting. The hub moves them the first time anyone opens it (promoteAll); the 8am email lists them meanwhile.
+  // firstShifts = agency_data 'firstShifts' ({ people: { 'Last, First': { date } } }); nameKey from CDSWellSky.
+  function readyForActive(data, firstShifts, nameKey) {
+    const people = (firstShifts && firstShifts.people) || {};
+    const byKey = {};
+    Object.keys(people).forEach(n => { byKey[nameKey(n)] = people[n].date; });
+    return (data.consumers || []).filter(isStarting).map(c => {
+      const d = [c.name, c.wellskyName].filter(Boolean).map(n => byKey[nameKey(n)]).filter(Boolean).sort()[0];
+      return d ? { id: c.id, name: c.name, firstShift: d } : null;
+    }).filter(Boolean);
+  }
   const STAGES = { applied: 'already applied', help: 'needs help applying', plans: 'plans to apply' };
   // Her default follow-up gaps (mockup version 5): days after today.
   const FOLLOWUP_DAYS = { applied: 14, help: 3, plans: 7 };
@@ -546,5 +569,5 @@
   }
   root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, parseDob, HELP, startDateAlerts, stateWaits, STATE_WAIT_DAYS, ageOn };
+                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, parseDob, HELP, startDateAlerts, stateWaits, STATE_WAIT_DAYS, readyList, readyForActive, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
