@@ -26,7 +26,7 @@ ok(R.endingMissing(e).length === 4, 'death: date of death plus three steps missi
 e.eventDate = '2026-10-20';
 ['learned', 'dsds', 'file'].forEach(k => { e.steps[k] = { date: '2026-10-22' }; });
 ok(R.endingMissing(e).length === 0, 'death: nothing missing once dated');
-ok(R.endingMissing({ kind: 'hospital', steps: {} }).length === 2, 'hospital: went-in date not required, two steps are');
+ok(R.endingMissing({ kind: 'hospital', steps: {} }).length === 3, 'hospital: went-in date not required, three steps are (11-05: shifts stopped in WellSky)');
 
 ok(R.appealEnds('2026-10-22') === '2026-11-01', '10 days after the notice');
 ok(R.appealEnds('2026-12-25') === '2027-01-04', 'across the year');
@@ -62,7 +62,7 @@ ok(!Object.values(L).join(' ').includes('\u2014'), 'no em dashes in the letter')
   const items = R.closureItems(cs, now, { days: 30, people: [{ id: '9', name: 'Ivy Quiet', last: '' }, { id: '10', name: 'Jo Told', last: '' }] });
   const line = n => items.find(i => i.t.startsWith(n));
   ok(/tell DSDS right away/.test(line('Ben Died').t) && line('Ben Died').bad && line('Ben Died').id === '2', 'death: tell DSDS right away, red, opens the profile');
-  ok(/Tell DSDS about the stay/.test(line('Cal Hospital').t) && line('Cal Hospital').bad, 'hospital: tell DSDS about the stay');
+  ok(/Stop their shifts in WellSky and tell the attendant not to clock in/.test(line('Cal Hospital').t) && line('Cal Hospital').bad, 'hospital: first stop the WellSky shifts');
   ok(/next, offers of help/.test(line('Dee NoAtt').t), 'no attendant: next missing step');
   ok(/appeal window ends Oct 28/.test(line('Eve Asked').t) && !line('Eve Asked').bad, 'appeal window shown, not red');
   ok(/Mark them inactive/.test(line('Fay Medicaid').t) && line('Fay Medicaid').bad, 'ready to mark inactive');
@@ -71,6 +71,31 @@ ok(!Object.values(L).join(' ').includes('\u2014'), 'no em dashes in the letter')
   const ns = items.find(i => /no worked shift/.test(i.t));
   ok(ns && /Ivy Quiet/.test(ns.t) && !/Jo Told/.test(ns.t) && ns.bad, 'no-shift line names only those DSDS was not told about');
   ok(R.closureItems([{ id: '1', name: 'A', status: 'active' }], now, null).length === 0, 'nothing to do, no lines');
+  // Something changed (her ask 2026-11-05): hospital order of steps, shifts during the stay, the 10-day DSDS date, moves, health, back home.
+  const H = (steps, extra) => [Object.assign({ id: 'h', name: 'Hana Stay', status: 'paused', ending: { kind: 'hospital', startedAt: '2026-10-20', eventDate: '2026-10-19', steps: st(steps) } }, extra || {})];
+  const WS = { consumers: [{ name: 'Stay, Hana', shifts: [{ date: '2026-10-18' }, { date: '2026-10-21' }, { date: '2026-10-30' }] }] };
+  let it = R.closureItems(H({ shiftsStopped: '2026-10-20' }), now, null, WS)[0];
+  ok(it && /WellSky has 2 shifts during the hospital stay \(Oct 21, Oct 30\)/.test(it.t) && it.bad, 'hospital: WellSky shifts on or after the day they went in (booked ahead too)');
+  it = R.closureItems(H({ shiftsStopped: '2026-10-20' }), now, null, { consumers: [] })[0];
+  ok(it && /tell DSDS about the hospital stay by Oct 29/.test(it.t) && !it.bad, 'hospital: tell DSDS by 10 days after they went in (7 days left: not red yet)');
+  it = R.closureItems(H({ shiftsStopped: '2026-10-20', dsdsTold: '2026-10-21' }), now, null, { consumers: [] })[0];
+  ok(it && /Mark them back home when they are/.test(it.t) && !it.bad, 'hospital: all done, waiting for them to come home');
+  const CH = (kind, steps, extra) => [Object.assign({ id: 'c', name: 'Moe Change', status: 'active', changes: [Object.assign({ id: 'x', kind, startedAt: '2026-10-20', eventDate: '2026-10-18', steps: st(steps) }, extra || {})] })];
+  it = R.closureItems(CH('moved', { learned: '2026-10-20' }), now, null)[0];
+  ok(it && /moved to a new address in our area\. Tell DSDS by Oct 28\./.test(it.t) && !it.bad, 'moved: tell DSDS within 10 days of the move');
+  it = R.closureItems(CH('moved', { learned: '2026-10-20' }, { eventDate: '2026-10-05' }), now, null)[0];
+  ok(it && /Tell DSDS by Oct 15 \(late\)/.test(it.t) && it.bad, 'moved weeks ago: late and red');
+  it = R.closureItems(CH('moved', { learned: '2026-10-20' }, { eventDate: '2026-10-14' }), now, null)[0];
+  ok(it && /by Oct 24\./.test(it.t) && it.bad, '3 days or less left: red');
+  it = R.closureItems(CH('moved', { learned: '2026-10-20', dsds: '2026-10-21' }), now, null)[0];
+  ok(it && /Next, new address saved on their profile/.test(it.t), 'moved: next step after DSDS');
+  it = R.closureItems(CH('health', { learned: '2026-10-20', dsds: '2026-10-21', selfDirect: '2026-10-21' }), now, null)[0];
+  ok(it && /Every step is done; mark it done/.test(it.t) && !it.bad, 'health: required steps done (the attendant talk is optional)');
+  ok(R.closureItems(CH('health', {}, { doneAt: '2026-10-22' }), now, null).length === 0, 'a done change leaves Today');
+  it = R.closureItems(CH('home', {}), now, null)[0];
+  ok(it && /back home from the hospital\. Next, called them now they are home/.test(it.t) && it.bad, 'back home: the call first');
+  ok(R.changeDue('2026-11-01') === '2026-11-11' && R.changeDue('') === '', 'DSDS due: 10 days after');
+  ok(R.hospitalShifts({ name: 'Hana Stay' }, WS, '2026-10-19', '2026-10-25').join() === '2026-10-21', 'shifts between went in and came home only');
   const steps = R.dailyRoutine({ consumers: cs, pipeline: [] }, now);
   ok(steps[steps.length - 1].title === 'Closings, pauses and missing shifts', 'the morning list gets the closings step');
   ok(R.dailyRoutine({ consumers: [{ id: '1', name: 'A' }], pipeline: [] }, now).length === 4, 'no closings: the email keeps its four steps');
