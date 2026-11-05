@@ -16,8 +16,8 @@ import '../office/starting-rules.js';
 const S = globalThis.CDSStarting;
 const DUP_DAYS = 7;
 const BAD_DELIVERY = ['failed', 'undelivered', 'bounced', 'rejected'];
-// Her decision 2026-11-04: Samantha and Zach resolve supervisor reviews (the hub checks the same list).
-export const SUPERVISORS = ['samantha@mo-care.com', 'samantha@caringcds.com', 'zach@caringcds.com'];
+// Her rule 2026-11-05: any care coordinator (a signed-in CDS Hub user) resolves an ME code review, with a note and its
+// supporting document (2026-11-04 it was Samantha and Zach only). Rule and message changes stay Samantha's.
 const AUDIT_ACTIONS = ['starting_started', 'emomed_check', 'review_requested', 'family_reports_approved', 'supervisor_approve', 'supervisor_hold', 'supervisor_close', 'rule_changed', 'messages_changed'];
 
 export function createMedicaidMessages(h) {
@@ -101,8 +101,8 @@ export function createMedicaidMessages(h) {
       return { message: pub(row) };
     },
 
-    // The audit record for Starting decisions (her decision 2026-11-04). A supervisor resolution is refused unless
-    // it comes from a supervisor and names its supporting document; the hub saves nothing until this succeeds.
+    // The audit record for Starting decisions (her decision 2026-11-04). A review resolution is refused unless it has
+    // a note and names its supporting document; the hub saves nothing until this succeeds.
     async startingAudit({ staff, person, action, detail }) {
       who(staff);
       if (!AUDIT_ACTIONS.includes(action)) fail('Unknown action.');
@@ -111,9 +111,8 @@ export function createMedicaidMessages(h) {
       if (!kind || !id) fail('Pick the lead or consumer first.');
       const d = detail && typeof detail === 'object' ? detail : {};
       if (/^supervisor_/.test(action)) {
-        if (!SUPERVISORS.includes(String(staff).toLowerCase())) fail('Only Samantha or Zach can resolve a supervisor review.', 403);
-        if (!String(d.note || '').trim()) fail('A supervisor resolution needs a note.');
-        if (!String(d.doc || '').trim()) fail('A supervisor resolution needs its supporting document.');
+        if (!String(d.note || '').trim()) fail('A review needs a note.');
+        if (!String(d.doc || '').trim()) fail('A review needs its supporting document.');
       }
       if ((action === 'rule_changed' || action === 'messages_changed') && !['samantha@mo-care.com', 'samantha@caringcds.com'].includes(String(staff).toLowerCase())) fail('Only Samantha changes the Starting rules and messages.', 403);
       const raw = JSON.stringify(d), clean = raw.length <= 4000 ? d : { note: String(d.note || '').slice(0, 1000), doc: d.doc || null, truncated: true };

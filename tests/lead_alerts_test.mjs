@@ -356,7 +356,7 @@ ok(!html.includes('<b>X</b>') && html.includes('&lt;b&gt;X&lt;/b&gt;'), 'what a 
   b2 = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
   ok(b2.includes('1 Medicaid application follow-up due') && b2.includes('Fic One (check the application with Krystal, late, was due Dec 8)'), 'late follow-up with its owner');
   ok(!b2.includes('Fic Two'), 'a follow-up not due yet is left out');
-  ok(b2.includes('1 Starting Medicaid review waiting on Samantha or Zach') && b2.includes('Fic Three'), 'a review waiting on a supervisor');
+  ok(b2.includes('1 Starting ME code review waiting') && b2.includes('Fic Three'), 'a review waiting on a supervisor');
   ok((b2.match(/(\d+) monthly check-in calls? not yet logged/) || [])[1] === '2', 'still not counted as active with the switch on');
 }
 

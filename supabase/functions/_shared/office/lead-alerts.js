@@ -432,8 +432,8 @@ export function createLeadAlerts(deps) {
         starting: (s.consumers || []).filter(c => String(c.status || '').toLowerCase() === 'starting').map(c => c.name),
         shifts: (ac.wellskyCheck || {}).shifts, reviewed: ac.attendantCheckReviewed || {}, now: noon }));
     }
-    // Starting (her decision 2026-11-04): only follow-ups due today or late, and reviews waiting on Samantha or
-    // Zach. Never a list of everyone Starting. Only while the hub switch 'starting' is on.
+    // Starting (her decision 2026-11-04): only follow-ups due today or late, and ME code reviews waiting (any care
+    // coordinator resolves them since 11-05). Never a list of everyone Starting. Only while the hub switch 'starting' is on.
     let startingItems = [];
     const stw = (await store(['starting'])).starting;
     if (stw && stw.live === true && globalThis.CDSStarting) {
@@ -453,7 +453,7 @@ export function createLeadAlerts(deps) {
                        people: fu.map(x => ({ name: x.name, why: 'check the application with ' + (x.owner || 'no owner set'), due: x.due })) },
         sdA.length && { t: sdA.length + ' Starting start date' + (sdA.length !== 1 ? 's' : '') + ' coming up, not ready to clock in', go: 'consumers', bad: true,
                         people: sdA.map(x => ({ name: x.name, why: x.why + (x.owner ? ', with ' + x.owner : ''), due: x.due })) },
-        sup.length && { t: sup.length + ' Starting Medicaid review' + (sup.length !== 1 ? 's' : '') + ' waiting on Samantha or Zach', go: 'consumers', bad: true,
+        sup.length && { t: sup.length + ' Starting ME code review' + (sup.length !== 1 ? 's' : '') + ' waiting', go: 'consumers', bad: true,
                         people: sup.map(c => ({ name: c.name, why: ST.medicaidState(c).label })) }
       ].filter(Boolean);
     }

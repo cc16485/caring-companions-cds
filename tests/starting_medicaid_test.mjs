@@ -87,10 +87,12 @@ await refuses(() => M.handle('staff', 'medicaidSend', { person, channel: 'sms', 
 await pg.query(`insert into cds_match_settings (key, value, updated_by) values ('staff_emails', '["samantha@mo-care.com","zach@caringcds.com","krystal@mo-care.com"]', 't')
   on conflict (key) do update set value=excluded.value`);
 const A = (who, i) => M.handle('staff', 'startingAudit', { staff: who, ...i });
-await refuses(() => A('krystal@mo-care.com', { person, action: 'supervisor_approve', detail: { note: 'ok', doc: 'x.pdf' } }), /Only Samantha or Zach/, 'a coordinator cannot resolve a review');
+// Her rule 2026-11-05: any care coordinator resolves an ME code review, still with a note and the document.
+await refuses(() => A('krystal@mo-care.com', { person, action: 'supervisor_approve', detail: { note: 'ok' } }), /supporting document/, 'a coordinator still needs the document');
 await refuses(() => A('zach@caringcds.com', { person, action: 'supervisor_approve', detail: { note: 'ok' } }), /supporting document/, 'a resolution needs its document');
 await refuses(() => A('zach@caringcds.com', { person, action: 'supervisor_approve', detail: { doc: 'x.pdf' } }), /note/, 'a resolution needs a note');
 ok((await A('zach@caringcds.com', { person, action: 'supervisor_approve', detail: { note: 'Checked eMOMED again', doc: 'c/docs/review_1.pdf' } })).ok, 'Zach resolves with note and document');
+ok((await A('krystal@mo-care.com', { person, action: 'supervisor_hold', detail: { note: 'Waiting on FSD', doc: 'c/docs/review_2.pdf' } })).ok, 'a care coordinator resolves with note and document');
 ok((await A('krystal@mo-care.com', { person, action: 'review_requested', detail: { note: 'Lock Ins unclear' } })).ok, 'a coordinator can ask for a review');
 await refuses(() => A('zach@caringcds.com', { person: { kind: 'admin', id: 'meRules' }, action: 'rule_changed', detail: {} }), /Only Samantha changes/, 'rules stay Samantha\'s');
 await refuses(() => A('samantha@mo-care.com', { person, action: 'anything' }), /Unknown action/, 'only known actions');
