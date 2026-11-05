@@ -75,6 +75,9 @@ export function practiceDeps(db, { familyBase, caregiverBase }) {
       async update(id, fields) {
         if (fields.email !== undefined) await db.query('update practice_ghl_contacts set email=$2 where id=$1', [id, fields.email]);
       },
+      async addTags(id, tags) {
+        await db.query(`update practice_ghl_contacts set tags = (select coalesce(jsonb_agg(distinct t), '[]'::jsonb) from jsonb_array_elements(tags || $2::jsonb) t) where id=$1`, [id, JSON.stringify(tags)]);
+      },
       async get(id) {
         const r = await db.query('select * from practice_ghl_contacts where id=$1', [id]);
         return r.rows[0] || null;

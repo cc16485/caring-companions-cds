@@ -6,7 +6,8 @@
 // Public  : applyStart (the one link everyone forwards: caringcds.com/apply)
 // Attendant (their private link): packet, packetSave, packetEsign, packetIdentity,
 //           packetSign, packetBookCall, packetSelf (orientation / Empeon done)
-// Office  : packetList, packetGet, packetFormView, packetMark, packetCountersign, packetCopy
+// Office  : packetList, packetGet, packetFormView, packetMark, packetCountersign, packetCopy,
+//           packetStartFromLead, packetSendLink (an attendant typed on a lead, 2026-11-05)
 // Job     : packetJob (reminders, Step 2 opening, orientation completions)
 //
 // Her rules built in: as little office work as possible; nothing signed in Step 2
@@ -352,8 +353,11 @@ export function createPacket(h) {
       const late = Object.fromEntries((await q(`select pool_id, min(due_at) as due from cds_tasks where pool_id is not null and done_at is null
         and due_at < now() group by pool_id`)).map(r => [r.pool_id, r.due]));
       const out = [];
-      for (const r of rows) { const x = await load(r.pool_id); out.push({ pool_id: r.pool_id, name: [r.first_name, r.last_name].join(' '), consumer: r.consumer_name,
-        label: x.st.label, tone: x.st.tone, next: x.st.next, active: x.st.active, list_choice: x.p.list_choice,
+      for (const r of rows) { const x = await load(r.pool_id);
+        // Added from a lead and their link never texted (2026-11-05): no reminders are going out yet, so say what is next.
+        const noLink = x.p.via === 'office' && !x.st.step1 && !(x.p.reminders || []).length;
+        out.push({ pool_id: r.pool_id, name: [r.first_name, r.last_name].join(' '), consumer: r.consumer_name,
+        label: x.st.label, tone: x.st.tone, next: noLink ? 'Their application link has not been texted yet. Text it from their lead (Text their application link).' : x.st.next, needs_link: noLink, active: x.st.active, list_choice: x.p.list_choice,
         consumer_waiting: !!r.consumer_name && !x.st.active && !['gcw_needed', 'edl', 'not_moving'].includes(x.c.screening.review), started_at: x.p.created_at, step1_at: x.p.step1_signed_at,
         active_at: x.p.active_at || null, updated_at: x.p.updated_at, late_since: late[r.pool_id] || null,
         table: x.st.active ? null : P.tableRow(x.p, x.forms, x.c.screening, x.st) }); }
@@ -529,6 +533,64 @@ export function createPacket(h) {
       if (decision === 'clear' && !y.st.checksClear) await h.task('packet_checks', ('Waiver approved: finish the checks for ' + nameOf(x.c.pool) + (x.p.consumer_name ? ' (for ' + x.p.consumer_name + ')' : '') + '.').slice(0, 300),
         { pool_id }, 'packet_checks:' + pool_id + ':waiver', (await one('select cds_next_business_4pm(now()) as d')).d);
       return { ok: true, status: y.st };
+    },
+    // ---------- an attendant typed on a lead (2026-11-05, her yes) ----------
+    // Save on a lead's "Their attendant" puts them in Attendants, Onboarding (for that consumer) and makes their
+    // GoHighLevel contact tagged 'attendant onboarding'. Nothing is sent: packetSendLink is the office's own button.
+    // The same 10-digit phone is the same person, as on caringcds.com/apply.
+    async packetStartFromLead({ staff, name, phone, email, consumer }) {
+      who(staff);
+      const parts = String(name || '').trim().replace(/\s+/g, ' ').split(' ');
+      const first = parts[0].slice(0, 60), last = parts.slice(1).join(' ').slice(0, 60);
+      const d = digits10(phone), mail = String(email || '').trim().toLowerCase().slice(0, 120);
+      const who4 = String(consumer || '').trim().slice(0, 120);
+      if (!first) fail('Type their name first.');
+      if (d.length !== 10) fail('Add their 10-digit phone number to put them in Onboarding.');
+      if (mail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) fail('Please check their email address.');
+      let pool = await one(`select id, first_name, last_name, phone, email, ghl_contact_id from attendant_pool where coalesce(archived,false)=false
+        and right(regexp_replace(coalesce(phone,''), '[^0-9]', '', 'g'), 10) = $1 order by submitted_at limit 1`, [d]);
+      const repeat = !!pool;
+      if (!pool) {
+        pool = await one(`insert into attendant_pool (agency_id, source, status, background_ok, show_anonymously, first_name, last_name, phone, email,
+            has_potential_consumer, knows_consumer) values ('caring-companions-cds', 'office', 'new', true, false, $1,$2,$3,$4,'Yes',$5)
+            returning id, first_name, last_name, phone, email, ghl_contact_id`, [first, last || null, fmtPhone(d), mail || null, who4 || null]);
+        await ensurePacket(pool.id, 'office', who4);
+        await q('update cds_packets set answers = $2::jsonb where pool_id=$1',
+          [pool.id, JSON.stringify(P.cleanAnswers({ first, last, phone: fmtPhone(d), email: mail, consumer_name: who4, has_consumer: 'yes' }))]);
+      } else {
+        await ensurePacket(pool.id, 'office', who4);
+        // Someone already on file: fill in what we did not have, never overwrite.
+        if (who4) await q('update cds_packets set consumer_name = coalesce(consumer_name, $2) where pool_id=$1', [pool.id, who4]);
+        if (mail && !pool.email) await q('update attendant_pool set email=$2 where id=$1', [pool.id, mail]);
+      }
+      // GoHighLevel: a failure is said out loud on the hub, and Save again tries again.
+      let ghl = { ok: true };
+      try {
+        const id = pool.ghl_contact_id || await deps.ghl.upsert({ first_name: pool.first_name || first, last_name: pool.last_name || last, phone: fmtPhone(d), email: pool.email || mail || undefined });
+        if (!id) throw new Error('GoHighLevel did not return a contact');
+        await deps.ghl.addTags(id, ['attendant onboarding']);
+        if (!pool.ghl_contact_id) await q('update attendant_pool set ghl_contact_id=$2 where id=$1', [pool.id, id]);
+      } catch (e) { ghl = { ok: false, error: String(e && e.message || e).slice(0, 200) }; }
+      await audit('staff:' + staff, 'packet_start_from_lead', 'pool:' + pool.id, { repeat, ghl: ghl.ok });
+      const x = await load(pool.id);
+      return { ok: true, pool_id: pool.id, repeat, ghl, status: x.st };
+    },
+    // The office's button: text them their private Step 1 link, the same text caringcds.com/apply sends, with the
+    // same day 2 and day 4 reminders while Step 1 is not signed. Held while the attendant texts switch is off.
+    async packetSendLink({ staff, pool_id }) {
+      who(staff);
+      const x = await load(pool_id);
+      if (!x) fail('Not found', 404);
+      if (!x.c.pool.phone) fail('There is no phone number on file for them.');
+      const now = await nowIso(), token = await crypto.token();
+      await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)',
+        [pool_id, await crypto.hash(token), 'office', addDays(now, R.CAREGIVER_LINK_DAYS)]);
+      const sent = await send({ template: 'att_link', channel: 'sms', audience: 'caregiver', pool_id, to: x.c.pool.phone,
+        vars: { first: x.c.pool.first_name, link: packetLink(token) }, by: 'staff:' + staff });
+      if (!x.st.step1) await q('update cds_packets set reminders = $2::jsonb where pool_id=$1',
+        [pool_id, JSON.stringify([{ kind: 'step1', due_at: tenAm(now, 2) }, { kind: 'step1', due_at: tenAm(now, 4) }])]);
+      await audit('staff:' + staff, 'packet_link_sent', 'pool:' + pool_id, { status: sent && sent.status });
+      return { ok: true, status: sent ? sent.status : 'failed' };
     },
   };
 

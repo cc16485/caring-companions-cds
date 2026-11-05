@@ -140,6 +140,10 @@ const match = createMatch({
     async update(id: string, fields: Record<string, unknown>) {
       await ghlFetch('/contacts/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify({ email: fields.email }) });
     },
+    // Adds tags only, never takes one off (2026-11-05, an attendant typed on a lead -> 'attendant onboarding').
+    async addTags(id: string, tags: string[]) {
+      await ghlFetch('/contacts/' + encodeURIComponent(id) + '/tags', { method: 'POST', body: JSON.stringify({ tags }) });
+    },
     // Read only (2026-10-22, check proof for Roster attendants).
     async find(query: string) {
       const body = await ghlFetch('/contacts/?' + new URLSearchParams({ locationId: GHL_LOC, query, limit: '20' }));
