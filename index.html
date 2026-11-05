@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=34"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=35"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=6"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=6"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
@@ -3121,6 +3121,20 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
   </div>
 </div>
 
+<!-- Something changed (her ask 2026-11-05, switch 'changes') -->
+<div class="modal-overlay" id="changeModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header"><div class="modal-title">Something changed: <span id="ch_name"></span></div>
+      <button class="modal-close" onclick="closeModal('changeModal')" aria-label="Close">×</button></div>
+    <p style="font-size:13px;color:var(--gray-600);margin:4px 0 0">The consumer must tell DSDS within 10 days about changes to their services or where they live (RSMo 208.909.1(4)). Pick what happened; the hub lists the steps and puts them on Today.</p>
+    <div id="ch_list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('changeModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="startChange()">Start</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="letterModal">
   <div class="modal" style="width:680px">
     <div class="modal-header"><div class="modal-title">Written notice to the consumer and DSDS</div>
@@ -6199,12 +6213,120 @@ function endCancel(cid) {
     e.endedAt = _endToday();
     e.log.push({ at: new Date().toISOString(), by: _endWho(), t: r && r.pause ? 'Back home. Active again.' : 'Stopped. Kept active.' });
     c.status = 'active';
+    // Back from the hospital (her ask 2026-11-05): the call and the WellSky restart stay on Today until done.
+    if (r && r.id === 'hospital' && hubSwitchOn('changes')) c.changes = (c.changes || []).concat([{ id: 'ch' + Date.now(), kind: 'home', startedAt: _endToday(), startedBy: _endWho(), eventDate: _endToday(), steps: {}, notes: '', log: [{ at: new Date().toISOString(), by: _endWho(), t: 'Started: back home from the hospital' }] }]);
     c.pastEndings = (c.pastEndings || []).concat([e]);
     c.ending = null;
     delete c.endTax;
   });
   updateDashboard();
 }
+// ============================================================
+// SOMETHING CHANGED (her ask 2026-11-05, switch 'changes'). A hospital or rehab stay is the hospital pause above
+// (Ending or pausing services). A move to a new address in our area and a health change are c.changes records:
+// steps with dates, who did them, notes, and a log. They never change the consumer's status. Nothing is deleted;
+// done ones show on Closings and pauses.
+// ============================================================
+let _chCid = null;
+function openChange(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c) return;
+  _chCid = cid;
+  document.getElementById('ch_name').textContent = c.name;
+  const opt = (v, t, tip) => '<label class="end-pick"><input type="radio" name="ch_kind" value="' + v + '"><span>' + esc(t) + (tip ? '<small>' + esc(tip) + '</small>' : '') + '</span></label>';
+  document.getElementById('ch_list').innerHTML = '<div class="end-group">' +
+    (c.ending ? '' : opt('hospital', 'In the hospital or rehab for a short stay', 'Pauses services. Stop their WellSky shifts and tell DSDS.')) +
+    opt('moved', CDSRules.CHANGE_KINDS.moved.t, CDSRules.CHANGE_KINDS.moved.tip) +
+    opt('health', CDSRules.CHANGE_KINDS.health.t, CDSRules.CHANGE_KINDS.health.tip) + '</div>' +
+    '<div style="font-size:13px;margin-top:8px">Leaving, moving out of our area, or no longer able to direct their own care? ' + (c.ending ? '' : '<a href="#" onclick="closeModal(\'changeModal\');openEnding(\'' + c.id + '\');return false">Ending or pausing services</a>') + '</div>';
+  openModal('changeModal');
+}
+function startChange() {
+  const pick = document.querySelector('input[name=ch_kind]:checked');
+  if (!pick) { alert('Pick what happened first.'); return; }
+  if (pick.value === 'hospital') {   // the existing hospital pause, started the same way as from Ending or pausing services
+    _endCid = _chCid; closeModal('changeModal');
+    const consumers = getData('consumers'), c = consumers.find(x => x.id === _chCid), r = CDSRules.endingReason('hospital');
+    if (!c || c.ending) return;
+    c.ending = { kind: 'hospital', startedAt: _endToday(), startedBy: _endWho(), eventDate: '', steps: {}, notes: '', dsdsNotice: '', lastDay: '', log: [{ at: new Date().toISOString(), by: _endWho(), t: 'Started: ' + r.t }] };
+    c.status = 'paused';
+    setData('consumers', consumers); renderConsumers(); openProfile(c.id); return;
+  }
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === _chCid);
+  if (!c) return;
+  const k = CDSRules.CHANGE_KINDS[pick.value];
+  c.changes = (c.changes || []).concat([{ id: 'ch' + Date.now(), kind: pick.value, startedAt: _endToday(), startedBy: _endWho(), eventDate: '', steps: {}, notes: '',
+    log: [{ at: new Date().toISOString(), by: _endWho(), t: 'Started: ' + k.t }] }]);
+  setData('consumers', consumers);
+  closeModal('changeModal'); openProfile(c.id);
+}
+function _chSave(cid, id, fn) {
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid), ch = c && (c.changes || []).find(x => x.id === id);
+  if (!ch) return;
+  fn(c, ch); setData('consumers', consumers);
+  setTimeout(renderProfile, 0);   // after the date box or the notes lose focus, so the next click is never lost
+}
+function chSetStep(cid, id, k, date) {
+  _chSave(cid, id, (c, ch) => {
+    ch.steps = ch.steps || {};
+    if (date) ch.steps[k] = { date, by: _endWho(), at: new Date().toISOString() }; else delete ch.steps[k];
+    const st = (CDSRules.CHANGE_KINDS[ch.kind].steps.find(s => s.k === k) || {}).t || k;
+    ch.log.push({ at: new Date().toISOString(), by: _endWho(), t: (date ? 'Dated ' + date + ': ' : 'Cleared: ') + st });
+  });
+}
+function chSetField(cid, id, f, v) {
+  _chSave(cid, id, (c, ch) => { if (ch[f] === v) return; ch[f] = v; ch.log.push({ at: new Date().toISOString(), by: _endWho(), t: (f === 'eventDate' ? 'Date of the change set to ' + v : 'Notes changed') }); });
+}
+function chDone(cid, id) {
+  const c = getData('consumers').find(x => x.id === cid), ch = c && (c.changes || []).find(x => x.id === id);
+  if (!ch) return;
+  const miss = CDSRules.changeMissing(ch);
+  if (miss.length) { alert('Not yet. Still needed:\n- ' + miss.join('\n- ')); return; }
+  _chSave(cid, id, (c, ch) => { ch.doneAt = _endToday(); ch.log.push({ at: new Date().toISOString(), by: _endWho(), t: 'Marked done' }); });
+}
+function changeCards(c) {
+  if (!hubSwitchOn('changes')) return '';
+  const open = (c.changes || []).filter(ch => !ch.doneAt);
+  return open.map(ch => {
+    const k = CDSRules.CHANGE_KINDS[ch.kind];
+    if (!k) return '';
+    const d = ch.steps || {}, id = c.id;
+    const due = CDSRules.changeDue(ch.eventDate || (d.learned && d.learned.date) || ch.startedAt);
+    const dateIn = (val, on) => '<input type="date" value="' + esc(val || '') + '" onchange="' + on + '">';
+    const step = s => {
+      const v = d[s.k];
+      return '<div class="end-step"><span class="t">' + (v && v.date ? '✓ ' : '') + esc(s.t) + (s.need ? '' : ' <span class="end-cite">(if it applies)</span>') +
+        (s.cite ? '<br><span class="end-cite">' + esc(s.cite) + '</span>' : '') +
+        (s.due && due && !(v && v.date) ? '<br><strong style="font-size:12.5px;color:' + (due < _endToday() ? 'var(--danger)' : '#7A4E0B') + '">' + (due < _endToday() ? 'Was due ' : 'Due by ') + esc(_niceDay(due)) + '</strong>' : '') +
+        (s.form ? '<br><a href="' + CDSRules.DSDS_FORM + '" target="_blank" rel="noopener">Open the DSDS form</a> <span class="end-cite">then check it in Fusion, PCCP Request tab</span>' : '') +
+        '</span>' + dateIn(v && v.date, "chSetStep('" + id + "','" + ch.id + "','" + s.k + "',this.value)") +
+        (v && v.date ? '<span class="who">by ' + esc(v.by || '') + '</span>' : '') + '</div>';
+    };
+    const miss = CDSRules.changeMissing(ch);
+    return '<div class="end-card">' +
+      '<div style="font-size:12px;font-weight:700;letter-spacing:.04em;color:#7A4E0B">SOMETHING CHANGED · started ' + esc(_niceDay(ch.startedAt)) + ' by ' + esc(ch.startedBy || '') + '</div>' +
+      '<div style="font-size:17px;font-weight:700;margin:4px 0 2px">' + esc(k.t) + '</div>' +
+      (k.tip ? '<div style="font-size:13px;margin-top:4px">' + esc(k.tip) + '</div>' : '') +
+      '<div style="margin-top:10px"><div class="end-step"><span class="t"><strong>' + esc(k.eventLabel) + '</strong></span>' + dateIn(ch.eventDate, "chSetField('" + id + "','" + ch.id + "','eventDate',this.value)") + '</div>' +
+      k.steps.map(step).join('') + '</div>' +
+      '<textarea rows="2" placeholder="Notes: what changed, what DSDS said, their answers" onchange="chSetField(\'' + id + '\',\'' + ch.id + '\',\'notes\',this.value)" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;margin-top:8px">' + esc(ch.notes || '') + '</textarea>' +
+      '<div style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="chDone(\'' + id + '\',\'' + ch.id + '\')"' + (miss.length ? ' style="opacity:.55"' : '') + '>Done: every step is finished</button></div>' +
+    '</div>';
+  }).join('');
+}
+// Done changes on Closings and pauses (kept with the other records; nothing is deleted).
+function changeRecords(c) {
+  const done = (c.changes || []).filter(ch => ch.doneAt).slice().reverse();
+  if (!done.length) return '';
+  const day = d => d ? esc(_niceDay(String(d).slice(0, 10))) : '';
+  return '<h4 style="margin:18px 0 4px;font-size:14px">Changes reported</h4>' + done.map(ch => {
+    const k = CDSRules.CHANGE_KINDS[ch.kind] || { t: ch.kind, steps: [] }, d = ch.steps || {};
+    return '<div style="border:1px solid var(--gray-300);border-radius:10px;padding:10px 14px;margin-top:8px;font-size:13px"><b>' + esc(k.t) + '</b> · ' + (ch.eventDate ? day(ch.eventDate) + ' · ' : '') + 'done ' + day(ch.doneAt) +
+      '<ul style="margin:6px 0 0 18px;padding:0">' + k.steps.filter(s => d[s.k] && d[s.k].date).map(s => '<li>' + esc(s.t) + ': ' + day(d[s.k].date) + ' by ' + esc(d[s.k].by || '') + '</li>').join('') + '</ul>' +
+      (ch.notes ? '<div style="margin-top:6px;white-space:pre-wrap"><strong>Notes:</strong> ' + esc(ch.notes) + '</div>' : '') + '</div>';
+  }).join('');
+}
+
 // ============================================================
 // ENDING: TAX STEPS (2026-10-22 her ask)
 // The tax side of a consumer leaving, alongside the DSDS steps above. The
@@ -6477,6 +6599,7 @@ function closingRecords(c) {
     reports.map(r => '<li>' + day(r.date) + (r.by ? ' by ' + esc(r.by) : '') + (r.lastShift ? ' (last worked shift ' + day(r.lastShift) + ')' : ' (no worked shift on file)') + '</li>').join('') + '</ul>';
   if (back.length) extra += '<h4 style="margin:18px 0 4px;font-size:14px">Made active again</h4><ul style="margin:0 0 0 18px;padding:0;font-size:13px">' +
     back.map(b => '<li>' + day(b.date) + (b.by ? ' by ' + esc(b.by) : '') + '</li>').join('') + '</ul>';
+  extra += changeRecords(c);
   if (oldInactive) extra += '<p style="font-size:13px;margin-top:14px;color:var(--gray-600)">Marked inactive ' + day(oldInactive) + (c.inactiveReason ? ' (' + esc(c.inactiveReason) + ')' : '') + ', before these records were kept.</p>';
   if (!parts.length && !extra) return '<p style="font-size:14px;color:#55677a;margin-top:10px">No closings, pauses or DSDS reports for ' + esc(c.name) + '.</p>';
   return '<p style="font-size:12.5px;color:var(--gray-600);margin:10px 0 0">Every closing, pause and letter, newest first. Kept 6 years (19 CSR 15-8.400(10)). Nothing here can be deleted.</p>' +
@@ -10385,6 +10508,8 @@ const HUB_SWITCHES = [
     does: 'On: a lead who says yes becomes a Starting consumer right away, with seven enrollment steps, one Next step, a Medicaid tab (eMOMED check, the required PDF, what the ME code means, the ME code review), Medicaid application instructions by text or email (sent only when someone presses Send, and only while Medicaid application texts is on), follow-ups on Today, and the Ready for first shift checklist. They move to Active the day WellSky shows the first shift. Off: Move to Consumers as before.' },
   { key: 'consumerComms', label: 'Communication tab on the consumer profile',
     does: 'On: Communication is the second tab on every consumer profile. It holds every call and text with the consumer, their representative, family and contacts, and every attendant who works or worked for them, each named, with Listen and Show the words. A follow-up from an attendant\'s call names the consumer they work for and points to the consumer, except Pay and Clock-in & EVV. Documents keeps its own tab. Off: Calls and texts as before.' },
+  { key: 'changes', label: 'Something changed checklist',
+    does: 'On: every active consumer profile has a Something changed button for a hospital or rehab stay, a move to a new address, or a health change. Each one lists the steps (tell DSDS within 10 days, stop or restart WellSky shifts, call when they are home) and puts what is left on Today. Off: hidden; the hospital pause in Ending or pausing services still works.' },
   { key: 'faxLive', label: 'One-click fax',
     does: 'On: the SS-4, 2643A and 2827 steps on Tax Setup get a Fax it now button (the SS-4 only when there is no EIN yet and, for a transfer, after the existing-EIN check) (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
@@ -11298,13 +11423,14 @@ function renderProfile() {
           prepCard + lateCard +
           '<div class="cp-pair">' + callBox + visitBox + '</div>') +
       moFormsBox(c) +
-      endingCard(c) + noShiftCard(c) +
+      endingCard(c) + changeCards(c) + noShiftCard(c) +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
         '<a href="#" onclick="openTaxSetup(\'' + c.id + '\');return false">Tax setup</a>' +
         '<a href="#" onclick="openCarePlan(\'' + c.id + '\');return false">' + (slim ? 'Authorized tasks' : 'Care plan') + '</a>' +
         (CDSRules.isActive(c)
-          ? (c.ending ? '</div>' : '<a href="#" onclick="openEnding(\'' + c.id + '\');return false" style="color:var(--danger)">Ending or pausing services</a></div>')
+          ? (hubSwitchOn('changes') ? '<a href="#" onclick="openChange(\'' + c.id + '\');return false">Something changed</a>' : '') +
+            (c.ending ? '</div>' : '<a href="#" onclick="openEnding(\'' + c.id + '\');return false" style="color:var(--danger)">Ending or pausing services</a></div>')
           : (endTaxOpen(c) ? '<a href="#" onclick="openEndTax(\'' + c.id + '\');return false">Tax steps for ending</a>' : '') +
             '<a href="#" onclick="makeConsumerActive(\'' + c.id + '\');if(_profileId)renderProfile();return false">Make active again</a></div>') +
     '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
@@ -15442,7 +15568,7 @@ function renderDailyRoutine() {
     authorizations: getObj('authorizations'), attendantWages: getObj('attendantWages'), calls: _leadCalls,
     wellskyItems: wsAll.filter(i => !i.system),
     wsPeople: _activePeople(), nameKey: CDSWellSky.nameKey,
-    firstShiftOf, followups: commForToday(), noShift: noShiftList(), wsAuth: wsAuthFor,
+    firstShiftOf, followups: commForToday(), noShift: noShiftList(), wsAuth: wsAuthFor, wsShifts: getObj('wellskyCheck').shifts,
     attendantWork: _todayAttWork(),
     // Approved due dates (2026-10-23): reports and tax filings, EVV forms, payroll uploads.
     quarterStatus: getObj('quarterStatus'),

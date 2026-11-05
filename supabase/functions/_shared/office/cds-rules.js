@@ -327,7 +327,7 @@
     }
     // Closings, pauses and missing shifts (closure plan step 5, her yes 2026-10-22). Only shown
     // when there is something to do, so a morning with none keeps the old steps.
-    const closing = closureItems(data.consumers || [], now, data.noShift);
+    const closing = closureItems(data.consumers || [], now, data.noShift, data.wsShifts);
     if (closing.length) steps.push({ n: steps.length + 1, title: 'Closings, pauses and missing shifts', items: closing,
                                      clear: 'No closings or missing shifts.' });
     // Who owns each part of Today (build step 5, 2026-10-23). Her call 2026-10-21: everything is
@@ -560,7 +560,7 @@
   // consumers with no worked shift in 30+ days whom nobody has told DSDS about yet
   // (noShift = CDSWellSky.noShifts(...); the hub hands it in, the email does not yet).
   // Items with id open that consumer's profile in the hub.
-  function closureItems(consumers, now, noShift) {
+  function closureItems(consumers, now, noShift, wsShifts) {
     const todayIso = isoLocal(now || new Date());
     const day = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const items = [];
@@ -569,7 +569,14 @@
       if (!r) return;
       const d = e.steps || {};
       const it = (t, bad) => items.push({ t: c.name + ': ' + t, go: 'consumers', id: c.id, bad: !!bad });
-      if (r.pause) return it('paused (' + r.t.toLowerCase() + ')' + (d.dsdsTold && d.dsdsTold.date ? '. Mark them back home when they are.' : '. Tell DSDS about the stay.'), !(d.dsdsTold && d.dsdsTold.date));
+      if (r.pause) {
+        const due = changeDue(e.eventDate || (d.learned && d.learned.date) || e.startedAt);
+        if (!(d.shiftsStopped && d.shiftsStopped.date)) return it('in the hospital. Stop their shifts in WellSky and tell the attendant not to clock in.', true);
+        const during = hospitalShifts(c, wsShifts, e.eventDate || e.startedAt, null);   // booked ahead counts too while they are away
+        if (during.length) return it('WellSky has ' + (during.length === 1 ? 'a shift' : during.length + ' shifts') + ' during the hospital stay (' + during.slice(0, 3).map(day).join(', ') + '). Cancel or check it was not worked.', true);
+        if (!(d.dsdsTold && d.dsdsTold.date)) return it('tell DSDS about the hospital stay' + (due ? ' by ' + day(due) : '') + '.', !due || due <= addDaysIso(todayIso, 3));
+        return it('paused (' + r.t.toLowerCase() + '). Mark them back home when they are.', false);
+      }
       if (r.group === 'tell' && !(d.dsds && d.dsds.date)) return it('tell DSDS right away (' + r.t.toLowerCase() + ')', true);
       const miss = endingMissing(e);
       if (miss.length) return it('next, ' + miss[0].charAt(0).toLowerCase() + miss[0].slice(1), true);
@@ -580,6 +587,7 @@
       if (!e.lastDay) return it('enter the last day of services from DSDS', true);
       return it('DSDS closed the case. Mark them inactive.', true);
     });
+    changeItems(consumers, todayIso).forEach(x => items.push(x));
     const notTold = ((noShift && noShift.people) || []).filter(p => {
       const c = (consumers || []).find(x => x.id === p.id);
       return !(c && c.noShiftReport && c.noShiftReport.date);
@@ -683,8 +691,70 @@
     { id: 'hospital', group: 'hospital', t: 'In the hospital or rehab for a short stay', cite: 'HCBS Manual 3.00', pause: true,
       tip: 'Not a closure. No CDS hours or billing for days in the hospital. Tell DSDS.',
       eventLabel: 'Went in on',
-      steps: [S.learned, { k: 'dsdsTold', t: 'Told DSDS about the stay', need: true }, { k: 'noBill', t: 'Checked no hours were entered for hospital days' }] }
+      steps: [S.learned, { k: 'dsdsTold', t: 'Told DSDS about the stay', need: true, form: true, cite: 'Within 10 days (RSMo 208.909.1(4))' },
+              // Her ask 2026-11-05 (something changed): stop the shifts and tell the attendant, so nothing is clocked or billed.
+              { k: 'shiftsStopped', t: 'Shifts stopped in WellSky, and the attendant told not to clock in', need: true },
+              { k: 'noBill', t: 'Checked no hours were entered for hospital days' }] }
   ];
+  // ---- Something changed (her ask 2026-11-05): a change that is not an ending. The consumer must tell DSDS within
+  // 10 days about changes to the services plan or where they live (RSMo 208.909.1(4)); we help and keep the record.
+  // A hospital stay is the existing hospital pause above. Moving out of our area, or no longer able to direct their
+  // own care, are endings (Ending or pausing services). 'home' is made by itself when a hospital stay ends.
+  const CHANGE_KINDS = {
+    moved: { t: 'Moved to a new address in our area', eventLabel: 'Moved on',
+      tip: 'Moved outside our 27 counties? Use Ending or pausing services instead.',
+      steps: [S.learned,
+        { k: 'dsds', t: 'Told DSDS about the new address (Care Plan Change Request form)', need: true, form: true, due: true, cite: 'Within 10 days (RSMo 208.909.1(4))' },
+        { k: 'address', t: 'New address saved on their profile', need: true },
+        { k: 'wellsky', t: 'Address updated in WellSky, so clock-ins match the new home', need: true }] },
+    health: { t: 'A change in their health or the help they need', eventLabel: 'Changed on',
+      tip: 'No longer able to direct their own care? Use Ending or pausing services instead.',
+      steps: [S.learned,
+        { k: 'dsds', t: 'Told DSDS about the change (Care Plan Change Request form)', need: true, form: true, due: true, cite: 'Within 10 days (RSMo 208.909.1(4)); significant health changes (RSMo 208.909.1(8))' },
+        { k: 'selfDirect', t: 'Asked whether they can still direct their own care (write the answer in the notes)', need: true },
+        { k: 'attendant', t: 'Talked with the attendant about any change in the help they give' }] },
+    home: { t: 'Back home from the hospital', eventLabel: 'Home on',
+      tip: 'Made when the hospital stay ended.',
+      steps: [{ k: 'called', t: 'Called them now they are home: how are they, and has anything changed?', need: true },
+        { k: 'restarted', t: 'Shifts restarted in WellSky, and the attendant told', need: true },
+        { k: 'dsdsHome', t: 'Told DSDS they are home', form: true }] },
+  };
+  function addDaysIso(iso, n) { const d = new Date(String(iso).slice(0, 10) + 'T12:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); }
+  // The day DSDS must hear by: 10 days after the change (or after we found out, when the change date is not known).
+  function changeDue(fromIso) { return fromIso && !isNaN(Date.parse(String(fromIso).slice(0, 10))) ? addDaysIso(fromIso, 10) : ''; }
+  function changeMissing(ch) {
+    const k = CHANGE_KINDS[ch && ch.kind];
+    if (!k) return [];
+    const d = ch.steps || {};
+    return k.steps.filter(s => s.need && !(d[s.k] && d[s.k].date)).map(s => s.t);
+  }
+  // Open changes for Today: the next step, red when DSDS is due in 3 days or less, or late.
+  function changeItems(consumers, todayIso) {
+    const day = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const out = [];
+    (consumers || []).filter(c => c && isActive(c)).forEach(c => (c.changes || []).filter(ch => !ch.doneAt).forEach(ch => {
+      const k = CHANGE_KINDS[ch.kind], d = ch.steps || {};
+      if (!k) return;
+      const miss = k.steps.filter(s => s.need && !(d[s.k] && d[s.k].date));
+      if (!miss.length) return out.push({ t: c.name + ': ' + k.t.toLowerCase() + '. Every step is done; mark it done.', go: 'consumers', id: c.id, bad: false });
+      const dsdsStep = miss.find(s => s.due);
+      const due = dsdsStep ? changeDue(ch.eventDate || (d.learned && d.learned.date) || ch.startedAt) : '';
+      if (dsdsStep) return out.push({ t: c.name + ': ' + k.t.toLowerCase() + '. Tell DSDS by ' + (due ? day(due) : 'the 10th day') + (due && due < todayIso ? ' (late)' : '') + '.', go: 'consumers', id: c.id, bad: !due || due <= addDaysIso(todayIso, 3) });
+      out.push({ t: c.name + ': ' + k.t.toLowerCase() + '. Next, ' + miss[0].t.charAt(0).toLowerCase() + miss[0].t.slice(1), go: 'consumers', id: c.id, bad: ch.kind === 'home' });
+    }));
+    return out;
+  }
+  // WellSky shifts on or after the day they went in (and before they came home): booked or worked, both need a look.
+  // shifts = agency_data wellskyCheck.shifts ({ consumers: [{ name, shifts: [{ date }] }] }).
+  function hospitalShifts(c, shifts, fromIso, toIso) {
+    if (!c || !shifts || !Array.isArray(shifts.consumers) || !fromIso) return [];
+    const key = n => String(n || '').toLowerCase().replace(/[^a-z\s,'-]/g, '').split(/[\s,]+/).filter(Boolean).sort().join(' ');
+    const mine = [c.name, c.wellskyName].filter(Boolean).map(key);
+    const from = String(fromIso).slice(0, 10), to = String(toIso || '9999-12-31').slice(0, 10);
+    const out = [];
+    shifts.consumers.filter(x => mine.includes(key(x.name))).forEach(x => (x.shifts || []).forEach(sh => { if (sh.date >= from && sh.date <= to) out.push(sh.date); }));
+    return [...new Set(out)].sort();
+  }
   // The written notice to the consumer and DSDS (19 CSR 15-8.400(7)(B): "listing
   // specific reasons"). Returns the parts; the hub fills, edits and prints them.
   function endingLetter(c, ending, today) {
@@ -1153,5 +1223,6 @@
                     dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT, caregiverPlan, CAREGIVER_PLAN,
-                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems };
+                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems,
+                    CHANGE_KINDS, changeDue, changeMissing, changeItems, hospitalShifts };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
