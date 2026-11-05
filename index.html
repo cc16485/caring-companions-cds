@@ -4195,9 +4195,9 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
     </div>
     <input type="hidden" id="la_id">
     <div id="la_picks"></div>
-    <div class="form-row">
-      <div class="form-group"><label for="la_name">Attendant full name</label><input type="text" id="la_name"></div>
-      <div class="form-group"><label for="la_phone">Attendant phone</label><input type="tel" id="la_phone"></div>
+    <div class="form-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="form-group"><label for="la_name">Attendant full name</label><input type="text" id="la_name" placeholder="First and last name"></div>
+      <div class="form-group"><label for="la_phone">Attendant phone</label><input type="tel" id="la_phone" inputmode="tel" placeholder="(417) 555-1234"></div>
     </div>
     <div class="form-group"><label for="la_email">Attendant email</label><input type="email" id="la_email"></div>
     <div class="field-note" style="margin:2px 0 10px">Nothing is sent to them from here. It is saved on this lead so the office can track their Empeon pack, background check and WellSky.</div>
@@ -8703,10 +8703,12 @@ function openLeadAttendant(id) {
   const a = p.attendant || {};
   document.getElementById('la_id').value = id;
   document.getElementById('la_title').textContent = (a.name ? 'Change the attendant for ' : 'Add the attendant for ') + (p.name || 'this lead');
-  document.getElementById('la_name').value = a.name || '';
-  document.getElementById('la_phone').value = a.phone || '';
+  // A last name saved in the phone box (Dorsey Harrell's "Andrea" / "Volley", 11-05) goes back on the name.
+  const phoneIsName = a.phone && !/\d/.test(a.phone);
+  document.getElementById('la_name').value = phoneIsName ? (a.name ? a.name + ' ' : '') + a.phone.trim() : (a.name || '');
+  document.getElementById('la_phone').value = phoneIsName ? '' : _laFmtPhone(a.phone || '');
   document.getElementById('la_email').value = a.email || '';
-  document.getElementById('la_err').textContent = '';
+  document.getElementById('la_err').textContent = phoneIsName ? 'Their last name was in the phone box, so it is back on their name. Type their phone number and Save.' : '';
   document.getElementById('la_remove').style.display = a.name ? '' : 'none';   // .btn's own display beats hidden
   const linked = CDSRules.relatedPeople(p).filter(r => r.role === 'attendant').map(r => ({ name: r.name, phone: r.phone || '', email: r.email || '', from: 'linked to this lead' }));
   const pool = getData('pipeline').filter(x => x.status === 'closed_pool' && x.name).map(x => ({ name: x.name, phone: x.phone || '', email: x.email || '', from: 'Caregiver Pool' }));
@@ -8717,19 +8719,28 @@ function openLeadAttendant(id) {
     : '';
   openModal('leadAttModal');
 }
+// (417) 555-1234 when it is 10 digits (or 1 + 10); anything else is shown as typed.
+function _laFmtPhone(v) {
+  const d = String(v || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  return d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : String(v || '').trim();
+}
 function laPick(i) {
   const x = _laPicks[i]; if (!x) return;
   document.getElementById('la_name').value = x.name || '';
-  document.getElementById('la_phone').value = x.phone || '';
+  document.getElementById('la_phone').value = _laFmtPhone(x.phone || '');
   document.getElementById('la_email').value = x.email || '';
 }
 function saveLeadAttendant() {
   const id = document.getElementById('la_id').value, list = getData('pipeline'), p = list.find(x => x.id === id);
   if (!p) return;
-  const name = document.getElementById('la_name').value.trim(), phone = document.getElementById('la_phone').value.trim(), email = document.getElementById('la_email').value.trim();
+  const name = document.getElementById('la_name').value.trim(), email = document.getElementById('la_email').value.trim();
+  let phone = document.getElementById('la_phone').value.trim();
   if (!name) { document.getElementById('la_err').textContent = 'Type their name, or pick someone above.'; return; }
+  if (phone && String(phone).replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '').length !== 10) { document.getElementById('la_err').textContent = 'The phone needs all 10 digits, like (417) 555-1234. Their last name goes in the name box.'; return; }
+  phone = _laFmtPhone(phone);
   const was = p.attendant || null;
-  const same = was && String(was.name || '').trim().toLowerCase() === name.toLowerCase();
+  const wasFull = was ? (String(was.name || '') + (was.phone && !/\d/.test(was.phone) ? ' ' + was.phone : '')).trim().toLowerCase() : '';
+  const same = was && (String(was.name || '').trim().toLowerCase() === name.toLowerCase() || wasFull === name.toLowerCase());
   p.attendant = same ? Object.assign({}, was, { name, phone: phone || null, email: email || null })
     : { name, phone: phone || null, email: email || null, empeonInvited: null, toldAboutEmpeon: null, paperworkBack: null, backgroundResult: null, wellskyReady: null };
   p.caregiverPlan = 'has';

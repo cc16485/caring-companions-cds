@@ -141,7 +141,7 @@ with sync_playwright() as pw:
       [...document.querySelectorAll('#la_picks button')].find(b => b.textContent.includes('Pat Pooler')).click();
       const phone = document.getElementById('la_phone').value; saveLeadAttendant();
       const h = _store.pipeline.find(x => x.id === 'p7'), row = [...document.querySelectorAll('#ldCards tbody tr')].find(t => t.textContent.includes('Hazel Dunn'));
-      const ok = noRemove && picks.some(x => x.includes('Caregiver Pool')) && phone === '4175550199' && h.attendant.name === 'Pat Pooler' && h.caregiverPlan === 'has'
+      const ok = noRemove && picks.some(x => x.includes('Caregiver Pool')) && phone === '(417) 555-0199' && h.attendant.name === 'Pat Pooler' && h.caregiverPlan === 'has'
         && /Attendant added: Pat Pooler/.test(h.notes.slice(-1)[0].text) && row.children[6].textContent.includes('Pat Pooler');
       _store.pipeline = _store.pipeline.filter(x => x.id !== 'pool1'); h.attendant = null; delete h.caregiverPlan; renderPipeline(); return ok; }"""))
     ck('changing to a different person starts their checklist fresh; taking them off clears it', pg.evaluate("""()=>{
