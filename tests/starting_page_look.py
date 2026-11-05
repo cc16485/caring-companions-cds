@@ -1,4 +1,4 @@
-"""Starting as its own page (Samantha 2026-11-05: "make Starting its own page and put it on its own custom menu link on
+"""Starting as its own page (live 2026-11-05) (Samantha 2026-11-05: "make Starting its own page and put it on its own custom menu link on
 the side between Leads and Consumers; then we don't need all the steps on Leads since Starting will have that").
 The real hub page, served from THIS checkout, offline (Supabase is blocked), MADE-UP people only.
 Saves desktop and phone screenshots to $OUT. python3 tests/starting_page_look.py   (needs playwright). Nothing is sent or saved."""
