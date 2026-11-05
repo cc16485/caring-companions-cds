@@ -114,7 +114,7 @@ ok(cp.missing.length === 0 && cp.summary.includes('Has Medicaid, DCN given.') &&
 const base = { who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', dob: '1940-03-04', county: 'Greene', medicaid: 'yes', dcn: '1', cds: 'new', help: ['bathing'], attendant: 'find', condition: 'stroke', handsOn: 'hands', selfDirect: 'yes', guardian: 'no', living: 'home', ready: 'yes' };
 cp = P(base); ok(cp.flags.length === 0 && cp.next.k === 'start' && cp.summary.includes('Why they need help: stroke.') && cp.summary.includes('Needs hands-on help.'), 'new to CDS, all fits: start the profile');
 const flagOf = x => P(Object.assign({}, base, x));
-ok(flagOf({ dob: '2012-01-01' }).flags[0].t.startsWith('Under 18') && flagOf({ dob: '2012-01-01' }).next.k === 'review', 'under 18: Samantha or Zach first');
+ok(flagOf({ dob: '2012-01-01' }).flags[0].t.startsWith('Under 18') && flagOf({ dob: '2012-01-01' }).next.k === 'review', 'under 18: the coordinator looks into it first');
 ok(flagOf({ living: 'facility' }).next.k === 'review' && flagOf({ selfDirect: 'concern' }).next.k === 'review' && flagOf({ guardian: 'yes' }).next.k === 'review' && flagOf({ other: 'dmh' }).next.k === 'review' && flagOf({ handsOn: 'reminders' }).next.k === 'review', 'facility, self-direction, guardian, DMH, reminders: review first');
 ok(flagOf({ living: 'hospital' }).flags.length === 0 && flagOf({ other: 'agency' }).flags.length === 0, 'hospital or another agency: no flag');
 ok(flagOf({ attendant: 'has', attName: 'Bob', attRel: 'spouse' }).flags.some(x => x.k === 'att' && /spouse/.test(x.t)) && flagOf({ attendant: 'has', attName: 'Bob', attRel: 'spouse' }).next.k === 'start', 'spouse as attendant: flagged, the referral can still go (they choose someone else)');
@@ -128,7 +128,7 @@ ok(cp.missing.join('|') === "their date of birth|the consumer's phone|the attend
 const AREA = ['Greene', 'Christian', 'Taney'];
 ok(flagOf({ area: AREA, county: 'Greene' }).flags.length === 0, 'in our counties: no flag');
 cp = flagOf({ area: AREA, county: 'Other', countyOther: 'Jackson' });
-ok(cp.next.k === 'review' && cp.flags[0].t === 'Lives outside our 27-county service area (Jackson).' && cp.summary.includes('lives in Jackson County'), 'another county: Samantha or Zach first');
+ok(cp.next.k === 'review' && cp.flags[0].t === 'Lives outside our 27-county service area (Jackson).' && cp.summary.includes('lives in Jackson County'), 'another county: the coordinator looks into it first');
 ok(flagOf({ area: AREA, county: 'Boone' }).flags.length === 1, 'a saved county not on our list: flagged');
 cp = P(Object.assign({}, tr, { county: 'Other', countyOther: 'St. Louis County', area: AREA }));
 ok(cp.next.k === 'review' && cp.flags.length === 1 && cp.missing.length === 0 && cp.flags[0].t.includes('(St. Louis County)'), 'transfer outside our counties: flagged too');

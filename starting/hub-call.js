@@ -156,7 +156,7 @@
   // Who the conversation is about, for the lines to say.
   function them() { return call.who === 'self' ? 'you' : (call.consumer.first || 'them'); }
   function theirs() { return call.who === 'self' ? 'your' : (call.consumer.first ? call.consumer.first + "'s" : 'their'); }
-  function ageText() { const a = S.ageOn(call.dob); return a === null ? '' : 'Age ' + a + (a >= 65 ? '. The application instructions will include the form for 65 and older.' : a < 18 ? '. Under 18: CDS for children has its own rules; Samantha or Zach can help.' : '.'); }
+  function ageText() { const a = S.ageOn(call.dob); return a === null ? '' : 'Age ' + a + (a >= 65 ? '. The application instructions will include the form for 65 and older.' : a < 18 ? '. Under 18: CDS is for adults 18 and older (policy 3.25). Look into it before anything is sent to the state.' : '.'); }
 
   function draw() {
     const host = document.getElementById('stCallBody');
@@ -214,7 +214,7 @@
         '<div class="st-row"><label>County<select onchange="StartCall.set(\'county\',this.value);StartCall.changed();StartCall.draw()"><option value="">pick one</option>' + list.map(c => '<option' + (call.county === c ? ' selected' : '') + '>' + esc(c) + '</option>').join('') + '<option value="Other"' + (call.county === 'Other' ? ' selected' : '') + '>Another county</option></select></label>' +
         (call.county === 'Other' ? inp('countyOther', call.countyOther, 'For example, Jackson', 'text', 'Which county?') : '<div></div>') + '</div>' +
         (S.outsideArea(Object.assign({}, call, { area: AREA() }))
-          ? '<div class="alert alert-warn" style="font-size:13px;display:block">Outside our 27 counties in Southwest Missouri. Samantha or Zach looks at this before anything is sent to the state.</div>' +
+          ? '<div class="alert alert-warn" style="font-size:13px;display:block">Outside our 27 counties in Southwest Missouri. Look into this before anything is sent to the state.</div>' +
             say('We serve 27 counties in Southwest Missouri. Let me check with our team, and we will call you back either way.')
           : why('The list is our service area: the same 27 counties as caringcds.com/service-area.'));
     } else if (k === 'medicaid') {
@@ -249,7 +249,7 @@
         '<div class="st-chips">' + chip('selfDirect', 'yes', 'Yes', call.selfDirect === 'yes') + chip('selfDirect', 'concern', 'Memory or decision-making concerns', call.selfDirect === 'concern') + unk('selfDirect') + '</div>' +
         say('Does anyone have guardianship or conservatorship for ' + (who === 'self' ? 'you' : them()) + '?') +
         '<div class="st-chips">' + chip('guardian', 'no', 'No', call.guardian === 'no') + chip('guardian', 'yes', 'Yes', call.guardian === 'yes') + unk('guardian') + '</div>' +
-        why('A concern or a guardian is not a no. Samantha or Zach looks at it before anything is sent to the state.');
+        why('A concern or a guardian is not a no. Look into it before anything is sent to the state.');
     } else if (k === 'living') {
       body = '<h3>Where they live</h3>' + say('Where ' + (who === 'self' ? 'are you' : 'is ' + them()) + ' living right now? At home, or in a nursing facility or residential care community?') +
         '<div class="st-chips">' + chip('living', 'home', 'Their own home', call.living === 'home') + chip('living', 'family', 'With family', call.living === 'family') + chip('living', 'hospital', 'Hospital or rehab', call.living === 'hospital') +
@@ -282,7 +282,7 @@
         '<textarea rows="3" oninput="StartCall.set(\'note\',this.value)" placeholder="Call note: anything worth remembering" style="font:inherit;font-size:13.5px">' + esc(call.note) + '</textarea>' +
         '<div style="padding:10px 12px;background:#fbf1dc;border-radius:10px"><b>What happens next:</b> ' + esc(plan.next.t) + '</div>' +
         (plan.say ? '<div><b style="font-size:13px">Tell them before you hang up:</b>' + say(plan.say) + '</div>' : '') +
-        (plan.flags.length ? '<div class="alert alert-warn" style="font-size:13px;display:block"><b>For Samantha or Zach to look at:</b><ul style="margin:6px 0 0 18px;padding:0">' + plan.flags.map(x => '<li>' + esc(x.t) + '</li>').join('') + '</ul><div style="margin-top:6px">Do not tell the family they qualify or do not qualify.</div></div>' : '') +
+        (plan.flags.length ? '<div class="alert alert-warn" style="font-size:13px;display:block"><b>Look into before sending to the state:</b><ul style="margin:6px 0 0 18px;padding:0">' + plan.flags.map(x => '<li>' + esc(x.t) + '</li>').join('') + '</ul><div style="margin-top:6px">Do not tell the family they qualify or do not qualify.</div></div>' : '') +
         (plan.missing.length ? why('Still missing: ' + plan.missing.join('; ') + '. Tap a step above to go back, or save anyway.') : '') +
         '<div><button type="button" class="btn btn-primary" onclick="StartCall.save(true)">Finish call</button></div>';
     }

@@ -338,8 +338,9 @@
   // Unknown answers are fine; they become "still missing". Returns the Finish call plan.
   // Close to the state assessment's areas (policy 4.10): bathing, dressing and grooming, eating, toileting, mobility, meal prep, medications.
   const HELP = { bathing: 'bathing', dressing: 'dressing and grooming', eating: 'eating', toileting: 'toileting', mobility: 'getting around and transfers', meals: 'meals', meds: 'medications', housekeeping: 'housekeeping', errands: 'errands and rides' };
-  // Answers that need a second look before a referral (her 11-05 decision: Samantha or Zach decides; nothing is told to the family here).
-  // k: 'review' = Samantha or Zach looks first; 'att' = the attendant in mind cannot be the paid attendant.
+  // Answers that need a second look before a referral; nothing is told to the family on the call. Her 11-05 rule: the care
+  // coordinator looks into these (every coordinator is trained for it), not Samantha or Zach.
+  // k: 'review' = look into it before the referral; 'att' = the attendant in mind cannot be the paid attendant.
   const countyName = C => C.county === 'Other' ? String(C.countyOther || '').trim() : String(C.county || '').trim();
   function outsideArea(C) {
     if (!C.county) return false;
@@ -440,7 +441,7 @@
     else if (!cn || !String(C.phone || '').replace(/\D/g, '')) { next = { k: 'callback', t: 'Call back for ' + (!cn ? "the consumer's name" : 'a phone number') }; days = 1; say = ''; }
     else if (!C.medicaid || C.medicaid === 'unsure' || C.medicaid === 'yes') { next = { k: 'emomed', t: 'Look ' + first + ' up in eMOMED' }; days = 2; say = "Thank you for calling" + about + ". We'll check a few things on our end and call you back."; }
     else { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling" + about + ". Take your time; we'll check back in with you."; }
-    if (C.who !== 'solo' && flags.some(x => x.k === 'review') && next.k !== 'pool') { next = { k: 'review', t: 'Samantha or Zach looks at this before anything is sent to the state' }; days = 1; say = "Thank you for calling" + about + ". We'll look at a few things on our end and call you back."; }
+    if (C.who !== 'solo' && flags.some(x => x.k === 'review') && next.k !== 'pool') { next = { k: 'review', t: 'Look into the items below before anything is sent to the state' }; days = 1; say = "Thank you for calling" + about + ". We'll look at a few things on our end and call you back."; }
     if (C.ready === 'not_yet' && next.k !== 'medicaid' && next.k !== 'pool' && next.k !== 'review') { next = { k: 'callback', t: 'Call back to see if they are ready' }; days = 7; say = "Thank you for calling" + about + ". Take your time; we'll check back in with you."; }
     return { summary, missing, next, followDays: days, say, consumerName: cn, callerName: caller, flags };
   }
