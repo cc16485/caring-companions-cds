@@ -101,15 +101,29 @@ ok(S.recentSends([{ at: '2026-11-02T00:00:00Z', status: 'sent' }, { at: '2026-10
 
 // The first call: summary, still missing, one next step, follow-up gap.
 const P = S.callPlan;
-let cp = P({ who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', medicaid: 'no', cds: 'new', help: ['bathing'], attendant: 'find' });
+let cp = P({ who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', medicaid: 'no', cds: 'new', help: ['bathing'], attendant: 'find', condition: 'stroke', handsOn: 'hands', selfDirect: 'yes', guardian: 'no', living: 'home' });
 ok(cp.summary.startsWith('Linda (daughter) called about Mae Example.') && cp.missing.join() === 'their date of birth,their county' && cp.next.k === 'medicaid' && cp.followDays === 3, 'family, no Medicaid');
 // Guided call (2026-11-05): date of birth, county, DCN and the application stage.
-cp = P({ who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', dob: '1940-03-04', county: 'Greene', medicaid: 'no', appStage: 'plans', cds: 'new', help: ['bathing'], attendant: 'find' });
+cp = P({ who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', dob: '1940-03-04', county: 'Greene', medicaid: 'no', appStage: 'plans', cds: 'new', help: ['bathing'], attendant: 'find', condition: 'stroke', handsOn: 'hands', selfDirect: 'yes', guardian: 'no', living: 'home' });
 ok(cp.missing.length === 0 && cp.followDays === 7 && /Age \d+, lives in Greene County\./.test(cp.summary) && cp.summary.includes('No Medicaid yet, plans to apply.'), 'no Medicaid, plans to apply: 7 days, age and county in the summary');
 cp = P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', county: 'Greene', medicaid: 'yes', cds: 'new', help: ['meals'], attendant: 'find' });
 ok(cp.missing.includes('their date of birth') && cp.missing.includes('their DCN or birth date, to look up their Medicaid'), 'Medicaid yes, no DCN or birth date: asked for');
-cp = P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', dob: '1950-01-01', county: 'Greene', medicaid: 'yes', dcn: '12345678', cds: 'new', help: ['meals'], attendant: 'find' });
+cp = P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', dob: '1950-01-01', county: 'Greene', medicaid: 'yes', dcn: '12345678', cds: 'new', help: ['meals'], attendant: 'find', condition: 'stroke', handsOn: 'hands', selfDirect: 'yes', guardian: 'no', living: 'home' });
 ok(cp.missing.length === 0 && cp.summary.includes('Has Medicaid, DCN given.') && !cp.summary.includes('12345678'), 'DCN given: not missing, never written in the summary');
+// New to CDS: eligibility answers (policy 3.25, RSMo 208.900); a transfer only needs who they are and how to reach them.
+const base = { who: 'family', consumer: { first: 'Mae', last: 'Example' }, caller: { name: 'Linda', relation: 'daughter' }, phone: '4175550177', dob: '1940-03-04', county: 'Greene', medicaid: 'yes', dcn: '1', cds: 'new', help: ['bathing'], attendant: 'find', condition: 'stroke', handsOn: 'hands', selfDirect: 'yes', guardian: 'no', living: 'home', ready: 'yes' };
+cp = P(base); ok(cp.flags.length === 0 && cp.next.k === 'start' && cp.summary.includes('Why they need help: stroke.') && cp.summary.includes('Needs hands-on help.'), 'new to CDS, all fits: start the profile');
+const flagOf = x => P(Object.assign({}, base, x));
+ok(flagOf({ dob: '2012-01-01' }).flags[0].t.startsWith('Under 18') && flagOf({ dob: '2012-01-01' }).next.k === 'review', 'under 18: Samantha or Zach first');
+ok(flagOf({ living: 'facility' }).next.k === 'review' && flagOf({ selfDirect: 'concern' }).next.k === 'review' && flagOf({ guardian: 'yes' }).next.k === 'review' && flagOf({ other: 'dmh' }).next.k === 'review' && flagOf({ handsOn: 'reminders' }).next.k === 'review', 'facility, self-direction, guardian, DMH, reminders: review first');
+ok(flagOf({ living: 'hospital' }).flags.length === 0 && flagOf({ other: 'agency' }).flags.length === 0, 'hospital or another agency: no flag');
+ok(flagOf({ attendant: 'has', attName: 'Bob', attRel: 'spouse' }).flags.some(x => x.k === 'att' && /spouse/.test(x.t)) && flagOf({ attendant: 'has', attName: 'Bob', attRel: 'spouse' }).next.k === 'start', 'spouse as attendant: flagged, the referral can still go (they choose someone else)');
+ok(flagOf({ attendant: 'has', attName: 'Bob', attRel: 'legal guardian' }).flags.length === 1 && flagOf({ attendant: 'has', attName: 'Bob', attRel: 'son', attCds: 'yes' }).flags.length === 1, 'guardian or CDS consumer as attendant: flagged');
+ok(P(Object.assign({}, base, { condition: '', handsOn: '', selfDirect: '', guardian: '', living: '' })).missing.join('|').includes('why they need help|hands-on help or reminders|whether they can direct their own care|guardian or conservator|where they live'), 'unanswered eligibility questions are missing');
+const tr = { who: 'family', cds: 'move', agency: 'Other CDS Co', consumer: { first: 'Vi', last: 'Sample' }, caller: { name: 'Lou' }, phone: '4175550100', consPhone: '4175550101', dob: '1950-01-01', attendant: 'has', attName: 'Amy', ready: 'yes' };
+cp = P(tr); ok(cp.missing.length === 0 && cp.flags.length === 0 && cp.next.k === 'start', 'transfer: no Medicaid, county, help or eligibility questions needed');
+cp = P(Object.assign({}, tr, { consPhone: '', dob: '', attName: '', living: 'facility' }));
+ok(cp.missing.join('|') === "their date of birth|the consumer's phone|the attendant's name" && cp.flags.length === 0, 'transfer: missing only who they are and how to reach them; no eligibility flags');
 ok(S.ageOn('2000-01-01') >= 26 && S.ageOn('') === null && S.ageOn('not a date') === null, 'age from the date of birth');
 ok(P({ who: 'family', medicaid: 'applied', consumer: { first: 'A' }, phone: '4175550100' }).followDays === 14, 'applied: two weeks');
 ok(P({ who: 'self', consumer: { first: 'Opal', last: 'T' }, phone: '4175550111', medicaid: 'yes', cds: 'new', ready: 'yes' }).next.k === 'start', 'ready: start the profile');

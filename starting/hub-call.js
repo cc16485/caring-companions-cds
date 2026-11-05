@@ -58,7 +58,8 @@
   function blank() {
     return { leadId: '', who: '', consumer: { first: '', last: '' }, caller: { name: '', relation: '' }, phone: '', email: '', medicaid: '', cds: '', agency: '',
              help: [], helpNote: '', attendant: '', attName: '', attPhone: '', county: '', note: '', ready: '',
-             dob: '', dobSkip: false, dcn: '', dcnUnknown: false, appStage: '', step: 0 };
+             dob: '', dobSkip: false, dcn: '', dcnUnknown: false, appStage: '', step: 0,
+             condition: '', handsOn: '', selfDirect: '', guardian: '', living: '', other: '', attRel: '', attEmail: '', attCds: '', consPhone: '', consEmail: '' };
   }
   // A returning caller's lead fills the screen (nothing typed twice).
   function fromLead(p) {
@@ -75,6 +76,10 @@
     c.help = Array.isArray(p.helpNeeded) ? p.helpNeeded.slice() : [];
     c.attendant = p.attendant && p.attendant.name ? 'has' : ({ has: 'has', find: 'find' }[p.caregiverPlan] || '');
     c.attName = (p.attendant && p.attendant.name) || ''; c.attPhone = (p.attendant && p.attendant.phone) || '';
+    c.attEmail = (p.attendant && p.attendant.email) || ''; c.attRel = (p.attendant && p.attendant.relation) || '';
+    if (rel) { c.consPhone = p.phone || ''; c.consEmail = p.email || ''; }
+    const sc = p.screening || {};
+    ['condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other', 'attCds'].forEach(k => { if (sc[k]) c[k] = sc[k]; });
     c.county = p.county || '';
     c.dob = typeof ldtIsoDay === 'function' ? ldtIsoDay(p.dob || (p.referral || {}).dob) || '' : String(p.dob || '').slice(0, 10);
     c.dcn = p.dcn || (p.referral || {}).dcn || '';
@@ -119,20 +124,25 @@
     c = c || call;
     if (!c.who) return ['who'];
     if (c.who === 'solo') return ['who', 'names', 'wrap'];
-    return ['who', 'names', 'phone', 'dob', 'county', 'medicaid', 'cds', 'help'].concat(c.who === 'pair' ? [] : ['attendant'], ['ready', 'wrap']);
+    // Already in CDS with another agency: the state approved them, so only who they are and how to reach them (her 11-05 ask).
+    if (c.cds === 'move') return ['who', 'cds', 'names', 'dob', 'phone', 'attendant', 'ready', 'wrap'];
+    return ['who', 'cds', 'names', 'phone', 'dob', 'county', 'medicaid', 'help', 'decide', 'living'].concat(['attendant', 'ready', 'wrap']);
   }
-  const STEP_LABEL = { who: 'Who', names: 'Names', phone: 'Phone', dob: 'Birth date', county: 'County', medicaid: 'Medicaid', cds: 'CDS now', help: 'Help at home', attendant: 'Attendant', ready: 'Go ahead', wrap: 'Wrap up' };
+  const STEP_LABEL = { who: 'Who', names: 'Names', phone: 'Phone', dob: 'Birth date', county: 'County', medicaid: 'Medicaid', cds: 'CDS now', help: 'Help at home', decide: 'Their decisions', living: 'Where they live', attendant: 'Attendant', ready: 'Go ahead', wrap: 'Wrap up' };
+  const ATT_REL = ['daughter', 'son', 'grandchild', 'sister', 'brother', 'niece or nephew', 'friend', 'neighbor', 'other family', 'spouse', 'legal guardian', 'other'];
   function answered(c, k) {
     switch (k) {
       case 'who': return !!c.who;
       case 'names': return c.who === 'solo' ? !!(c.caller.name && digits(c.phone)) : !!(c.consumer.first && (c.who === 'self' || c.caller.name));
-      case 'phone': return !!digits(c.phone);
+      case 'phone': return !!digits(c.phone) && (c.cds !== 'move' || c.who === 'self' || !!digits(c.consPhone));
       case 'dob': return !!(c.dob || c.dobSkip);
       case 'county': return !!c.county;
       case 'medicaid': return !!c.medicaid && (c.medicaid !== 'yes' || !!(c.dcn || c.dcnUnknown)) && (c.medicaid !== 'no' || !!c.appStage);
       case 'cds': return !!c.cds;
-      case 'help': return !!((c.help || []).length || c.helpNote);
-      case 'attendant': return !!c.attendant;
+      case 'help': return !!((c.help || []).length || c.helpNote) && !!c.condition && !!c.handsOn;
+      case 'decide': return !!c.selfDirect && !!c.guardian;
+      case 'living': return !!c.living && !!c.other;
+      case 'attendant': return c.who === 'pair' ? !!c.attRel : !!c.attendant && (c.attendant !== 'has' || !!(c.attName && c.attRel));
       case 'ready': return !!c.ready;
       default: return false;
     }
@@ -185,7 +195,9 @@
     } else if (k === 'phone') {
       body = '<h3>Best phone number and email</h3>' + say('What is the best number to reach you? And is there an email where I can send you information?') +
         '<div class="st-row">' + inp('phone', call.phone, '(417) 555-0100', 'tel', who === 'self' ? 'Their phone' : "The caller's phone") + inp('email', call.email, '', 'email', 'Email (if they gave one)') + '</div>' +
-        why('Texts and emails after the call go here. Nothing is sent until you press Send.');
+        (who !== 'self' ? say('And what is the best phone number and email for ' + them() + '?') +
+          '<div class="st-row">' + inp('consPhone', call.consPhone, call.cds === 'move' ? '' : 'if different', 'tel', "The consumer's phone") + inp('consEmail', call.consEmail, '', 'email', "The consumer's email") + '</div>' : '') +
+        why('Texts and emails after the call go to the caller. Nothing is sent until you press Send.');
     } else if (k === 'dob') {
       body = '<h3>Date of birth</h3>' + say(who === 'self' ? 'And what is your date of birth? That helps us look up your Medicaid.' : 'What is ' + theirs() + ' date of birth? That helps us look up ' + (call.consumer.first ? 'their' : 'the') + ' Medicaid.') +
         '<div class="st-row">' + inp('dob', call.dob, '', 'date', 'Date of birth') + '<div></div></div><div id="stAge" style="font-weight:600;color:var(--primary)">' + esc(ageText()) + '</div>' +
@@ -212,16 +224,45 @@
     } else if (k === 'cds') {
       body = '<h3>CDS now?</h3>' + say((who === 'self' ? 'Are you' : 'Is ' + them()) + ' getting CDS services with another agency right now, or would this be new?') +
         '<div class="st-chips">' + chip('cds', 'new', 'No, new to CDS', call.cds === 'new') + chip('cds', 'move', 'Yes, with another agency', call.cds === 'move') + unk('cds') + '</div>' +
-        (call.cds === 'move' ? '<div class="st-row">' + inp('agency', call.agency, '', 'text', 'Which agency') + '<div></div></div>' + why('Moving agencies is a transfer. The current authorization stays in place while we work on it.') : '');
+        (call.cds === 'move' ? '<div class="st-row">' + inp('agency', call.agency, '', 'text', 'Which agency') + '<div></div></div>' + why('A transfer: the state already approved them, so the call is short. Names, birth date, phone and email for the consumer and the attendant.') : '');
     } else if (k === 'help') {
-      body = '<h3>Help at home</h3>' + say('What kind of help ' + (who === 'self' ? 'do you' : 'does ' + them()) + ' need at home?') +
+      body = '<h3>Help at home</h3>' + say('What is the diagnosis or health condition that makes daily tasks hard for ' + (who === 'self' ? 'you' : them()) + '? For example, a stroke, a heart condition, arthritis, a fall or a surgery.') +
+        '<input type="text" value="' + esc(call.condition) + '" placeholder="In their words" aria-label="Why they need help" oninput="StartCall.set(\'condition\',this.value)" onchange="StartCall.changed()" style="font-size:13.5px;padding:7px 9px">' +
+        why('CDS is for a physical disability: the body needs another person\'s help with routine tasks (RSMo 208.900).') +
+        say('What kind of help ' + (who === 'self' ? 'do you' : 'does ' + them()) + ' need at home?') +
         '<div class="st-chips">' + Object.keys(S.HELP).map(h => chip('help', h, S.HELP[h].charAt(0).toUpperCase() + S.HELP[h].slice(1), (call.help || []).includes(h), true)).join('') + '</div>' +
-        '<input type="text" value="' + esc(call.helpNote) + '" placeholder="Anything else, in their words" oninput="StartCall.set(\'helpNote\',this.value)" onchange="StartCall.changed()" style="font-size:13.5px;padding:7px 9px">';
+        '<input type="text" value="' + esc(call.helpNote) + '" placeholder="Anything else, in their words" oninput="StartCall.set(\'helpNote\',this.value)" onchange="StartCall.changed()" style="font-size:13.5px;padding:7px 9px">' +
+        say((who === 'self' ? 'Do you' : 'Does ' + them()) + ' need hands-on help, or mostly reminders and someone nearby?') +
+        '<div class="st-chips">' + chip('handsOn', 'hands', 'Hands-on help', call.handsOn === 'hands') + chip('handsOn', 'reminders', 'Mostly reminders or someone nearby', call.handsOn === 'reminders') + unk('handsOn') + '</div>' +
+        why('The state pays for hands-on help only, not reminders, standby or waiting time (policy 3.25). The state\'s assessment decides eligibility; never tell a family they will qualify.');
+    } else if (k === 'decide') {
+      body = '<h3>Their decisions</h3>' + say('CDS asks ' + (who === 'self' ? 'you' : them()) + ' to direct ' + (who === 'self' ? 'your' : 'their') + ' own services: managing the attendant\'s schedule, making sure they clock in and out, and asking for the help ' + (who === 'self' ? 'you need' : 'they need') + '. ' + (who === 'self' ? 'Are you' : 'Is ' + them()) + ' able to do this?') +
+        '<div class="st-chips">' + chip('selfDirect', 'yes', 'Yes', call.selfDirect === 'yes') + chip('selfDirect', 'concern', 'Memory or decision-making concerns', call.selfDirect === 'concern') + unk('selfDirect') + '</div>' +
+        say('Does anyone have guardianship or conservatorship for ' + (who === 'self' ? 'you' : them()) + '?') +
+        '<div class="st-chips">' + chip('guardian', 'no', 'No', call.guardian === 'no') + chip('guardian', 'yes', 'Yes', call.guardian === 'yes') + unk('guardian') + '</div>' +
+        why('A concern or a guardian is not a no. Samantha or Zach looks at it before anything is sent to the state.');
+    } else if (k === 'living') {
+      body = '<h3>Where they live</h3>' + say('Where ' + (who === 'self' ? 'are you' : 'is ' + them()) + ' living right now? At home, or in a nursing facility or residential care community?') +
+        '<div class="st-chips">' + chip('living', 'home', 'Their own home', call.living === 'home') + chip('living', 'family', 'With family', call.living === 'family') + chip('living', 'hospital', 'Hospital or rehab', call.living === 'hospital') +
+          chip('living', 'facility', 'Nursing home, RCF or assisted living', call.living === 'facility') + unk('living') + '</div>' +
+        say((who === 'self' ? 'Are you' : 'Is ' + them()) + ' getting any other help at home right now, from another agency or DMH?') +
+        '<div class="st-chips">' + chip('other', 'none', 'No', call.other === 'none') + chip('other', 'agency', 'Another agency', call.other === 'agency') + chip('other', 'dmh', 'DMH services', call.other === 'dmh') + unk('other') + '</div>';
     } else if (k === 'attendant') {
-      body = '<h3>An attendant</h3>' + say('With CDS, ' + (who === 'self' ? 'you choose your' : them() + ' chooses their') + ' own attendant, often a family member or friend. Do ' + (who === 'self' ? 'you' : 'they') + ' have someone in mind?') +
-        '<div class="st-chips">' + chip('attendant', 'has', 'Yes', call.attendant === 'has') + chip('attendant', 'find', 'No, needs us to find someone', call.attendant === 'find') + unk('attendant') + '</div>' +
-        (call.attendant === 'has' ? '<div class="st-row">' + inp('attName', call.attName, '', 'text', 'Their name') + inp('attPhone', call.attPhone, '', 'tel', 'Their phone') + '</div>' : '') +
-        (call.attendant === 'find' ? why('We work on a match from the Caregiver Pool. Do not promise a person or a start date yet.') : '');
+      const relSel = '<label>How are they related to ' + esc(who === 'self' ? 'the consumer' : them()) + '?<select onchange="StartCall.set(\'attRel\',this.value);StartCall.changed();StartCall.draw()"><option value="">pick one</option>' + ATT_REL.map(r => '<option' + (call.attRel === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>';
+      const attCds = '<div style="display:grid;gap:6px"><span style="font-size:12.5px;color:var(--gray-600)">Do they get CDS services themselves?</span><div class="st-chips">' + chip('attCds', 'no', 'No', call.attCds === 'no') + chip('attCds', 'yes', 'Yes', call.attCds === 'yes') + unk('attCds') + '</div></div>';
+      if (who === 'pair') {
+        body = '<h3>You, the attendant</h3>' + say('How are you related to ' + them() + '? And what is a good email for you?') +
+          '<div class="st-row">' + relSel + inp('attEmail', call.attEmail, '', 'email', 'Attendant email') + '</div>' + attCds;
+      } else {
+        body = '<h3>An attendant</h3>' + say(call.cds === 'move' ? 'Who is ' + (who === 'self' ? 'your' : theirs()) + ' attendant now? Can I get their phone number and email?'
+            : 'With CDS, ' + (who === 'self' ? 'you choose your' : them() + ' chooses their') + ' own attendant, often a family member or friend. Do ' + (who === 'self' ? 'you' : 'they') + ' have someone in mind?') +
+          '<div class="st-chips">' + chip('attendant', 'has', 'Yes', call.attendant === 'has') + chip('attendant', 'find', 'No, needs us to find someone', call.attendant === 'find') + unk('attendant') + '</div>' +
+          (call.attendant === 'has' ? '<div class="st-row">' + inp('attName', call.attName, '', 'text', 'Their name') + inp('attPhone', call.attPhone, '', 'tel', 'Their phone') + '</div>' +
+            '<div class="st-row">' + inp('attEmail', call.attEmail, '', 'email', 'Their email') + relSel + '</div>' + attCds : '') +
+          (call.attendant === 'find' ? why('We work on a match from the Caregiver Pool. Do not promise a person or a start date yet.') : '');
+      }
+      const af = S.callFlags(call).filter(x => x.k === 'att');
+      if (af.length) body += '<div class="alert alert-warn" style="font-size:13px">' + af.map(x => esc(x.t)).join('<br>') + ' They can choose someone else.</div>';
     } else if (k === 'ready') {
       body = '<h3>Go ahead?</h3>' + say(call.cds === 'move' ? 'Would you like us to go ahead and start the transfer?' : 'Would you like us to go ahead and send the referral to the state?') +
         why('Yes means they want us to send the referral or the transfer. It starts their profile at Finish call.') +
@@ -232,6 +273,7 @@
         '<textarea rows="3" oninput="StartCall.set(\'note\',this.value)" placeholder="Call note: anything worth remembering" style="font:inherit;font-size:13.5px">' + esc(call.note) + '</textarea>' +
         '<div style="padding:10px 12px;background:#fbf1dc;border-radius:10px"><b>What happens next:</b> ' + esc(plan.next.t) + '</div>' +
         (plan.say ? '<div><b style="font-size:13px">Tell them before you hang up:</b>' + say(plan.say) + '</div>' : '') +
+        (plan.flags.length ? '<div class="alert alert-warn" style="font-size:13px;display:block"><b>For Samantha or Zach to look at:</b><ul style="margin:6px 0 0 18px;padding:0">' + plan.flags.map(x => '<li>' + esc(x.t) + '</li>').join('') + '</ul><div style="margin-top:6px">Do not tell the family they qualify or do not qualify.</div></div>' : '') +
         (plan.missing.length ? why('Still missing: ' + plan.missing.join('; ') + '. Tap a step above to go back, or save anyway.') : '') +
         '<div><button type="button" class="btn btn-primary" onclick="StartCall.save(true)">Finish call</button></div>';
     }
@@ -280,7 +322,7 @@
     const keep = call;
     call = fromLead(p);
     // what was already typed on this call wins over the old lead
-    ['who', 'medicaid', 'cds', 'attendant', 'ready', 'note', 'helpNote', 'agency', 'attName', 'attPhone', 'dob', 'dcn', 'county', 'appStage', 'dobSkip', 'dcnUnknown'].forEach(k => { if (keep && keep[k]) call[k] = keep[k]; });
+    ['who', 'medicaid', 'cds', 'attendant', 'ready', 'note', 'helpNote', 'agency', 'attName', 'attPhone', 'dob', 'dcn', 'county', 'appStage', 'dobSkip', 'dcnUnknown', 'condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other', 'attRel', 'attEmail', 'attCds', 'consPhone', 'consEmail'].forEach(k => { if (keep && keep[k]) call[k] = keep[k]; });
     if (keep && keep.help && keep.help.length) call.help = keep.help;
     if (keep && keep.phone) call.phone = keep.phone;
     if (keep && keep.caller && keep.caller.name) call.caller = keep.caller;
@@ -319,7 +361,8 @@
     }
     const ph = digits(call.phone);
     if (call.who === 'self' || call.who === 'solo') { if (ph) p.phone = call.phone.trim(); if (call.email) p.email = call.email.trim(); }
-    else if (call.caller.name.trim()) {
+    else if (digits(call.consPhone) || call.consEmail.trim()) { if (digits(call.consPhone)) p.phone = call.consPhone.trim(); if (call.consEmail.trim()) p.email = call.consEmail.trim(); }
+    if (call.who !== 'self' && call.who !== 'solo' && call.caller.name.trim()) {
       const rp = CDSRules.relatedPeople(p), same = rp.find(r => (ph && digits(r.phone) === ph) || String(r.name || '').toLowerCase() === call.caller.name.trim().toLowerCase());
       if (same) { if (ph) same.phone = call.phone.trim(); if (call.email) same.email = call.email.trim(); if (call.caller.relation) same.relation = call.caller.relation; }
       else { CDSRules.addContact(p, { name: call.caller.name.trim(), phone: call.phone.trim(), role: call.who === 'pair' ? 'attendant' : 'family', relation: call.caller.relation }, { by }); const n = CDSRules.relatedPeople(p); if (call.email) n[n.length - 1].email = call.email.trim(); }
@@ -329,8 +372,9 @@
     if (call.cds === 'move') { p.type = 'pccp'; if (call.agency) p.leavingAgency = call.agency.trim(); }
     else if (call.cds === 'new' && call.ready === 'yes' && p.type === 'lead') p.type = 'referral';
     if ((call.help || []).length) p.helpNeeded = call.help.slice();
-    if (call.who === 'pair' && call.caller.name.trim()) { p.attendant = Object.assign({}, p.attendant, { name: call.caller.name.trim(), phone: call.phone.trim() || null }); p.caregiverPlan = 'has'; }
-    else if (call.attendant === 'has') { if (call.attName) p.attendant = Object.assign({}, p.attendant, { name: call.attName.trim(), phone: call.attPhone.trim() || null }); p.caregiverPlan = 'has'; }
+    const attMore = a => { if (call.attEmail.trim()) a.email = call.attEmail.trim(); if (call.attRel) a.relation = call.attRel; if (call.attCds) a.getsCds = call.attCds; return a; };
+    if (call.who === 'pair' && call.caller.name.trim()) { p.attendant = attMore(Object.assign({}, p.attendant, { name: call.caller.name.trim(), phone: call.phone.trim() || null })); p.caregiverPlan = 'has'; }
+    else if (call.attendant === 'has') { if (call.attName) p.attendant = attMore(Object.assign({}, p.attendant, { name: call.attName.trim(), phone: call.attPhone.trim() || null })); p.caregiverPlan = 'has'; }
     else if (call.attendant === 'find') p.caregiverPlan = 'find';
     if (call.county && call.county !== 'Other') p.county = call.county;
     if (call.dob) { p.dob = call.dob; if (p.referral) p.referral.dob = call.dob; }
@@ -339,6 +383,12 @@
       const stage = call.medicaid === 'applied' ? 'applied' : (call.appStage || 'help');
       p.medicaid = p.medicaid || {};
       if (!p.medicaid.application || p.medicaid.application.stage !== stage) p.medicaid.application = { stage, at: now, by };
+    }
+    // The eligibility answers (new to CDS), with what needs a second look. Kept on the lead, never sent anywhere.
+    if (call.who !== 'solo' && call.cds !== 'move' && ['condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other'].some(k => call[k])) {
+      const sc = { at: now, by }; ['condition', 'handsOn', 'selfDirect', 'guardian', 'living', 'other'].forEach(k => { if (call[k]) sc[k] = typeof call[k] === 'string' ? call[k].trim() : call[k]; });
+      sc.flags = S.callFlags(call).map(x => x.t);
+      p.screening = sc;
     }
     if (!p.coordinator) p.coordinator = by;
     if (p.status === 'new' && call.who !== 'solo') p.status = 'nurturing';
@@ -375,6 +425,7 @@
     return '<div class="st-sum"><b style="color:var(--primary)">Call saved</b><div style="margin-top:6px">' + esc(plan.summary) + '</div>' +
       '<div style="margin-top:8px"><b>Still missing:</b> ' + esc(plan.missing.length ? plan.missing.join('; ') : 'nothing') + '</div>' +
       '<div style="margin-top:8px;padding:8px 10px;background:#fbf1dc;border-radius:10px"><b>Next step:</b> ' + esc(plan.next.t) + '</div>' +
+      (plan.flags.length ? '<div style="margin-top:8px;font-size:13px"><b>To look at:</b> ' + esc(plan.flags.map(x => x.t).join(' ')) + '</div>' : '') +
       (plan.next.k !== 'pool' ? '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:13px">Who: <select id="stFinOwner" style="font-size:13px">' + owners.map(o => '<option' + (o === f.owner ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select>' +
         ' Follow up: <input type="date" id="stFinDate" value="' + esc(f.date) + '" style="font-size:13px"> <button type="button" class="btn btn-sm btn-outline" onclick="StartCall.saveFollow()">Save</button></div><div class="field-note" id="stFinNote"></div>' : '') + '</div>' +
       (f.body !== '' || plan.say ? '<div class="st-q"><b>Message to ' + esc((call.who === 'self' || call.who === 'solo') ? (p.name || 'them') : (rp && rp.name) || 'the caller') + '</b>' +
@@ -438,5 +489,5 @@
   }
   function done() { const id = call && call.leadId; closeModal('stCallModal'); if (id) openLeadProfile(id); else if (typeof renderPipeline === 'function') renderPipeline(); }
 
-  window.StartCall = { open, close, pick, set, changed, go, next, back, find, useLead, notDup, save, ch, body, saveFollow, send, startProfile, toPool, done, state: () => call, finishState: () => finish };
+  window.StartCall = { open, close, pick, set, changed, go, next, back, draw, find, useLead, notDup, save, ch, body, saveFollow, send, startProfile, toPool, done, state: () => call, finishState: () => finish };
 })();
