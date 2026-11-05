@@ -47,6 +47,7 @@ await pg.exec(NOTES_SQL); await pg.exec(NOTES_SQL);
 ok(true, 'call_notes.sql runs twice');
 // voicemail leads (2026-10-29): voicemails get notes too; links can point at a voicemail
 await pg.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname='service_role') then create role service_role nologin; end if; end $$;`);
+await pg.exec(strip(readFileSync(ROOT + '/attendant_packet.sql', 'utf8')));   // the phone book reads cds_packets (2026-11-05)
 await pg.exec(strip(readFileSync(ROOT + '/cds_lead_link.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/voicemail_leads.sql', 'utf8')));
 const s0 = (await pg.query(`select value from cds_match_settings where key='call_notes'`)).rows[0].value;

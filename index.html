@@ -724,6 +724,8 @@ input, select, textarea { border-radius:10px; }
 .cn-pill { display:inline-block; margin-top:4px; background:var(--cute-honey-pale) !important; color:#7A4E0B !important; }
 .ch-note { margin-top:4px; font-size:13px; line-height:1.5; color:var(--cute-ink); background:#f6f5f0; border-radius:8px; padding:6px 10px; }
 .ch-note.wait { background:#FFFBF1; color:#7A4E0B; }
+.fu-confirm { border-color:#9ED6D3; }
+.fu-ask { font-size:14px; line-height:1.55; margin:8px 0 12px; }
 .fu-boss { font-size:13px; color:#0D365F; background:#EEF6F6; border-radius:8px; padding:6px 10px; margin:6px 0; }
 .ch-play { margin-top:4px; font-size:13px; display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center; }
 .ch-play > div { flex:1 1 100%; }
@@ -9379,6 +9381,19 @@ async function renderFollowups(reload) {
         _fuNextDays(todayIso).map(x => '<button type="button" onclick="fuLater(\'' + id + '\',\'' + x + '\')">' + esc(_fuDay(x)) + '</button>').join('') +
         (c.later ? '<button type="button" onclick="fuLater(\'' + id + '\',null)">Back to today</button>' : '') +
         '<button type="button" onclick="fuLaterPick(\'\')">Cancel</button></div>' : '';
+    // Confirm once (2026-11-05): GoHighLevel's name for this number matches an attendant in payroll. Nothing is tied until Yes.
+    if (c.kind === 'attendant_confirm') {
+      const m = ((c.events || [])[0] || {}).suggest || { name: c.name, ties: [] };
+      const forWho = (m.ties || []).map(t => esc(t.name) + (t.past ? ' (before)' : '')).join(', ');
+      return '<article class="ld-card fu-confirm">' +
+        '<div class="ld-top"><h3>Is this ' + esc(m.name) + '?</h3><span class="ld-kind k-pccp">Attendant, from payroll</span></div>' +
+        (phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
+        '<p class="fu-ask">GoHighLevel has this number as <b>' + esc(m.contact || m.name) + '</b>. ' +
+        'Payroll pays ' + esc(m.name) + ' as the attendant for ' + forWho + '. If it is them, their calls and texts go on ' + forWho + '\'s Communication tab from now on.</p>' +
+        '<div class="fu-acts"><button type="button" class="go" onclick="fuAttendant(\'' + id + '\',true)">Yes, it is ' + esc(String(m.name).split(' ')[0]) + '</button>' +
+        '<button type="button" class="plain" onclick="fuAttendant(\'' + id + '\',false)">No</button></div>' +
+        '<div class="field-note" id="fuAttErr_' + id + '"></div></article>';
+    }
     return '<article class="ld-card' + (c.urgent ? ' fu-urgent' : '') + '">' +
       '<div class="ld-top"><h3>' + esc(c.kind === 'who_is_this' ? 'Who is this?' : c.name) + '</h3>' + (role ? '<span class="ld-kind k-pccp">' + esc(role) + '</span>' : '') + '</div>' +
       (c.kind !== 'who_is_this' && phone ? '<div class="ld-meta"><span>' + esc(phone) + '</span></div>' : '') +
@@ -9416,7 +9431,7 @@ async function renderFollowups(reload) {
   const closed = d.closedToday || [];
   const box = document.getElementById('fuClosedBox');
   box.hidden = !closed.length;
-  const WHY = { texted: 'texted them back', called: 'called them back', talked: 'talked to them', marked_done: 'marked it done', not_cds: 'marked it not for CDS' };
+  const WHY = { texted: 'texted them back', called: 'called them back', talked: 'talked to them', marked_done: 'marked it done', not_cds: 'marked it not for CDS', attendant_yes: 'said it is their attendant', attendant_no: 'said it is not that attendant' };
   document.getElementById('fuClosedSum').textContent = closed.length + ' closed today';
   document.getElementById('fuClosed').innerHTML = closed.map(t => '<div>' + esc(t.title) + ': ' + esc(t.done_by || 'Someone') + ' ' + esc(WHY[t.closed_reason] || 'closed it') + ', ' + esc(_commWhen(t.done_at)) + '</div>').join('');
 }
@@ -9432,16 +9447,32 @@ function commWhoHtml(c) {
     '<label class="ld-sr" for="fuWho_' + id + '">Who is this?</label>' +
     '<input type="text" id="fuWho_' + id + '" list="fuPeople_' + id + '" placeholder="Start typing a name">' +
     '<datalist id="fuPeople_' + id + '">' + opts + '</datalist>' +
-    '<label class="row" style="font-size:14px"><input type="checkbox" id="fuFam_' + id + '"> It is their family, not them</label>' +
+    '<label class="row" style="font-size:14px"><input type="checkbox" id="fuFam_' + id + '" onchange="if(this.checked){const a=document.getElementById(\'fuAtt_' + id + '\');if(a)a.checked=false;}"> It is their family, not them</label>' +
+    (hubSwitchOn('consumerComms') ? '<label class="row" style="font-size:14px"><input type="checkbox" id="fuAtt_' + id + '" onchange="document.getElementById(\'fuAttName_' + id + '\').hidden=!this.checked;if(this.checked)document.getElementById(\'fuFam_' + id + '\').checked=false;"> It is their attendant (pick the consumer they work for)</label>' +
+      '<input type="text" id="fuAttName_' + id + '" hidden placeholder="Attendant\'s name (if you know it)" aria-label="Attendant\'s name">' : '') +
     '<div class="row"><button type="button" class="go" onclick="commPickTyped(\'' + id + '\',\'' + esc(c.phone10) + '\')">Save</button>' +
     '<button type="button" onclick="commPick(\'' + esc(c.phone10) + '\',\'ignore\',false)">Not for CDS</button></div>' +
     '<div class="field-note" id="fuErr_' + id + '"></div></div>';
+}
+async function fuAttendant(id, yes) {
+  const err = document.getElementById('fuAttErr_' + id);
+  try { await _commCall({ action: 'attendant_answer', id, yes }); await renderFollowups(true); }
+  catch (e) { if (err) err.textContent = e.message; }
 }
 function commPickTyped(id, phone10) {
   const v = (document.getElementById('fuWho_' + id) || {}).value || '';
   const p = (_commPeople || []).find(x => (x.name + ' (' + x.role + ')') === v);
   if (!p) { document.getElementById('fuErr_' + id).textContent = 'Pick a name from the list.'; return; }
+  const att = document.getElementById('fuAtt_' + id);
+  if (att && att.checked) {
+    if (!String(p.ref).startsWith('consumer:')) { document.getElementById('fuErr_' + id).textContent = 'Pick the consumer they work for.'; return; }
+    return commPickAttendant(id, phone10, p.ref, (document.getElementById('fuAttName_' + id) || {}).value || '');
+  }
   commPick(phone10, p.ref, !!(document.getElementById('fuFam_' + id) || {}).checked);
+}
+async function commPickAttendant(id, phone10, ref, name) {
+  try { await _commCall({ action: 'pick', phone10, ref, attendant: true, name }); await renderFollowups(true); }
+  catch (e) { document.getElementById('fuErr_' + id).textContent = e.message; }
 }
 async function commPick(phone10, ref, family) {
   try { await _commCall({ action: 'pick', phone10, ref, family }); _commPeople = null; renderFollowups(true); }
