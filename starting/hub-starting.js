@@ -319,9 +319,9 @@
     if (promote(c)) return false;   // WellSky shows the first shift: they are Active now; the usual profile draws
     if (typeof profPacketFetch === 'function') profPacketFetch(c);
     const ctx = ctxFor(c), st = S.startingSteps(c, ctx), med = st.medicaid;
-    if (!['overview', 'medicaid', 'state', 'ready', 'tax', 'calls', 'docs', 'notes'].includes(_profTab)) _profTab = 'overview';
+    if (!['overview', 'contacts', 'medicaid', 'state', 'ready', 'tax', 'calls', 'docs', 'notes'].includes(_profTab)) _profTab = 'overview';
     const tab = _profTab;
-    const tabs = [['overview', 'Overview'], ['medicaid', 'Medicaid'], ['state', 'State and authorization'], ['ready', 'Ready for first shift'], ['tax', 'Tax and EIN'], ['calls', 'Calls and texts'], ['docs', 'Documents'], ['notes', 'Notes']]
+    const tabs = [['overview', 'Overview'], ['contacts', 'Contacts'], ['medicaid', 'Medicaid'], ['state', 'State and authorization'], ['ready', 'Ready for first shift'], ['tax', 'Tax and EIN'], ['calls', 'Calls and texts'], ['docs', 'Documents'], ['notes', 'Notes']]
       .map(([k, l]) => '<button type="button" class="' + (tab === k ? 'on' : '') + '" onclick="_profTab=\'' + k + '\';renderProfile()">' + l + '</button>').join('');
     const bar = '<div class="st-bar" aria-label="Enrollment steps">' + st.steps.map(s => '<div class="st-step ' + s.state + '"><b>' + (s.state === 'done' ? '✓ ' : '') + esc(s.t) + '</b>' +
       '<small>' + (s.state === 'side' ? 'can start now' : s.state === 'now' ? 'next' : '') + '</small></div>').join('') + '</div>';
@@ -333,6 +333,7 @@
     const also = st.also.length ? '<div class="st-also"><b>You can also do now, while you wait</b><ul>' + st.also.map(a => '<li>' + esc(a.t) + '</li>').join('') + '</ul></div>' : '';
     let body = '';
     if (tab === 'overview') body = overviewHtml(c, ctx, st);
+    else if (tab === 'contacts') body = rpCardHtml('consumer', c);
     else if (tab === 'medicaid') body = medicaidHtml(c, ctx, st);
     else if (tab === 'state') body = stateHtml(c, ctx);
     else if (tab === 'ready') body = readyHtml(c, st);
@@ -346,7 +347,7 @@
         '<span class="badge" style="background:var(--success-pale);color:var(--success)">Starting</span><span class="badge" style="background:var(--gray-100)">' + (st.transfer ? 'Moving from another agency' : 'New to CDS') + '</span></div>' +
         '<div style="font-size:13.5px;color:#55677a;margin-top:4px">' + [c.county ? esc(c.county) + ' County' : '', 'Coordinator ' + esc(c.coordinator || 'not set'), 'said yes ' + esc(day(c.starting && c.starting.at))].filter(Boolean).join(' · ') + '</div></div>' +
         '<div style="text-align:right"><div class="field-note">Enrollment progress</div><b style="color:var(--primary);font-size:18px">' + st.count + ' of ' + st.of + '</b></div></div>' +
-      bar + next + also + rpCardHtml('consumer', c) +
+      bar + next + also +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body + '</div>';
     if (tab === 'medicaid') { preview(c.id); if (!med.verified) noMedicaidAfter('consumer', c); }
     if (window.cdsCommHistory) window.cdsCommHistory(host);
