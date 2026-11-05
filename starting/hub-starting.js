@@ -342,7 +342,7 @@
     else body = (c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>');
     host.innerHTML = '<div class="card" style="padding:26px">' +
       '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div>' +
-        '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><div class="cute-title" style="font-size:30px">' + esc(c.name) + '</div>' +
+        '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><div class="cute-title" style="font-size:30px">' + esc(c.name) + '</div>' + (typeof nameEditLink === 'function' ? nameEditLink(c) : '') +
         '<span class="badge" style="background:var(--success-pale);color:var(--success)">Starting</span><span class="badge" style="background:var(--gray-100)">' + (st.transfer ? 'Moving from another agency' : 'New to CDS') + '</span></div>' +
         '<div style="font-size:13.5px;color:#55677a;margin-top:4px">' + [c.county ? esc(c.county) + ' County' : '', 'Coordinator ' + esc(c.coordinator || 'not set'), 'said yes ' + esc(day(c.starting && c.starting.at))].filter(Boolean).join(' · ') + '</div></div>' +
         '<div style="text-align:right"><div class="field-note">Enrollment progress</div><b style="color:var(--primary);font-size:18px">' + st.count + ' of ' + st.of + '</b></div></div>' +
@@ -386,7 +386,7 @@
           '<div class="st-lookup"><span><small>First</small>' + esc(name[0] || '') + '</span><span><small>Last</small>' + esc(name.slice(1).join(' ')) + '</span><span><small>Date of birth</small>' + esc(dob ? day(dob) : 'add it in Overview') + '</span></div>' +
           '<div class="field-note">Use what eMOMED shows, not what was said on the phone.</div></div>' +
         '<div class="st-box"><b>2. Upload the eligibility page from eMOMED <span style="color:var(--danger);font-size:11px">REQUIRED</span></b>' +
-          '<input type="file" id="stPdf" accept="application/pdf,image/*" style="font-size:12px"><div class="field-note">Saved to their Documents as "eMOMED eligibility page".</div></div>' +
+          '<input type="file" id="stPdf" accept="application/pdf,image/*" style="font-size:12px" onchange="StartHub.readPdf(\'' + q(c.id) + '\')"><div class="field-note">Saved to their Documents as "eMOMED eligibility page". A PDF fills in what it shows.</div><div id="stFound"></div></div>' +
         '<div class="st-box"><b>3. Type what eMOMED shows</b><div class="st-form">' +
           '<label>Medicaid status<select id="stStatus" onchange="StartHub.preview(\'' + q(c.id) + '\')">' + [['active', 'Active'], ['nomed', 'Does not have Medicaid'], ['pending', 'Application pending'], ['inactive', 'Inactive (had Medicaid before)']].map(([v, l]) =>
             '<option value="' + v + '"' + ((f.status || 'active') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>' +
@@ -425,12 +425,71 @@
       (d.k === 'no' ? '<div style="margin-top:8px;font-weight:600;color:var(--primary);font-size:13px">They stay in Starting. Nothing closes without a review with a note and a document.</div>' : '') +
       '<div style="margin-top:10px;padding:10px 12px;background:var(--white);border-radius:10px;font-size:13px"><b>What we say to families</b><div style="margin-top:4px">' + esc(d.fam) + '</div><div class="field-note" style="margin-top:4px">A starting point. Say it in your own words.</div></div></div>';
   }
+  // Fill in from the eMOMED PDF (2026-11-05, her ask). Read in this browser; nothing leaves it. The person
+  // still checks the page, types the ME code and presses Save.
+  const _found = {};
+  async function readPdf(cid) {
+    const c = getData('consumers').find(x => x.id === cid), box = document.getElementById('stFound'), inp = document.getElementById('stPdf');
+    const file = inp && inp.files ? inp.files[0] : null;
+    delete _found[cid];
+    if (!c || !box) return;
+    if (!file) { box.innerHTML = ''; return; }
+    const note = (t, bad) => { box.innerHTML = '<div class="field-note" style="margin-top:6px' + (bad ? ';color:#9C6410' : '') + '">' + t + '</div>'; };
+    if (!/pdf$/i.test(file.type) && !/\.pdf$/i.test(file.name)) return note('A picture is saved but not read. To fill things in, save the eMOMED page as a PDF (Print, then Save as PDF).', true);
+    note('Reading the eMOMED page…');
+    let E;
+    try { await prLoadPdfJs(); E = S.parseEmomed(await pdfText(file)); }
+    catch (e) { return note('Could not read this PDF (' + esc(e.message || e) + '). Type what eMOMED shows below.', true); }
+    if (!E) return note('This PDF does not look like the eMOMED Eligibility Response page, so nothing was filled in. Type what eMOMED shows below.', true);
+    _found[cid] = E;
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+    set('stDcn', E.dcn);
+    if (E.active) set('stStatus', 'active');
+    // eMOMED's Plan Code is the ME code (her word, 2026-11-05). A code already typed is kept.
+    const codesEl = document.getElementById('stCodes');
+    if (codesEl && !codesEl.value.trim() && E.planCodes.length) codesEl.value = E.planCodes.join(', ');
+    preview(cid);
+    const F = typeof consumerFacts === 'function' ? consumerFacts(c) : null;
+    const name = [E.name.first, E.name.last].filter(Boolean).join(' ');
+    const addr = E.address ? E.address.street + ', ' + E.address.city + ' ' + E.address.zip : '';
+    const differs = (now, was) => was && now && String(was).toLowerCase().replace(/\W/g, '') !== String(now).toLowerCase().replace(/\W/g, '') ? ' <span style="color:#9C6410">(profile says ' + esc(was) + ')</span>' : '';
+    const row = (k, v) => '<div class="st-hist"><span>' + k + '</span><span>' + v + '</span></div>';
+    box.innerHTML = '<div class="st-box" style="margin-top:8px;background:var(--white)"><b>Read from the eMOMED page</b>' +
+      (E.death ? '<div class="alert alert-warn" style="margin:6px 0;font-size:13.5px"><div><b>eMOMED shows a date of death: ' + esc(day(E.death)) + '.</b> Check before doing anything else.</div></div>' : '') +
+      row('Medicaid', E.active ? '<span style="color:var(--success)">Active Coverage, MO HealthNet</span>' : '<span style="color:#9C6410">The page does not show Active Coverage for MO HealthNet. Pick the status yourself.</span>') +
+      (E.planCodes.length ? row('ME code (Plan Code)', esc(E.planCodes.join(', '))) : '') +
+      row('DCN', esc(E.dcn || 'not shown') + differs(E.dcn, c.dcn)) +
+      row('Date of birth', esc(E.dob ? day(E.dob) : 'not shown') + (F && F.dob.v ? differs(E.dob, F.dob.v) : '')) +
+      row('Address', esc(addr || 'not shown') + (F && F.address.v && E.address ? differs(E.address.street, F.address.v.split(',')[0]) : '')) +
+      (E.other.length ? row('Other insurance', esc(E.other.join(', '))) : '') +
+      '<label class="field-note" style="display:block;margin-top:8px">Name on eMOMED' + (E.name.middle ? ' (middle: ' + esc(E.name.middle) + ')' : '') +
+        '<input type="text" id="stFoundName" value="' + esc(name) + '" style="display:block;width:100%;margin-top:2px">' + (name.toLowerCase() !== String(c.name || '').toLowerCase() ? '<span style="color:#9C6410">Profile says ' + esc(c.name) + '</span>' : '') + '</label>' +
+      '<label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:13px"><input type="checkbox" id="stUseFound" checked> When I save, also put the name, DCN, date of birth and address on their profile</label></div>';
+  }
+  // What Save puts on the profile from the PDF. Returns '' or what went wrong.
+  function useFound(cid) {
+    const E = _found[cid], use = document.getElementById('stUseFound');
+    if (!E || !use || !use.checked) return '';
+    const nm = ((document.getElementById('stFoundName') || {}).value || '').trim();
+    if (nm && typeof renameConsumer === 'function') { const err = renameConsumer(cid, nm); if (err) return err; }
+    edit('consumer', cid, c => {
+      if (E.dcn) c.dcn = E.dcn;
+      const f = Object.assign({}, c.facts);
+      if (E.dob) f.dob = E.dob;
+      if (E.address) { if (prNorm(f.street || '') !== prNorm(E.address.street)) f.apt = ''; f.street = E.address.street; f.city = E.address.city; f.zip = E.address.zip; }
+      c.facts = Object.assign(f, { at: nowIso(), by: meName() });
+      logTo(c, 'Name, DCN, date of birth and address filled in from the eMOMED page by ' + meName() + '.');
+    });
+    return '';
+  }
   async function saveCheck(cid) {
     const c0 = getData('consumers').find(x => x.id === cid), msg = document.getElementById('stSaveMsg');
     if (!c0) return;
     const input = currentInput(c0), file = (document.getElementById('stPdf') || {}).files ? document.getElementById('stPdf').files[0] : null;
     if (!file) { msg.innerHTML = '<span style="color:var(--danger)">Upload the eMOMED page first. It is required.</span>'; return; }
     if (input.status === 'active' && !input.codes.length) { msg.innerHTML = '<span style="color:var(--danger)">Type the ME code from eMOMED.</span>'; return; }
+    const nm = document.getElementById('stFoundName'), useIt = document.getElementById('stUseFound');
+    if (_found[cid] && useIt && useIt.checked && nm && nm.value.trim().split(/\s+/).length < 2) { msg.innerHTML = '<span style="color:var(--danger)">Type their first and last name in Name on eMOMED.</span>'; return; }
     msg.textContent = 'Saving the eMOMED page…';
     let doc;
     try { doc = await _saveConsumerDoc(c0, file, { kind: 'emomed', date: today(), note: 'eMOMED eligibility page' }); }
@@ -445,6 +504,9 @@
       if (input.status === 'active' && c.medicaid.followup) c.medicaid.followup.done = d.k === 'ok';
       logTo(c, 'eMOMED check: ' + d.label + (input.codes.length ? ', code ' + input.codes.join(', ') : '') + '. Checked by ' + meName() + '.');
     });
+    const fillErr = useFound(cid);
+    delete _found[cid];
+    if (fillErr) { rerender(); const m2 = document.getElementById('stSaveMsg'); if (m2) m2.innerHTML = '<span style="color:var(--danger)">The check was saved, but the profile was not filled in: ' + esc(fillErr) + '</span>'; return; }
     auditQuiet('consumer', c0, 'emomed_check', { status: input.status, codes: input.codes, managedCare: input.managedCare, lockIn: input.lockIn, result: d.label, pdf: doc.path, rules: rules().version });
     rerender();
   }
@@ -733,6 +795,6 @@
   // window.renderProfile is the hub's; renderProfile inside this file is the Starting one.
   function rerender() { const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
 
-  window.StartHub = { on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
+  window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
     renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
 })();

@@ -1,0 +1,93 @@
+11/5/26, 2
+:
+36
+AM
+MO HealthNet Portal
+Page 1 of 2
+Home
+/
+eProvider
+/
+Eligibility
+Eligibility Response
+NPI
+1548725682
+Taxonomy Code:
+253Z00000X
+Submitted Information
+First Date Of Service
+11/04/2026
+Participant Date of Birth
+04/12/1940
+Participant Last Name
+Sample
+Participant First Name
+Margie
+Participant Information
+Participant DCN
+01234567
+Participant Name
+MARGARET
+L
+MCDONALD
+Participant Date of Birth
+04/12/1940
+
+Participant Address
+22 NE OAK RIDGE DR
+REPUBLIC
+MO
+65738
+Participant SSN
+Participant Date Of Death
+Eligibility / Benefit Information
+1 of
+4
+Eligibility / Benefit Code
+Service Type
+Plan Code
+B - Co-Payment
+30 - Health Benefit Plan Coverage
+11
+34 - Month
+$0.00
+MC - MO HealthNet
+291
+11/04/2026
+Eligibility / Benefit Information
+2 of
+4
+Eligibility / Benefit Code
+1 - Active Coverage
+30 - Health Benefit Plan Coverage
+11
+34 - Month
+MC - MO HealthNet
+291
+11/04/2026
+Eligibility / Benefit Information
+3 of
+4
+Eligibility / Benefit Code
+R - Other or Additional Payor
+MA - Medicare Part A
+1AB2CD3EF45
+291
+Eligibility / Benefit Information
+4 of
+4
+Eligibility / Benefit Code
+R - Other or Additional
+Payor
+HN - Health Maintenance Organization (HMO) Medicare
+Risk
+291
+Third Party Liability Information
+Name and Address
+SAMPLE HEALTH PLANS
+P.O. Box 1
+Reference Information
+Confirmation Number
+1
+Print
+Finish

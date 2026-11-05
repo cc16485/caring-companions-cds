@@ -567,7 +567,56 @@
     if (T('attRel')) { const w = REL_WORDS.find(([re]) => re.test(T('attRel'))); if (w) set.attRel = w[1]; }
     return { set, shown };
   }
-  root.CDSStarting = { SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
+  // The eMOMED Eligibility Response page, saved as a PDF (2026-11-05, her ask: "it would be nice if things
+  // fill in from the eMOMED upload"). Takes the PDF's text, one piece per line, and returns what the page
+  // says about the person, or null when it is not that page. It never decides Medicaid: a person still
+  // reads the page and presses Save. Plan Code is the ME code (her word, 2026-11-05); the hub fills it into the ME code box.
+  const EM_LABEL = /^(Participant |Eligibility \/ Benefit|Third Party Liability|Reference Information)/;
+  function niceName(s) {
+    return String(s || '').toLowerCase().replace(/(^|[\s\-'])([a-z])/g, (m, a, b) => a + b.toUpperCase()).replace(/\bMc([a-z])/g, (m, a) => 'Mc' + a.toUpperCase());
+  }
+  function parseEmomed(text) {
+    const L = String(text || '').split(/\n/).map(s => s.trim()).filter(Boolean);
+    const start = L.indexOf('Participant Information');
+    if (start < 0) return null;
+    const after = (label, from) => { const i = L.indexOf(label, from); if (i < 0) return []; const out = []; for (let j = i + 1; j < L.length && !EM_LABEL.test(L[j]); j++) out.push(L[j]); return out; };
+    const nameBits = after('Participant Name', start).join(' ').split(/\s+/).filter(Boolean);
+    if (!nameBits.length) return null;
+    const SUFFIX = /^(JR|SR|II|III|IV)\.?$/i;
+    const suffix = nameBits.length > 2 && SUFFIX.test(nameBits[nameBits.length - 1]) ? nameBits.pop() : '';
+    const name = { first: niceName(nameBits[0]), middle: niceName(nameBits.slice(1, -1).join(' ')), last: niceName(nameBits.length > 1 ? nameBits[nameBits.length - 1] : '') + (suffix ? ' ' + niceName(suffix) : '') };
+    const dcn = (after('Participant DCN', start)[0] || '').replace(/\D/g, '');
+    const dob = parseDob(after('Participant Date of Birth', start)[0] || '');
+    const death = parseDob(after('Participant Date Of Death', start)[0] || '');
+    // Street lines, then city, two-letter state, zip.
+    const A = after('Participant Address', start), zi = A.findIndex(x => /^\d{5}(-?\d{4})?$/.test(x));
+    let address = null;
+    if (zi >= 2 && /^[A-Z]{2}$/.test(A[zi - 1])) {
+      const zip = A[zi].slice(0, 5), street = A.slice(0, zi - 2).join(' ');
+      address = { street: niceName(street).replace(/\b(Ne|Nw|Se|Sw)\b/g, s => s.toUpperCase()), city: niceName(A[zi - 2]), state: A[zi - 1], zip };
+    }
+    // Each Eligibility / Benefit Information box, as its own list of lines.
+    const boxes = [];
+    L.forEach((x, i) => { if (x === 'Eligibility / Benefit Information') boxes.push(i); });
+    let active = false; const planCodes = [], other = [];
+    boxes.forEach((b, n) => {
+      const box = L.slice(b, n + 1 < boxes.length ? boxes[n + 1] : L.length), joined = box.join(' ');
+      if (/\b1 - Active Coverage\b/.test(joined) && /\bMC - MO HealthNet\b/.test(joined)) {
+        active = true;
+        const i = box.indexOf('1 - Active Coverage'), code = box.slice(i + 1).find(x => /^[0-9A-Z]{2}$/.test(x));
+        if (code && !planCodes.includes(code)) planCodes.push(code);
+      }
+      if (/Other or Additional/.test(joined)) {
+        const t = box.find(x => /^(MA|MB|HN|OT|C1|CP|HM|MC|PR|12|13|14|15|16|41|43|47) - /.test(x) && !/MO HealthNet/.test(x));
+        const tpl = box.indexOf('Name and Address') >= 0 ? box[box.indexOf('Name and Address') + 1] : '';
+        const label = tpl ? niceName(tpl) : t ? (/^HN - /.test(t) ? 'Medicare HMO' : t.replace(/^\w+ - /, '')) : '';
+        if (label && !other.includes(label)) other.push(label);
+      }
+    });
+    return { name, dcn, dob, death, address, active, planCodes, other };
+  }
+
+  root.CDSStarting = { parseEmomed, niceName, SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
                        fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, parseDob, HELP, startDateAlerts, stateWaits, STATE_WAIT_DAYS, readyList, readyForActive, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

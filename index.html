@@ -26,7 +26,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
-<script src="supabase/functions/_shared/office/starting-rules.js?v=7"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
+<script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=6"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
@@ -4265,6 +4265,23 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-primary" onclick="saveFacts()">Save</button>
       <button class="btn btn-outline" onclick="closeModal('factsModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+<!-- Change a consumer's name (2026-11-05, her ask) -->
+<div class="modal-overlay" id="nameModal">
+  <div class="modal" style="width:480px;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:24px">Change their name</div>
+      <button class="modal-close" onclick="closeModal('nameModal')" aria-label="Close">×</button>
+    </div>
+    <input type="hidden" id="nm_id">
+    <div class="form-group"><label for="nm_name">Name</label><input type="text" id="nm_name" autocomplete="off"></div>
+    <div class="field-note">Use the name eMOMED shows. Their lead, authorizations, billing and payroll lines in the hub change with it. WellSky and payroll keep their own spelling: change it there too if it is wrong.</div>
+    <div class="field-note" id="nm_err" style="color:var(--danger);font-weight:600"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-primary" onclick="saveNameEdit()">Save</button>
+      <button class="btn btn-outline" onclick="closeModal('nameModal')">Cancel</button>
     </div>
   </div>
 </div>
@@ -11515,7 +11532,7 @@ function renderProfile() {
 
   host.innerHTML =
     '<div class="card" style="padding:26px">' +
-      '<div class="cute-title" style="font-size:30px">' + esc(c.name) + '</div>' +
+      '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><div class="cute-title" style="font-size:30px">' + esc(c.name) + '</div>' + nameEditLink(c) + '</div>' +
       '<div style="font-size:13.5px;color:#55677a;margin-top:4px">' +
         [c.county ? esc(c.county) + ' County' : '', c.dcn ? 'DCN ' + esc(c.dcn) : '', attendants.length ? 'Attendant: ' + attendants.map(esc).join(', ') : ''].filter(Boolean).join(' · ') +
       '</div>' +
@@ -11691,6 +11708,50 @@ function saveFacts() {
   closeModal('factsModal');
   renderProfile();
 }
+
+// Change a consumer's name (2026-11-05, her ask: "we can't change her name on her consumer profile").
+// The hub matches authorizations, billing and payroll lines to a consumer by name, so those move with it,
+// and so does the lead they came from. Returns '' when saved, or what is wrong.
+function renameConsumer(cid, newName) {
+  const name = String(newName || '').trim().replace(/\s+/g, ' ');
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid);
+  if (!c) return 'That consumer is not in the hub.';
+  if (name.split(' ').length < 2) return 'Type their first and last name.';
+  const was = c.name || '', same = s => prNorm(s || '') === prNorm(was);
+  if (name === was) return '';
+  if (consumers.some(x => x.id !== cid && prNorm(x.name || '') === prNorm(name))) return 'Another consumer already has that name.';
+  c.name = name;
+  (c.nameHistory = c.nameHistory || []).push({ from: was, to: name, at: new Date().toISOString(), by: _acWho() });
+  setData('consumers', consumers);
+  const leadId = c.starting && c.starting.leadId, pipeline = getData('pipeline');
+  const leads = pipeline.filter(p => p.id === leadId || p.startingId === cid || (p.movedToConsumers && same(p.name)));
+  if (leads.length) { leads.forEach(p => { p.name = name; }); setData('pipeline', pipeline); }
+  if (prNorm(name) === prNorm(was)) return '';   // only the spelling of capitals or spaces changed: name matching already agrees
+  const auths = getObj('authorizations'), recs = Object.values(auths.records || {}).filter(a => same(a.consumer));
+  if (recs.length) { recs.forEach(a => { a.consumer = name; }); setObj('authorizations', auths); }
+  ['billing', 'attendantWages'].forEach(key => {
+    const o = getObj(key), hits = (Array.isArray(o.entries) ? o.entries : []).filter(e => same(e.consumer));
+    if (hits.length) { hits.forEach(e => { e.consumer = name; }); setObj(key, o); }
+  });
+  return '';
+}
+function openNameEdit(cid) {
+  const c = getData('consumers').find(x => x.id === cid);
+  if (!c) return;
+  document.getElementById('nm_id').value = cid;
+  document.getElementById('nm_name').value = c.name || '';
+  document.getElementById('nm_err').textContent = '';
+  openModal('nameModal');
+  setTimeout(() => document.getElementById('nm_name').focus(), 50);
+}
+function saveNameEdit() {
+  const err = renameConsumer(document.getElementById('nm_id').value, document.getElementById('nm_name').value);
+  if (err) { document.getElementById('nm_err').textContent = err; return; }
+  closeModal('nameModal');
+  renderProfile();
+  if (typeof renderConsumers === 'function') renderConsumers();
+}
+const nameEditLink = c => '<a href="#" class="cf-edit" onclick="openNameEdit(\'' + c.id + '\');return false" style="font-size:12px;white-space:nowrap">✎ Edit name</a>';
 
 // Her first-shift checklist (2026-10-21). Saved on the consumer record.
 function _prepSave(cid, fn) {
@@ -17593,7 +17654,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=7"></script>
+<script src="starting/hub-starting.js?v=8"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>
