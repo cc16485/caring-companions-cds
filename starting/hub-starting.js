@@ -664,6 +664,66 @@
       '<td colspan="3"><div class="st-mini">' + st.steps.map(s => '<i class="' + s.state + '"></i>').join('') + '</div><div style="font-size:12.5px;margin-top:3px">' + esc(st.next.t) + '</div></td>' +
       '<td>' + btn('Open', "openProfile('" + q(c.id) + "')", true) + '</td></tr>').join('');
   }
+  // ---------------------------------------------------------------- The Starting page (#starting)
+  // 2026-11-05 her ask: Starting is its own page and its own GoHighLevel menu link, between Leads and Consumers.
+  // Leads keeps only the calls; everyone who said yes is here with their seven steps, one row each, in the Leads
+  // table's look. Leads sent to the state before Starting existed are listed underneath, one button to start them.
+  const STEP_GO = { medicaid: "_profTab='medicaid';", state: "_profTab='state';", ready: "_profTab='ready';" };
+  const shown = () => on() || getData('consumers').some(S.isStarting);
+  function stepCell(c, s) {
+    const go = s.k === 'paperwork' ? "StartHub.openLead('" + q(c.id) + "')" : s.k === 'attendant' ? "showPage('attendants')"
+      : (STEP_GO[s.k] || "_profTab='overview';") + "openProfile('" + q(c.id) + "')";
+    if (s.state === 'done') return '<td><span class="lt-ok">✓</span></td>';
+    if (s.state === 'now') return '<td class="lt-hi"><button type="button" class="lt-b" onclick="' + esc(go) + '">Next</button></td>';
+    if (s.state === 'side') return '<td><button type="button" class="lt-b lt-b-q" onclick="' + esc(go) + '">Can do now</button></td>';
+    return '<td><span class="lt-none">–</span></td>';
+  }
+  // Leads sent to the state (or approved) before Starting began: they have no Starting profile yet.
+  function waitingLeads() {
+    if (!on() || !window.CDSRules || !CDSRules.leadCard) return [];
+    const onRoster = new Set(getData('consumers').map(c => String(c.name || '').trim().toLowerCase()).filter(Boolean));
+    const calls = typeof _leadCalls !== 'undefined' ? _leadCalls : [];
+    return getData('pipeline').filter(p => !p.startingId).map(p => ({ p, c: CDSRules.leadCard(p, calls, today(), !!p.movedToConsumers || onRoster.has(String(p.name || '').trim().toLowerCase())) }))
+      .filter(x => x.c.step === 'state' || x.c.step === 'ready');
+  }
+  function renderPage() {
+    const host = document.getElementById('startingPage');
+    if (!host) return;
+    const find = String((document.getElementById('stPageSearch') || {}).value || '').trim().toLowerCase();
+    const hit = c => !find || [c.name, c.county, c.coordinator, c.phone].some(v => String(v || '').toLowerCase().includes(find));
+    const all = startingRows(), rows = all.filter(r => hit(r.c));
+    const wl = waitingLeads().filter(x => !find || String(x.p.name || '').toLowerCase().includes(find));
+    const urgent = all.filter(r => r.st.next.urgent || r.st.medicaid.needsSupervisor).length;
+    const who = r => [r.st.transfer ? 'Moving from another agency' : 'New to CDS', r.c.county, r.c.coordinator].filter(Boolean).map(esc).join(' · ');
+    const next = r => '<b' + (r.st.next.urgent ? ' class="lt-red"' : '') + '>' + esc(r.st.next.t) + '</b>' + (r.st.next.d ? '<div class="lt-sub">' + esc(r.st.next.d) + '</div>' : '');
+    const start = r => r.c.cdsStartDate ? '<span class="' + (r.st.startAlert && r.st.startAlert.soon ? 'lt-red' : '') + '">' + esc(day(r.c.cdsStartDate)) + '</span>' : '<span class="lt-none">–</span>';
+    const open = r => "openProfile('" + q(r.c.id) + "')";
+    const table = '<div class="lt-wrap"><table class="lt-t" style="min-width:1100px"><thead><tr><th class="lt-n">Person</th>' +
+      S.STEP_TITLES.map((t, i) => '<th' + (i === 0 ? ' class="lt-sep"' : '') + '>' + esc(t) + '</th>').join('') +
+      '<th class="lt-sep">Next step</th><th>Start date</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(r => '<tr class="lt-r' + (r.st.next.urgent ? ' lt-now' : '') + '"><td class="lt-n"><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
+        '<div class="lt-sub">' + who(r) + '</div></td>' + r.st.steps.map(s => stepCell(r.c, s)).join('') +
+        '<td class="lt-sep" style="min-width:220px">' + next(r) + '</td><td>' + start(r) + '</td></tr>').join('')
+        : '<tr><td colspan="10" class="lt-empty">' + (all.length ? 'Nobody matches that search.' : 'Nobody is Starting. Press They said yes on a lead to start someone.') + '</td></tr>') +
+      '</tbody></table></div>';
+    const cards = '<div class="lt-cards">' + (rows.length ? rows.map(r => '<div class="lt-card' + (r.st.next.urgent ? ' lt-now' : '') + '"><div><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
+        '<div class="lt-sub">' + who(r) + (r.c.cdsStartDate ? ' · starts ' + esc(day(r.c.cdsStartDate)) : '') + '</div></div>' +
+        '<div class="lt-pms">' + r.st.steps.map(s => '<span class="lt-pm' + (s.state === 'done' ? ' lt-pm-ok' : s.state === 'now' ? ' lt-pm-todo lt-pm-hi' : s.state === 'side' ? ' lt-pm-todo' : '') + '">' + esc(s.t) + '</span>').join('') + '</div>' +
+        '<div class="lt-card-b"><span class="lt-sub" style="flex:1 1 180px">' + next(r) + '</span><button type="button" class="lt-b" onclick="' + esc(open(r)) + '">Open</button></div></div>').join('')
+        : '<div class="lt-empty">' + (all.length ? 'Nobody matches that search.' : 'Nobody is Starting. Press They said yes on a lead to start someone.') + '</div>') + '</div>';
+    const legacy = !wl.length ? '' : '<div class="card" style="padding:16px 18px;margin-top:14px"><b style="color:var(--primary)">Sent to the state before Starting began</b>' +
+      '<div class="lt-sub" style="margin:4px 0 8px;font-size:13px">These leads have no Starting profile yet. Start their profile to track them here with everything from their lead.</div>' +
+      wl.map(x => '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--gray-200)">' +
+        '<div style="flex:1 1 220px"><b>' + esc(x.p.name || 'No name') + '</b><div class="lt-sub">' + esc(x.p.type === 'pccp' ? 'Moving from another agency' : 'New to CDS') +
+          ' · ' + esc(x.c.step === 'ready' ? 'The state said yes' : 'Waiting on the state' + (x.p.stateSubmit ? ', sent ' + day(x.p.stateSubmit) : '')) + '</div></div>' +
+        '<button type="button" class="lt-b lt-b-q" onclick="openLeadProfile(\'' + q(x.p.id) + '\')">Open lead</button>' +
+        '<button type="button" class="lt-b" onclick="StartHub.startFromLead(\'' + q(x.p.id) + '\',\'' + (x.p.type === 'pccp' ? 'move' : 'new') + '\')">Start their profile</button></div>').join('') + '</div>';
+    const sum = document.getElementById('stPageSum');
+    if (sum) sum.innerHTML = all.length + (all.length === 1 ? ' person said yes and is' : ' people said yes and are') + ' getting ready for their first shift.' +
+      (urgent ? ' <strong>' + urgent + (urgent === 1 ? ' needs' : ' need') + ' you now.</strong>' : '') + ' They move to Consumers by themselves when WellSky shows their first shift.';
+    host.innerHTML = '<div class="lt">' + table + cards + '<div class="lt-key"><span><b class="lt-red">Red edge</b> start date is close or passed</span> · <span>✓ done</span> · <span>Next and Can do now open that step</span></div></div>' + legacy;
+  }
+
   // Today: Medicaid application follow-ups (owner shown) and Starting people waiting on an ME code review.
   // Today step 5 (2026-11-05): Starting people not marked ready, with their checklist count.
   function readyList() { return on() ? S.readyList({ consumers: getData('consumers') }, today(), c => Object.assign(ctxFor(c), _profPacket[c.id] && 'packet' in _profPacket[c.id] ? {} : { skipKeys: ['packet'] })) : null; }
@@ -793,8 +853,12 @@
     renderAdmin();
   }
   // window.renderProfile is the hub's; renderProfile inside this file is the Starting one.
-  function rerender() { const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile(); if (typeof renderConsumers === 'function') renderConsumers(); }
+  function rerender() {
+    const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile();
+    if (typeof renderConsumers === 'function') renderConsumers();
+    const sp = document.getElementById('page-starting'); if (sp && sp.classList.contains('active')) renderPage();
+  }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
 })();

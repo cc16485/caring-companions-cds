@@ -182,10 +182,11 @@ with sync_playwright() as pw:
     ck('ready: no start-date alert on Today any more', 'start date, not ready' not in pg.evaluate("()=>StartHub.todayHtml()"))
 
     # ---- 6. Consumers list, then the first completed shift
-    pg.evaluate("()=>{showPage('consumers'); setRosterView('starting');}"); pg.wait_for_timeout(300)
-    ck('Consumers: Starting tab lists Pat with the next step', 'Pat Example' in pg.inner_text('#consumerTableBody') and not pg.evaluate("()=>document.getElementById('rosterSegStarting').hidden"))
-    shot(pg, '09-consumers-starting-tab-desktop')
-    pg.evaluate("()=>{ _store.firstShifts = { people: { 'Pat Example': { date: _todayIso() } } }; setRosterView('active'); }"); pg.wait_for_timeout(300)
+    # 2026-11-05 Starting is its own page (#starting), not a tab on Consumers.
+    pg.evaluate("()=>showPage('starting')"); pg.wait_for_timeout(300)
+    ck('Starting page lists Pat with the next step', 'Pat Example' in pg.inner_text('#startingPage') and pg.evaluate("()=>document.getElementById('rosterSegStarting').hidden"))
+    shot(pg, '09-starting-page-desktop')
+    pg.evaluate("()=>{ showPage('consumers'); _store.firstShifts = { people: { 'Pat Example': { date: _todayIso() } } }; setRosterView('active'); }"); pg.wait_for_timeout(300)
     ck('first shift in WellSky: Active by itself, on the Active list', pg.evaluate("()=>getData('consumers')[0].status") == 'active' and 'Pat Example' in pg.inner_text('#consumerTableBody'), pg.evaluate("()=>[getData('consumers')[0].status, firstShiftOf(getData('consumers')[0])]"))
     pg.evaluate("()=>openProfile(getData('consumers')[0].id)"); pg.wait_for_timeout(300)
     ck('Active: the usual profile again (monthly call box back)', 'Monthly check-in call' in pg.inner_text('#prof_body') and 'Enrollment progress' not in pg.inner_text('#prof_body'))

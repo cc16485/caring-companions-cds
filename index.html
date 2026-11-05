@@ -27,7 +27,7 @@
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script><!-- 2026-11-04 Starting profile rules (switch starting) -->
-<script src="leads-table.js?v=6"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
+<script src="leads-table.js?v=7"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="supabase/functions/_shared/office/wellsky.js?v=14"></script>
 <!-- The daily attendant check against WellSky (2026-10-20), shared with the 8am email. -->
 <script src="supabase/functions/_shared/office/cds-attendant-check.js?v=2"></script>
@@ -1096,6 +1096,25 @@ table.lt-t { border-collapse:separate; border-spacing:0; width:100%; min-width:1
 </div>
 
 <!-- ==================== CONSUMERS ==================== -->
+<!-- 2026-11-05 her ask: Starting is its own page and its own GoHighLevel menu link (#starting), between Leads and
+     Consumers. Everyone who said yes, one row each with their seven steps. Drawn by StartHub.renderPage. -->
+<div id="page-starting" class="page">
+  <div class="ld-head">
+    <div>
+      <h1 class="cute-title ld-title">Starting</h1>
+      <p class="ld-sum" id="stPageSum"></p>
+    </div>
+  </div>
+  <div class="ld-tools">
+    <label class="ld-search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="ld-sr">Find someone</span>
+      <input type="search" id="stPageSearch" placeholder="Find someone by name, county or coordinator" oninput="window.StartHub && StartHub.renderPage()">
+    </label>
+  </div>
+  <div id="startingPage"></div>
+</div>
+
 <div id="page-consumers" class="page">
   <!-- Sub-navigation -->
   <div class="sub-nav">
@@ -5339,6 +5358,9 @@ const SECTIONS = [
       // New CDS consumers card, its own tab (her ask 2026-10-22).
       { page: 'goals',     label: 'Goals' } ] },
   { id: 'leads',      label: 'Leads',       tabs: [] },
+  // Starting (her ask 2026-11-05): its own tab and GoHighLevel link. Shown once the Starting switch is on
+  // (or anyone is Starting); #starting always opens it.
+  { id: 'starting',   label: 'Starting',    tabs: [], show: () => !!(window.StartHub && StartHub.shown()) },
   { id: 'consumers',  label: 'Consumers',   chips: true, tabs: [
       { page: 'consumers',      label: 'Everyone' },
       { page: 'taxcompliance',  label: 'Tax & EIN' },
@@ -5380,7 +5402,7 @@ const PAGE_TO_SECTION = (() => {
   Object.assign(m, {
     dashboard: 'today', today: 'today', followups: 'today', numbers: 'today', goals: 'today',
     pipeline: 'leads', statesubmissions: 'leads', leadprofile: 'leads', leads: 'leads',
-    profile: 'consumers',
+    profile: 'consumers', starting: 'starting',
     attendants: 'attendants', roster: 'attendants',
     caregivermatch: 'directory', backuppool: 'directory', caregiverpool: 'directory', directory: 'directory',
     dirtasks: 'directory', dirmessages: 'directory',
@@ -5423,7 +5445,7 @@ const STACK_HOME = { statesubmissions: 'pipeline', financials: 'payroll' };
 function renderMainTabs(activeSection) {
   const bar = document.getElementById('mainTabs');
   if (!bar) return;
-  bar.innerHTML = SECTIONS.map(sec =>
+  bar.innerHTML = SECTIONS.filter(sec => !sec.show || sec.show() || sec.id === activeSection).map(sec =>
     '<div class="tab' + (sec.quiet ? ' tab-quiet' : '') + (sec.id === activeSection ? ' active' : '') +
     '" onclick="showPage(\'' + (SECTION_DEFAULT[sec.id] || sec.id) + '\')">' + sec.label + '</div>').join('');
 }
@@ -5518,6 +5540,7 @@ function showPage(id) {
   if (id === 'taxcompliance') { renderTaxCompliance(); renderComplianceClocks(); }
   if (id === 'payroll') renderPayroll();
   if (id === 'authorizations') renderAuthorizations();
+  if (id === 'starting' && window.StartHub) StartHub.renderPage();
   if (id === 'hoursmonth') renderHoursMonth();
   if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); }
   if (id === 'backuppool') renderBackupPool();
@@ -5862,7 +5885,10 @@ function renderConsumers() {
   const starting = consumers.filter(c => CDSStarting.isStarting(c)).filter(hit);
   const inactive = consumers.filter(c => !CDSRules.isActive(c) && !CDSStarting.isStarting(c)).filter(hit).sort((a, b) => a.name.localeCompare(b.name));
   const segS = document.getElementById('rosterSegStarting');
-  if (segS) { segS.hidden = !((window.StartHub && StartHub.on()) || starting.length); segS.textContent = 'Starting (' + starting.length + ')'; segS.classList.toggle('on', _rosterView === 'starting'); }
+  // 2026-11-05 Starting has its own page now (#starting), so the chip only shows if that page is not in the menu.
+  const stPage = !!(window.StartHub && StartHub.shown && StartHub.shown());
+  if (stPage && _rosterView === 'starting') _rosterView = 'active';
+  if (segS) { segS.hidden = stPage || !starting.length; segS.textContent = 'Starting (' + starting.length + ')'; segS.classList.toggle('on', _rosterView === 'starting'); }
   if (_rosterView === 'starting' && window.StartHub) {
     ['rosterSegActive', 'rosterSegInactive'].forEach(id => document.getElementById(id).classList.remove('on'));
     document.getElementById('rosterSegActive').textContent = 'Active (' + consumers.filter(CDSRules.isActive).length + ')';
@@ -8941,7 +8967,10 @@ function renderPipeline() {
   const onRoster = new Set(getData('consumers').map(c => String(c.name || '').trim().toLowerCase()).filter(Boolean));
   const wcOn = ldWhoLive();
   const people = pipeline.map(p => ({ p, c: R.leadCard(p, _leadCalls, today, !!p.movedToConsumers || onRoster.has(String(p.name || '').trim().toLowerCase()), { whoCalled: wcOn }) }));
-  const open = people.filter(x => x.c.step !== 'closed');
+  // 2026-11-05 her ask: with Starting on, Leads is only the calls. Anyone sent to the state or approved is on the
+  // Starting page (#starting), which lists the ones from before Starting with a button to start their profile.
+  const stOn = !!(window.StartHub && StartHub.on());
+  const open = people.filter(x => x.c.step !== 'closed' && (!stOn || x.c.step === 'call'));
   const closed = people.filter(x => x.c.step === 'closed');
 
   // Summary line: who needs a call today.
@@ -8962,9 +8991,10 @@ function renderPipeline() {
       : '<strong>' + urgent.length + ' people</strong> need you today.');
 
   // Tabs, like GoHighLevel's Smart Lists: All, then the three steps (the steps' words show on hover).
-  const tabs = [{ id: 'all', label: 'All', desc: 'Everyone still open.' }].concat(LD_STEPS);
+  const tabs = [{ id: 'all', label: 'All', desc: 'Everyone still open.' }].concat(stOn ? [] : LD_STEPS);
   if (!tabs.some(t => t.id === _ldStep)) _ldStep = 'all';
-  stepsEl.innerHTML = tabs.map(s => {
+  // With Starting on there is one step left, so no tabs.
+  stepsEl.innerHTML = stOn ? '' : tabs.map(s => {
     const inStep = s.id === 'all' ? open : open.filter(x => x.c.step === s.id);
     const late = inStep.filter(x => x.c.tone === 'late').length;
     const on = s.id === _ldStep;
@@ -10342,7 +10372,7 @@ function openProfile(id) {
 
 const PROFILE_BACK_LABEL = {
   consumers: 'Consumers', taxcompliance: 'Tax & EIN', payroll: 'Payroll & Wages',
-  authorizations: 'Hours & authorizations', dashboard: 'Today', statesubmissions: 'Leads',
+  authorizations: 'Hours & authorizations', dashboard: 'Today', statesubmissions: 'Leads', starting: 'Starting',
   financials: 'Financials'
 };
 
@@ -17654,7 +17684,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=8"></script>
+<script src="starting/hub-starting.js?v=9"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>

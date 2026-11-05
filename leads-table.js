@@ -30,6 +30,11 @@
     { k: 'att', h: 'Attendant', job: 'Attendant' },
     { k: 'move', h: 'Move to Consumers', job: 'Move to Consumers' },
   ];
+  /* 2026-11-05 her ask: with Starting on (StartHub.on), the state, packet, attendant and move steps live on the
+     Starting page. Leads keeps First call and the answers, then They said yes, which opens the lead to start them. */
+  const YES = { k: 'yes', h: 'They said yes', job: 'They said yes' };
+  const startOn = () => !!(window.StartHub && StartHub.on());
+  const cols = () => startOn() ? [COLS[0], COLS[1], YES] : COLS;
   const STEP = { call: 'To call', state: 'Sent to state', ready: 'Ready to start' };
   const HOLD = { office: 'Office', consumer: 'Consumer', state: 'State', attendant: 'Attendant' };
   const KIND = { lead: 'Still deciding', referral: 'New to CDS - Referral', pccp: 'Moving from Another Agency - PCCP' };
@@ -127,7 +132,13 @@
     }
     if (c.step === 'ready' && cells[5].s === 'wait' && cur === 6) { hold = 'attendant'; holdNote = 'Attendant: ' + cells[5].t; }
     const urg = c.tone === 'late' ? 'now' : c.tone === 'today' || c.tone === 'ready' ? 'today' : '';
-    return { id, p, c, name: p.name || 'No name', county: p.county || '', phone: p.phone || '', type, step: c.step, cells, cur, job: COLS[cur].k, hold, holdNote,
+    if (startOn()) {
+      /* the answers are in (or nothing more to ask): They said yes is next, on their lead */
+      const yes = called && (answered || sent) ? (c.tone === 'late' ? late('They said yes', prof, c.due) : todo('They said yes', prof)) : none();
+      cells.splice(2, cells.length, yes);
+      if (cur >= 2) { cur = 2; hold = 'consumer'; holdNote = 'Waiting for their yes'; if (c.tone === 'late' || !p.followup) hold = 'office'; }
+    }
+    return { id, p, c, name: p.name || 'No name', county: p.county || '', phone: p.phone || '', type, step: c.step, cells, cur, job: cols()[cur].k, hold, holdNote,
       followup: p.followup || '', days, urg, prof, closed: false };
   }
   function closedRow(p, c) {
@@ -141,7 +152,8 @@
   let F = { step: null, job: null, hold: null, kind: null };
   try { const s = JSON.parse(ls('ldTableF') || 'null'); if (s && typeof s === 'object') F = Object.assign(F, s); } catch (e) { /* none saved */ }
   const save = () => ls('ldTableF', JSON.stringify(F));
-  const pass = (r, skip) => (skip === 'step' || !F.step || r.step === F.step) && (skip === 'job' || !F.job || r.job === F.job)
+  /* a saved Step filter is ignored with Starting on: Leads has only the one step then */
+  const pass = (r, skip) => (skip === 'step' || !F.step || startOn() || r.step === F.step) && (skip === 'job' || !F.job || r.job === F.job)
     && (skip === 'hold' || !F.hold || r.hold === F.hold) && (skip === 'kind' || !F.kind || r.type === F.kind);
 
   function cellHTML(x, r, i) {
@@ -165,6 +177,7 @@
       + '<td>' + (r.days == null ? '<span class="lt-none">–</span>' : r.days === 0 ? 'today' : r.days + (r.days === 1 ? ' day' : ' days')) + '</td></tr>';
   }
   function cardHTML(r) {
+    const COLS = cols();
     const x = r.cells[r.cur] || {};
     const btn = x.s === 'todo' || x.s === 'late' ? '<button type="button" class="lt-b' + (x.s === 'late' ? ' lt-b-late' : '') + '" onclick="' + E(x.go) + '">' + E(x.t) + '</button>'
       : r.reopen ? '<button type="button" class="lt-b lt-b-q" onclick="' + E(r.reopen) + '">Reopen</button>' : '<button type="button" class="lt-b lt-b-q" onclick="' + E(r.prof) + '">Open</button>';
@@ -200,17 +213,21 @@
     if (showClosed) list = list.concat(closed.filter(x => match(x)).map(x => closedRow(x.p, x.c)));
     const cnt = document.getElementById('ldCount'); if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' lead' : ' leads');
     const n = f => rows.filter(f).length;
+    const COLS = cols(), st = startOn();
     const jobs = {}; COLS.forEach(c => { jobs[c.k] = c.job; });
-    const any = F.step || F.job || F.hold || F.kind || (whoOn && who && who !== 'all');
+    const any = (F.step && !startOn()) || F.job || F.hold || F.kind || (whoOn && who && who !== 'all');
     const WHO = whoOn && window.CDSRules && CDSRules.WHO_CALLED;
     cardsEl.innerHTML = '<div class="lt">'
-      + '<div class="lt-bar">' + menu('Step', 'step', STEP, rows) + menu('Who needs', 'job', jobs, rows) + menu('Waiting on', 'hold', HOLD, rows) + menu('Kind', 'kind', KIND, rows)
+      + '<div class="lt-bar">' + (st ? '' : menu('Step', 'step', STEP, rows)) + menu('Who needs', 'job', jobs, rows) + menu('Waiting on', 'hold', HOLD, rows) + menu('Kind', 'kind', KIND, rows)
       + (WHO ? menu('Who called', 'who', WHO, rows, who, 'ldWhoFilter(this.value||\'all\')') : '')
       + (any ? '<button type="button" class="lt-link" onclick="LDT.clear()">Clear filters</button>' : '')
       /* the page's own line above already says how many people and who needs you now */
-      + '<span class="lt-sum"><span><b>' + n(r => r.hold === 'state') + '</b> with the state</span><span><b>' + n(r => r.hold === 'consumer') + '</b> waiting on the consumer</span><span><b>' + n(r => r.step === 'ready') + '</b> ready to start</span></span></div>'
-      + '<div class="lt-wrap"><table class="lt-t"><thead><tr class="lt-grp"><th class="lt-n"></th><th colspan="2">To call</th><th colspan="2" class="lt-sep">Sent to state</th><th colspan="3" class="lt-sep">Ready to start</th><th colspan="3" class="lt-sep"></th></tr>'
-      + '<tr><th class="lt-n">Person</th>' + COLS.map((c, i) => '<th' + (i === 2 || i === 4 ? ' class="lt-sep"' : '') + '>' + E(c.h) + '</th>').join('') + '<th class="lt-sep">Waiting on</th><th>Call back on</th><th>Days on this step</th></tr></thead><tbody>'
+      + (st ? '<span class="lt-sum"><span><b>' + n(r => r.hold === 'consumer') + '</b> waiting on the consumer</span><span><b>' + n(r => r.cur === 2) + '</b> ready for their yes</span>'
+          + '<button type="button" class="lt-link" onclick="showPage(\'starting\')">Open Starting</button></span></div>'
+        : '<span class="lt-sum"><span><b>' + n(r => r.hold === 'state') + '</b> with the state</span><span><b>' + n(r => r.hold === 'consumer') + '</b> waiting on the consumer</span><span><b>' + n(r => r.step === 'ready') + '</b> ready to start</span></span></div>')
+      + '<div class="lt-wrap"><table class="lt-t"' + (st ? ' style="min-width:880px"' : '') + '><thead><tr class="lt-grp"><th class="lt-n"></th><th colspan="2">To call</th>'
+      + (st ? '<th class="lt-sep">Starting</th>' : '<th colspan="2" class="lt-sep">Sent to state</th><th colspan="3" class="lt-sep">Ready to start</th>') + '<th colspan="3" class="lt-sep"></th></tr>'
+      + '<tr><th class="lt-n">Person</th>' + COLS.map((c, i) => '<th' + (i === 2 || (!st && i === 4) ? ' class="lt-sep"' : '') + '>' + E(c.h) + '</th>').join('') + '<th class="lt-sep">Waiting on</th><th>Call back on</th><th>Days on this step</th></tr></thead><tbody>'
       + (list.length ? list.map(rowHTML).join('') : '<tr><td colspan="' + (COLS.length + 4) + '" class="lt-empty">' + (rows.length ? 'Nobody matches these filters.' : 'No open leads right now.') + '</td></tr>') + '</tbody></table></div>'
       + '<div class="lt-cards">' + (list.length ? list.map(cardHTML).join('') : '<div class="lt-empty">' + (rows.length ? 'Nobody matches these filters.' : 'No open leads right now.') + '</div>') + '</div>'
       + '<div class="lt-key"><span><b class="lt-red">Red edge</b> needs you now</span> · <span><b class="lt-gold">Gold edge</b> today</span> · <span>✓ done</span> · <span>Search finds a name, phone or county</span>'
