@@ -22,6 +22,7 @@ import { createSign } from '../enroll/sign.js';
 import { createMedicaidMessages } from '../enroll/medicaid.js';
 import { createRosterProof } from '../office/roster-proof.js';
 import { createPrescreen } from '../enroll/prescreen.js';
+import { createLeadQuestions } from '../enroll/lead-questions.js';
 
 export class MatchError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -1411,6 +1412,9 @@ export function createMatch(deps) {
   // Background check proof for Roster attendants, brought in from GHL (2026-10-22).
   Object.assign(staff, createRosterProof({ q, one, nowIso, audit, fail, crypto, deps }).office);
   Object.assign(staff, createPrescreen({ audit, fail, deps }).office);   // the online pre-screen, read only (2026-11-05)
+  // The sign-up questions on a lead's own link (2026-11-05): staff press Send, switch lead_questions; answers wait for OK.
+  const leadQs = createLeadQuestions({ q, one, audit, setting, task, crypto, R, fail, deps, isTestRecipient, link: links.questions });
+  Object.assign(staff, leadQs.office); Object.assign(pub, leadQs.pub);
   // 'job' is only reachable with the schedule's secret (checked in the edge function).
   // One 15-minute job runs both packets' reminders; one failing never stops the other.
   const job = { packetJob: async () => {

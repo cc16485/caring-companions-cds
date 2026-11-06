@@ -201,7 +201,8 @@ const match = createMatch({
   links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}`,
            packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}`,
            enroll: (t: string) => `https://www.caringcds.com/enroll/?c=${t}`,
-           sign: (t: string) => `https://www.caringcds.com/sign/?c=${t}` },
+           sign: (t: string) => `https://www.caringcds.com/sign/?c=${t}`,
+           questions: (t: string) => `https://www.caringcds.com/start/?k=${t}` },
 });
 
 function cors(origin: string | null) {
