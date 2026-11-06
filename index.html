@@ -27,6 +27,7 @@
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script>
+<script src="marketing/marketing.js?v=1"></script><!-- 2026-11-05 Marketing tab -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=8"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="followups-table.js?v=1"></script><!-- 2026-11-05 Follow-ups as one table (switch followupsTable) -->
@@ -126,6 +127,34 @@
   /* LAYOUT */
   .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
   .page { display: none; }
+  /* Marketing tab (2026-11-05) */
+  .mk { max-width: 1100px; }
+  .mk-head h2 { font-size: 24px; color: var(--primary); margin: 0; }
+  .mk-head p { margin: 6px 0 0; color: var(--gray-600); font-size: 14px; max-width: 70ch; }
+  .mk-head nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .mk-head nav a { border: 1px solid var(--gray-200, #e5e1d8); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; color: var(--primary); text-decoration: none; background: #fff; }
+  .mk section { margin-top: 26px; scroll-margin-top: 80px; }
+  .mk h3 { font-size: 18px; color: var(--primary); margin: 0 0 10px; }
+  .mk-card { background: #fff; border: 1px solid var(--gray-200, #e5e1d8); border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; min-width: 0; }
+  .mk-grid { display: grid; gap: 12px; } .mk-grid2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); } .mk-grid3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .mk-grid > .mk-card { margin: 0; }
+  .mk video { width: 100%; max-height: 520px; background: #000; border-radius: 10px; display: block; }
+  .mk img { width: 100%; display: block; border-radius: 10px; border: 1px solid var(--gray-200, #e5e1d8); }
+  .mk figure { margin: 0; } .mk figcaption { margin-top: 6px; font-size: 12.5px; color: var(--gray-600); display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .mk-title { display: block; margin-top: 8px; color: var(--primary); font-size: 15px; }
+  .mk-note { margin: 4px 0 0; font-size: 13px; color: var(--gray-600); line-height: 1.5; }
+  .mk-dl { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 700; color: #fff; background: var(--primary); border-radius: 999px; padding: 6px 14px; text-decoration: none; }
+  .mk figcaption .mk-dl { margin-top: 0; padding: 4px 10px; font-size: 12px; }
+  .mk-ad { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; }
+  .mk-adimgs { display: flex; gap: 10px; align-items: flex-start; } .mk-adimgs figure { flex: 1; min-width: 0; } .mk-adimgs figure:nth-child(2) { flex: 0 0 36%; }
+  .mk-field { margin-top: 10px; } .mk-field:first-child { margin-top: 0; }
+  .mk-lbl { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--gray-600); }
+  .mk-val { margin: 4px 0 0; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; } .mk-pre { white-space: pre-line; } .mk-url { font-size: 12.5px; color: var(--primary); overflow-wrap: anywhere; }
+  .mk-copy { margin-left: auto; font: 700 12px inherit; color: var(--primary); background: #e3f1ef; border: 0; border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+  .mk-copy.ok { background: #0f7a7c; color: #fff; }
+  .mk-qr { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; } #mkQr { background: #fff; padding: 10px; border: 1px solid var(--gray-200, #e5e1d8); border-radius: 10px; }
+  .mk-rule { margin: 0 0 8px; font-size: 14px; line-height: 1.55; } .mk-rule b { color: var(--primary); }
+  @media (max-width: 760px) { .mk-ad { grid-template-columns: 1fr; } }
   .page.active { display: block; }
 
   /* CARDS */
@@ -986,6 +1015,10 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
 <!-- ==================== GOALS ====================
      Her ask 2026-10-22: the New CDS consumers card gets its own Goals tab inside Today
      instead of sitting at the top of Today. Same id, so renderCdsGoal fills it. Hash #goals. -->
+<div id="page-marketing" class="page">
+  <div id="mkBody"></div>
+</div>
+
 <div id="page-goals" class="page">
   <div id="cdsGoal" style="margin-bottom:18px"></div>
 </div>
@@ -5435,6 +5468,9 @@ const SECTIONS = [
       { page: 'authorizations', label: 'Authorizations' },
       { page: 'evvcorrections', label: 'EVV forms' } ] },
   { id: 'money',      label: 'Money',       tabs: [] },
+  // Marketing (her ask 2026-11-05: "I dont want this to get lost ... a marketing materials page/tab"): ads, videos,
+  // photos, sign-up links and texts for leads (marketing/marketing.js). #marketing opens it.
+  { id: 'marketing',  label: 'Marketing',   tabs: [] },
   { id: 'help',       label: 'Help',        quiet: true, tabs: [
       { page: 'calendar',    label: 'Deadlines' },
       { page: 'compliance',  label: 'Compliance' },
@@ -5459,7 +5495,7 @@ const PAGE_TO_SECTION = (() => {
     dirtasks: 'directory', dirmessages: 'directory',
     hours: 'hours', evv: 'hours', hoursevv: 'hours',
     payroll: 'money', financials: 'money', quarterly: 'money', money: 'money',
-    guides: 'help', help: 'help',
+    guides: 'help', help: 'help', marketing: 'marketing',
     automations: 'help', switches: 'help', settings: 'help'
   });
   return m;
@@ -5572,6 +5608,7 @@ function showPage(id) {
     const u = document.getElementById('sw_user');
     if (u) u.textContent = (document.getElementById('header_user') || {}).textContent || '';
   }
+  if (id === 'marketing' && window.CDSMarketing) CDSMarketing.render();
   if (id === 'careplans') loadCarePlanPrefs();
   if (id === 'quarterly') renderQuarterlyReport();
   if (id === 'financials' || id === 'payroll') renderFinancials();

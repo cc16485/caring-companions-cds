@@ -120,7 +120,7 @@ const at = d => new Date(d + 'T12:00:00');
   Object.entries(STACKED).forEach(([k, v]) => v.forEach(x => ok(pages.has(x) && pages.has(k === 'pipeline' ? 'consumers' : k), 'stacked ' + k + ' + ' + x)));
   SECTIONS.forEach(s => s.tabs.forEach(t => ok(pages.has(t.page) || guideSubs.includes(t.page) || DIR_VIEWS[t.page], 'tab ' + t.label + ' has a page')));
   // 2026-10-22 (her ask): Switches became the Settings tab at the right of Help; Caregiver Directory got its own section.
-  ok(SECTIONS.length === 8 && SECTIONS.map(s => s.id).join() === 'today,leads,consumers,attendants,directory,hours,money,help', 'the eight sections, in order (Hours & EVV added 10-22)');
+  ok(SECTIONS.length === 10 && SECTIONS.map(s => s.id).join() === 'today,leads,starting,consumers,attendants,directory,hours,money,marketing,help', 'the ten sections, in order (Hours & EVV added 10-22, Starting 11-05, Marketing 11-05)');
   ok(SECTIONS.find(s => s.id === 'hours').tabs.map(t => t.page).join() === 'hoursmonth,authorizations,evvcorrections', 'Hours & EVV: This month, Authorizations, EVV forms');
   // Slimmer Authorizations (her switch 'authSlim', 2026-10-23) renames Care plans; off = as before.
   const cpTab = SECTIONS.find(s => s.id === 'consumers').tabs.find(t => t.page === 'careplans');
