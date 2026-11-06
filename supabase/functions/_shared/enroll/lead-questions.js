@@ -24,6 +24,10 @@ const MEDICAID = ['Yes', 'Not sure', 'No'];
 const TASKS = ['Bathing and grooming', 'Dressing', 'Meals', 'Toileting', 'Getting in and out of bed', 'Getting around', 'Housekeeping', 'Shopping and rides'];
 const BASICS = ['Yes', 'Not sure'];
 const WHEN = ['Any time', 'Morning', 'Afternoon', 'Evening'];
+// The consumer path (2026-11-05): the person who needs help answers for themself.
+const PATH = ['care', 'self'];
+const HELPER = ['has', 'find', 'unsure'];
+const HELPER_REL = ['Son or daughter', 'Grandchild', 'Another relative', 'Friend or neighbor', 'Husband or wife', 'Someone else'];
 
 const str = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 const pick = (v, list) => list.includes(v) ? v : '';
@@ -51,6 +55,10 @@ export function cleanAnswers(a) {
   set('when', pick(a.when, WHEN));
   // The person getting care, only when they had it handy (her ask 2026-11-05: we check Medicaid with full name and birth date).
   set('consName', str(a.consName, 80));
+  set('path', pick(a.path, PATH));
+  set('helper', pick(a.helper, HELPER));
+  set('helperName', str(a.helperName, 60));
+  set('helperRel', pick(a.helperRel, HELPER_REL));
   const dob = S.parseDob ? S.parseDob(str(a.consDob, 20)) : '';
   if (dob) out.consDob = dob;
   return out;

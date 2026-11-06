@@ -106,5 +106,18 @@ ok(LQ.toCall({ who: 'My husband or wife' }).attRel === 'spouse', 'a spouse answe
 const sh = LQ.shown(x).map(y => y.label);
 ok(sh.includes('Their date of birth') && sh.includes('Best time to call') && sh.includes('Makes their own decisions'), 'every answer is shown word for word');
 
+// ---- the consumer path: the person who needs help answers for themself
+const SELF = cleanAnswers({ path: 'self', decide: 'Yes', county: 'Polk', medicaid: 'Yes', tasks: ['Dressing', 'Meals'], helper: 'has', helperName: 'Dana', helperRel: 'Grandchild',
+  first: 'Ruth', last: 'Example', phone: '4175550111', consName: 'Ruth Example', consDob: '1950-07-01', when: 'Afternoon', helperRelX: 'nope' });
+ok(SELF.path === 'self' && SELF.helper === 'has' && SELF.helperRel === 'Grandchild' && SELF.consDob === '1950-07-01' && !('helperRelX' in SELF), 'consumer answers are cleaned too');
+ok(!cleanAnswers({ helperRel: 'Boss' }).helperRel && !cleanAnswers({ path: 'other' }).path, 'consumer choices outside the list are dropped');
+const sa = LQ.toAnswers(SELF);
+ok(sa.who === 'self' && sa.first === 'Ruth' && sa.last === 'Example' && sa.dob === '1950-07-01' && sa.county === 'Polk' && sa.medicaid === 'yes' && sa.att_name === 'Dana' && sa.att_relation === 'grandchild', 'consumer answers become the lead’s own name, birth date and caregiver');
+const sc = LQ.toCall(SELF);
+ok(sc.who === 'self' && sc.first === 'Ruth' && sc.attName === 'Dana' && sc.attRel === 'grandchild' && !sc.callerName && sc.callerPhone === '(417) 555-0111', 'the call: consumer for themself, with the caregiver they have in mind');
+ok(LQ.toCall(cleanAnswers({ path: 'self', helper: 'find' })).attendant === 'find' && LQ.toAnswers(cleanAnswers({ path: 'self', helper: 'find' })).attendant === 'find', 'wants help finding a caregiver');
+ok(LQ.toCall(cleanAnswers({ path: 'self', helper: 'has', helperRel: 'Husband or wife' })).attRel === 'spouse', 'a spouse in mind is marked for the attendant check');
+ok(LQ.shown(SELF).some(y => y.label === 'Filled out by' && /needs care/.test(y.value)) && LQ.shown(SELF).some(y => y.label === 'Their caregiver'), 'shown answers say who filled it out');
+
 console.log(pass + ' passed, ' + failN + ' failed');
 if (failN) process.exit(1);

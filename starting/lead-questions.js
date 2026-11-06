@@ -27,8 +27,22 @@
   const inArea = c => { const a = area(); return !!c && (!a.length || a.includes(c)); };
 
   // Their answers as the lead's answer set (the same shape the recorded-call answers use).
+  // The person who needs help answered for themself (the consumer path): their caregiver in mind, if any.
+  const HELPER_REL_OF = { Grandchild: 'grandchild', 'Another relative': 'other family', 'Friend or neighbor': 'friend', 'Husband or wife': 'spouse' };
+  function selfAnswers(x) {
+    const a = { who: 'self' };
+    if (x.first) a.first = x.first; if (x.last) a.last = x.last;
+    if (x.consDob) a.dob = x.consDob;
+    if (inArea(x.county)) a.county = x.county;
+    if (x.medicaid === 'Yes') a.medicaid = 'yes'; else if (x.medicaid === 'No') a.medicaid = 'no';
+    const h = helpOf(x.tasks); if (h.length) a.help = h;
+    if (x.helper === 'has' && x.helperName) { a.attendant = 'has'; a.att_name = x.helperName; if (HELPER_REL_OF[x.helperRel]) a.att_relation = HELPER_REL_OF[x.helperRel]; }
+    else if (x.helper === 'find') a.attendant = 'find';
+    return a;
+  }
   function toAnswers(x) {
     x = x || {};
+    if (x.path === 'self') return selfAnswers(x);
     const a = { who: 'pair' };
     const cn = String(x.consName || '').trim().split(/\s+/).filter(Boolean);
     if (cn.length > 1) { a.first = cn[0]; a.last = cn.slice(1).join(' '); } else if (x.cared || cn[0]) a.first = cn[0] || x.cared;
@@ -43,6 +57,21 @@
   // Their answers as guided call fields. The person who answered is the one calling, about someone else ('pair').
   function toCall(x) {
     x = x || {};
+    if (x.path === 'self') {
+      const s = { who: 'self' };
+      if (x.first) s.first = x.first; if (x.last) s.last = x.last;
+      if (x.consDob) s.dob = x.consDob;
+      if (x.county && inArea(x.county)) s.county = x.county;
+      if (x.medicaid) s.medicaid = { Yes: 'yes', No: 'no', 'Not sure': 'unsure' }[x.medicaid];
+      const h = helpOf(x.tasks); if (h.length) s.help = h;
+      if (x.decide === 'Yes') s.selfDirect = 'yes';
+      if (x.decide === 'Guardian') s.guardian = 'yes';
+      if (x.helper === 'has') { s.attendant = 'has'; if (x.helperName) s.attName = x.helperName; if (HELPER_REL_OF[x.helperRel]) s.attRel = HELPER_REL_OF[x.helperRel]; }
+      if (x.helper === 'find') s.attendant = 'find';
+      if (x.phone) s.callerPhone = phone(x.phone);
+      if (x.email) s.callerEmail = x.email;
+      return s;
+    }
     const set = { who: 'pair' };
     const cn = String(x.consName || '').trim().split(/\s+/).filter(Boolean);
     if (cn.length) { set.first = cn[0]; set.last = cn.slice(1).join(' '); } else if (x.cared) set.first = x.cared;
@@ -63,6 +92,7 @@
   function shown(x) {
     x = x || {};
     const out = [], add = (label, v) => { if (v) out.push({ label, value: String(v) }); };
+    add('Filled out by', x.path === 'self' ? 'The person who needs care' : x.path === 'care' ? 'A family member or friend' : '');
     add('Who they care for', WHO_SAID[x.who]);
     add('Their first name', x.cared);
     add('Their full name', x.consName);
@@ -73,7 +103,9 @@
     add('Needs help with', (x.tasks || []).join(', '));
     add('Hours a week they pictured', x.hours);
     add('18+, can work in the US, background check', x.basics === 'Yes' ? 'Yes' : x.basics ? 'Has a question' : '');
-    add('Caregiver', [[x.first, x.last].filter(Boolean).join(' '), phone(x.phone), x.email].filter(Boolean).join(', '));
+    add(x.path === 'self' ? 'Their contact' : 'Caregiver', [[x.first, x.last].filter(Boolean).join(' '), phone(x.phone), x.email].filter(Boolean).join(', '));
+    add('Caregiver in mind', { has: 'Yes', find: 'Wants help finding one', unsure: 'Not sure yet' }[x.helper]);
+    add('Their caregiver', [x.helperName, x.helperRel].filter(Boolean).join(', '));
     add('Best time to call', x.when);
     return out;
   }
@@ -117,9 +149,10 @@
     }
     html += '<details style="margin-top:8px"><summary class="field-note" style="cursor:pointer">Every answer, word for word</summary>' +
       shown(ans.answers).map(x => '<div style="display:flex;gap:10px;padding:3px 0;font-size:13px"><span style="color:var(--gray-600);min-width:190px">' + esc(x.label) + '</span><span>' + esc(x.value) + '</span></div>').join('') + '</details>';
-    if (ans.answers.who === 'My husband or wife' || ans.answers.decide === 'Guardian' || ans.answers.decide === 'POA')
+    if (ans.answers.who === 'My husband or wife' || ans.answers.helperRel === 'Husband or wife' || ans.answers.decide === 'Guardian' || ans.answers.decide === 'POA')
       html += '<div class="alert alert-warning" style="margin-top:8px;font-size:13px">' +
         (ans.answers.who === 'My husband or wife' ? 'The person who answered is their spouse. A spouse cannot be the paid attendant. ' : '') +
+        (ans.answers.helperRel === 'Husband or wife' ? 'The caregiver they have in mind is their spouse. A spouse cannot be the paid attendant. ' : '') +
         (ans.answers.decide === 'Guardian' ? 'They said someone has guardianship. A person with a guardian cannot be enrolled in CDS. ' : '') +
         (ans.answers.decide === 'POA' ? 'They said someone has power of attorney. Ask what it covers: it matters only if it lets someone else make the CDS decisions. ' : '') + '</div>';
     if (!ans.decided) html += '<div class="cn-btns" style="margin-top:10px"><button type="button" class="btn btn-primary btn-sm"' + (busy === ans.id ? ' disabled' : '') + ' onclick="LeadQs.decide(\'' + esc(id) + '\',\'' + esc(ans.id) + '\',\'ok\')">OK, save it</button>' +
@@ -157,6 +190,7 @@
     const first = String((to && to.name) || '').trim().split(/\s+/)[0];
     const me = String(whoBy() || '').trim();
     const meFirst = me && me !== 'office' ? me.charAt(0).toUpperCase() + me.slice(1).split(/[\s@.]/)[0] : '';
+    if (p.whoCalled === 'self' && (!to || to.self)) return 'Hi' + (first ? ' ' + first : '') + ', this is ' + (meFirst ? meFirst + ' with ' : '') + 'Caring Companions CDS. Here are a few quick questions about getting care at home through CDS. It takes about 2 minutes, and it makes our call much shorter: [link]\nReply STOP to opt out.';
     return 'Hi' + (first ? ' ' + first : '') + ', this is ' + (meFirst ? meFirst + ' with ' : '') + 'Caring Companions CDS. Here are a few quick questions about getting paid to care for ' +
       (p.firstName || (p.name && !/^(caller:|unknown caller)/i.test(p.name) ? String(p.name).split(' ')[0] : 'your loved one')) + '. It takes about 2 minutes, and it makes our call much shorter: [link]\nReply STOP to opt out.';
   }
@@ -165,7 +199,9 @@
     const rel = root.CDSRules && root.CDSRules.relatedPeople ? root.CDSRules.relatedPeople(p) : [];
     rel.forEach(r => { if (r.phone || r.email) list.push({ name: r.name || '', label: (r.name || 'Contact') + (r.relation ? ' (' + r.relation + ')' : ''), phone: r.phone || '', email: r.email || '' }); });
     if (p.attendant && (p.attendant.phone || p.attendant.email) && !list.some(x => x.name === p.attendant.name)) list.push({ name: p.attendant.name || '', label: (p.attendant.name || 'Attendant') + ' (attendant)', phone: p.attendant.phone || '', email: p.attendant.email || '' });
-    if (p.phone || p.email) list.push({ name: /^(caller:|unknown caller)/i.test(p.name || '') ? '' : p.name || '', label: (p.name || 'The lead') + ' (the lead)', phone: p.phone || '', email: p.email || '' });
+    if (p.phone || p.email) list.push({ self: true, name: /^(caller:|unknown caller)/i.test(p.name || '') ? '' : p.name || '', label: (p.name || 'The lead') + ' (the lead)', phone: p.phone || '', email: p.email || '' });
+    // A consumer who called for themself: their own number first.
+    if (p.whoCalled === 'self') list.sort((x, y) => (y.self ? 1 : 0) - (x.self ? 1 : 0));
     return list;
   }
   function ensureModal() {
@@ -192,7 +228,7 @@
       return;
     }
     box.innerHTML =
-      '<div class="field-note" style="margin-bottom:10px">These questions are written for the family member or friend who would be the paid caregiver. Send it to them.</div>' +
+      '<div class="field-note" style="margin-bottom:10px">The page asks first whether they need help themselves or help someone they love, so it fits the consumer or the family caregiver.</div>' +
       (send.ppl.length > 1 ? '<label class="rp-lbl" for="lqWho">To</label><select id="lqWho" onchange="LeadQs.pick(this.value)">' + send.ppl.map((x, i) => '<option value="' + i + '"' + (i === send.who ? ' selected' : '') + '>' + esc(x.label) + '</option>').join('') + '</select>' : '') +
       '<div style="display:flex;gap:8px;margin:10px 0"><button type="button" class="btn btn-sm ' + (send.ch === 'sms' ? 'btn-primary' : 'btn-outline') + '" onclick="LeadQs.channel(\'sms\')">Text</button>' +
         '<button type="button" class="btn btn-sm ' + (send.ch === 'email' ? 'btn-primary' : 'btn-outline') + '" onclick="LeadQs.channel(\'email\')">Email</button></div>' +
