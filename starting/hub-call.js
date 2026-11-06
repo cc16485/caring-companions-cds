@@ -349,18 +349,27 @@
   async function lookForm() {
     if (!call || call.who === 'solo') return;
     const pp = formPeople(), key = pp.phones.concat(pp.emails).join('|');
+    if (!key && call.leadId && !call.webAnswers) { const mine = call; lookQuestions(mine).then(() => { if (call === mine) draw(); }).catch(() => {}); }
     if (!key || key === formKey || (form && form.found)) return;
     formKey = key; form = { loading: true }; drawSide();
     const mine = call;
     try {
       const r = await cdsMatchApi('prescreen', { person: { kind: call.leadId ? 'lead' : 'call', id: call.leadId || '', phones: pp.phones, emails: pp.emails } });
       if (call !== mine) return;
-      if (!r || !r.found || !(r.answers || []).length) { form = { found: false, why: (r && r.why) || 'No online pre-screen answers.' }; drawSide(); return; }
-      const m = S.mapPrescreen(r.answers, AREA());
-      form = { found: true, shown: m.shown, at: r.at };
-      applyForm(m.set);
+      if (!r || !r.found || !(r.answers || []).length) form = { found: false, why: (r && r.why) || 'No online pre-screen answers.' };
+      else { const m = S.mapPrescreen(r.answers, AREA()); form = { found: true, shown: m.shown, at: r.at }; applyForm(m.set); }
+      await lookQuestions(mine);
       draw();
-    } catch (e) { if (call === mine) { form = { err: String(e && e.message || e) }; drawSide(); } }
+    } catch (e) { if (call === mine) { form = { err: String(e && e.message || e) }; await lookQuestions(mine).catch(() => {}); draw(); } }
+  }
+  // The sign-up questions they answered on their own link (2026-11-05, window.LeadQs): fill what is still empty.
+  async function lookQuestions(mine) {
+    if (!call || call !== mine || !call.leadId || !window.LeadQs) return;
+    let ans = null;
+    try { ans = LeadQs.latestAnswered(await LeadQs.load(call.leadId)); } catch { return; }
+    if (!ans || call !== mine) return;
+    call.webAnswers = { at: ans.answered, shown: LeadQs.shown(ans.answers) };
+    applyForm(LeadQs.toCall(ans.answers));
   }
   // Fill only what is still empty; a coordinator's answer always wins. Filled fields carry "from their online form".
   function applyForm(set) {
@@ -368,22 +377,28 @@
     const empty = v => v === '' || v == null || (Array.isArray(v) && !v.length);
     if (set.who && !call.who) { call.who = set.who; mark('who'); }
     if (set.first && !call.consumer.first && !call.consumer.last) { call.consumer.first = set.first; call.consumer.last = set.last || ''; mark('first'); mark('last'); }
-    ['dob', 'county', 'countyOther', 'medicaid', 'dcn', 'cds', 'condition', 'helpNote', 'selfDirect', 'living', 'attendant', 'attName', 'attPhone', 'attRel'].forEach(k => {
+    if (set.callerName && !call.caller.name) { call.caller.name = set.callerName; mark('callerName'); }
+    if (set.callerPhone && !call.phone) { call.phone = set.callerPhone; mark('callerName'); }
+    if (set.callerEmail && !call.email) call.email = set.callerEmail;
+    ['dob', 'county', 'countyOther', 'medicaid', 'dcn', 'cds', 'condition', 'helpNote', 'selfDirect', 'guardian', 'living', 'attendant', 'attName', 'attPhone', 'attRel'].forEach(k => {
       if (set[k] != null && empty(call[k])) { call[k] = set[k]; mark(k); }
     });
     if (set.help && empty(call.help)) { call.help = set.help.slice(); mark('help'); }
   }
-  const STEP_FIELDS = { who: ['who'], names: ['first', 'last'], dob: ['dob'], county: ['county'], medicaid: ['medicaid', 'dcn'], cds: ['cds'],
-    help: ['condition', 'help', 'helpNote'], decide: ['selfDirect'], living: ['living'], attendant: ['attendant', 'attName', 'attPhone', 'attRel'] };
+  const STEP_FIELDS = { who: ['who'], names: ['first', 'last', 'callerName'], dob: ['dob'], county: ['county'], medicaid: ['medicaid', 'dcn'], cds: ['cds'],
+    help: ['condition', 'help', 'helpNote'], decide: ['selfDirect', 'guardian'], living: ['living'], attendant: ['attendant', 'attName', 'attPhone', 'attRel'] };
   const fromFormTag = k => (STEP_FIELDS[k] || []).some(f => call.fromForm && call.fromForm[f]) ? '<span class="st-fromform">from their online form, confirm it</span>' : '';
   function formHtml() {
-    if (!form) return '';
+    const web = call && call.webAnswers ? '<details class="st-form" open><summary><b>Their sign-up questions</b> (caringcds.com, ' + esc(_niceDay(String(call.webAnswers.at).slice(0, 10))) + ')</summary>' +
+      '<div class="field-note" style="margin-top:4px">Filled in where the answer was clear. Confirm each one, and get the consumer\u2019s OK before any referral.</div>' +
+      '<dl>' + call.webAnswers.shown.map(x => '<dt>' + esc(x.label) + '</dt><dd>' + esc(x.value) + '</dd>').join('') + '</dl></details>' : '';
+    if (!form) return web;
     if (form.loading) return '<div class="st-form">Checking GoHighLevel for their online pre-screen...</div>';
-    if (form.err) return '<div class="st-form" style="background:#fdf1ef;border-color:#e3a59b">Could not check their online pre-screen: ' + esc(form.err) + '. Ask the questions as usual.</div>';
-    if (!form.found) return '<div class="field-note">No online pre-screen found for this phone or email.</div>';
+    if (form.err) return '<div class="st-form" style="background:#fdf1ef;border-color:#e3a59b">Could not check their online pre-screen: ' + esc(form.err) + '. Ask the questions as usual.</div>' + web;
+    if (!form.found) return web + (web ? '' : '<div class="field-note">No online pre-screen found for this phone or email.</div>');
     return '<details class="st-form" open><summary><b>Their online pre-screen</b> (GoHighLevel' + (form.at ? ', ' + esc(_niceDay(String(form.at).slice(0, 10))) : '') + ')</summary>' +
       '<div class="field-note" style="margin-top:4px">Filled in where the answer was clear. Confirm each one with them.</div>' +
-      '<dl>' + form.shown.map(x => '<dt>' + esc(x.label) + '</dt><dd>' + esc(x.value) + '</dd>').join('') + '</dl></details>';
+      '<dl>' + form.shown.map(x => '<dt>' + esc(x.label) + '</dt><dd>' + esc(x.value) + '</dd>').join('') + '</dl></details>' + web;
   }
 
   function drawSide() {
