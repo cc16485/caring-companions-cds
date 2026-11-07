@@ -683,7 +683,7 @@
       (((c.starting || {})[move ? 'transferEntered' : 'referralSent']) && !ctx.auth ? '<div class="field-note" style="margin:4px 0 8px">If no authorization comes back within ' + esc(String(waits()[move ? 'transfer' : 'referral'])) + ' days' + (move ? '' : ' (counted from the assessment once it has happened)') + ', it shows on Today to check with DSDS.</div>' : '') +
       line('Start date from the state', '<input type="date" value="' + esc(c.cdsStartDate || '') + '" onchange="StartHub.setStart(\'' + q(c.id) + '\',this.value)" style="font-size:13px"> <span class="field-note">The consumer and the attendant must be ready to clock in that day.</span>') +
       line('Authorization', ctx.auth ? '<span style="color:var(--success)">On file' + (ctx.authRec && ctx.authRec.planEnd ? ', ends ' + esc(day(ctx.authRec.planEnd)) : '') + '</span>'
-        : '<span style="color:#9C6410">Not uploaded yet</span> ' + btn('Upload it on Authorizations', "showPage('authorizations')", true));
+        : '<span style="color:#9C6410">Not uploaded yet</span> ' + btn('Upload the authorization', "profAuthPick('" + q(c.id) + "')", true));
   }
   function dateField(c, k) {
     const v = (c.starting || {})[k] || '';
