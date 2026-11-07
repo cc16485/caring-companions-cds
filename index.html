@@ -4289,6 +4289,29 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
   </div>
 </div>
 
+<!-- Add an attendant from the Attendants page or a consumer's profile (2026-11-06, her yes): the same Save as a lead's attendant box. -->
+<div class="modal-overlay" id="addAttModal">
+  <div class="modal" style="width:520px;max-width:96vw;background:var(--cute-cream)">
+    <div class="modal-header">
+      <div class="modal-title cute-title" style="font-size:22px">Add an attendant</div>
+      <button class="modal-close" onclick="closeModal('addAttModal')" aria-label="Close">×</button>
+    </div>
+    <div class="form-group"><label for="aa_for">Who is this attendant for?</label><select id="aa_for"></select></div>
+    <div class="form-row" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+      <div class="form-group"><label for="aa_name">Attendant full name</label><input type="text" id="aa_name" placeholder="First and last name"></div>
+      <div class="form-group"><label for="aa_phone">Attendant phone</label><input type="tel" id="aa_phone" inputmode="tel" placeholder="(417) 555-1234"></div>
+    </div>
+    <div class="form-group"><label for="aa_email">Attendant email</label><input type="email" id="aa_email"></div>
+    <div class="field-note" style="margin:2px 0 10px">Saving puts them in Attendants, Onboarding, for this consumer, and in GoHighLevel. If that phone is already on file, it is the same person and nothing is doubled.</div>
+    <div id="aa_err" class="field-note" style="color:var(--danger);font-weight:600"></div>
+    <div class="modal-footer" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="closeModal('addAttModal')">Cancel</button>
+      <button class="btn btn-outline" id="aa_save" onclick="saveAddAttendant(false)">Save only</button>
+      <button class="btn btn-primary" id="aa_text" onclick="saveAddAttendant(true)">Save and text their application link</button>
+    </div>
+  </div>
+</div>
+
 <!-- Their attendant on a lead (2026-11-04, her ask: "how can we add the attendant on to the cds lead? ... attach them") -->
 <div class="modal-overlay" id="leadAttModal">
   <div class="modal" style="width:520px;max-width:96vw;background:var(--cute-cream)">
@@ -5693,7 +5716,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=23');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=24');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5706,7 +5729,8 @@ async function renderActiveAttendants() {
       corrections: () => getData('evvCorrections'),   // for the attendant file's shifts fixed by hand
       who: () => ((document.getElementById('header_user') || {}).textContent || '').trim(),
       oigPeople: () => { const d = oig && oig.data(); return d && d.live ? d.people : {}; },
-      openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch') });
+      openRoster: () => showPage('roster'), openMatch: () => showPage('caregivermatch'),
+      addAttendant: reload => openAddAttendant('', reload) });
     _hpMounted = true;
   } catch (e) {
     root.innerHTML = '<div style="padding:24px;color:#a8342a">Active Attendants could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
@@ -7991,6 +8015,7 @@ async function laStartOnboarding(id) {
   else _ghlToast('⚠️ ' + a0.name + ' is in Attendants, Onboarding, but not in GoHighLevel: ' + ((r.ghl && r.ghl.error) || 'unknown reason') + '. Press Change, then Save, to try again.', true);
   renderPipeline();
   if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
+  return r;
 }
 // The office's button on the card: text them their private Step 1 link.
 async function laSendLink(id, poolId) {
@@ -8975,7 +9000,7 @@ function saveLeadAttendant() {
   closeModal('leadAttModal');
   renderPipeline();
   if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
-  laStartOnboarding(id);
+  return laStartOnboarding(id);
 }
 function removeLeadAttendant() {
   const id = document.getElementById('la_id').value, list = getData('pipeline'), p = list.find(x => x.id === id);
@@ -8989,6 +9014,89 @@ function removeLeadAttendant() {
   closeModal('leadAttModal');
   renderPipeline();
   if (document.getElementById('page-leadprofile')?.classList.contains('active') && _lprofId === id) renderLeadProfile();
+}
+
+// ---- Add an attendant from the Attendants page or a consumer's profile (2026-11-06, her yes) ----
+// Pick the consumer (active or starting consumers, and open leads), type the attendant, Save. Same server call as a
+// lead's attendant box (packetStartFromLead): Attendants, Onboarding, for that consumer, and GoHighLevel tagged
+// 'attendant onboarding'. "Save and text" then sends the same application link text as the lead card's button.
+let _aaAfter = null;
+function _aaChoices() {
+  const cons = getData('consumers').filter(c => c && c.id && c.name && (CDSRules.isActive(c) || (window.CDSStarting && CDSStarting.isStarting(c))))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const leads = getData('pipeline').filter(p => p && p.id && p.name && !CDSRules.CLOSED.includes(p.status)).sort((a, b) => a.name.localeCompare(b.name));
+  return { cons, leads };
+}
+function openAddAttendant(who, after) {
+  _aaAfter = typeof after === 'function' ? after : null;
+  const { cons, leads } = _aaChoices();
+  const sel = document.getElementById('aa_for');
+  sel.innerHTML = '<option value="">Pick a consumer</option>' +
+    (cons.length ? '<optgroup label="Consumers">' + cons.map(c => '<option value="c:' + esc(c.id) + '">' + esc(c.name) + '</option>').join('') + '</optgroup>' : '') +
+    (leads.length ? '<optgroup label="Open leads">' + leads.map(p => '<option value="l:' + esc(p.id) + '">' + esc(p.name) + ' (lead)</option>').join('') + '</optgroup>' : '');
+  sel.value = who && [...sel.options].some(o => o.value === who) ? who : '';
+  ['aa_name', 'aa_phone', 'aa_email'].forEach(i => { document.getElementById(i).value = ''; });
+  document.getElementById('aa_err').textContent = '';
+  ['aa_save', 'aa_text'].forEach(i => { document.getElementById(i).disabled = false; });
+  openModal('addAttModal');
+}
+async function saveAddAttendant(andText) {
+  const err = m => { document.getElementById('aa_err').textContent = m; };
+  const pick = document.getElementById('aa_for').value;
+  const name = document.getElementById('aa_name').value.trim().replace(/\s+/g, ' '), email = document.getElementById('aa_email').value.trim();
+  const raw = document.getElementById('aa_phone').value.trim();
+  if (!pick) return err('Pick who this attendant is for.');
+  if (!name) return err('Type their first and last name.');
+  if (String(raw).replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '').length !== 10) return err('Add their 10-digit phone number, like (417) 555-1234.');
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err('Check their email address.');
+  const phone = _laFmtPhone(raw), kind = pick.slice(0, 1), id = pick.slice(2);
+  err('');
+  ['aa_save', 'aa_text'].forEach(i => { document.getElementById(i).disabled = true; });
+  let r, poolId, forName;
+  if (kind === 'l') {
+    // A lead: the attendant goes on the lead too, so the lead card shows their steps (the lead's own Save).
+    const p = getData('pipeline').find(x => x.id === id);
+    if (!p) { ['aa_save', 'aa_text'].forEach(i => { document.getElementById(i).disabled = false; }); return err('That lead is gone. Pick again.'); }
+    if (p.attendant && p.attendant.name && p.attendant.name.trim().toLowerCase() !== name.toLowerCase()) {
+      ['aa_save', 'aa_text'].forEach(i => { document.getElementById(i).disabled = false; });
+      return err(p.name + ' already has an attendant on their lead (' + p.attendant.name + '). Open the lead and press Change.');
+    }
+    forName = p.name;
+    document.getElementById('la_id').value = id; document.getElementById('la_name').value = name;
+    document.getElementById('la_phone').value = phone; document.getElementById('la_email').value = email;
+    closeModal('addAttModal');
+    r = await saveLeadAttendant();   // says every outcome itself
+    if (!r || !r.pool_id) return _aaDone();
+    poolId = r.pool_id;
+  } else {
+    const c = getData('consumers').find(x => String(x.id) === id);
+    if (!c) { ['aa_save', 'aa_text'].forEach(i => { document.getElementById(i).disabled = false; }); return err('That consumer is gone. Pick again.'); }
+    forName = c.name;
+    try { r = await cdsMatchApi('packetStartFromLead', { name, phone, email, consumer: c.name }); }
+    catch (e) { ['aa_save', 'aa_text'].forEach(i => { document.getElementById(i).disabled = false; }); return err('Not saved: ' + e.message); }
+    closeModal('addAttModal');
+    poolId = r.pool_id;
+    if (r.repeat) _ghlToast('⚠️ ' + name + ' was already in Attendants (same phone), so nothing about them was changed. If they are now working for ' + c.name + ' too, open their name on Attendants.', true);
+    else if (r.ghl && r.ghl.ok) _ghlToast('✅ ' + name + ' is in Attendants, Onboarding, for ' + c.name + ', and in GoHighLevel.' + (andText ? '' : ' Nothing was sent to them.'));
+    else _ghlToast('⚠️ ' + name + ' is in Attendants, Onboarding, for ' + c.name + ', but not in GoHighLevel: ' + ((r.ghl && r.ghl.error) || 'unknown reason') + '. Add them again with the same phone to try again.', true);
+  }
+  if (andText && poolId) {
+    let s;
+    try { s = await cdsMatchApi('packetSendLink', { pool_id: poolId }); }
+    catch (e) { _ghlToast('⚠️ ' + name + ' is saved, but the application link was not texted: ' + e.message, true); return _aaDone(); }
+    _ghlToast({ sent: '✅ ' + name + ' is in Onboarding for ' + forName + ', and was texted their application link.',
+      held: '⚠️ ' + name + ' is saved, but the link was not texted: attendant application texts are switched off (Switches card). Nothing went out.',
+      failed: '⚠️ ' + name + ' is saved, but the text did not go through. Try again from their lead or call them.' }[s.status] || ('Link made (' + s.status + ').'), s.status !== 'sent');
+    if (s.status === 'sent' && kind === 'l') {
+      const list = getData('pipeline'), q = list.find(x => x.id === id);
+      if (q) { if (!q.notes) q.notes = []; q.notes.push({ date: new Date().toLocaleDateString('en-CA'), text: 'Texted ' + name + ' their application link.' }); setData('pipeline', list); }
+    }
+  }
+  _aaDone();
+}
+function _aaDone() {
+  _attPk.at = 0;
+  if (_aaAfter) { try { _aaAfter(); } catch (e) { /* the Attendants page is not drawn */ } }
 }
 
 function lpSetBackground(value){
@@ -11648,7 +11756,8 @@ function renderProfile() {
     line('Phone', esc(c.phone || 'none on file')) +
     (packetOn ? profPacketLine(c, line) : '') +
     factsLines(c, line) +
-    line('Attendant' + (attendants.length === 1 ? '' : 's'), attendants.length ? attendants.map(esc).join(', ') : 'none in payroll yet') +
+    line('Attendant' + (attendants.length === 1 ? '' : 's'), (attendants.length ? attendants.map(esc).join(', ') : 'none in payroll yet') +
+      ' <button type="button" class="btn btn-sm btn-outline" style="margin-left:8px;padding:2px 10px;font-size:12px" onclick="openAddAttendant(\'c:' + esc(c.id) + '\')">+ Add an attendant</button>') +
     line('Start date', c.cdsStartDate ? esc(_niceDay(c.cdsStartDate)) : 'not on file') +
     (fs ? line('First shift (WellSky)', esc(_niceDay(fs))) : '') +
     (prep.shiftStyle ? line('Shifts', prep.shiftStyle === 'set' ? 'Set shifts' : 'Shifts as needed') : '') +
