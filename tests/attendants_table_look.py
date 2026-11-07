@@ -40,8 +40,9 @@ async([LIST, mode])=>{
   window.SW = { live: mode === 'live', owner: mode !== 'staff', flips: [] };
   window.CALLS = [];
   const api = async (a, b) => { CALLS.push([a, b]); if (a === 'packetList') return { attendants: JSON.parse(JSON.stringify(LIST)) };
-    if (a === 'packetGet') return { pool: { first: 'Jeana', last: 'Wise' }, packet: {}, status: { steps: [], label: 'Run EDL and FCSR', tone: 'r', next: 'x' }, screening: { checks: [] }, forms: {}, answers: {} }; return { ok: true }; };
-  const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=23');
+    if (a === 'packetGet') return { pool: { first: 'Jeana', last: 'Wise' }, packet: {}, status: { steps: [], label: 'Run EDL and FCSR', tone: 'r', next: 'x' }, screening: { checks: window.CHECKS || [] }, forms: {}, answers: {} };
+    if (a === 'recordCheck' && window.CHECKS) { const c = window.CHECKS.find(x => x.key === b.check_key); if (c && b.result === 'clear') { c.clear = true; c.at = b.checked_on; } } return { ok: true }; };
+  const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=25');
   let host = document.getElementById('att_test'); if (host) host.remove();
   host = document.createElement('div'); host.id = 'att_test'; host.style.cssText = 'position:fixed;inset:0;overflow:auto;background:#f6f7f5;z-index:99999;padding:16px';
   document.body.appendChild(host);
@@ -71,8 +72,8 @@ with sync_playwright() as pw:
     pg.evaluate(SETUP, [LIST, 'live']); R = pg.evaluate(READ); by = {r['name']: r for r in R['rows']}
     ck('the table, one row per attendant onboarding, with no switch bar', len(R['rows']) == 7 and not R['sw'] and 'Turn off for everyone' not in R['text'], R['sw'])
     ck('the columns as on the mockup', R['heads'] == ['Attendant', 'Step 1', 'Orientation', 'FCSR', 'EDL', 'OIG', 'Fingerprints', 'Empeon invite', 'Empeon', 'ID video check', 'I-9 Section 2', 'Countersign', 'Waiting on', 'Consumer', 'Days quiet'], R['heads'])
-    ck('Jeana: red edge (consumer waiting, quiet 4 days), Copy for FCSR, fingerprints Not needed', by['Jeana Wise']['cls'] == 'now' and 'Copy for FCSR' in by['Jeana Wise']['cells'][2] and by['Jeana Wise']['cells'][5] == 'Not needed' and 'Office' in by['Jeana Wise']['cells'][11], by['Jeana Wise'])
-    ck('Nora: gold edge (quiet 11 days), fingerprints Sent with Clear: add the result, waiting on Fingerprints', by['Nora Kidd']['cls'] == 'quiet' and 'Sent' in by['Nora Kidd']['cells'][5] and 'Clear: add the result' in by['Nora Kidd']['cells'][5] and by['Nora Kidd']['cells'][11].startswith('Fingerprints'), by['Nora Kidd'])
+    ck('Jeana: red edge (consumer waiting, quiet 4 days), FCSR Order or record, EDL Record (2026-11-06), fingerprints Not needed', by['Jeana Wise']['cls'] == 'now' and 'Order or record' in by['Jeana Wise']['cells'][2] and by['Jeana Wise']['cells'][3] == 'Record' and by['Jeana Wise']['cells'][5] == 'Not needed' and 'Office' in by['Jeana Wise']['cells'][11], by['Jeana Wise'])
+    ck('Nora: gold edge (quiet 11 days), fingerprints Sent with Record (2026-11-06), waiting on Fingerprints', by['Nora Kidd']['cls'] == 'quiet' and 'Sent' in by['Nora Kidd']['cells'][5] and 'Record' in by['Nora Kidd']['cells'][5] and by['Nora Kidd']['cells'][11].startswith('Fingerprints'), by['Nora Kidd'])
     T = pg.evaluate('''() => { const tr = [...document.querySelectorAll('table.at tbody tr')].find(r => r.textContent.includes('Nora Kidd'));
       return [...tr.querySelectorAll('td')].map(td => { const x = td.querySelector('[title]'); return x ? x.title + ' | ' + x.textContent : ''; }); }''')
     ck('hover on a done cell: what finished and the full date with the time', T[1] == 'Step 1 signed Monday, November 2, 2026 at 1:14 PM | Nov 2', T[1])
@@ -108,6 +109,42 @@ with sync_playwright() as pw:
     ck('second tap saves I-9 for Lena, then the list reloads', pg.evaluate("()=>CALLS.some(c=>c[0]==='packetMark'&&c[1].what==='i9_done'&&c[1].pool_id==='a5')"), pg.evaluate('()=>CALLS'))
     pg.click('#att_test [data-open="packet:a1"].at-name'); pg.wait_for_timeout(200)
     ck('a name opens their packet', pg.evaluate("()=>CALLS.some(c=>c[0]==='packetGet'&&c[1].pool_id==='a1')") and '← All attendants' in pg.evaluate(READ)['text'])
+
+    # Record a check from the table (2026-11-06, her ask: like the Caring Companions Onboarding tab)
+    pg.evaluate(SETUP, [LIST, 'live'])
+    pg.evaluate("()=>{ window.CHECKS=[{key:'edl',label:'EDL',clear:false},{key:'edr',label:'DMH EDR',clear:false},{key:'oig',label:'OIG',clear:true,at:'2026-10-31'}]; }")
+    pg.click('#att_test tr:has(.at-name:text("Jeana Wise")) [data-atrec="edl"]'); pg.wait_for_timeout(250)
+    box = pg.evaluate("()=>{ const b=document.querySelector('#att_test .rc-box'); return b ? { text:b.innerText, dates:[...b.querySelectorAll('input[type=date]')].map(i=>[i.value,i.max]) } : null; }")
+    today = datetime.date.today().isoformat()
+    ck('Record on EDL opens a window over the table with EDL and the DMH registry, today filled in, no later date allowed', box and 'Record EDL and DMH registry: Jeana Wise' in box['text'] and 'EDL' in box['text'] and 'DMH EDR' in box['text'] and len(box['dates']) == 2 and all(d[0] == d[1] for d in box['dates']), box)
+    ck('...the table stays put behind it (no packet page)', '← All attendants' not in pg.evaluate(READ)['text'] and len(pg.evaluate(READ)['rows']) >= 6, len(pg.evaluate(READ)['rows']))
+    pg.click('#att_test [data-rcsave="edl"]'); pg.wait_for_timeout(150)
+    ck('...Clear with no screenshot is refused, nothing saved', 'needs its proof' in pg.evaluate("()=>document.querySelector('#rc_err').textContent") and not pg.evaluate("()=>CALLS.some(c=>c[0]==='recordCheck')"))
+    pg.evaluate("()=>{ const i=document.querySelector('#rc_date_edl'); i.removeAttribute('max'); i.value='2099-01-01'; }")
+    pg.set_input_files('#rc_file_edl', files=[{'name': 'edl.png', 'mimeType': 'image/png', 'buffer': b'\x89PNG\r\n\x1a\nfake'}])
+    pg.click('#att_test [data-rcsave="edl"]'); pg.wait_for_timeout(150)
+    ck('...a future date is refused, nothing saved', 'today or earlier' in pg.evaluate("()=>document.querySelector('#rc_err').textContent") and not pg.evaluate("()=>CALLS.some(c=>c[0]==='recordCheck')"))
+    pg.evaluate("()=>{ document.querySelector('#rc_date_edl').value='2026-11-02'; }")
+    pg.click('#att_test [data-rcsave="edl"]'); pg.wait_for_timeout(400)
+    rc = pg.evaluate("()=>CALLS.filter(c=>c[0]==='recordCheck').map(c=>({k:c[1].check_key, r:c[1].result, on:c[1].checked_on, id:c[1].id, proof:!!(c[1].proof&&c[1].proof.data)}))")
+    ck('...EDL saved as clear on the picked day with its screenshot', rc == [{'k': 'edl', 'r': 'clear', 'on': '2026-11-02', 'id': 'a1', 'proof': True}], rc)
+    left = pg.evaluate("()=>{ const b=document.querySelector('#att_test .rc-box'); return b ? b.innerText : ''; }")
+    ck('...the window stays open for the DMH registry, EDL now shows clear', 'DMH EDR' in left and 'Clear' in left and 'data-rcsave="edl"' not in pg.evaluate("()=>document.querySelector('#att_test .rc-box').innerHTML"), left)
+    pg.select_option('#rc_res_edr', 'not_clear'); pg.click('#att_test [data-rcsave="edr"]'); pg.wait_for_timeout(400)
+    rc2 = pg.evaluate("()=>CALLS.filter(c=>c[0]==='recordCheck'&&c[1].check_key==='edr').map(c=>({r:c[1].result, on:c[1].checked_on, proof:!!(c[1].proof&&c[1].proof.data)}))")
+    ck('...Not clear saves without a screenshot (the owners review it)', rc2 == [{'r': 'not_clear', 'on': today, 'proof': False}], rc2)
+    pg.click('#att_test .rc-box [data-rcclose]'); pg.wait_for_timeout(150)
+    ck('...Close shuts the window', not pg.evaluate("()=>!!document.querySelector('#att_test .rc-box')"))
+    pg.click('#att_test tr:has(.at-name:text("Jeana Wise")) [data-atrec="fcsr"]'); pg.wait_for_timeout(250)
+    ck('FCSR: Order or record offers Mark as ordered and Save as clear', 'Mark as ordered' in pg.evaluate("()=>document.querySelector('#att_test .rc-box').innerText") and 'Save as clear' in pg.evaluate("()=>document.querySelector('#att_test .rc-box').innerText"))
+    pg.click('#att_test [data-rcfcsr="clear"]'); pg.wait_for_timeout(150)
+    ck('...FCSR clear with no result page is refused', 'FCSR result page' in pg.evaluate("()=>document.querySelector('#rc_err').textContent") and not pg.evaluate("()=>CALLS.some(c=>c[0]==='packetFcsr')"))
+    pg.click('#att_test [data-rcfcsr="pending"]'); pg.wait_for_timeout(400)
+    ck('...Mark as ordered records it pending at the state and closes', pg.evaluate("()=>CALLS.some(c=>c[0]==='packetFcsr'&&c[1].result==='pending'&&c[1].pool_id==='a1')") and not pg.evaluate("()=>!!document.querySelector('#att_test .rc-box')"))
+    pg.click('#att_test tr:has(.at-name:text("Nora Kidd")) [data-atrec="fp"]'); pg.wait_for_timeout(250)
+    ck('Fingerprints sent: Record opens the fingerprint result', 'Record Fingerprints' in pg.evaluate("()=>document.querySelector('#att_test .rc-box').innerText"))
+    pg.click('#att_test .rc-box [data-rcopen]'); pg.wait_for_timeout(250)
+    ck('...Open their packet goes to the full packet page', '← All attendants' in pg.evaluate(READ)['text'] and not pg.evaluate("()=>!!document.querySelector('#att_test .rc-box')"))
 
     pg.evaluate(SETUP, [LIST, 'live'])
     # phone
