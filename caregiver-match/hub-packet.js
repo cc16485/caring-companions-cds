@@ -616,7 +616,7 @@ export function mountHubPacket(el, opts) {
       ${g.quiet.length ? g.quiet.map(rowHtml).join('') : '<p class="small">Nobody.</p>'}</section>
       <section class="grp"><div class="ghead"><h3>No longer working</h3><span>Marked no longer working. No rechecks.</span></div>
       ${g.ended.length ? g.ended.map(endedRow).join('') : '<p class="small">Nobody.</p>'}</section>`;
-    el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><div class="btns" style="margin:0"><button class="btn o" data-act="ghl-import">Bring in papers and checks from GHL</button><button data-act="reload" class="pill-btn">Refresh</button></div></div>
+    el.innerHTML = `<div class="hp-head"><h2>Attendants</h2><div class="btns" style="margin:0">${opts.addAttendant ? '<button class="btn" data-act="add-att">+ Add an attendant</button>' : ''}<button class="btn o" data-act="ghl-import">Bring in papers and checks from GHL</button><button data-act="reload" class="pill-btn">Refresh</button></div></div>
       <label style="display:flex;align-items:center;gap:8px;max-width:380px;margin:8px 0 0;padding:0 14px;min-height:42px;background:#fff;border:2px solid #dfe6ec;border-radius:999px">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55677a" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input type="search" id="hp_find" value="${esc(query)}" placeholder="Find an attendant or consumer by name" aria-label="Find an attendant or consumer by name" style="border:0;outline:0;font:inherit;font-size:14.5px;flex:1;min-width:0;background:transparent"></label>
@@ -883,6 +883,7 @@ export function mountHubPacket(el, opts) {
       if (b.dataset.open) { const [k, id] = b.dataset.open.split(':'); return k === 'packet' ? openPacket(id) : openRosterCard(id); }
       const act = b.dataset.act;
       if (act === 'reload') return load();
+      if (act === 'add-att') return opts.addAttendant && opts.addAttendant(() => load());
       if (act === 'back') { open = null; return load(); }
       if (act === 'roster') return opts.openRoster && opts.openRoster(open.id);
       if (act === 'dates') {
