@@ -26,7 +26,7 @@ SETUP = r"""
     CALLS.push([a, i]);
     if (a === 'packetStartFromLead') return { ok: true, pool_id: 'pool-' + CALLS.length, repeat: REPEAT, ghl: GHL_OK ? { ok: true } : { ok: false, error: 'GoHighLevel 503: down' } };
     if (a === 'packetSendLink') return { ok: true, status: SEND_STATUS };
-    if (a === 'packetList') return { attendants: [] };
+    if (a === 'packetList') return { attendants: window.ONB || [] };
     return {};
   };
   _attPk = { at: 0, list: null, busy: false };
@@ -111,6 +111,12 @@ with sync_playwright() as pw:
         ck('profile button opens the box with that consumer', pg.evaluate("()=>document.getElementById('addAttModal').classList.contains('open')") and pg.input_value('#aa_for') == 'c:C1')
         pg.evaluate("()=>closeModal('addAttModal')")
         pg.locator('#prof_body .cp-line', has_text='Attendant').first.screenshot(path=os.path.join(OUT, 'add_att_profile.png'))
+
+    # 2026-11-06: an attendant added for them and still onboarding shows on the profile (not only payroll).
+    pg.evaluate(SETUP)
+    pg.evaluate("()=>{ ONB = [{ pool_id: 'p9', name: 'Kris Newperson', consumer: 'Mae Testerson', label: 'Application link sent', active: false }, { pool_id: 'p8', name: 'Other Person', consumer: 'Someone Else', label: 'x', active: false }]; renderProfile(); }"); pg.wait_for_timeout(600)
+    att = pg.locator('#prof_body .cp-line', has_text='Attendant').first.inner_text()
+    ck('onboarding attendant shows on the profile', 'Kris Newperson' in att and 'onboarding' in att and 'Other Person' not in att and 'none in payroll yet' not in att, att)
 
     # The Attendants page button.
     pg.evaluate("async ()=>{ const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=24'); const el = document.createElement('div'); el.id = 'hp_test'; document.body.prepend(el);"

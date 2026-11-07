@@ -3,7 +3,7 @@
 // One button sends the consumer their private link (caringcds.com/enroll). The card
 // then shows each form as it is signed, every text and email (sent, held or failed:
 // nothing fails silently), the one-tap agent signature, and the signed PDFs.
-// mountLeadEnroll(el, { api, lead, PDFLib, blank, consumer })
+// mountLeadEnroll(el, { api, lead, PDFLib, blank, consumer, afterSent, afterAgentSigned })
 // No em dashes in anything a person reads.
 import { buildEnrollPdfs } from './enroll-pdf.js?v=1';
 
@@ -79,6 +79,8 @@ export function mountLeadEnroll(el, opts) {
         const held = r.messages.filter(s => s === 'held').length, failed = r.messages.filter(s => s === 'failed').length;
         say(failed ? 'Something did not send. See below.' : held ? 'Saved. The text and email are waiting in Messages because the Enrollment packet texts switch is off.' : 'Sent.', failed ? 'bad' : '');
         if (r.practice_link) say(msg + ' Practice link: ' + r.practice_link);
+        // The consumer profile ties the packet to the consumer (2026-11-06). A failure here never hides the send.
+        if (opts.afterSent && !failed) { try { await opts.afterSent(lead); } catch (err2) { say(msg + ' (It could not be tied to their profile yet: ' + err2.message + ')', 'bad'); } }
       } else if (act === 'agent') {
         await api('enrollOfficeSign', { lead_id: lead.id, typed_name: (el.querySelector('#enrAgentName') || {}).value || '' });
         say('Signed as agent.');

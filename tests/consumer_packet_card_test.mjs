@@ -18,15 +18,18 @@ const el = { innerHTML: '' };
 const mounted = [];
 const ctx = {
   _profPacket: {}, _db: {}, ENROLL_BLANK: {}, window: { PDFLib: {} }, cdsMatchApi: () => {},
+  prNorm: s => String(s).trim().toLowerCase(),
   _niceDay: iso => 'D' + iso, esc: s => String(s).replace(/</g, '&lt;'),
-  getData: k => ({ pipeline: [{ id: 9000000000001, name: 'Pat Example', type: 'pccp' }] })[k],
+  getData: k => ({ pipeline: [{ id: 9000000000001, name: 'Pat Example', type: 'pccp', movedToConsumers: '2026-11-01' }, { id: 9000000000002, name: 'Robin Sample', type: 'lead', phone: '4175550100' }] })[k],
   document: { getElementById: id => (id === 'profEnroll' ? el : null) },
   fileHubPacketForLead: () => 'filed',
+  calls: [],
 };
 vm.createContext(ctx);
 vm.runInContext(code + '\nthis.profPacketLine = profPacketLine; this.mountProfileEnroll = mountProfileEnroll;', ctx);
 // Stand in for the dynamic import of the lead card.
-vm.runInContext('mountProfileEnroll = ' + ctx.mountProfileEnroll.toString().replace("await import('./enroll/hub-enroll.js?v=3')", 'HUB') + '; this.mountProfileEnroll = mountProfileEnroll;', ctx);
+vm.runInContext('mountProfileEnroll = ' + ctx.mountProfileEnroll.toString().replace("await import('./enroll/hub-enroll.js?v=4')", 'HUB') + '; this.mountProfileEnroll = mountProfileEnroll;', ctx);
+ctx.cdsMatchApi = (a, b) => { ctx.calls.push([a, b]); return Promise.resolve({ ok: true }); };
 ctx.HUB = { mountLeadEnroll: (e, o) => mounted.push(o) };
 
 const line = (l, v) => '[' + l + ': ' + v + ']';
@@ -36,7 +39,7 @@ ok(ctx.profPacketLine(c, line) === '', 'nothing while not fetched');
 ctx._profPacket.c1 = { busy: true };
 ok(ctx.profPacketLine(c, line) === '', 'nothing while checking');
 ctx._profPacket.c1 = { packet: null };
-ok(ctx.profPacketLine(c, line).includes('not sent from the Hub'), 'no packet');
+ok(ctx.profPacketLine(c, line).includes('not sent yet') && ctx.profPacketLine(c, line).includes('send it'), 'no packet: offers to send it');
 ctx._profPacket.c1 = { packet: { lead_id: '9000000000001', status: 'Signed, needs your agent signature', sent_at: '2026-11-04T06:15:00Z', signed_at: '2026-11-04 13:45:32+00' } };
 const l = ctx.profPacketLine(c, line);
 ok(l.includes('Signed, needs your agent signature') && l.includes('D2026-11-04') && l.includes('9C6410') && l.includes("_profTab='tax'"), 'signed, waiting on agent: ' + l);
@@ -50,9 +53,35 @@ ok(mounted[0].afterAgentSigned({}) === 'filed' && !ctx._profPacket.c1, 'agent si
 ctx._profPacket.c1 = { packet: { lead_id: 'gone' } };
 await ctx.mountProfileEnroll(c);
 ok(el.innerHTML.includes('no longer in Leads'), 'lead gone');
+// 2026-11-06: no packet yet, someone already on Consumers. The card mounts here so it can be sent.
+mounted.length = 0;
 ctx._profPacket.c1 = { packet: null };
 await ctx.mountProfileEnroll(c);
-ok(el.innerHTML.includes('Send it from their lead'), 'no packet note');
+ok(mounted.length === 1 && mounted[0].lead.id === 9000000000001, 'no packet: card mounts with the lead moved to Consumers');
+// A Starting consumer made Active: their own lead from starting.leadId, whatever its name match.
+mounted.length = 0;
+const s2 = { id: 'c2', name: 'Robin  Sample', status: 'active', starting: { kind: 'new', leadId: '9000000000002' } };
+ctx._profPacket.c2 = { packet: null };
+await ctx.mountProfileEnroll(s2);
+ok(mounted.length === 1 && mounted[0].lead.id === 9000000000002, 'Active from Starting: uses their Starting lead');
+await mounted[0].afterSent({ id: 9000000000002 });
+ok(ctx.calls.some(([a, b]) => a === 'enrollLinkConsumer' && b.lead_id === 9000000000002 && b.consumer_id === 'c2') && !ctx._profPacket.c2, 'after a send the packet is tied to the consumer');
+// Added straight to Consumers with no lead at all: the card still mounts from the consumer record.
+mounted.length = 0;
+const c3 = { id: 'c3', name: 'Lee Nobody', phone: '4175550111', email: 'lee@example.com', facts: { street: '1 Main', city: 'Joplin', zip: '64801' }, starting: { kind: 'move' } };
+ctx._profPacket.c3 = { packet: null };
+await ctx.mountProfileEnroll(c3);
+const L3 = mounted[0] && mounted[0].lead;
+ok(L3 && L3.id === 'consumer-c3' && L3.type === 'pccp' && L3.phone === '4175550111' && L3.city === 'Joplin', 'no lead: built from the consumer record');
+// A packet whose lead was removed: no second packet under a new id.
+mounted.length = 0;
+ctx._profPacket.c3 = { packet: { lead_id: 'gone' } };
+await ctx.mountProfileEnroll(c3);
+ok(!mounted.length && el.innerHTML.includes('no longer in Leads'), 'packet with a removed lead is not re-sent');
+// A packet sent from the consumer record opens again from the consumer record.
+ctx._profPacket.c3 = { packet: { lead_id: 'consumer-c3', status: 'Sent' } };
+await ctx.mountProfileEnroll(c3);
+ok(mounted.length === 1 && mounted[0].lead.id === 'consumer-c3', 'packet sent from the profile opens again');
 
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);

@@ -7969,7 +7969,9 @@ function attPacketFor(p) {
       .finally(() => { _attPk.at = Date.now(); _attPk.busy = false;
         if (document.getElementById('page-pipeline')?.classList.contains('active') || document.getElementById('csub-pipeline')?.offsetParent) { try { renderPipeline(); } catch (e) { /* the Leads page is not drawn */ } }
         const lp = document.getElementById('page-leadprofile');
-        if (lp && lp.classList.contains('active') && !lp.contains(document.activeElement)) renderLeadProfile(); });
+        if (lp && lp.classList.contains('active') && !lp.contains(document.activeElement)) renderLeadProfile();
+        const cp = document.getElementById('page-profile');   // a consumer's Attendants line (2026-11-06)
+        if (cp && cp.classList.contains('active') && !cp.contains(document.activeElement)) { try { renderProfile(); } catch (e) { /* not drawn */ } } });
   }
   const list = _attPk.list || [], a = p.attendant;
   // Saved from this lead (2026-11-05): the same record, whatever name they go by.
@@ -7977,6 +7979,13 @@ function attPacketFor(p) {
   if (a && a.name) return list.find(x => _attKey(x.name) === _attKey(a.name)) || null;
   const mine = list.filter(x => x.consumer && _attKey(x.consumer) === _attKey(p.name));
   return mine.length === 1 ? mine[0] : null;
+}
+
+// Attendants still onboarding for a consumer (2026-11-06, her ask: she added Kristen from the profile and
+// could not see her there, because the profile only listed attendants already in payroll).
+function onboardingFor(c) {
+  attPacketFor({ name: c.name });   // starts the Onboarding list fetch when it is old
+  return (_attPk.list || []).filter(x => !x.active && x.consumer && _attKey(x.consumer) === _attKey(c.name));
 }
 
 // Their onboarding steps on the lead card, from the Onboarding table's row (packetList .table.cells, rules.js tableRow).
@@ -8578,7 +8587,7 @@ async function mountLeadEnrollCard(p) {
   const el = document.getElementById('lpEnroll');
   if (!el || !_db) return;
   try {
-    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=3');
+    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=4');
     mountLeadEnroll(el, { api: cdsMatchApi, lead: p, PDFLib: window.PDFLib, blank: ENROLL_BLANK, afterAgentSigned: fileHubPacketForLead,
       consumer: () => getData('consumers').find(c => (c.name || '').trim().toLowerCase() === (p.name || '').trim().toLowerCase()) || null });
   } catch (e) { el.innerHTML = '<div class="field-note" style="color:var(--danger)">The enrollment packet card did not load: ' + esc(e.message) + '</div>'; }
@@ -11604,6 +11613,7 @@ function renderProfile() {
   const wages = myWages.reduce((t, x) => t + x.gross, 0);
   const margin = billed - wages;
   const attendants = [...new Set(myWages.map(x => x.attendant))];
+  const onb = onboardingFor(c);
 
   const today = new Date(); today.setHours(12, 0, 0, 0);
   const daysLeft = auth ? Math.round((new Date(auth.planEnd + 'T12:00:00') - today) / 864e5) : null;
@@ -11756,7 +11766,8 @@ function renderProfile() {
     line('Phone', esc(c.phone || 'none on file')) +
     (packetOn ? profPacketLine(c, line) : '') +
     factsLines(c, line) +
-    line('Attendant' + (attendants.length === 1 ? '' : 's'), (attendants.length ? attendants.map(esc).join(', ') : 'none in payroll yet') +
+    line('Attendant' + (attendants.length + onb.length === 1 ? '' : 's'), (attendants.length ? attendants.map(esc).join(', ') : onb.length ? '' : 'none in payroll yet') +
+      onb.map((x, i) => (attendants.length || i ? ', ' : '') + '<a href="#" onclick="showPage(\'attendants\');return false">' + esc(x.name) + '</a> <span class="field-note">(onboarding: ' + esc(x.label || 'started') + ')</span>').join('') +
       ' <button type="button" class="btn btn-sm btn-outline" style="margin-left:8px;padding:2px 10px;font-size:12px" onclick="openAddAttendant(\'c:' + esc(c.id) + '\')">+ Add an attendant</button>') +
     line('Start date', c.cdsStartDate ? esc(_niceDay(c.cdsStartDate)) : 'not on file') +
     (fs ? line('First shift (WellSky)', esc(_niceDay(fs))) : '') +
@@ -11850,24 +11861,41 @@ function profPacketLine(c, line) {
   const hit = _profPacket[c.id] || {}, P = hit.packet;
   if (!('packet' in hit)) return '';   // still checking, or it could not be read
   const open = ' <a href="#" onclick="_profTab=\'tax\';renderProfile();return false" style="font-size:12px;margin-left:8px">open</a>';
-  if (!P) return line('Enrollment packet', 'not sent from the Hub');
+  if (!P) return line('Enrollment packet', 'not sent yet' + open.replace('>open<', '>send it<'));
   const late = P.signed_at && P.status !== 'Done';
   return line('Enrollment packet', (late ? '<span style="color:#9C6410">' : '<span>') + esc(P.status) + '</span>' +
     (P.signed_at ? ', ' + esc(_niceDay(String(P.signed_at).slice(0, 10))) : P.sent_at ? ', sent ' + esc(_niceDay(String(P.sent_at).slice(0, 10))) : '') + open);
 }
 // The same card as on their lead: each form, Sign as agent, the one-PDF download.
+// 2026-11-06 (her ask): the packet can also be SENT from here, so someone who is already on
+// Consumers (made Active by chance, or added before the packet went out) still gets it. The card
+// uses their own lead when there is one (Starting's leadId, else the lead moved to Consumers);
+// otherwise it builds the same details from the consumer record. After a send the packet is tied
+// to this consumer on the server (enrollLinkConsumer) so the profile always finds it again.
+function profPacketLead(c, leadId) {
+  const list = getData('pipeline');
+  const byId = id => id ? list.find(p => String(p.id) === String(id)) : null;
+  const f = c.facts || {};
+  const own = () => ({ id: 'consumer-' + c.id, type: c.starting && c.starting.kind === 'move' ? 'pccp' : 'lead', name: c.name, phone: c.phone, email: c.email,
+    county: c.county || f.county, street: f.street, apt: f.apt, city: f.city, zip: f.zip });
+  // A packet already sent: only its own lead (or the consumer record it was sent from). If that lead
+  // is gone, do not open a different one, so nobody is sent a second packet under a new id.
+  if (leadId) return String(leadId) === 'consumer-' + c.id ? own() : byId(leadId) || null;
+  return byId(c.starting && c.starting.leadId) || byId(c.leadId) ||
+    list.find(p => p.movedToConsumers && prNorm(p.name || '') === prNorm(c.name || '')) || own();
+}
 async function mountProfileEnroll(c) {
   const el = document.getElementById('profEnroll');
   if (!el || !_db) return;
   const hit = _profPacket[c.id] || {}, P = hit.packet;
   if (!('packet' in hit)) return;
-  if (!P) { el.innerHTML = '<div class="field-note">No Hub enrollment packet for ' + esc(c.name) + '. Send it from their lead (Leads, open the lead, Send enrollment packet).</div>'; return; }
-  const lead = getData('pipeline').find(p => String(p.id) === String(P.lead_id));
+  const lead = profPacketLead(c, P && P.lead_id);
   if (!lead) { el.innerHTML = '<div class="field-note">Their packet\'s lead is no longer in Leads, so the packet card cannot open here.</div>'; return; }
   try {
-    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=3');
+    const { mountLeadEnroll } = await import('./enroll/hub-enroll.js?v=4');
     if (document.getElementById('profEnroll') !== el) return;   // the profile was drawn again meanwhile
     mountLeadEnroll(el, { api: cdsMatchApi, lead, PDFLib: window.PDFLib, blank: ENROLL_BLANK, consumer: () => c,
+      afterSent: l => cdsMatchApi('enrollLinkConsumer', { lead_id: l.id, consumer_id: c.id }).then(() => { delete _profPacket[c.id]; }),
       afterAgentSigned: l => { delete _profPacket[c.id]; return fileHubPacketForLead(l); } });
   } catch (e) { el.innerHTML = '<div class="field-note" style="color:var(--danger)">The enrollment packet card did not load: ' + esc(e.message) + '</div>'; }
 }
