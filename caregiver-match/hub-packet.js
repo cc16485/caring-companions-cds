@@ -97,6 +97,12 @@ const CSS = `
 .hp .at-btn{border:2px solid #0f7a7c;color:#0f7a7c;background:#fff;border-radius:8px;padding:3px 9px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
 .hp .at-btn.late{border-color:#b42318;color:#b42318;background:#fdecea}
 .hp .at-btn.sure{background:#0f7a7c;color:#fff}
+/* Record a check from the table (2026-11-06, her ask: like the Caring Companions Onboarding tab) */
+.hp .rc-mask{position:fixed;inset:0;background:rgba(13,54,95,.35);display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:50;overflow:auto}
+.hp .rc-box{background:#fff;border-radius:14px;max-width:560px;width:100%;padding:18px 20px;box-shadow:0 18px 50px rgba(13,54,95,.25);display:flex;flex-direction:column;gap:12px}
+.hp .rc-box h3{margin:0;font-size:19px;color:#0D365F;text-transform:none;letter-spacing:0}.hp .rc-row{border:1px solid #dfe6ec;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.hp .rc-row b{color:#0D365F}.hp .rc-f{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.hp .rc-f select,.hp .rc-f input[type=date]{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #c9d3dc;border-radius:8px}
+.hp .rc-err{color:#b42318;font-weight:600;min-height:1em}.hp .rc-x{align-self:flex-end;background:none;border:0;font-size:22px;line-height:1;color:#5b6977;cursor:pointer;margin:-6px -6px 0 0}
 .hp .at-wait{display:inline-block;border-radius:6px;padding:2px 7px;font-size:12.5px;font-weight:600;background:#e4edf6;color:#2b5c8a}
 .hp .at-wait.warn{background:#f6e7b8;color:#6b4e00}
 .hp .at-bad{display:inline-block;border-radius:6px;padding:2px 7px;font-size:12.5px;font-weight:700;background:#fdecea;color:#b42318}
@@ -414,6 +420,43 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
 // The same people as the Onboarding tab (buildGroups' starting list), one row each. The cells come from the
 // server (packetList .table, rules.js tableRow). Red: their consumer is waiting and nothing moved in 2 weekdays,
 // or an office to-do is past due. Gold: nothing moved in 10 days. Her switch: agency_data 'attendantsTable'.
+// The table's check columns and the checks each one holds (EDL with the DMH registry, OIG with the Missouri Medicaid exclusion).
+export const REC_COLS = ['fcsr', 'edl', 'oig', 'fp'];
+export const REC_KEYS = { edl: ['edl', 'edr'], oig: ['oig', 'mo_medicaid'], fp: ['fingerprints'] };
+// A check date: today or earlier (her pick 2026-11-06), never later than today.
+export const recDateOk = (v, today) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && v <= today;
+export function recordBoxHtml(col, g, today) {
+  const first = esc(g.pool.first), name = esc(g.pool.first + ' ' + g.pool.last), p = g.packet || {};
+  const title = { fcsr: 'FCSR', edl: 'EDL and DMH registry', oig: 'OIG and Missouri Medicaid exclusion', fp: 'Fingerprints' }[col];
+  const fileRow = id => `<label class="small">Screenshot or PDF of the result <input type="file" id="${id}" accept="image/*,application/pdf"></label>`;
+  let body = '';
+  if (col === 'fcsr') {
+    const f = fcsrState(g.screening);
+    body = `<div class="rc-row"><b>FCSR</b><div class="small">${esc(FCSR_WORDS[f] || '')}</div>
+      ${f === 'none' ? `<div class="rc-f"><button class="btn o" data-rcfcsr="pending">Mark as ordered: pending at the state</button></div>` : ''}
+      <div class="rc-f">${fileRow('rc_file_fcsr')}</div>
+      <div class="rc-f"><button class="btn good" data-rcfcsr="clear">Save as clear</button><button class="btn o" data-rcopen="1">Something came up: open their packet</button></div>
+      <div class="small">Clear is recorded with today's date. A finding is picked on their packet, where the Good Cause Waiver steps are.</div></div>`;
+  } else {
+    const checks = (g.screening && g.screening.checks) || [];
+    const rows = REC_KEYS[col].map(k => checks.find(c => c.key === k)).filter(Boolean);
+    if (!rows.length) body = '<p class="small">Not needed for ' + first + '.</p>';
+    body += rows.map(c => {
+      const label = esc(CHECK_NAMES[c.key] || c.label || c.key);
+      if (c.clear) return `<div class="rc-row"><b>${label}</b><span class="at-ok">Clear ${esc(fmtD(c.at))}</span></div>`;
+      const sent = c.key === 'fingerprints' ? (p.fingerprints_sent_at ? `<div class="small">Sent ${esc(fmtD(p.fingerprints_sent_at))}</div>` : `<div class="rc-f"><button class="btn o" data-rcsent="1">Mark fingerprints sent</button></div>`) : '';
+      return `<div class="rc-row"><b>${label}</b>${c.result === 'not_clear' ? '<span class="small" style="color:#b42318">Recorded as not clear. Recording it again adds a new result.</span>' : ''}${sent}
+        <div class="rc-f"><select id="rc_res_${c.key}" aria-label="Result"><option value="clear">Clear</option><option value="not_clear">Not clear</option></select>
+        <input type="date" id="rc_date_${c.key}" value="${today}" max="${today}" aria-label="Date checked"></div>
+        <div class="rc-f">${fileRow('rc_file_' + c.key)}</div>
+        <div class="rc-f"><button class="btn good" data-rcsave="${c.key}">Save ${label}</button></div></div>`;
+    }).join('');
+    body += '<p class="small">Clear needs the screenshot or PDF of the search. Not clear goes to the owners to review.</p>';
+  }
+  return `<div class="rc-mask" data-rcmask="1"><div class="rc-box" role="dialog" aria-label="Record ${esc(title)}"><button class="rc-x" data-rcclose="1" aria-label="Close">×</button>
+    <h3>Record ${esc(title)}: ${name}</h3>${body}<div class="rc-err" id="rc_err"></div>
+    <div class="rc-f"><button class="btn o" data-rcopen="1">Open their packet</button><button class="btn o" data-rcclose="1">Close</button></div></div></div>`;
+}
 export const AT_COLS = [['step1', 'Step 1'], ['orient', 'Orientation'], ['fcsr', 'FCSR'], ['edl', 'EDL'], ['oig', 'OIG'], ['fp', 'Fingerprints'],
   ['invite', 'Empeon invite'], ['empeon', 'Empeon'], ['call', 'ID video check'], ['i9', 'I-9 Section 2'], ['counter', 'Countersign']];
 export const AT_JOB = Object.fromEntries(AT_COLS.map(([k, l]) => [k, l === 'Step 1' ? 'Step 1 application' : l]));
@@ -635,9 +678,13 @@ export function mountHubPacket(el, opts) {
     const btn = (label, act, late) => act === 'open'
       ? `<button class="at-btn${late ? ' late' : ''}" data-open="packet:${esc(r.id)}">${esc(label)}</button>`
       : `<button class="at-btn${late ? ' late' : ''}${sure === r.id + ':' + act ? ' sure' : ''}" data-atmark="${esc(act)}" data-id="${esc(r.id)}">${esc(sure === r.id + ':' + act ? 'Tap again to save' : label)}</button>`;
-    if (x.s === 'todo') { const late = r.urg === 'now' && r.job === k; return btn(x.t, x.act, late) + (late && r.why ? `<div class="at-sub" style="color:#b42318">${esc(r.why)}</div>` : ''); }
+    // Check cells (her ask 2026-11-06, like the Caring Companions Onboarding tab): record the check right here.
+    const recBtn = (label, late) => `<button class="at-btn${late ? ' late' : ''}" data-atrec="${esc(k)}" data-id="${esc(r.id)}">${esc(label)}</button>`;
+    const isRec = REC_COLS.includes(k) && x.act === 'open' && !(k === 'fcsr' && /Found something/.test(x.t || ''));
+    if (x.s === 'todo') { const late = r.urg === 'now' && r.job === k; return (isRec ? recBtn(k === 'fcsr' ? 'Order or record' : 'Record', late) : btn(x.t, x.act, late)) + (late && r.why ? `<div class="at-sub" style="color:#b42318">${esc(r.why)}</div>` : ''); }
     const sent = x.at ? ' ' + shortDay(atDay(x.at)) : '';
-    return `<span class="at-wait${x.warn ? ' warn' : ''}"${x.at ? ` title="${esc(x.t + ' ' + atLong(x.at))}"` : ''}>${esc(x.t + sent)}</span>${x.btn ? `<div style="margin-top:4px">${btn(x.btn, x.act)}</div>` : ''}`;
+    const recWait = (k === 'fp' && x.btn) || (k === 'fcsr' && /Pending/.test(x.t || ''));
+    return `<span class="at-wait${x.warn ? ' warn' : ''}"${x.at ? ` title="${esc(x.t + ' ' + atLong(x.at))}"` : ''}>${esc(x.t + sent)}</span>${recWait ? `<div style="margin-top:4px">${recBtn('Record')}</div>` : x.btn ? `<div style="margin-top:4px">${btn(x.btn, x.act)}</div>` : ''}`;
   }
   function tableHtml(g) {
     const all = onboardingRows({ starting: g.starting, packets: list });
@@ -732,6 +779,52 @@ export function mountHubPacket(el, opts) {
       </article>`;
     el.scrollIntoView({ block: 'start' });
     if (print) setTimeout(() => window.print(), 150);
+  }
+
+  // ---------- Record a check from the table (2026-11-06) ----------
+  let rec = null;   // { id, col, g }
+  const recEl = () => el.querySelector('#hp_rec');
+  async function openRecord(id, col) {
+    let g; try { g = await api('packetGet', { pool_id: id }); } catch (e) { alert(e.message); return; }
+    rec = { id, col, g };
+    let host = recEl(); if (!host) { host = document.createElement('div'); host.id = 'hp_rec'; el.appendChild(host); }
+    host.innerHTML = recordBoxHtml(col, g, isoLocal(new Date()));
+  }
+  function closeRecord() { rec = null; const h = recEl(); if (h) h.remove(); }
+  const readFile = async id => {
+    const f = (el.querySelector('#' + id) || {}).files; const file = f && f[0]; if (!file) return null;
+    if (file.size > 15 * 1024 * 1024) throw new Error('That file is too big (15 MB limit).');
+    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+    return { mime: file.type || 'application/pdf', name: file.name, data };
+  };
+  async function recordClick(b) {
+    const say = m => { const x = el.querySelector('#rc_err'); if (x) x.textContent = m; };
+    const { id, col } = rec;
+    try {
+      if (b.dataset.rcclose) return closeRecord();
+      if (b.dataset.rcopen) { closeRecord(); return openPacket(id); }
+      b.disabled = true;
+      if (b.dataset.rcsent) { await api('packetMark', { pool_id: id, what: 'fingerprints_sent' }); return openRecord(id, col); }
+      if (b.dataset.rcfcsr === 'pending') { await api('packetFcsr', { pool_id: id, result: 'pending' }); closeRecord(); return load(); }
+      if (b.dataset.rcfcsr === 'clear') {
+        const proof = await readFile('rc_file_fcsr');
+        if (!proof) { b.disabled = false; return say('Add the FCSR result page (a screenshot or PDF) first.'); }
+        await api('packetFcsr', { pool_id: id, result: 'clear', proof }); closeRecord(); return load();
+      }
+      if (b.dataset.rcsave) {
+        const k = b.dataset.rcsave, today = isoLocal(new Date());
+        const result = (el.querySelector('#rc_res_' + k) || {}).value || 'clear', on = (el.querySelector('#rc_date_' + k) || {}).value || '';
+        if (!recDateOk(on, today)) { b.disabled = false; return say('Pick the day the check was done: today or earlier.'); }
+        const proof = await readFile('rc_file_' + k);
+        if (result === 'clear' && !proof) { b.disabled = false; return say('Add the screenshot or PDF of the result first. A clear check needs its proof.'); }
+        await api('recordCheck', { id, check_key: k, result, checked_on: on, proof: proof || undefined, note: 'Recorded from the Onboarding table' });
+        await openRecord(id, col);   // the other check in the same column, if any, is still here
+        const left = ((rec && rec.g.screening.checks) || []).filter(c => (REC_KEYS[col] || []).includes(c.key) && !c.clear);
+        if (!left.length) { closeRecord(); return load(); }
+        const x = el.querySelector('#rc_err'); if (x) { x.style.color = '#1f7a4d'; x.textContent = 'Saved.'; }
+        return;
+      }
+    } catch (e) { b.disabled = false; say(e.message); }
   }
 
   let pendingProof = null;
@@ -860,12 +953,16 @@ export function mountHubPacket(el, opts) {
 
   const act0 = b => b.dataset.act;
   async function onClick(e) {
+    if (rec && e.target.dataset && e.target.dataset.rcmask) return closeRecord();
     const b = e.target.closest('button'); if (!b) return;
     const errEl = () => el.querySelector('#hp_err');
     const fail = m => { const x = errEl(); if (x) x.textContent = m; else alert(m); };
     try {
       if (b.dataset.tab) { tab = b.dataset.tab; draw(); return; }
       if (act0(b) === 'at-clear') { F = { show: '', job: '', hold: '' }; ls('hpTableF', JSON.stringify(F)); draw(); return; }
+      // Record a check from the table (2026-11-06): a small window over the table, like the Caring Companions Onboarding tab.
+      if (b.dataset.atrec) return openRecord(b.dataset.id, b.dataset.atrec);
+      if (rec && (b.dataset.rcclose || b.dataset.rcopen || b.dataset.rcsave || b.dataset.rcfcsr || b.dataset.rcsent)) return recordClick(b);
       // A one-tap step from the table: tap twice so a stray click never records it.
       if (b.dataset.atmark) {
         const key = b.dataset.id + ':' + b.dataset.atmark;
