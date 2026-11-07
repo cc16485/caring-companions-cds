@@ -11801,6 +11801,7 @@ function renderProfile() {
         (plan && authUnits !== null && plan.monthlyUnits !== authUnits
           ? '<div class="alert alert-warn" style="font-size:13px;margin-top:10px">The ' + (slim ? 'state scheduling worksheet' : 'care plan') + ' totals ' + plan.monthlyUnits + ' units a month against ' + authUnits + ' authorized.</div>' : '')
       : '<p style="font-size:14px;color:var(--danger);margin:12px 0"><strong>No authorization on file.</strong></p>') +
+    '<div style="margin:8px 0 4px">' + btn(auth ? 'Upload a new authorization (PDF)' : 'Upload the authorization (PDF)', "profAuthPick('" + c.id + "')", !!auth) + '</div><div id="profAuthMsg" style="font-size:13px;margin-bottom:6px"></div>' +
     line(slim ? 'State scheduling worksheet' : 'Care plan', plan ? plan.monthlyUnits + ' units a month' : (slim ? 'none on file' : 'no calendar on file')) +
     evvLine(c, line) +
     '<div style="margin-top:12px">' + btn(slim ? 'Authorized tasks' : 'Care plan', "openCarePlan('" + c.id + "')", true) + '</div>';
@@ -12330,6 +12331,45 @@ function parseAuthorizationPdf(text, fileName) {
 const isoOf = us => { const p = us.split('/'); return p[2] + '-' + p[0] + '-' + p[1]; };
 const titleCaseName = s => s.trim().toLowerCase().split(/\s+/)
   .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+// Upload the DSDS authorization from a consumer's own profile (2026-11-06, her ask). Same reader and the same
+// record as the Authorizations page, but the file is for THIS consumer: it is saved only when the DCN on the PDF
+// matches theirs, or, with no DCN on their profile, when the name matches (then the DCN is filled in from it).
+// The PDF is kept in their Documents like the Authorizations page does. Says every outcome; nothing silent.
+function profAuthPick(cid) {
+  let inp = document.getElementById('profAuthFile');
+  if (!inp) { inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.pdf'; inp.id = 'profAuthFile'; inp.style.display = 'none'; document.body.appendChild(inp); }
+  inp.onchange = () => { const f = inp.files && inp.files[0]; inp.value = ''; if (f) profAuthUpload(cid, f); };
+  inp.click();
+}
+async function profAuthUpload(cid, file) {
+  const say = (m, bad) => { const el = document.getElementById('profAuthMsg'); if (el) el.innerHTML = '<span style="color:' + (bad ? 'var(--danger)' : 'var(--success)') + '">' + m + '</span>'; else _ghlToast((bad ? '⚠️ ' : '✅ ') + m.replace(/<[^>]+>/g, ''), bad); };
+  say('<span style="color:var(--gray-600)">Reading ' + esc(file.name) + '…</span>');
+  const consumers = getData('consumers'), c = consumers.find(x => x.id === cid);
+  if (!c) return say('That consumer is gone. Reload the page.', true);
+  let r;
+  try { await prLoadPdfJs(); r = parseAuthorizationPdf(await pdfText(file), file.name); }
+  catch (e) { return say('Could not read ' + esc(file.name) + ': ' + esc(e.message || e) + '. Nothing was saved.', true); }
+  if (r.error) return say('This does not look like a DSDS authorization (' + esc(r.error) + '). Nothing was saved. Other papers go on the Documents tab.', true);
+  const strip = d => String(d || '').replace(/\D/g, '').replace(/^0+/, '');
+  const mine = strip(c.dcn), theirs = strip(r.dcn);
+  if (mine && theirs && mine !== theirs) return say('This authorization is for DCN ' + esc(r.dcn) + (r.name ? ' (' + esc(r.name) + ')' : '') + ', but ' + esc(c.name) + '\'s DCN is ' + esc(c.dcn) + '. Nothing was saved. Check you picked the right file.', true);
+  if (!mine && r.name && prNorm(r.name) !== prNorm(c.name)) return say('This authorization is for ' + esc(r.name) + ', not ' + esc(c.name) + '. Nothing was saved. If it is them under another name, add their DCN to the profile first.', true);
+  let kept = '';
+  if (_db) {
+    try { const doc = await _saveConsumerDoc(c, file, { kind: 'careplan', date: r.planStart || _todayIso(), with: 'DHSS', about: 'Authorization ' + (r.planStart || '') + ' to ' + (r.planEnd || '') });
+          c.docs = (c.docs || []).concat([doc]); }
+    catch (e) { kept = ' The PDF itself was not kept (' + esc(e.message || e) + '): add it on the Documents tab.'; }
+  }
+  if (!mine && theirs) c.dcn = r.dcn;
+  r.consumer = c.name;
+  const store = getAuths();
+  store.records[(r.dcn || r.name || c.name).toUpperCase()] = r;
+  setObj('authorizations', { loadedAt: _todayIso(), unitMinutes: store.unitMinutes, records: store.records });
+  setData('consumers', consumers);
+  renderProfile();
+  say('Authorization saved: ' + esc(_niceDay(r.planStart)) + ' to ' + esc(_niceDay(r.planEnd)) + '.' + kept, !!kept);
+}
 
 async function importAuthorizations(event) {
   const files = [...event.target.files];
@@ -17966,7 +18006,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=11"></script>
+<script src="starting/hub-starting.js?v=12"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>
