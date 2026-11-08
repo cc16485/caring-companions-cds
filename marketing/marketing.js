@@ -22,6 +22,48 @@
     { title: 'CDS Caregiver Directory', file: 'caregiver-directory.mp4', poster: 'caregiver-directory-poster.jpg', made: 'Oct 16, 2026', size: '1080 by 1080, for the Facebook feed',
       about: 'Samantha’s voice. Families without a caregiver can ask us to help find one at findcdscaregivers.com.' },
   ];
+  // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
+  // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
+  // Files here are 720 by 1280 copies; full size masters are in ~/Claude/Projects/cds-facebook-daily/videos.
+  const REELS = [  // [Facebook date, title, who it is for, seconds]
+    ['2026-11-25', "Build your caregiver profile in about 10 minutes", "Caregivers: create your profile at findcdscaregivers.com", 25],
+    ['2026-12-02', "Greene County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2026-12-09', "Caregivers wanted in Jasper County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2026-12-16', "Taney County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2026-12-23', "Every CDS family needs a backup caregiver", "Families: find a caregiver or a backup caregiver", 26],
+    ['2026-12-30', "Caregivers wanted in Christian County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-01-06', "Newton County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 26],
+    ['2027-01-13', "Caregivers wanted in Laclede County", "Caregivers: create your profile at findcdscaregivers.com", 25],
+    ['2027-01-20', "Meet a caregiver before you decide", "Families: find a caregiver or a backup caregiver", 26],
+    ['2027-01-27', "Phelps County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-02-03', "Caregivers wanted in Polk County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-02-10', "Pulaski County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-02-17', "Record a short intro video for families", "Caregivers: create your profile at findcdscaregivers.com", 22],
+    ['2027-02-24', "Caregivers wanted in Barry County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-03-03', "Lawrence County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 26],
+    ['2027-03-10', "Caregivers wanted in Camden County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-03-17', "The state screening, explained", "Caregivers: create your profile at findcdscaregivers.com", 21],
+    ['2027-03-24', "Stone County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 26],
+    ['2027-03-31', "Caregivers wanted in Webster County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-04-07', "Texas County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-04-14', "Get paid to care for a loved one", "Families: find a caregiver or a backup caregiver", 27],
+    ['2027-04-21', "Caregivers wanted in Vernon County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-04-28', "Wright County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 26],
+    ['2027-05-05', "Caregivers wanted in Dallas County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-05-12', "You're the boss in CDS", "Families: find a caregiver or a backup caregiver", 17],
+    ['2027-05-19', "McDonald County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-05-26', "Caregivers wanted in Benton County", "Caregivers: create your profile at findcdscaregivers.com", 23],
+    ['2027-06-02', "Douglas County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-06-09', "Fill-in caregiving that fits your life", "Caregivers: create your profile at findcdscaregivers.com", 19],
+    ['2027-06-16', "Caregivers wanted in Cedar County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+    ['2027-06-23', "Barton County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-06-30', "Caregivers wanted in St. Clair County", "Caregivers: create your profile at findcdscaregivers.com", 23],
+    ['2027-07-07', "Already in CDS? You can switch.", "Families: find a caregiver or a backup caregiver", 23],
+    ['2027-07-14', "Dade County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-07-21', "Caregivers wanted in Hickory County", "Caregivers: create your profile at findcdscaregivers.com", 23],
+    ['2027-07-28', "Ozark County: find a caregiver or a backup caregiver", "Families: find a caregiver or a backup caregiver", 25],
+    ['2027-08-04', "Caregivers wanted in Greene County", "Caregivers: create your profile at findcdscaregivers.com", 24],
+  ];
   const ADS = [
     { key: 'ad1', name: 'Get paid to care', files: ['ad1-get-paid-square.jpg', 'ad1-get-paid-story.jpg'],
       primary: "In Missouri's CDS program, the person who needs help at home chooses their own caregiver. That can be a son, daughter, grandchild, other relative or friend.\n\nCaring Companions pays CDS caregivers $15 to $16 an hour, every Thursday, and handles the payroll taxes.\n\nAnswer a few quick questions to see if your family may qualify. It takes about 2 minutes.",
@@ -71,7 +113,7 @@
   function html() {
     return '<div class="mk">' +
       '<div class="mk-head"><h2>Marketing</h2><p>Everything we have made to market CDS, in one place. Download the files, copy the text, and use the tracked links so each sign-up shows where it came from on Leads.</p>' +
-      '<nav>' + [['mk-signup', 'Sign-up links'], ['mk-videos', 'Videos'], ['mk-ads', 'Ads'], ['mk-photos', 'Photos'], ['mk-texts', 'Texts for leads'], ['mk-post', 'A post'], ['mk-flyer', 'Flyer QR'], ['mk-links', 'Tracked links'], ['mk-rules', 'Facebook rules']]
+      '<nav>' + [['mk-signup', 'Sign-up links'], ['mk-videos', 'Videos'], ['mk-reels', 'Weekly Reels'], ['mk-ads', 'Ads'], ['mk-photos', 'Photos'], ['mk-texts', 'Texts for leads'], ['mk-post', 'A post'], ['mk-flyer', 'Flyer QR'], ['mk-links', 'Tracked links'], ['mk-rules', 'Facebook rules']]
         .map(([id, l]) => '<a href="#" data-mk-go="' + id + '">' + l + '</a>').join('') + '</nav></div>' +
 
       '<section id="mk-signup"><h3>Sign-up links</h3><div class="mk-card">' + SIGNUP.map(([l, u]) => field(l, u, 'mk-url')).join('') + '</div></section>' +
@@ -79,6 +121,11 @@
       '<section id="mk-videos"><h3>Videos</h3><div class="mk-grid mk-grid2">' + VIDEOS.map(v =>
         '<div class="mk-card"><video controls preload="none" playsinline poster="' + M + esc(v.poster) + '" src="' + M + esc(v.file) + '"></video>' +
         '<b class="mk-title">' + esc(v.title) + '</b><p class="mk-note">' + esc(v.about) + '</p><p class="mk-note">' + esc(v.size) + '. Made ' + esc(v.made) + '.</p>' + dl(v.file, 'Download video') + '</div>').join('') + '</div></section>' +
+
+      '<section id="mk-reels"><h3>Weekly Reels for Facebook</h3><p class="mk-note">' + REELS.length + ' short videos, scheduled on the Caring Companions CDS Facebook Page every Wednesday at 6 pm. Samantha’s voice and real findcdscaregivers.com screens; screens with made-up people say Example. Each is also fine for Instagram, Stories or TikTok.</p><div class="mk-grid mk-grid3">' + REELS.map(([d, t, who, sec]) => {
+        const f = 'reel-' + d + '.mp4', when = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+        return '<div class="mk-card"><video controls preload="none" playsinline poster="' + M + 'reel-' + esc(d) + '-poster.jpg" src="' + M + esc(f) + '"></video>' +
+          '<b class="mk-title">' + esc(t) + '</b><p class="mk-note">' + esc(who) + '. ' + esc(sec) + ' seconds. On Facebook ' + esc(when) + '.</p>' + dl(f, 'Download video') + '</div>'; }).join('') + '</div></section>' +
 
       '<section id="mk-ads"><h3>Facebook and Instagram ads</h3>' + ADS.map(a =>
         '<div class="mk-card mk-ad"><div class="mk-adimgs">' + a.files.map(f => '<figure><img loading="lazy" src="' + M + esc(f) + '" alt="' + esc(a.name) + ' ad"><figcaption>' + (/story/.test(f) ? 'Story 1080 by 1920' : 'Square 1080 by 1080') + ' ' + dl(f) + '</figcaption></figure>').join('') + '</div>' +
@@ -130,5 +177,5 @@
     s.onload = draw; s.onerror = () => { box.textContent = 'The QR code could not load. Check the connection.'; };
     document.head.appendChild(s);
   }
-  root.CDSMarketing = { render, VIDEOS, ADS, PHOTOS, LINKS, TEXTS };
+  root.CDSMarketing = { render, VIDEOS, REELS, ADS, PHOTOS, LINKS, TEXTS };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
