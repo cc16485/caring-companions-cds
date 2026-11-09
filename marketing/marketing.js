@@ -43,6 +43,8 @@
       about: 'Samantha’s voice, 3 minutes. What counts as falsification, why “they told me to” is not a defense, and how honest mistakes get fixed. Good to send to every attendant. On the CDS YouTube channel Thursday, Apr 8 at 5 pm.' },
     { title: 'YouTube: Emergencies and Reporting, What Every CDS Caregiver Should Know', file: 'youtube-emergencies-reporting.mp4', poster: 'youtube-emergencies-reporting-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
       about: 'Samantha’s voice, 2.5 minutes. Mandated reporting, the DHSS hotline, what to report, and what to do in an emergency. Good to send to every attendant. On the CDS YouTube channel Thursday, Apr 22 at 5 pm.' },
+    { title: 'YouTube: Professional Basics for CDS Caregivers', file: 'youtube-professional-basics.mp4', poster: 'youtube-professional-basics-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
+      about: 'Samantha’s voice, 2.5 minutes. Showing up, call-offs, dignity, boundaries and privacy. Good to send to new attendants. On the CDS YouTube channel Thursday, May 6 at 5 pm.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
