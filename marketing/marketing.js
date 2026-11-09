@@ -131,7 +131,9 @@
 
       '<section id="mk-cover"><h3>Page covers</h3><p class="mk-note">Made Nov 8, 2026 to match the new caringcds.com. Words and faces stay in the middle so phones and wide screens do not cut them off.</p><div class="mk-grid">' +
         '<figure class="mk-card"><img loading="lazy" src="' + M + 'facebook-cover.jpg" alt="Facebook page cover: Get paid to care for a loved one"><figcaption>Facebook cover, 1640 by 624 ' + dl('facebook-cover.jpg') + '</figcaption></figure>' +
-        '<figure class="mk-card"><img loading="lazy" src="' + M + 'pinterest-cover.jpg" alt="Pinterest profile cover: Get paid to care for a loved one"><figcaption>Pinterest cover, 1920 by 1080 ' + dl('pinterest-cover.jpg') + '</figcaption></figure></div></section>' +
+        '<figure class="mk-card"><img loading="lazy" src="' + M + 'pinterest-cover.jpg" alt="Pinterest profile cover: Get paid to care for a loved one"><figcaption>Pinterest cover, 1920 by 1080 ' + dl('pinterest-cover.jpg') + '</figcaption></figure>' +
+        '<figure class="mk-card"><img loading="lazy" src="' + M + 'youtube-banner.jpg" alt="YouTube channel banner: Get paid to care for a loved one"><figcaption>YouTube banner, 2560 by 1440 ' + dl('youtube-banner.jpg') + '</figcaption></figure>' +
+        '<figure class="mk-card"><img loading="lazy" src="' + M + 'youtube-picture.png" alt="YouTube channel picture: Caring Companions CDS logo"><figcaption>YouTube channel picture, 512 by 512 ' + dl('youtube-picture.png') + '</figcaption></figure></div></section>' +
 
       '<section id="mk-ads"><h3>Facebook and Instagram ads</h3>' + ADS.map(a =>
         '<div class="mk-card mk-ad"><div class="mk-adimgs">' + a.files.map(f => '<figure><img loading="lazy" src="' + M + esc(f) + '" alt="' + esc(a.name) + ' ad"><figcaption>' + (/story/.test(f) ? 'Story 1080 by 1920' : 'Square 1080 by 1080') + ' ' + dl(f) + '</figcaption></figure>').join('') + '</div>' +
