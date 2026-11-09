@@ -39,6 +39,8 @@
       about: 'Samantha’s voice, 3 minutes. The plan of care, who you help, what to do when asked for more, supplies, the hours limit. Good to send to new attendants. On the CDS YouTube channel Thursday, Mar 11 at 5 pm.' },
     { title: 'YouTube: Orienting Your CDS Caregiver, the 8 Topics', file: 'youtube-orientation-8-topics.mp4', poster: 'youtube-orientation-8-topics-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
       about: 'Samantha’s voice, 3 minutes. All 8 topics Missouri asks the employer to cover with a new caregiver. Good to send new consumers before orientation. On the CDS YouTube channel Thursday, Mar 25 at 5 pm.' },
+    { title: 'YouTube: Recording Time Honestly, What Counts as Medicaid Fraud', file: 'youtube-recording-time.mp4', poster: 'youtube-recording-time-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
+      about: 'Samantha’s voice, 3 minutes. What counts as falsification, why “they told me to” is not a defense, and how honest mistakes get fixed. Good to send to every attendant. On the CDS YouTube channel Thursday, Apr 8 at 5 pm.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
