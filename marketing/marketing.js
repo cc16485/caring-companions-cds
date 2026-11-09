@@ -25,6 +25,8 @@
       about: 'Samantha’s voice, 5 minutes. Who can be paid, all 8 steps and caregiver pay. On the CDS YouTube channel Thursday, Dec 3 at 5 pm.' },
     { title: 'YouTube: What Is Consumer Directed Services? You’re the Boss', file: 'youtube-what-is-cds.mp4', poster: 'youtube-what-is-cds-poster.jpg', made: 'Nov 8, 2026', size: '1920 by 1080, for YouTube and the website',
       about: 'Samantha’s voice, 3 minutes. Who qualifies, what the caregiver helps with, being the employer and what we handle. On the CDS YouTube channel Thursday, Dec 17 at 5 pm.' },
+    { title: 'YouTube: Who Can Be a Paid Caregiver in Missouri CDS?', file: 'youtube-who-can-be-paid.mp4', poster: 'youtube-who-can-be-paid-poster.jpg', made: 'Nov 8, 2026', size: '1920 by 1080, for YouTube and the website',
+      about: 'Samantha’s voice, 3.5 minutes. Who can and cannot be paid, the guardian rule, what to do when it is the spouse, and the caregiver profile. On the CDS YouTube channel Thursday, Dec 31 at 5 pm.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
