@@ -21,6 +21,8 @@
       about: 'Samantha’s voice. Family can be the paid CDS caregiver, $15 to $16 an hour, with the pay calculator.' },
     { title: 'CDS Caregiver Directory', file: 'caregiver-directory.mp4', poster: 'caregiver-directory-poster.jpg', made: 'Oct 16, 2026', size: '1080 by 1080, for the Facebook feed',
       about: 'Samantha’s voice. Families without a caregiver can ask us to help find one at findcdscaregivers.com.' },
+    { title: 'YouTube: How to Get Paid to Care for a Family Member in Missouri', file: 'youtube-get-paid-step-by-step.mp4', poster: 'youtube-get-paid-step-by-step-poster.jpg', made: 'Nov 8, 2026', size: '1920 by 1080, for YouTube and the website',
+      about: 'Samantha’s voice, 5 minutes. Who can be paid, all 8 steps and caregiver pay. On the CDS YouTube channel Thursday, Dec 3 at 5 pm.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
