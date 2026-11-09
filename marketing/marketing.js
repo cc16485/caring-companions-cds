@@ -45,6 +45,8 @@
       about: 'Samantha’s voice, 2.5 minutes. Mandated reporting, the DHSS hotline, what to report, and what to do in an emergency. Good to send to every attendant. On the CDS YouTube channel Thursday, Apr 22 at 5 pm.' },
     { title: 'YouTube: Professional Basics for CDS Caregivers', file: 'youtube-professional-basics.mp4', poster: 'youtube-professional-basics-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
       about: 'Samantha’s voice, 2.5 minutes. Showing up, call-offs, dignity, boundaries and privacy. Good to send to new attendants. On the CDS YouTube channel Thursday, May 6 at 5 pm.' },
+    { title: 'YouTube: Clocking In the Right Way', file: 'youtube-clocking-in.mp4', poster: 'youtube-clocking-in-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
+      about: 'Samantha’s voice, 2.5 minutes. The app or the home phone, the habits that protect pay, and the correction form deadline. Good to send to every attendant. On the CDS YouTube channel Thursday, May 20 at 5 pm.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
