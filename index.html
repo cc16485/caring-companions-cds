@@ -27,7 +27,7 @@
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script>
-<script src="marketing/marketing.js?v=10"></script><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
+<script src="marketing/marketing.js?v=10"></script><script src="owners/owners.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=8"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="followups-table.js?v=1"></script><!-- 2026-11-05 Follow-ups as one table (switch followupsTable) -->
@@ -1017,6 +1017,10 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
      instead of sitting at the top of Today. Same id, so renderCdsGoal fills it. Hash #goals. -->
 <div id="page-marketing" class="page">
   <div id="mkBody"></div>
+</div>
+
+<div id="page-owners" class="page">
+  <div id="ownersBody"></div>
 </div>
 
 <div id="page-goals" class="page">
@@ -4478,6 +4482,9 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
           <option>Family referral</option>
           <option>Current consumer referral</option>
           <option>Google / Website</option>
+          <option>Facebook</option>
+          <option>YouTube</option>
+          <option>Instagram</option>
           <option>Doctor / Hospital</option>
           <option>Social worker</option>
           <option>Other</option>
@@ -5494,6 +5501,9 @@ const SECTIONS = [
   // Marketing (her ask 2026-11-05: "I dont want this to get lost ... a marketing materials page/tab"): ads, videos,
   // photos, sign-up links and texts for leads (marketing/marketing.js). #marketing opens it.
   { id: 'marketing',  label: 'Marketing',   tabs: [] },
+  // Owners (her ask 2026-11-09: the monthly content scorecard "in the owners area on the CDS hub"): only the owners
+  // (LD_WHO_OWNERS, the same people as the switches) see the tab. owners/owners.js. #owners opens it.
+  { id: 'owners',     label: 'Owners',      tabs: [], show: () => typeof ldWhoOwner === 'function' && ldWhoOwner() },
   { id: 'help',       label: 'Help',        quiet: true, tabs: [
       { page: 'calendar',    label: 'Deadlines' },
       { page: 'compliance',  label: 'Compliance' },
@@ -5518,7 +5528,7 @@ const PAGE_TO_SECTION = (() => {
     dirtasks: 'directory', dirmessages: 'directory',
     hours: 'hours', evv: 'hours', hoursevv: 'hours',
     payroll: 'money', financials: 'money', quarterly: 'money', money: 'money',
-    guides: 'help', help: 'help', marketing: 'marketing',
+    guides: 'help', help: 'help', marketing: 'marketing', owners: 'owners',
     automations: 'help', switches: 'help', settings: 'help'
   });
   return m;
@@ -5632,6 +5642,7 @@ function showPage(id) {
     if (u) u.textContent = (document.getElementById('header_user') || {}).textContent || '';
   }
   if (id === 'marketing' && window.CDSMarketing) CDSMarketing.render();
+  if (id === 'owners' && window.CDSOwners) CDSOwners.render();
   if (id === 'careplans') loadCarePlanPrefs();
   if (id === 'quarterly') renderQuarterlyReport();
   if (id === 'financials' || id === 'payroll') renderFinancials();
