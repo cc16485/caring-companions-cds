@@ -127,6 +127,9 @@
         return '<div class="mk-card"><video controls preload="none" playsinline poster="' + M + 'reel-' + esc(d) + '-poster.jpg" src="' + M + esc(f) + '"></video>' +
           '<b class="mk-title">' + esc(t) + '</b><p class="mk-note">' + esc(who) + '. ' + esc(sec) + ' seconds. On Facebook ' + esc(when) + '.</p>' + dl(f, 'Download video') + '</div>'; }).join('') + '</div></section>' +
 
+      '<section id="mk-cover"><h3>Facebook page cover</h3><p class="mk-note">Made Nov 8, 2026 to match the new caringcds.com. 1640 by 624. Words and faces stay in the middle so phones do not cut them off.</p>' +
+        '<figure class="mk-card"><img loading="lazy" src="' + M + 'facebook-cover.jpg" alt="Facebook page cover: Get paid to care for a loved one"><figcaption>Cover photo ' + dl('facebook-cover.jpg') + '</figcaption></figure></section>' +
+
       '<section id="mk-ads"><h3>Facebook and Instagram ads</h3>' + ADS.map(a =>
         '<div class="mk-card mk-ad"><div class="mk-adimgs">' + a.files.map(f => '<figure><img loading="lazy" src="' + M + esc(f) + '" alt="' + esc(a.name) + ' ad"><figcaption>' + (/story/.test(f) ? 'Story 1080 by 1920' : 'Square 1080 by 1080') + ' ' + dl(f) + '</figcaption></figure>').join('') + '</div>' +
         '<div class="mk-adtxt"><b class="mk-title">' + esc(a.key.toUpperCase()) + ': ' + esc(a.name) + '</b>' + field('Primary text', a.primary, 'mk-pre') + field('Headline', a.headline) + field('Description', a.desc) +
