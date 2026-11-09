@@ -33,6 +33,8 @@
       about: 'Samantha’s voice, 2.5 minutes. Why a backup caregiver matters and how Find CDS Caregivers helps families meet one. On the CDS YouTube channel Thursday, Jan 28 at 5 pm.' },
     { title: 'YouTube: How to Make Your Caregiver Profile on Find CDS Caregivers', file: 'youtube-caregiver-profile.mp4', poster: 'youtube-caregiver-profile-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
       about: 'Samantha’s voice, 2.5 minutes. A screen-by-screen walk-through of the caregiver profile (example data). Good to send to caregivers who want the work. On the CDS YouTube channel Thursday, Feb 11 at 5 pm.' },
+    { title: 'YouTube: Switching CDS Agencies in Missouri', file: 'youtube-switching.mp4', poster: 'youtube-switching-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
+      about: 'Samantha’s voice, 2.5 minutes. What stays the same when a family switches to us, what can change, and how the switch goes. On the CDS YouTube channel Thursday, Feb 25 at 5 pm.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
