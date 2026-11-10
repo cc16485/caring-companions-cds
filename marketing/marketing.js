@@ -48,17 +48,29 @@
     { title: 'YouTube: Clocking In the Right Way', file: 'youtube-clocking-in.mp4', poster: 'youtube-clocking-in-poster.jpg', made: 'Nov 9, 2026', size: '1920 by 1080, for YouTube and the website',
       about: 'Samantha’s voice, 2.5 minutes. The app or the home phone, the habits that protect pay, and the correction form deadline. Good to send to every attendant. On the CDS YouTube channel Thursday, May 20 at 5 pm.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 1: You’re Already Doing the Work', file: 'youtube-getting-paid-part-1.mp4', poster: 'youtube-getting-paid-part-1-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
-      about: 'Samantha’s voice, 7.5 minutes. Part 1 of a 6-part story series: Ray, 74, and his daughter Rosa learn what CDS is, who it’s for, who can be paid, and that Ray is the boss. Good to send families who are already caring for a parent. Not scheduled on YouTube yet.' },
+      about: 'Samantha’s voice, 7.5 minutes. Part 1 of a 6-part story series: Ray, 74, and his daughter Rosa learn what CDS is, who it’s for, who can be paid, and that Ray is the boss. Good to send families who are already caring for a parent. On the CDS YouTube channel Sundays from Jan 10, 2027, at 5 pm.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 2: Dad Is the Boss', file: 'youtube-getting-paid-part-2.mp4', poster: 'youtube-getting-paid-part-2-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
-      about: 'Samantha’s voice, 6 minutes. Ray isn’t sure he wants his daughter on the payroll. Who works for whom in CDS, what being the employer takes, what we handle, and hiring family. Not scheduled on YouTube yet.' },
+      about: 'Samantha’s voice, 6 minutes. Ray isn’t sure he wants his daughter on the payroll. Who works for whom in CDS, what being the employer takes, what we handle, and hiring family. On the CDS YouTube channel Sundays from Jan 10, 2027, at 5 pm.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 3: Getting Approved', file: 'youtube-getting-paid-part-3.mp4', poster: 'youtube-getting-paid-part-3-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
-      about: 'Samantha’s voice, 6 minutes. The state assessment (tell the truth about the hard days), the signing packet, the two tax numbers, the caregiver’s screening and orientation, and the waiting. Not scheduled on YouTube yet.' },
+      about: 'Samantha’s voice, 6 minutes. The state assessment (tell the truth about the hard days), the signing packet, the two tax numbers, the caregiver’s screening and orientation, and the waiting. On the CDS YouTube channel Sundays from Jan 10, 2027, at 5 pm.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 4: Clocking In', file: 'youtube-getting-paid-part-4.mp4', poster: 'youtube-getting-paid-part-4-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
-      about: 'Samantha’s voice, 6 minutes. Rosa’s first paid shift: the practice run, clocking in and out, what’s on the plan, family time vs paid time, the correction form, honest time, and the Thursday paycheck. Good to send new family caregivers. Not scheduled on YouTube yet.' },
+      about: 'Samantha’s voice, 6 minutes. Rosa’s first paid shift: the practice run, clocking in and out, what’s on the plan, family time vs paid time, the correction form, honest time, and the Thursday paycheck. Good to send new family caregivers. On the CDS YouTube channel Sundays from Jan 10, 2027, at 5 pm.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 5: When Rosa Needs a Break', file: 'youtube-getting-paid-part-5.mp4', poster: 'youtube-getting-paid-part-5-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
-      about: 'Samantha’s voice, 6 minutes. Rosa gets sick and there’s no plan. Ray interviews and hires his granddaughter as backup. Backup plans, one caregiver at a time, rest for the main caregiver, and Find CDS Caregivers. Not scheduled on YouTube yet.' },
+      about: 'Samantha’s voice, 6 minutes. Rosa gets sick and there’s no plan. Ray interviews and hires his granddaughter as backup. Backup plans, one caregiver at a time, rest for the main caregiver, and Find CDS Caregivers. On the CDS YouTube channel Sundays from Jan 10, 2027, at 5 pm.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 6: A Year Later', file: 'youtube-getting-paid-part-6.mp4', poster: 'youtube-getting-paid-part-6-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
-      about: 'Samantha’s voice, 5 minutes. The last part: a year later, the monthly check-in and yearly visit, telling us about health changes, when the plan stops fitting, daughter and caregiver, and Ray’s Thanksgiving toast. Not scheduled on YouTube yet.' },
+      about: 'Samantha’s voice, 5 minutes. The last part: a year later, the monthly check-in and yearly visit, telling us about health changes, when the plan stops fitting, daughter and caregiver, and Ray’s Thanksgiving toast. On the CDS YouTube channel Sundays from Jan 10, 2027, at 5 pm.' },
+    { title: 'Instagram clip: Getting Paid to Care for Dad, Part 1: You’re Already Doing the Work', file: 'instagram-getting-paid-part-1.mp4', poster: 'instagram-getting-paid-part-1-poster.jpg', made: 'Nov 10, 2026', size: '1080 by 1920, for Instagram Reels, Stories and TikTok',
+      about: 'Samantha’s voice with captions, about 1.5 minutes, cut from Part 1. On the CDS Instagram Saturday, Jan 16, 2027 at noon.' },
+    { title: 'Instagram clip: Getting Paid to Care for Dad, Part 2: Dad Is the Boss', file: 'instagram-getting-paid-part-2.mp4', poster: 'instagram-getting-paid-part-2-poster.jpg', made: 'Nov 10, 2026', size: '1080 by 1920, for Instagram Reels, Stories and TikTok',
+      about: 'Samantha’s voice with captions, about 1.5 minutes, cut from Part 2. On the CDS Instagram Saturday, Jan 23, 2027 at noon.' },
+    { title: 'Instagram clip: Getting Paid to Care for Dad, Part 3: Getting Approved', file: 'instagram-getting-paid-part-3.mp4', poster: 'instagram-getting-paid-part-3-poster.jpg', made: 'Nov 10, 2026', size: '1080 by 1920, for Instagram Reels, Stories and TikTok',
+      about: 'Samantha’s voice with captions, about 1.5 minutes, cut from Part 3. On the CDS Instagram Saturday, Jan 30, 2027 at noon.' },
+    { title: 'Instagram clip: Getting Paid to Care for Dad, Part 4: Clocking In', file: 'instagram-getting-paid-part-4.mp4', poster: 'instagram-getting-paid-part-4-poster.jpg', made: 'Nov 10, 2026', size: '1080 by 1920, for Instagram Reels, Stories and TikTok',
+      about: 'Samantha’s voice with captions, about 1.5 minutes, cut from Part 4. On the CDS Instagram Saturday, Feb 6, 2027 at noon.' },
+    { title: 'Instagram clip: Getting Paid to Care for Dad, Part 5: When Rosa Needs a Break', file: 'instagram-getting-paid-part-5.mp4', poster: 'instagram-getting-paid-part-5-poster.jpg', made: 'Nov 10, 2026', size: '1080 by 1920, for Instagram Reels, Stories and TikTok',
+      about: 'Samantha’s voice with captions, about 1.5 minutes, cut from Part 5. On the CDS Instagram Saturday, Feb 13, 2027 at noon.' },
+    { title: 'Instagram clip: Getting Paid to Care for Dad, Part 6: A Year Later', file: 'instagram-getting-paid-part-6.mp4', poster: 'instagram-getting-paid-part-6-poster.jpg', made: 'Nov 10, 2026', size: '1080 by 1920, for Instagram Reels, Stories and TikTok',
+      about: 'Samantha’s voice with captions, about 1.5 minutes, cut from Part 6. On the CDS Instagram Saturday, Feb 20, 2027 at noon.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
@@ -116,6 +128,14 @@
       primary: "In CDS, your loved one stays the boss. They choose their caregiver and set the schedule.\n\nYou get paid $15 to $16 an hour, every Thursday, for the approved hours you work.\n\nAnswer a few quick questions to see if they may qualify.",
       headline: 'They stay in charge. You get paid to help.', desc: '27 Southwest Missouri counties' },
   ];
+  const PRINTABLES = [  // Getting Paid to Care for Dad, one free page per video (also on caringcds.com/getting-paid/)
+    ['getting-paid-1-is-cds-a-fit-for-our-family.pdf', 'Part 1: Is CDS a Fit for Our Family?'],
+    ['getting-paid-2-our-family-s-cds-plan.pdf', "Part 2: Our Family's CDS Plan"],
+    ['getting-paid-3-getting-started-with-cds-the-steps.pdf', 'Part 3: Getting Started with CDS: the Steps'],
+    ['getting-paid-4-clocking-in-the-habits-and-the-fixes.pdf', 'Part 4: Clocking In: the Habits and the Fixes'],
+    ['getting-paid-5-our-backup-plan.pdf', 'Part 5: Our Backup Plan'],
+    ['getting-paid-6-our-yearly-check-in.pdf', 'Part 6: Our Yearly Check-In'],
+  ];
   const PHOTOS = [
     ['photo-g-garden.jpg', 'A walk in the garden'], ['photo-m-mom-charge.jpg', 'Mom stays in charge'], ['photo-p-phone.jpg', 'Looking at the phone together'],
     ['photo-k-kitchen.jpg', 'Help in the kitchen'], ['photo-d-dressing.jpg', 'Help getting dressed'], ['photo-t-tired.jpg', 'A tired caregiver with the bills'],
@@ -151,7 +171,7 @@
   function html() {
     return '<div class="mk">' +
       '<div class="mk-head"><h2>Marketing</h2><p>Everything we have made to market CDS, in one place. Download the files, copy the text, and use the tracked links so each sign-up shows where it came from on Leads.</p>' +
-      '<nav>' + [['mk-signup', 'Sign-up links'], ['mk-videos', 'Videos'], ['mk-reels', 'Weekly Reels'], ['mk-ads', 'Ads'], ['mk-photos', 'Photos'], ['mk-texts', 'Texts for leads'], ['mk-post', 'A post'], ['mk-flyer', 'Flyer QR'], ['mk-links', 'Tracked links'], ['mk-rules', 'Facebook rules']]
+      '<nav>' + [['mk-signup', 'Sign-up links'], ['mk-videos', 'Videos'], ['mk-printables', 'Printables'], ['mk-reels', 'Weekly Reels'], ['mk-ads', 'Ads'], ['mk-photos', 'Photos'], ['mk-texts', 'Texts for leads'], ['mk-post', 'A post'], ['mk-flyer', 'Flyer QR'], ['mk-links', 'Tracked links'], ['mk-rules', 'Facebook rules']]
         .map(([id, l]) => '<a href="#" data-mk-go="' + id + '">' + l + '</a>').join('') + '</nav></div>' +
 
       '<section id="mk-signup"><h3>Sign-up links</h3><div class="mk-card">' + SIGNUP.map(([l, u]) => field(l, u, 'mk-url')).join('') + '</div></section>' +
@@ -159,6 +179,9 @@
       '<section id="mk-videos"><h3>Videos</h3><div class="mk-grid mk-grid2">' + VIDEOS.map(v =>
         '<div class="mk-card"><video controls preload="none" playsinline poster="' + M + esc(v.poster) + '" src="' + M + esc(v.file) + '"></video>' +
         '<b class="mk-title">' + esc(v.title) + '</b><p class="mk-note">' + esc(v.about) + '</p><p class="mk-note">' + esc(v.size) + '. Made ' + esc(v.made) + '.</p>' + dl(v.file, 'Download video') + '</div>').join('') + '</div></section>' +
+
+      '<section id="mk-printables"><h3>Printables: Getting Paid to Care for Dad</h3><p class="mk-note">One free page for each part of the series, Letter size, 1 page each. Also free to download at caringcds.com/getting-paid. Good to hand a family or send after a call.</p><div class="mk-card">' + PRINTABLES.map(([f, l]) =>
+        '<p class="mk-rule"><a href="' + M + esc(f) + '" target="_blank" rel="noopener"><b>' + esc(l) + '</b></a> ' + dl(f, 'Download PDF') + '</p>').join('') + field('Series page', 'https://caringcds.com/getting-paid/', 'mk-url') + '</div></section>' +
 
       '<section id="mk-reels"><h3>Weekly Reels for Facebook</h3><p class="mk-note">' + REELS.length + ' short videos, scheduled on the Caring Companions CDS Facebook Page every Wednesday at 6 pm. Samantha’s voice and real findcdscaregivers.com screens; screens with made-up people say Example. Each is also fine for Instagram, Stories or TikTok.</p><div class="mk-grid mk-grid3">' + REELS.map(([d, t, who, sec]) => {
         const f = 'reel-' + d + '.mp4', when = new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -221,5 +244,5 @@
     s.onload = draw; s.onerror = () => { box.textContent = 'The QR code could not load. Check the connection.'; };
     document.head.appendChild(s);
   }
-  root.CDSMarketing = { render, VIDEOS, REELS, ADS, PHOTOS, LINKS, TEXTS };
+  root.CDSMarketing = { render, VIDEOS, PRINTABLES, REELS, ADS, PHOTOS, LINKS, TEXTS };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
