@@ -31,7 +31,7 @@ with sync_playwright() as pw:
         vids = pg.evaluate("""async()=>Promise.all([...document.querySelectorAll('#page-marketing video')].map(v => fetch(v.getAttribute('src'), { method: 'HEAD' }).then(r => r.status)))""")
         ck(tag + ': every video file is there', vids == [200] * 58, [x for x in vids if x != 200])
         dls = pg.evaluate("()=>[...document.querySelectorAll('#page-marketing a.mk-dl')].length")
-        ck(tag + ': a Download button for every file (21 videos, 37 Reels, 4 covers, 6 ads, 6 photos)', dls == 74, dls)
+        ck(tag + ': a Download button for every file (21 videos, 6 printables, 37 Reels, 4 covers, 6 ads, 6 photos)', dls == 80, dls)
         txt = pg.inner_text('#page-marketing')
         ck(tag + ': sign-up links, texts, post and rules are there', all(x in txt for x in ['caringcds.com/start/?for=self', 'Texts for leads', 'Did you know?', 'Employment special ad category']), txt[:300])
         ck(tag + ': no em dashes', '—' not in txt)
