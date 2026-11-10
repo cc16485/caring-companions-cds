@@ -53,6 +53,8 @@
       about: 'Samantha’s voice, 6 minutes. Ray isn’t sure he wants his daughter on the payroll. Who works for whom in CDS, what being the employer takes, what we handle, and hiring family. Not scheduled on YouTube yet.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 3: Getting Approved', file: 'youtube-getting-paid-part-3.mp4', poster: 'youtube-getting-paid-part-3-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
       about: 'Samantha’s voice, 6 minutes. The state assessment (tell the truth about the hard days), the signing packet, the two tax numbers, the caregiver’s screening and orientation, and the waiting. Not scheduled on YouTube yet.' },
+    { title: 'YouTube series: Getting Paid to Care for Dad, Part 4: Clocking In', file: 'youtube-getting-paid-part-4.mp4', poster: 'youtube-getting-paid-part-4-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
+      about: 'Samantha’s voice, 6 minutes. Rosa’s first paid shift: the practice run, clocking in and out, what’s on the plan, family time vs paid time, the correction form, honest time, and the Thursday paycheck. Good to send new family caregivers. Not scheduled on YouTube yet.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
