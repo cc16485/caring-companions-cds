@@ -51,6 +51,8 @@
       about: 'Samantha’s voice, 7.5 minutes. Part 1 of a 6-part story series: Ray, 74, and his daughter Rosa learn what CDS is, who it’s for, who can be paid, and that Ray is the boss. Good to send families who are already caring for a parent. Not scheduled on YouTube yet.' },
     { title: 'YouTube series: Getting Paid to Care for Dad, Part 2: Dad Is the Boss', file: 'youtube-getting-paid-part-2.mp4', poster: 'youtube-getting-paid-part-2-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
       about: 'Samantha’s voice, 6 minutes. Ray isn’t sure he wants his daughter on the payroll. Who works for whom in CDS, what being the employer takes, what we handle, and hiring family. Not scheduled on YouTube yet.' },
+    { title: 'YouTube series: Getting Paid to Care for Dad, Part 3: Getting Approved', file: 'youtube-getting-paid-part-3.mp4', poster: 'youtube-getting-paid-part-3-poster.jpg', made: 'Nov 10, 2026', size: '1920 by 1080, for YouTube and the website (smaller copy here)',
+      about: 'Samantha’s voice, 6 minutes. The state assessment (tell the truth about the hard days), the signing packet, the two tax numbers, the caregiver’s screening and orientation, and the waiting. Not scheduled on YouTube yet.' },
   ];
   // Weekly Reels (2026-11-08, Samantha: push findcdscaregivers.com, find a caregiver or a backup caregiver, recruit caregivers to
   // build profiles, weekly videos). Scheduled in Blotato on the CDS Facebook Page, Wednesdays 6 pm. Her voice, real screens.
