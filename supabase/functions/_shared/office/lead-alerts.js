@@ -494,7 +494,10 @@ export function createLeadAlerts(deps) {
           .map(r => ({ name: [r.first_name, r.last_name].filter(Boolean).join(' ') + ' (caregiver)', why: String(r.ghl_status).replace(/^failed: /, '') })))
         .concat(siteLeads.filter(r => String(r.ghl_note_status || '').startsWith('failed')).map(r => ({ name: R.siteLeadName(r), why: 'form note: ' + String(r.ghl_note_status).replace(/^failed: /, '') })))
         .concat((await q(`select first_name, last_name, ghl_note_status from attendant_pool where not coalesce(archived,false) and ghl_note_status like 'failed%'`).catch(() => []))
-          .map(r => ({ name: [r.first_name, r.last_name].filter(Boolean).join(' ') + ' (caregiver)', why: 'form note: ' + String(r.ghl_note_status).replace(/^failed: /, '') }))),
+          .map(r => ({ name: [r.first_name, r.last_name].filter(Boolean).join(' ') + ' (caregiver)', why: 'form note: ' + String(r.ghl_note_status).replace(/^failed: /, '') })))
+        // and (email-welcome.js, 2026-11-11) a worksheet email sign-up whose welcome email did not go
+        .concat((await q(`select first_name, fail from cds_email_signups where stopped_at is null and fail is not null`).catch(() => []))
+          .map(r => ({ name: (r.first_name || 'Someone') + ' (email sign-up)', why: 'welcome email: ' + r.fail }))),
     };
     const ownersRow = await setting('switch_owners', []);
     const owners = (Array.isArray(ownersRow) ? ownersRow : []).map(e => String(e).toLowerCase());
