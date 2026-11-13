@@ -210,7 +210,9 @@
         ...(data.quarterStatus ? [reportsDue(data.quarterStatus, now)].filter(r => r.length).map(r => ({
           t: plural(r.length, 'state report or tax filing', 'state reports and tax filings') + ' due', go: 'calendar', bad: r.some(x => x.late || x.days <= 7),
           people: r.map(x => ({ name: x.title, why: x.late ? 'late' : x.days === 0 ? 'due today' : plural(x.days, 'day', 'days') + ' left', due: x.due, key: x.key, act: 'report' })) })) : []),
-        ...(data.agencyDates ? agencyDatesDue(data.agencyDates, now) : [])
+        ...(data.agencyDates ? agencyDatesDue(data.agencyDates, now) : []),
+        // The daily Fusion look (2026-11-13), only when the caller hands fusionCheck in (the hub does).
+        ...(data.fusionCheck ? fusionDue(data.fusionCheck, now) : [])
       ].filter(Boolean),
       clear: 'Nothing outstanding with the state.'
     });
@@ -398,6 +400,18 @@
     });
     return ppl.length ? [{ t: plural(ppl.length, 'checklist item', 'checklist items') + ' due this period', go: 'compliance',
                            people: ppl.sort((a, b) => a.due.localeCompare(b.due)) }] : [];
+  }
+  // Fusion, every weekday (2026-11-13). Since May 1, 2026 DSDS tells vendors about new, changed and
+  // closed care plans only in Fusion's queues (DHSS memo INFO 04-26-01), so somebody has to look.
+  // fusionCheck = { at: 'yyyy-mm-dd', by } from the Checked button; done for the day it was pressed.
+  function fusionDue(fusionCheck, now) {
+    now = now || new Date();
+    if (now.getDay() === 0 || now.getDay() === 6) return [];
+    const today = isoLocal(now), at = String((fusionCheck || {}).at || '').slice(0, 10);
+    if (at === today) return [];
+    return [{ t: 'Check Fusion today for new, changed and closed care plans', go: 'authorizations',
+              people: [{ name: "Fusion: Proposed Care Plans, Closed Care Plans, My Agency's Participants",
+                         why: at ? 'last checked ' + monDay(at) : 'not checked yet', due: today, key: 'fusion', act: 'fusion' }] }];
   }
   // Yearly agency dates she types in on the Deadlines page (her picks 2026-10-23). agencyDates =
   // agency_data 'agencyDates' { [key]: { due: 'yyyy-mm-dd', done: 'yyyy-mm-dd'? } }. Shown on step 1
@@ -1225,7 +1239,7 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    dailyRoutine, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, fusionDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT, caregiverPlan, CAREGIVER_PLAN,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems,

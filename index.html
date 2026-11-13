@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=36"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=37"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script>
 <script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
@@ -1819,7 +1819,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       <tbody>
         <tr><td><strong>Pay Period Cycle</strong></td><td>Sunday – Saturday (weekly)</td><td>Matches EVV visit verification window</td></tr>
         <tr><td><strong>Direct Deposit Day</strong></td><td>Thursday</td><td>Wednesday before Thanksgiving, Christmas, New Year's</td></tr>
-        <tr><td><strong>EVV Correction Form Due</strong></td><td>Saturday 11:59 PM</td><td>Submit via <a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light)">mycaringcds.com</a> — no exceptions</td></tr>
+        <tr><td><strong>EVV Correction Form Due</strong></td><td>Saturday 11:59 PM</td><td>Submit at <a href="https://hub.caringcds.com/evv-form" target="_blank" style="color:var(--primary-light)">hub.caringcds.com/evv-form</a>, no exceptions</td></tr>
         <tr><td><strong>Pay Rate</strong></td><td>$15.00 to $16.00/hour</td><td>Per consumer employment agreement</td></tr>
         <tr><td><strong>EVV Vendor</strong></td><td>WellSky Personal Care</td><td>Syncs to Sandata EVV Aggregator (EAS)</td></tr>
         <tr><td><strong>Holiday Pay Dates</strong></td><td>Wed (day before holiday)</td><td>Thanksgiving Nov 26, Christmas Dec 24, New Year's Dec 31</td></tr>
@@ -2123,7 +2123,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
 
   <!-- ── ONBOARDING SUB-SECTION ── -->
   <div id="gsub-onboarding">
-  <div class="section-title" style="margin-bottom:16px">Onboarding Checklists</div>
+  <div class="section-title" style="margin-bottom:16px">Step by step</div>
 
   <div class="card" style="margin-bottom:16px;border:2px solid #14807A">
     <div class="card-title"><span class="icon">🎓</span> Orientation Completions <button class="btn-sm" style="float:right" onclick="renderOrientCompletions(true)">↻ Refresh</button></div>
@@ -2131,6 +2131,111 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div id="orientCompletionsList" style="font-size:13px"><span style="color:var(--gray-600)">Loading&hellip;</span></div>
   </div>
 
+
+  <!-- CDS coordinator, step by step (2026-11-13, her ask: the best step by step for the coordinator, and the
+       hub set up to support it). Replaces the old New Consumer and New Attendant checklists, which described
+       the GoHighLevel way. Rules: 19 CSR 15-8, 13 CSR 70-3.320, DHSS HCBS Manual 3.25, 4.05 to 4.40,
+       DHSS memo INFO 04-26-01 (Fusion), MO HealthNet Personal Care Provider Manual 8/10/2026. -->
+  <div class="card" id="guide-coordinator-rhythm" style="margin-bottom:16px;border:2px solid #0f7a7c">
+    <div class="card-title"><span class="icon">🗓️</span> The coordinator's rhythm</div>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px">The consumer is the boss and the attendant works for them. Our job is to get each consumer to a first shift, keep their file clean while they are active, and tell the state when something changes. Start every day on <strong>Today</strong> and work the list from the top.</p>
+    <div class="cat-header">EVERY MORNING</div>
+    <ul style="margin:6px 0 10px 18px;font-size:13px;line-height:1.6">
+      <li>Work <strong>Today</strong>, steps 1 to 5. Use <strong>Mine</strong> to see your parts.</li>
+      <li>Look in <strong>Fusion</strong>: Proposed Care Plans, Closed Care Plans and My Agency's Participants. The state shows new, changed and closed care plans only there. Then tap <strong>Checked</strong> on Today.</li>
+      <li>Answer what came in on <strong>Today &gt; Follow-ups</strong>, care or safety first.</li>
+      <li>Call new leads the same day. Every lead gets a call back date.</li>
+      <li>Open <strong>Hours &amp; EVV &gt; This month</strong>: hours used against the authorization, long shifts, two attendants at once, nobody clocked out. Check with the consumer, not the attendant.</li>
+    </ul>
+    <div class="cat-header">EVERY WEEK</div>
+    <ul style="margin:6px 0 10px 18px;font-size:13px;line-height:1.6">
+      <li>Log in to the state EVV system and make sure every visit is verified. A visit that is not verified is not paid.</li>
+      <li>Finish every EVV correction form by <strong>Saturday 11:59 PM</strong>. The consumer and the attendant both sign. Someone in the office fixes the shift in WellSky, never the attendant or the consumer.</li>
+      <li>After Thursday payday, upload the Empeon Check Register and Payroll Summary on <strong>Money</strong>.</li>
+    </ul>
+    <div class="cat-header">EVERY MONTH</div>
+    <ul style="margin:6px 0 10px 18px;font-size:13px;line-height:1.6">
+      <li>One check-in call with every active consumer (<strong>Log call</strong>).</li>
+      <li>OIG check on the 11th. It runs by itself. Open the OIG card if a name matches.</li>
+    </ul>
+    <div class="cat-header">EVERY QUARTER (APR 30, JUL 31, OCT 31, JAN 31)</div>
+    <ul style="margin:6px 0 10px 18px;font-size:13px;line-height:1.6">
+      <li>Quarterly Financial and Service Report to MMAC: <strong>Money &gt; Start quarterly report</strong>.</li>
+      <li>Federal 941, MO 941 and the DES wage report for each consumer. Mark each one sent on Today.</li>
+      <li>EDL recheck on every working attendant.</li>
+    </ul>
+    <div class="cat-header">EVERY YEAR</div>
+    <ul style="margin:6px 0 4px 18px;font-size:13px;line-height:1.6">
+      <li>Face-to-face visit with each consumer, in person, in the home. Today tells you at month 10. The visitor cannot be that consumer's attendant.</li>
+      <li>For each consumer: pandemic policy given and trained, backup plan reviewed.</li>
+      <li>FCSR recheck on each attendant.</li>
+      <li>Annual Service Report, CPA audit and the MMAC manager meeting: see <strong>Deadlines</strong>.</li>
+    </ul>
+  </div>
+
+  <div class="card" id="guide-new-consumer" style="margin-bottom:16px;border:2px solid #0f7a7c">
+    <div class="card-title"><span class="icon">🧭</span> A new consumer, step by step</div>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px">These steps follow the <strong>Starting</strong> page. Each Starting profile shows one Next step. Paperwork and attendant setup can begin while the state is still working.</p>
+    <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">First call, the same day</div>
+      <div class="step-desc"><strong>Leads &gt; Add someone</strong> opens the call screen. Ask who is calling, their Medicaid number (DCN), birth date, county, whether they get CDS now, what help they need, who makes their decisions, where they live, and who they want as their attendant. The hub flags what to look into before sending anything to the state.</div></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">They say yes</div>
+      <div class="step-desc">Tap <strong>They said yes</strong>, then <strong>Yes, start the profile</strong>. They move to Starting as New to CDS or Moving from another agency.</div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Medicaid check</div>
+      <div class="step-desc">Look them up in eMOMED, upload the eligibility page and type the ME code. If a spenddown is not met, the state will not take the referral yet.</div></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Send it to the state</div>
+      <div class="step-desc"><strong>New to CDS:</strong> send the referral on the <a href="https://modhss.entellitrak.com/etk-modhss-prod/page.request.do?page=portal.referral" target="_blank" rel="noopener">DSDS referral page</a>, or call 866-835-3505 (weekdays 8:30 to 3:00). Anyone may refer.<br>
+        <strong>Moving from another agency:</strong> tell the consumer we will accept their care plan and give a start date. The consumer calls 866-835-3505, or we send the <a href="https://modhss.entellitrak.com/etk-modhss-prod/page.request.do?page=portal.pccpRequest" target="_blank" rel="noopener">PCCP request</a> for them.<br>
+        Record the request ID and the date on <strong>State and authorization</strong>.</div></div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-content"><div class="step-title">Wait on the state, and keep in touch</div>
+      <div class="step-desc">DSDS screens the referral, then visits the home within 15 business days to assess. The consumer needs 18 points or more and must be able to direct their own care. The consumer names us as their vendor. Check in when the hub flags the wait.</div></div></div>
+    <div class="step"><div class="step-num">6</div><div class="step-content"><div class="step-title">Accept the care plan in Fusion</div>
+      <div class="step-desc">A new plan shows in Fusion under Proposed Care Plans. Download the authorization, upload it to their profile and record the start date.</div></div></div>
+    <div class="step"><div class="step-num">7</div><div class="step-content"><div class="step-title">Consumer paperwork</div>
+      <div class="step-desc">Send the enrollment packet from their lead. They sign on their phone: vendor acknowledgement, EVV consent, backup plan, SS-4, 8821, 2678 and 2827. Someone moving from another agency also signs the previous vendor form and a new 2678. Then <strong>Sign as agent</strong>.</div></div></div>
+    <div class="step"><div class="step-num">8</div><div class="step-content"><div class="step-title">Tax setup</div>
+      <div class="step-desc">Follow the Next line on <strong>Tax and EIN</strong>. Have the EIN before the first shift. Type the EIN and the MO Tax ID into Fusion and upload the proof there within 90 days of the start date. A W-9 is not proof.</div></div></div>
+    <div class="step"><div class="step-num">9</div><div class="step-content"><div class="step-title">Train the consumer as the employer</div>
+      <div class="step-desc">Consumer orientation, rights and responsibilities signed, office details, pandemic policy and backup plan. Record the training date on their profile.</div></div></div>
+    <div class="step"><div class="step-num">10</div><div class="step-content"><div class="step-title">Attendant setup</div>
+      <div class="step-desc">Follow the attendant steps below. Every check is clear before any shift. An attendant cannot be the spouse, the guardian, under 18, a CDS consumer themselves, someone with past Medicaid fraud, or our own office staff.</div></div></div>
+    <div class="step"><div class="step-num">11</div><div class="step-content"><div class="step-title">Ready for first shift</div>
+      <div class="step-desc">Put the authorization and the tasks into WellSky before the start date. Ask whether they want set shifts or the attendant adds shifts as they are worked. Tell them how clock-in works and that they can call us for the first one. Tap <strong>Mark ready for first shift</strong>.</div></div></div>
+    <div class="step"><div class="step-num">12</div><div class="step-content"><div class="step-title">First shift</div>
+      <div class="step-desc">The hub moves them to Active when WellSky shows the first shift. If it comes after the start date, record why. Monthly calls, the yearly visit and the 90-day EIN clock start now.</div></div></div>
+  </div>
+
+  <div class="card" id="guide-something-changed" style="margin-bottom:16px;border:2px solid #0f7a7c">
+    <div class="card-title"><span class="icon">🔔</span> Active consumers: when something changes</div>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px">Check in with the consumer about their care and talk to the attendant as little as possible. Use <strong>Something changed</strong> on the profile so the steps land on Today.</p>
+    <ul style="margin:0 0 4px 18px;font-size:13px;line-height:1.7">
+      <li><strong>Hospital or rehab stay:</strong> no shifts on those days. Nothing can be billed while they are in a hospital or nursing facility. Call when they are home.</li>
+      <li><strong>Nursing home admission:</strong> tell DSDS when we learn of it.</li>
+      <li><strong>Needs more or fewer hours:</strong> send the online PCCP request. More hours can start any day. Fewer start the first of the next month.</li>
+      <li><strong>Moved:</strong> a new address goes to DSDS. Check the new county is one of ours.</li>
+      <li><strong>Health decline, or no longer able to direct their care:</strong> tell DSDS. If the attendant knew and did not report it, tell DSDS that too.</li>
+      <li><strong>Services not delivered as authorized:</strong> tell DSDS.</li>
+      <li><strong>Abuse, neglect or exploitation:</strong> call 800-392-0210 right away, 7 a.m. to midnight every day.</li>
+      <li><strong>A false EVV record is suspected:</strong> report to MMAC within 2 business days.</li>
+      <li><strong>Medicaid lapsed or spenddown not met:</strong> nothing can be billed for that time. Help them fix it fast.</li>
+      <li><strong>Hours:</strong> the monthly authorization is the hard limit. There is no daily limit, so a sick week can use more. Do not add shifts at month end to use up hours. One attendant at a time.</li>
+      <li><strong>Yearly reassessment:</strong> DSDS does it in the month the care plan ends. Watch end dates on <strong>Hours &amp; EVV</strong> and help DSDS reach the consumer.</li>
+      <li><strong>Consumer disagrees with a state decision:</strong> they have 90 days to ask for a hearing in writing. Asking within 10 days keeps services going.</li>
+    </ul>
+  </div>
+
+  <div class="card" id="guide-ending" style="margin-bottom:16px;border:2px solid #0f7a7c">
+    <div class="card-title"><span class="icon">🚪</span> Ending or pausing services</div>
+    <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px">Only DSDS can close a CDS case. We tell DSDS. We never close it ourselves.</p>
+    <div class="step"><div class="step-num">1</div><div class="step-content"><div class="step-title">Open Ending or pausing services on their profile</div>
+      <div class="step-desc">Pick the reason. The hub lists the steps for that reason and puts what is left on Today.</div></div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-content"><div class="step-title">Tell DSDS in writing, and the consumer too</div>
+      <div class="step-desc"><strong>Open the DSDS form</strong> and fill in the Closure section with the reason. Mail the consumer the letter the hub writes. If the consumer wants to stop, they call DSDS at 866-835-3505 to confirm.</div></div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Record what DSDS does</div>
+      <div class="step-desc">The date DSDS sent its closing notice and the last day of services. DSDS gives 10 days notice, and an appeal in that time keeps services going.</div></div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Mark inactive after DSDS closes the case</div>
+      <div class="step-desc">The hub will not let you do it sooner. Then finish <strong>Consumers &gt; Tax &amp; EIN &gt; Leaving</strong>. The EIN belongs to the consumer and goes with them.</div></div></div>
+    <div class="step-desc" style="margin-top:8px">When a consumer lets an attendant go, use <strong>No longer working</strong> on the attendant and record why, how the consumer told us, the date and their words.</div>
+  </div>
 
   <!-- CDS Attendant Onboarding, step by step (2026-10-23, her ask: step by step like the Caring Companions
        Onboarding tab, the FCSR "cannot hire" list linked, and the Good Cause Waiver steps). Each attendant's
@@ -2171,368 +2276,6 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div class="step-desc" style="margin-top:6px">Rechecks after they start: OIG every month (runs by itself), EDL every 3 months, FCSR every year. Keep FCSR and waiver papers 5 years.</div>
   </div>
 
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title"><span class="icon">👤</span> New Consumer Onboarding Checklist</div>
-      <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">All documents are collected via <strong>GoHighLevel e-sign</strong> and the orientation is self-serve, so no in-person meeting is required. The annual home visit is the only in-person contact. There is still an <strong>onboarding specialist call</strong> before the first shift, at step 11b.</p>
-
-      <div class="cat-header">STEP 1 — ELIGIBILITY & AUTHORIZATION</div>
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-content">
-          <div class="step-title">Receive &amp; Date-Stamp Authorization — Clock Starts Now</div>
-          <div class="step-desc"><strong>Stamp the date received</strong> on the authorization immediately upon receipt. Services must begin within <strong>7 calendar days</strong> (or the authorization start date, whichever is later). If you cannot start in time, place written justification in the consumer's file and send a copy to the DHSS case manager. Confirm consumer is MO HealthNet eligible, 18+, able to self-direct care.</div>
-          <div class="step-regs">Reg: 19 CSR 15-8.400 §5; P&amp;P Policy 5</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-content">
-          <div class="step-title">Review DHSS-Approved Plan of Care</div>
-          <div class="step-desc">Obtain the approved plan of care from DHSS/DSDS. Note the authorized hours, units, and specific tasks. Services must be delivered strictly per the care plan — do not provide any task not authorized.</div>
-          <div class="step-regs">Reg: CDS Program Req. §2.2</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-content">
-          <div class="step-title">Verify TPL Insurance &amp; Medicare Before Proceeding</div>
-          <div class="step-desc"><strong>Ask the consumer about other insurance coverage</strong> before billing MO HealthNet. If they have private insurance or Medicare, that must be billed first — MO HealthNet is payer of last resort. Verify via IVR: <strong>(573) 635-8908</strong> or emomed.com. Document TPL status in consumer file.</div>
-          <div class="step-regs">Reg: P&amp;P Policy 9; CDS Program Req. §3.3(c)</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 2 — CONSUMER ENROLLMENT PACKET (Hub)</div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-content">
-          <div class="step-title">Send the enrollment packet from their lead</div>
-          <div class="step-desc">Open their lead in Leads and press <strong>Send enrollment packet</strong>. They get a private link by text and email and sign every form on their phone; what we already know is filled in. Then you sign 2678 and 2827 as the agent on the same card.
-            <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12px;line-height:1.8">
-              <li><strong>New to CDS</strong>: Consumer Vendor Acknowledgement, Authorization to Obtain Employment Numbers, Telephony/EVV Consent, Emergency Back-Up Plan, Form 8821, Form SS-4, Form 2678, Form 2827, and Form 2643A (you sign)</li>
-              <li><strong>Moving from another agency (PCCP)</strong>: the same, plus the Previous CDS Vendor Authorization, without SS-4 and 2643A</li>
-            </ul>
-            <div style="margin-top:6px">⚠️ <strong>Do NOT send the Training Acknowledgement Form in this packet</strong> — consumer must complete orientation first (Step 3 below).</div>
-          </div>
-          <div class="step-regs">Reg: CDS Program Req. §2.3(e); P&amp;P Policy 3</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 3 — CONSUMER ORIENTATION (Before Training Ack)</div>
-      <div class="step">
-        <div class="step-num">5</div>
-        <div class="step-content">
-          <div class="step-title">Direct Consumer to Complete Online Orientation</div>
-          <div class="step-desc">Send consumer to <a href="https://caringcds.com/orientation" target="_blank" style="color:var(--primary-light)"><strong>caringcds.com/orientation</strong></a> to:
-            <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12px;line-height:1.8">
-              <li>Watch the CDS orientation videos</li>
-              <li>Review the CDS Handbook</li>
-            </ul>
-            The orientation covers all required training topics: consumer eligibility, plan of care, consumer responsibilities and rights, what consumers are not allowed to do, emergency backup plan, maintaining eligibility, denial/termination/reduction, grievance procedures, disaster policy, how to recruit/hire/train/supervise attendants, vendor responsibilities, required background checks, attendant qualifications and responsibilities, mandated reporting, fraud prevention, HIPAA, EVV, allowable/non-allowable tasks, and essential transportation.
-          </div>
-          <div class="step-regs">Reg: 19 CSR 15-8.400; MMAC Vendor Responsibilities; P&amp;P Policy 7</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">6</div>
-        <div class="step-content">
-          <div class="step-title">Send Training Acknowledgement Form via GoHighLevel (After Orientation)</div>
-          <div class="step-desc">After consumer has watched the videos and reviewed the handbook, send the <strong>Consumer Training Acknowledgement Form</strong> via GoHighLevel for e-signature. This form documents that the consumer has been trained on all required CDS program topics. <strong>Acknowledgement form must be placed in consumer file.</strong> If consumer needs help, offer to walk them through orientation by phone.</div>
-          <div class="step-regs">Reg: CDS Program Req. §5.18; P&amp;P Policy 7</div>
-        </div>
-      </div>
-
-      <div class="step">
-        <div class="step-num">6b</div>
-        <div class="step-content">
-          <div class="step-title">Collect Their Scheduling Preferences</div>
-          <div class="step-desc">The state's plan of care fixes the tasks and how many days a week each one is
-            approved for. The consumer chooses <strong>which</strong> days. Take those choices on
-            <a href="https://hub.caringcds.com/care-plan/" target="_blank" rel="noopener"><strong>hub.caringcds.com/care-plan/</strong></a>,
-            which holds them to the approved number of days and will not let them pick a fourth day on a
-            three-day task.<br><br>
-            It arrives signed under <strong>Consumers → Care Plan Days</strong> laid out as a week grid to build
-            the WellSky schedule from. Tick <strong>Built in WellSky</strong> once it is in. WellSky has no open
-            API, so nothing can push it there for you.</div>
-          <div class="step-regs">Replaces the old GoHighLevel scheduling preferences document, whose signed output was an image nobody could read</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 4 — PROCESS TAX FORMS (After Signed Packet Received)</div>
-      <div class="step">
-        <div class="step-num">7</div>
-        <div class="step-content">
-          <div class="step-title">Submit SS-4 — Obtain Federal EIN for Consumer</div>
-          <div class="step-desc">Using the signed SS-4 and Authorization to Obtain Employment Numbers, obtain the consumer's Federal EIN online via irs.gov. Consumer is registered as a "Household Employer (HCSR)." Record EIN in consumer file.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">8</div>
-        <div class="step-content">
-          <div class="step-title">Submit Form 8821 &amp; Form 2678 to IRS</div>
-          <div class="step-desc">File Form 8821 (Tax Information Authorization) and Form 2678 (Appointment of Agent) with the IRS. These authorize Caring Companions to handle federal payroll tax reporting and payments on the consumer's behalf. Form 2678 covers Forms 940 and 941.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">9</div>
-        <div class="step-content">
-          <div class="step-title">Submit Form 2643A &amp; Form 2827 to Missouri</div>
-          <div class="step-desc">Submit MO Form 2643A (Tax Registration — "New Consumer-Directed Services Participant") to MO Department of Revenue. Submit Form 2827 (MO Power of Attorney — Withholding) to authorize Caring Companions for state tax matters. Mail to: Taxation Division, P.O. Box 357, Jefferson City MO 65105-0357. Note consumer's MO Tax ID when received.</div>
-          <div class="step-regs">MO Revenue: (573) 751-5860 | businesstaxregister@dor.mo.gov</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">10</div>
-        <div class="step-content">
-          <div class="step-title">Register Consumer in UInteract (DES) — Missouri UI Tax Only</div>
-          <div class="step-desc">
-            ⚠️ <strong>Timing:</strong> UInteract registration can ONLY happen AFTER first payroll is issued AND consumer has paid at least $1,000 in wages in a single quarter. Do not attempt before then — DES will not issue an account number.<br><br>
-            <strong>NEW Consumer (never had a CDS vendor before):</strong><br>
-            Login to uinteract.labor.mo.gov → Employer Registration → Register Employer. Enter consumer's EIN and SSN. Type of Organization = "Individual Ownership." Business type = "Health Care / Social Assistance / Services for Elderly and Persons with Disabilities." Domestic employment = Yes. Enter consumer's home address as headquarters. Enter wage history (gross wages per quarter). Submit. The confirmation screen shows the consumer's MO Unemployment Tax Account Number (EAN) and is the only place it appears during registration, so record it before closing the window. If you lose it: <strong>Inquiry → Tax Inquiry → Client List Details</strong> lists every consumer with their EAN. The full screen-by-screen walkthrough is in the consumer's Tax Setup window under step 5.<br><br>
-            <strong>TRANSFERRED Consumer (came from another CDS vendor):</strong><br>
-            If you are not sure whether they were with another vendor, <strong>try registering them in UInteract
-            first</strong>. If it errors, they are a transfer. Then email MODES-5083 (Transferred Consumer
-            Registration form) to cdstax@labor.mo.gov after their first payroll with you. Need: consumer's EIN, SSN, first payroll date with you, name of previous vendor. Download form: labor.mo.gov/media/22536/download<br><br>
-            <strong>After registration:</strong> File quarterly wage reports per consumer (Q1 Apr 30 / Q2 Jul 31 / Q3 Oct 31 / Q4 Jan 31). Wages reported under consumer's account — NEVER under Caring Companions' account. Separate payment per consumer — do NOT combine.<br><br>
-            <strong>Parent attendant exception:</strong> If attendant is a parent of the consumer, wages are NEVER reportable for UI purposes — do not report them.
-          </div>
-          <div class="step-regs">General questions: cdstax@labor.mo.gov | 573-751-1995 Opt. 1 | Delinquent/penalties: Christopher Matzke 573-751-1867 | Wage reporting/adjustments: Kristie Riedmann 573-751-1995 x4105</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">10b</div>
-        <div class="step-content">
-          <div class="step-title">Local Tax Registration — Kansas City or St. Louis Consumers Only</div>
-          <div class="step-desc">If the consumer lives within Kansas City or St. Louis city limits, register for local payroll taxes. Not required for other Missouri locations.</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 5 — SETUP & GO-LIVE</div>
-      <div class="step">
-        <div class="step-num">11</div>
-        <div class="step-content">
-          <div class="step-title">Set Up Consumer in WellSky Personal Care (EVV &amp; Billing)</div>
-          <div class="step-desc">Enroll consumer in WellSky Personal Care — our EVV AND billing platform. Confirm attendant and consumer both understand EVV clock-in/clock-out procedure and the <strong>Saturday 11:59 PM weekly correction deadline</strong>. All MO HealthNet billing flows through WellSky. Portal: <a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light)">mycaringcds.com</a></div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">11b</div>
-        <div class="step-content">
-          <div class="step-title">Onboarding Specialist Call — Before the First Shift</div>
-          <div class="step-desc">The orientation is self-serve, but somebody rings them before the first shift.
-            It is not a courtesy call: it is where the things that stop them being paid get caught.<br><br>
-            Cover three things:<br>
-            1. <strong>Can the attendant actually clock in?</strong> Either the WellSky Personal Care app on their
-               own phone, or <strong>telephony from the consumer's home phone</strong> if that suits them better.
-               Have them do it while you are on the line rather than taking their word for it. Getting this wrong
-               means unpaid hours, not a warning.<br>
-            2. <strong>What to do when a shift needs correcting.</strong> Walk them through the
-               <a href="https://hub.caringcds.com/evv-form" target="_blank" rel="noopener"><strong>EVV
-               Correction Form</strong></a>, which is how they ask us to change a shift, and the
-               <strong>Saturday 11:59 PM</strong> deadline each week. Nobody reads that page for the first time
-               calmly, so show them before they need it.<br>
-            3. <strong>Anything left over from the orientation.</strong> They have just read the handbook and
-               watched the videos on their own, so ask what did not make sense.</div>
-          <div class="step-regs">Also the moment to confirm the scheduling preferences from step 6b match what they expect</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">12</div>
-        <div class="step-content">
-          <div class="step-title">Establish Consumer Case File</div>
-          <div class="step-desc">Create complete consumer file with all of the following:
-            <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12px;line-height:1.8">
-              <li>Date-stamped authorization + Plan of Care</li>
-              <li>All signed GoHighLevel e-sign documents (Vendor Ack, Auth to Obtain Numbers, Previous Vendor Auth, EVV Consent, Training Ack)</li>
-              <li>Signed Emergency Back-Up Plan (names + phone numbers of backup caregiver)</li>
-              <li>TPL/insurance documentation</li>
-              <li>All tax form copies (SS-4, 8821, 2678, 2643A, 2827)</li>
-              <li>EVV and WellSky enrollment confirmation</li>
-            </ul>
-          </div>
-          <div class="step-regs">Reg: CDS Program Req. §5.23; P&amp;P Policy 6</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">13</div>
-        <div class="step-content">
-          <div class="step-title">Schedule First Monthly Case Management Contact</div>
-          <div class="step-desc">Begin monthly monitoring cadence — phone or in-person. Document all contacts in consumer file. The required annual face-to-face home visit counts as a contact; schedule it within the first year.</div>
-          <div class="step-regs">Reg: 19 CSR 15-8.400(4)(F)</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">🧑‍🤝‍🧑</span> New Attendant Onboarding Checklist</div>
-      <p style="font-size:12px;color:var(--gray-600);margin-bottom:14px">Two platforms, in this order: the <strong>application</strong> is a GoHighLevel document, and <strong>Empeon</strong> is for the hiring paperwork once the checks come back clear. No in-person meeting required. Complete ALL steps before the attendant begins providing services, no exceptions.</p>
-
-      <div class="cat-header">STEP 1 — INTAKE (Attendant Self-Serve)</div>
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-content">
-          <div class="step-title">Send the Attendant Application — GoHighLevel, Not Empeon Yet</div>
-          <div class="step-desc">Send the <strong>attendant application</strong> as a GoHighLevel document for e-signature.
-            This comes <strong>before</strong> Empeon: the application is what lets us run the checks, and there is
-            no point setting somebody up for payroll who has not cleared them.<br><br>
-            The application must capture: (a) disclosure of ALL criminal convictions and pleas; (b) authorisation to
-            obtain criminal background information; (c) consent to release closed records (§610.120 RSMo);
-            (d) ALL aliases and SSNs ever used; (e) whether they have lived outside Missouri in the last five years.<br><br>
-            <strong>Do not run any background check until the signed application is back</strong>, because the
-            consent to look is on it.</div>
-          <div class="step-regs">Platform: GoHighLevel documents | Reg: CDS Program Req. §4.2.1</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 2 — PRE-HIRE SCREENING (After Signed Packet Received)</div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-content">
-          <div class="step-title">FCSR — Family Care Safety Registry Check</div>
-          <div class="step-desc">Screen ALL aliases and ALL SSNs disclosed. Check for: criminal history, sex offender registry, child abuse records, DHSS EDL, DMH EDR, child care license revocations. Retain documentation on file. If finding — verify whether disqualifying under RSMo 192.2495.</div>
-          <div class="step-regs">Reg: CDS Program Req. §4.1; 19 CSR 30-82.060</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-content">
-          <div class="step-title">EDL — Employee Disqualification List Check</div>
-          <div class="step-desc">Check Missouri EDL at health.mo.gov/safety/edl — screen ALL known aliases. Do NOT hire anyone listed. Retain documentation.</div>
-          <div class="step-regs">Reg: RSMo 192.2490; CDS Program Req. §4.1</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-content">
-          <div class="step-title">LEIE — OIG Exclusion List Check</div>
-          <div class="step-desc">Screen at exclusions.oig.hhs.gov. Screen ALL known aliases. Retain proof. Any exclusion discovered must be reported to MMAC immediately.</div>
-          <div class="step-regs">Reg: CDS Program Req. §5.2</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">5</div>
-        <div class="step-content">
-          <div class="step-title">Out-of-State Check — Has Attendant Lived Outside Missouri in Last 5 Years?</div>
-          <div class="step-desc"><strong>If YES:</strong> FCSR data is Missouri-only — you must also obtain background checks (criminal history, sex offender, child abuse/neglect registry) from each state the attendant lived in during the past 5 years. Additionally, a <strong>fingerprint-based background check</strong> is required for a national FBI criminal history search via Missouri State Highway Patrol (MSHP). Submit FBI FD-258 fingerprint card to MSHP CJIS Division, PO Box 9500, Jefferson City, MO 65102-9500 (4–6 week processing), or use IDEMIA (MO's fingerprint vendor) at <strong>(844) 543-9712</strong>. Out-of-state applicants can be fingerprinted by local law enforcement in their state. <strong>If NO (MO resident 5+ years):</strong> Standard FCSR check is sufficient for state criminal history.</div>
-          <div class="step-regs">MSHP CJIS Division: 573-526-6153 | IDEMIA: 844-543-9712 | FCSR: Missouri data only</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">6</div>
-        <div class="step-content">
-          <div class="step-title">Verify Attendant is NOT Consumer's Spouse</div>
-          <div class="step-desc">Attendant can be a family member (parent, sibling, child, grandparent) but CANNOT be the consumer's spouse or legal guardian. Obtain verification if needed.</div>
-          <div class="step-regs">Reg: §208.909; CDS Program Req. §4.4.1</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">7</div>
-        <div class="step-content">
-          <div class="step-title">E-Verify — Work Authorization</div>
-          <div class="step-desc">If agency qualifies as a "business entity" under RSMo 285.525, must enroll and participate in E-Verify. Run E-Verify on all new hires.</div>
-          <div class="step-regs">Reg: CDS Program Req. §4.5; RSMo 285.530</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 3 — HIRE DOCUMENTATION (After All Checks Clear)</div>
-      <div class="step">
-        <div class="step-num">8</div>
-        <div class="step-content">
-          <div class="step-title">Checks Cleared — Now Invite Them Into Empeon</div>
-          <div class="step-desc">Only once FCSR, EDL and OIG/LEIE have all come back clear, plus the fingerprint check
-            if they have lived out of state, invite the attendant into <strong>Empeon</strong> for the hiring paperwork:
-            W-4, I-9, direct deposit and the attendant contract. Empeon invitations are manual, so this is a person
-            doing it, not an automation. Then they may begin serving a consumer.<br><br><strong>⚠️ FCSR Disqualifying Finding?</strong> If FCSR returns a disqualifying offense, the attendant <strong>CANNOT work under ANY circumstances</strong> until a Good Cause Waiver (GCW) is applied for AND approved by DHSS. Conditional employment is never permitted while awaiting GCW. If GCW is denied — the attendant cannot be hired. Reg: P&amp;P Policy 13; CDS Program Req. §4.3</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">9</div>
-        <div class="step-content">
-          <div class="step-title">Execute Attendant Contract</div>
-          <div class="step-desc">Agency must have a contract with each personal care attendant. Even though the attendant is the consumer's employee, the vendor maintains the contract.</div>
-          <div class="step-regs">Reg: CDS Program Req. §4.4.1</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">10</div>
-        <div class="step-content">
-          <div class="step-title">Report New Hire to State of Missouri</div>
-          <div class="step-desc">Report new hire to Missouri Division of Employment Security (new hire reporting requirement). File under consumer's EIN.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">11</div>
-        <div class="step-content">
-          <div class="step-title">Obtain FCSR Registration Number</div>
-          <div class="step-desc">Obtain attendant's FCSR number — required for EVV system. Record in attendant file.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">11b</div>
-        <div class="step-content">
-          <div class="step-title">⚠️ Issue &amp; Mail Permanent Agency ID Card to Attendant</div>
-          <div class="step-desc"><strong>This is a gap currently being implemented.</strong> At time of employment, mail a permanent ID card to the attendant. Card must display: <strong>(1) Agency name (Caring Companions)</strong>, <strong>(2) Attendant's full name</strong>, <strong>(3) Title (Personal Care Attendant)</strong>, <strong>(4) Attendant's signature</strong>. Attendant must carry this card at all times while working. Upon termination: request card be returned by mail. If unable to recover, document recovery attempts in writing and place in file.</div>
-          <div class="step-regs">Reg: P&amp;P Policy 6 &amp; 8; CDS Program Req. §5.6</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 4 — TRAINING & SETUP</div>
-      <div class="step">
-        <div class="step-num">12</div>
-        <div class="step-content">
-          <div class="step-title">Train Attendant on WellSky Personal Care (EVV)</div>
-          <div class="step-desc">Attendant must understand how to check in and out, either through the <strong>WellSky Personal Care</strong> app or by <strong>telephony from the consumer's home phone</strong> if that works better for them (portal: <a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light)">mycaringcds.com</a>). EVV Correction Forms due by <strong>Saturday 11:59 PM</strong> each week. Train on fraud consequences of falsifying EVV. Attendant's FCSR# must be captured in EVV.</div>
-          <div class="step-regs">Reg: 13 CSR 70-3.320</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">13</div>
-        <div class="step-content">
-          <div class="step-title">Orient Attendant on Consumer's Care Plan</div>
-          <div class="step-desc">Attendant should understand the consumer's authorized tasks, hours, and limitations. Services must be delivered per the approved care plan only.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">14</div>
-        <div class="step-content">
-          <div class="step-title">Orient Attendant on Fraud Prevention</div>
-          <div class="step-desc">Do not leave early without adjusting EVV. Do not claim hours not worked. Do not use EVV when consumer is hospitalized. False claims = fraud.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">15</div>
-        <div class="step-content">
-          <div class="step-title">Payroll Setup Under Consumer's EIN (via Empeon)</div>
-          <div class="step-desc">Set up attendant in payroll system under the <strong>consumer's EIN</strong> (NOT Caring Companions' EIN 82-0968875). Pay rate: $15 to $16/hour. Direct deposit processes Thursdays (Wed before major holidays). Withhold and remit FICA, Medicare, federal and state income tax. Register attendant wages under consumer's UInteract account at uinteract.labor.mo.gov.</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">16</div>
-        <div class="step-content">
-          <div class="step-title">Establish LEIE Monthly Screening Schedule</div>
-          <div class="step-desc">Add attendant to monthly LEIE screening roster. Screen all aliases monthly. Document each screening.</div>
-          <div class="step-regs">Reg: CDS Program Req. §5.2 — Monthly requirement, non-negotiable</div>
-        </div>
-      </div>
-
-      <div class="cat-header">STEP 5 — ONGOING (POST-HIRE)</div>
-      <div class="step">
-        <div class="step-num">17</div>
-        <div class="step-content">
-          <div class="step-title">EDL Quarterly Re-Check</div>
-          <div class="step-desc">Re-screen all attendants against EDL every quarter. Document date and results.</div>
-          <div class="step-regs">Reg: RSMo 192.2490</div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">18</div>
-        <div class="step-content">
-          <div class="step-title">FCSR Annual Re-Screen (Recommended)</div>
-          <div class="step-desc">DHSS recommends annual FCSR re-screening of all employed attendants. Document per PM-VM 17-31 guidance.</div>
-        </div>
-      </div>
-    </div>
-  </div>
   </div><!-- end gsub-onboarding -->
 
   <!-- ── REFERENCE SUB-SECTION ── -->
@@ -2545,21 +2288,21 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
         <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Agency Name</div>
         <div style="font-weight:700;font-size:15px">Caring Companions In-Home Senior Care</div>
         <div style="opacity:0.85;margin-top:2px">Troutman Enterprises LLC (DBA)</div>
-        <div style="margin-top:8px;opacity:0.85">1331 N Stewart Ave<br>Springfield MO 65802</div>
+        <div style="margin-top:8px;opacity:0.85">1331 N Stewart Ave, Suite B<br>Springfield MO 65802</div>
       </div>
       <div>
         <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Identifiers</div>
         <div>NPI: <strong>1548725682</strong></div>
         <div>Federal EIN: <strong>82-0968875</strong></div>
         <div style="margin-top:8px">EVV Vendor: <strong>WellSky Personal Care</strong></div>
-        <div>EVV Portal: <a href="https://mycaringcds.com" target="_blank" style="color:rgba(255,255,255,0.9)">mycaringcds.com</a></div>
+        <div>EVV correction form: <a href="https://hub.caringcds.com/evv-form" target="_blank" style="color:rgba(255,255,255,0.9)">hub.caringcds.com/evv-form</a></div>
         <div>Website: <a href="https://caringcds.com" target="_blank" style="color:rgba(255,255,255,0.9)">caringcds.com</a></div>
       </div>
       <div>
         <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Contact & Service Area</div>
         <div>Samantha Troutman (Owner)</div>
-        <div>📞 417-234-8494 | 866-863-5151</div>
-        <div>📧 samantha@ccseniorhomecare.com</div>
+        <div>📞 417-218-2888 | 866-863-5151</div>
+        <div>📧 samantha@mo-care.com</div>
         <div style="margin-top:8px;font-size:12px;opacity:0.85"><strong>27 Service Counties:</strong><br>Barry · Barton · Benton · Camden · Cedar · Christian · Dade · Dallas · Douglas · Greene · Hickory · Jasper · Laclede · Lawrence · McDonald · Newton · Ozark · Phelps · Polk · Pulaski · St. Clair · Stone · Taney · Texas · Vernon · Webster · Wright</div>
       </div>
     </div>
@@ -2572,7 +2315,11 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
         <tr><td><strong>🏠 Caring Companions Staff Portal (EVV / Payroll)</strong></td><td><a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light);font-weight:700">mycaringcds.com</a></td></tr>
         <tr><td><strong>🏠 Caring Companions Website</strong></td><td><a href="https://caringcds.com" target="_blank">caringcds.com</a></td></tr>
         <tr><td><strong>🏠 Find CDS Caregivers (Job Board)</strong></td><td><a href="https://findcdscaregivers.com" target="_blank">findcdscaregivers.com</a></td></tr>
-        <tr><td><strong>🖥️ WellSky Personal Care (EVV Vendor)</strong></td><td><a href="https://mycaringcds.com" target="_blank">WellSky / mycaringcds.com</a></td></tr>
+        <tr><td><strong>🖥️ WellSky Personal Care (EVV Vendor)</strong></td><td><a href="https://troutman.clearcareonline.com" target="_blank" rel="noopener">troutman.clearcareonline.com</a></td></tr>
+        <tr><td><strong>📝 EVV Correction Form (attendants and consumers)</strong></td><td><a href="https://hub.caringcds.com/evv-form" target="_blank">hub.caringcds.com/evv-form</a></td></tr>
+        <tr><td><strong>DSDS Referral (new to CDS)</strong></td><td><a href="https://modhss.entellitrak.com/etk-modhss-prod/page.request.do?page=portal.referral" target="_blank" rel="noopener">Online referral form</a> | 866-835-3505</td></tr>
+        <tr><td><strong>DSDS PCCP Request (transfers, hours, closings)</strong></td><td><a href="https://modhss.entellitrak.com/etk-modhss-prod/page.request.do?page=portal.pccpRequest" target="_blank" rel="noopener">Online PCCP request form</a></td></tr>
+        <tr><td><strong>eMOMED (Medicaid eligibility)</strong></td><td><a href="https://www.emomed.com" target="_blank" rel="noopener">emomed.com</a></td></tr>
         <tr><td><strong>MMAC (Contracts, Enrollment, Provider Review)</strong></td><td><a href="https://mmac.mo.gov" target="_blank">mmac.mo.gov</a></td></tr>
         <tr><td><strong>DSDS – HCBS Provider Page</strong></td><td><a href="https://health.mo.gov/seniors/hcbs/" target="_blank">health.mo.gov/seniors/hcbs</a></td></tr>
         <tr><td><strong>DSDS – Provider Memos</strong></td><td><a href="https://health.mo.gov/seniors/hcbs/infomemos.php" target="_blank">health.mo.gov/seniors/hcbs/infomemos</a></td></tr>
@@ -15916,8 +15663,17 @@ const _TODAY_ACT = {
   payroll: ['Open Payroll',   "showPage('payroll')"],
   dhss:    ['Reported',       '_todayDhssReported(this)'],
   checklist: ['Open checklist', "showPage('compliance')"],
-  agencydate: ['Done',        '_agencyDateDone(this.dataset.k)']
+  agencydate: ['Done',        '_agencyDateDone(this.dataset.k)'],
+  fusion:  ['Checked',        '_fusionChecked()']
 };
+// The daily Fusion look (2026-11-13): Checked saves who and when, and keeps the last 120 looks.
+function _fusionChecked() {
+  const f = Object.assign({}, getObj('fusionCheck')), rec = { at: _todayIso(), by: _acWho() };
+  f.log = (f.log || []).concat([rec]).slice(-120);
+  f.at = rec.at; f.by = rec.by;
+  setObj('fusionCheck', f);
+  renderDailyRoutine();
+}
 // Approved due dates (2026-10-23): a report or tax filing marked sent for its current due date,
 // and a DHSS change report recorded on the check-in call that found the change.
 function _todayReportSent(btn) {
@@ -16032,12 +15788,12 @@ function _todayPeople(n, i) {
     const id = p.id || (p.act === 'lead' ? '' : (consumers.find(c => CDSWellSky.nameKey(c.name) === CDSWellSky.nameKey(p.name)) || {}).id || '');
     const act = p.act === undefined ? 'profile' : p.act;
     const a = _TODAY_ACT[act];
-    const can = a && (act === 'shift' || act === 'report' || act === 'agencydate' ? p.key : ['oig', 'attendant', 'evv', 'payroll', 'checklist'].includes(act) ? true : id);
+    const can = a && (act === 'shift' || act === 'report' || act === 'agencydate' ? p.key : ['oig', 'attendant', 'evv', 'payroll', 'checklist', 'fusion'].includes(act) ? true : id);
     const due = p.due ? '<span class="td-due ' + (p.due < today ? 'late' : p.due <= soon ? 'soon' : '') + '">' +
       (p.due < today ? 'Late, was due ' : 'Due ') + esc(_niceDay(p.due)) + '</span>' : '';
     const why = p.why || [p.county, p.at && !isNaN(Date.parse(p.at)) ? 'since ' + _niceDay(/T/.test(p.at) ? CDSWellSky.isoLocal(new Date(p.at)) : String(p.at).slice(0, 10)) : ''].filter(Boolean).join(', ');
     // "Last, First" from WellSky reads "First Last"; a report title keeps its comma.
-    const shown = ['report', 'payroll', 'checklist', 'agencydate'].includes(act) ? p.name : CDSWellSky.firstLast(p.name);
+    const shown = ['report', 'payroll', 'checklist', 'agencydate', 'fusion'].includes(act) ? p.name : CDSWellSky.firstLast(p.name);
     return '<div class="td-row"><span class="td-name">' + esc(shown) + '</span>' +
       (why ? '<span class="td-why">' + esc(why) + '</span>' : '') + due +
       (can ? '<button class="btn btn-sm btn-outline td-btn" data-id="' + esc(id) + '" data-k="' + esc(p.key || p.month || '') + '" onclick="' + a[1] + '">' + a[0] + '</button>' : '') +
@@ -16106,7 +15862,8 @@ function renderDailyRoutine() {
     evv: { corrections: getData('evvCorrections'), submissions: (_todayAtt.data && _todayAtt.data.evvSubs) || [] },
     payroll: { runs: getObj('payrollTotals').runs || [], registers: getObj('attendantWages').registers || [] },
     owners: getObj('todayOwners').owners || {},
-    checks: getObj('complianceChecks'), agencyDates: getObj('agencyDates')
+    checks: getObj('complianceChecks'), agencyDates: getObj('agencyDates'),
+    fusionCheck: getObj('fusionCheck')
   });
   _todayAttLoad(false);
   const owner = ldWhoOwner();
