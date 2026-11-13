@@ -71,7 +71,11 @@ const form = text => ({ date: '2026-10-20', text, fromForm: true });
 {
   const s = d => R.leadCard({ type: 'referral', status: 'submitted', stateSubmit: d }, [], T);
   ok(s('2026-10-14').due === 'Day 7 of waiting' && s('2026-10-14').tone === 'later', 'day 7: nothing to do yet');
-  ok(s('2026-10-07').tone === 'today' && /this week/.test(s('2026-10-07').next), 'day 14: check in this week');
+  ok(s('2026-10-07').tone === 'today' && /Ask them this week if DSDS has called or visited/.test(s('2026-10-07').next), 'day 14: ask the consumer this week');
+  ok(s('2026-10-08').tone === 'later', 'day 13: nothing yet (the one clock, 2026-11-13)');
+  ok(s('2026-09-30').tone === 'late', 'day 21: call DSDS (was day 22)');
+  const x = d => R.leadCard({ type: 'pccp', status: 'submitted', stateSubmit: d }, [], T);
+  ok(x('2026-10-15').tone === 'later' && x('2026-10-14').tone === 'late' && /Call DSDS today/.test(x('2026-10-14').next), 'a transfer: day 6 nothing, day 7 call DSDS');
   ok(s('2026-09-26').tone === 'late' && /Call DSDS today/.test(s('2026-09-26').next), 'day 25: call DSDS today');
   ok(/^Sent to the state /.test(s('2026-10-07').who), 'the sent date is on the card');
   const m = R.leadCard({ type: 'referral', status: 'submitted' }, [], T);

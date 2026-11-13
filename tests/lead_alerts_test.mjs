@@ -379,7 +379,7 @@ ok(!html.includes('<b>X</b>') && html.includes('&lt;b&gt;X&lt;/b&gt;'), 'what a 
   at('2026-12-10T14:00:00Z');
   await jobs.morning();
   b2 = (await pg.query(`select body from cds_outbox where template='morning_email' order by created_at desc limit 1`)).rows[0].body;
-  ok(b2.includes('1 waiting on the state with no authorization yet') && b2.includes('Fic Four (Referral sent 39 days ago, no authorization yet. Check with DSDS (request R-44))'), 'waiting on the state, with the request ID');
+  ok(b2.includes('1 waiting on the state with no authorization yet') && b2.includes('Fic Four (Referral sent 39 days ago, no authorization yet. Call DSDS (request R-44))'), 'waiting on the state, with the request ID');
   ok(b2.includes('Fic Eight: moved to a new address in our area. Tell DSDS by Dec 17.'), 'something changed reaches the email (closings step)');
   ok(b2.includes('1 Starting consumer had the first shift: open the Hub to move them to Active') && b2.includes('Fic Five (first shift 2026-12-05)'), 'ready to move to Active from the WellSky first shift');
   const six = (b2.split('\n').find(l => l.includes('Fic Six')) || ''), seven = (b2.split('\n').find(l => l.includes('Fic Seven')) || '');
