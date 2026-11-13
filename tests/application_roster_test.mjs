@@ -60,5 +60,9 @@ ok(w.length === 1 && w[0].name === 'Marcus Webb', 'old Roster attendant with no 
 const lines = R.attendantWork({ tasks: [], applications: [packet], roster: [row], autoOig: {} }, now) || [];
 ok(lines.some(i => (i.people || []).some(p => /Marcus Webb/.test(p.name))), 'Today lists their overdue recheck');
 
+// Office staff cannot be a paid attendant for our consumers (2026-11-13, 19 CSR 15-8.400(8)(C)).
+ok(HP.isOfficeStaff('Marcus Webb', ['Webb, Marcus', 'Krystal Example']) === true, 'office staff: same person, either name order');
+ok(HP.isOfficeStaff('Marcus Webb', ['Mark Webber']) === false && HP.isOfficeStaff('Marcus Webb', []) === false && HP.isOfficeStaff('', ['']) === false, 'office staff: someone else, an empty list, an empty name');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

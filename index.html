@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=37"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=38"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script>
 <script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
@@ -2398,7 +2398,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
   <div class="section-header">
     <div class="section-title">EVV Manual Corrections</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-outline" onclick="openOutreachModal('evv_bulk_reminder',{})" style="font-size:12px;color:var(--warn)">📱 Friday EVV Reminder</button>
+      <!-- Friday EVV Reminder button removed 2026-11-13: it copied text and marked it sent, nothing went out. -->
     </div>
   </div>
 
@@ -2407,7 +2407,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div style="font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap">📋 Attendant Form Link</div>
     <code style="font-size:13px;font-weight:600;color:var(--primary);background:#dde9f8;padding:5px 12px;border-radius:6px;flex:1;min-width:200px">hub.caringcds.com/evv-form</code>
     <button class="btn btn-outline" style="font-size:12px;white-space:nowrap" onclick="navigator.clipboard.writeText('https://hub.caringcds.com/evv-form').then(()=>{this.textContent='✓ Copied!';setTimeout(()=>this.textContent='📋 Copy Link',1800)})">📋 Copy Link</button>
-    <button class="btn btn-accent" style="font-size:12px;white-space:nowrap" onclick="openModal('sendEvvFormLinkModal')">📱 Send to Attendant</button>
+    <!-- Send to Attendant removed 2026-11-13 (same reason). Copy Link and send it from the office line in GoHighLevel. -->
   </div>
 
   <!-- WORKFLOW BANNER -->
@@ -2443,6 +2443,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div class="alert alert-warn" style="margin-bottom:12px">
       ⚠️ <strong>Missouri Medicaid (MMAC) treats high manual correction rates as a potential fraud indicator.</strong> Our internal standard is <strong>≥95% real-time EVV compliance</strong>, meaning no more than 5% of visits should ever need a manual correction. Each correction must have a legitimate, documented reason and a signed form on file. If MMAC audits, every manual adjustment will be scrutinized. <em style="opacity:0.8">(MMAC has not published a specific numeric threshold; 95% is Caring Companions' internal compliance target.)</em>
     </div>
+    <div class="alert alert-danger" style="margin-bottom:12px;font-size:13px"><div><strong>If a form or a shift looks false</strong> (time not worked, someone else clocking in, clocking in away from the home): do not fix the shift. Tell the owner the same day. A suspected false EVV record must be reported to MMAC within 2 business days (13 CSR 70-3.320). MMAC: 573-751-3399.</div></div>
     <div class="grid-3" style="margin-bottom:14px">
       <div style="text-align:center;padding:14px;background:var(--gray-100);border-radius:8px">
         <div style="font-size:24px;font-weight:700;color:var(--success)" id="threshMonthTotal">0</div>
@@ -2652,7 +2653,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       </div>
     </div>
     <div style="margin-top:12px;padding:10px 14px;background:#f0faf9;border-left:4px solid var(--accent);border-radius:0 6px 6px 0;font-size:12px">
-      <strong>Bulk EVV Reminder</strong> → go to <a href="#" onclick="showPage('evvcorrections');return false" style="color:var(--primary)">EVV Corrections tab</a> → click <strong>📱 Friday EVV Reminder</strong> → paste command here in Claude.
+      <strong>Bulk EVV Reminder</strong>: the button was removed on 2026-11-13 because it never sent anything. Copy the form link on EVV forms and send it from the office line in GoHighLevel.
     </div>
   </div>
 
@@ -5474,7 +5475,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=26');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=27');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5484,6 +5485,7 @@ async function renderActiveAttendants() {
         renderAttendants(); updateDashboard(); renderAttendantCheck();
       },
       onList: syncApplicationAttendants,
+      staff: () => getData('officeStaff').filter(x => !x.leftAt).map(x => x.name),
       wellsky: () => getObj('wellskyCheck'),
       corrections: () => getData('evvCorrections'),   // for the attendant file's shifts fixed by hand
       who: () => ((document.getElementById('header_user') || {}).textContent || '').trim(),
@@ -6029,6 +6031,8 @@ function consumerToFinish(c) {
     !authOk && (wsAuthFor(c.name) ? (authSlimOn() ? 'Upload the new authorization' : 'Upload the new care plan') : auth ? 'Renewed authorization' : 'Authorization'),
     !plan && (authSlimOn() ? 'State scheduling worksheet' : 'Care plan'),
     !c.backupPlan && 'Backup plan',
+    // Reviewed every year (19 CSR 15-8.400(5)(G); her Compliance checklist). From the last review, else the start date.
+    c.backupPlan && (c.backupReviewed || c.cdsStartDate) && _plusYear(c.backupReviewed || c.cdsStartDate) < _todayIso() && 'Backup plan yearly review',
     c.trained !== 'yes' && 'Consumer training',
     ...moFormsMissing(c)
   ].filter(Boolean);
@@ -7096,7 +7100,7 @@ function renderAttendants() {
         <button class="btn btn-sm btn-outline" onclick="openAttendantOutreach('${a.id}','bg_cleared')" style="margin-bottom:4px;width:100%;font-size:10px;color:var(--success)">✅ BG Cleared → Notify</button>
         <button class="btn btn-sm btn-outline" onclick="openAttendantOutreach('${a.id}','orientation_nudge')" style="margin-bottom:4px;width:100%;font-size:10px;color:var(--primary)">📺 Orientation Nudge</button>
         <button class="btn btn-sm btn-outline" onclick="updateScreenings('${a.id}')" style="margin-bottom:4px;width:100%;font-size:11px">Update Screenings</button>
-        <button class="btn btn-sm btn-danger" onclick="removeAttendant('${a.id}')" style="width:100%;font-size:11px">Remove</button>
+        <div style="font-size:10.5px;color:var(--gray-600);line-height:1.3">To end them: Attendants, their card, No longer working.</div>
       </td>
     </tr>`;
   }).join('');
@@ -15721,7 +15725,7 @@ function _todayDhssReported(btn) {
   const vk = /^visit:(\d+)$/.exec(btn.dataset.k || '');
   const log = c && (vk ? (c.homeVisits || [])[+vk[1]] : c.contacts && c.contacts[btn.dataset.k]);
   if (!log) return;
-  const date = prompt('Date you reported the change to DHSS (YYYY-MM-DD):', _todayIso());
+  const date = prompt('Date you reported the change to DSDS (YYYY-MM-DD):', _todayIso());
   if (!date) return;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('Please use YYYY-MM-DD.'); return; }
   log.dhssReported = { date, by: _acWho(), at: new Date().toISOString() };
@@ -15743,7 +15747,7 @@ async function syncApplicationAttendants(packets) {
   _appSync.busy = true;
   let changed = false;
   try {
-    const HP = await import('./caregiver-match/hub-packet.js?v=26');
+    const HP = await import('./caregiver-match/hub-packet.js?v=27');
     for (const a of HP.rosterPlan(packets, getData('attendants'))) {
       let g;
       try { g = await cdsMatchApi('packetGet', { pool_id: a.pool_id }); }
