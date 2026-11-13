@@ -542,6 +542,7 @@
     const day = iso => iso ? isoLocal(new Date(iso)) : '';
     const tasks = (w.tasks || []).filter(t => t && !t.done_at);
     const oig = tasks.filter(t => t.kind === 'oig_check');
+    const oigMatch = oig.filter(t => /^OIG possible match/i.test(String(t.title || ''))), oigBroken = oig.filter(t => !/^OIG possible match/i.test(String(t.title || '')));
     const steps = tasks.filter(t => /^packet_/.test(t.kind));
     const withTask = new Set(steps.map(t => t.pool_id).filter(Boolean));
     const taskWho = t => ({ name: t.caregiver || 'New attendant', why: t.title, due: day(t.due_at), id: t.id, pool: t.pool_id || '', act: 'task' });
@@ -565,8 +566,12 @@
     return [
       w.error && { t: 'The attendant to-dos could not be read: ' + w.error, go: 'activeattendants', bad: true },
       i9.length && { t: plural(i9.length, 'attendant', 'attendants') + ' worked before I-9 Section 2 was done (3 business days)', go: 'activeattendants', bad: true, people: i9 },
-      oig.length && { t: plural(oig.length, 'OIG possible match', 'OIG possible matches') + ' to decide today', go: 'activeattendants', bad: true,
-                      people: byDue(oig.map(t => Object.assign(taskWho(t), { name: t.caregiver || 'OIG check', act: 'oig' }))) },
+      // A real possible match and a check that did not run are different jobs (2026-11-13: the November list did not
+      // download and Today called it "1 OIG possible match to decide"). Match to-dos are titled "OIG possible match: ...".
+      oigMatch.length && { t: plural(oigMatch.length, 'OIG possible match', 'OIG possible matches') + ' to decide today', go: 'activeattendants', bad: true,
+                      people: byDue(oigMatch.map(t => Object.assign(taskWho(t), { name: t.caregiver || 'OIG check', act: 'oig' }))) },
+      oigBroken.length && { t: 'The monthly OIG check did not finish. Nobody is a match; the check itself needs fixing', go: 'activeattendants', bad: true,
+                      people: byDue(oigBroken.map(t => Object.assign(taskWho(t), { name: 'OIG check', act: 'oig' }))) },
       steps.length && { t: plural(steps.length, 'office step', 'office steps') + ' for new attendants', go: 'activeattendants',
                         bad: steps.some(t => /^Consumer waiting/.test(t.title) || (t.due_at && day(t.due_at) <= today)),
                         people: byDue(steps.map(taskWho)) },
