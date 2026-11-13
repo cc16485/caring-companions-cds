@@ -648,7 +648,10 @@
   const S = {
     learned:  { k: 'learned',  t: 'Date we found out', need: true },
     dsds:     { k: 'dsds',     t: 'Told DSDS on the online Care Plan Change Request form (Closure section)', need: true, form: true },
-    letter:   { k: 'letter',   t: 'Written notice with the specific reasons sent to the consumer AND DSDS', need: true, cite: '19 CSR 15-8.400(7)(B)', print: true },
+    // 21 days (her decision 2026-11-13, "keep the 21 day notice"): the Personal Care Provider Manual, section 2.2,
+    // asks for written notice to the participant and DHSS at least 21 days before discharge; care goes on for those
+    // 21 days or until DSDS makes other arrangements. The DHSS CDS Q&A (6) reads it the other way; she keeps the 21 days.
+    letter:   { k: 'letter',   t: 'Written 21-day notice with the specific reasons sent to the consumer AND DSDS', need: true, cite: '19 CSR 15-8.400(7)(B); Personal Care Provider Manual 2.2', print: true },
     paused:   { k: 'paused',   t: 'Services paused (only after DSDS was told)', cite: '19 CSR 15-8.400(7)(A)' },
     fixTried: { k: 'fixTried', t: 'We tried to fix it first (write what we did in the notes)', need: true },
     file:     { k: 'file',     t: 'Proof saved in the consumer file (kept 6 years)', need: true, cite: '19 CSR 15-8.400(10)' }
@@ -783,6 +786,7 @@
   function endingLetter(c, ending, today) {
     const r = endingReason(ending && ending.kind);
     if (!r || !r.letter) return null;
+    const paused = ((ending.steps || {}).paused || {}).date || '';
     return {
       date: today,
       to: (c.name || '') + (c.mailAddress ? '\n' + c.mailAddress : ''),
@@ -791,12 +795,23 @@
       opening: 'Dear ' + (c.name || '') + ',\n\nCaring Companions CDS is asking the Missouri Department of Health and Senior Services, Division of Senior and Disability Services (DSDS), to close your Consumer Directed Services with our agency. We are sending this letter to you and to DSDS.',
       reason: r.letter,
       facts: (ending.notes || '').trim(),
-      next: 'Only DSDS can close your services. DSDS will review this request.\n' +
+      next: (!r.steps.some(s => s.k === 'letter') ? ''
+              : paused ? 'Your services are paused as of ' + longDay(paused) + '. Missouri rule 19 CSR 15-8.400(7)(A) allows this after DSDS has been told.\n'
+              : 'This letter is your 21-day written notice. Your services will go on as your care plan says through ' + longDay(noticeEnds(today)) + ', or until DSDS makes other arrangements with you, whichever comes first.\n') +
+            'Only DSDS can close your services. DSDS will review this request.\n' +
             'If DSDS decides to close your services, DSDS will send you a written notice. That notice explains your right to appeal.\n' +
             'Until DSDS decides, please call us with any questions. You may also call DSDS at ' + DSDS_PHONE + '.',
-      cite: 'This notice is sent under 19 CSR 15-8.400(7)(B).'
+      cite: 'This notice is sent under 19 CSR 15-8.400(7)(B).' + (r.steps.some(s => s.k === 'letter') ? ' It gives the 21 days written notice in the MO HealthNet Personal Care Provider Manual, section 2.2.' : '')
     };
   }
+  // The 21st day after the written notice went out: the earliest last day of services we ask for.
+  function noticeEnds(letterDate) {
+    if (!letterDate) return '';
+    const d = new Date(String(letterDate).slice(0, 10) + 'T12:00:00');
+    d.setDate(d.getDate() + 21);
+    return d.toISOString().slice(0, 10);
+  }
+  const longDay = iso => iso ? new Date(String(iso).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
   const endingReason = id => ENDING_REASONS.find(r => r.id === id) || null;
   // The required steps still missing a date, and whether DSDS's closing date is in.
   function endingMissing(ending) {
@@ -1246,6 +1261,6 @@
                     dailyRoutine, STATE_WAIT, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, fusionDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT, caregiverPlan, CAREGIVER_PLAN,
-                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, endingLetter, closureItems,
+                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, noticeEnds, endingLetter, closureItems,
                     CHANGE_KINDS, changeDue, changeMissing, changeItems, hospitalShifts };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

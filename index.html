@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=39"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=40"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=9"></script>
 <script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
@@ -2232,6 +2232,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       <div class="step-desc"><strong>Open the DSDS form</strong> and fill in the Closure section with the reason. Mail the consumer the letter the hub writes. If the consumer wants to stop, they call DSDS at 866-835-3505 to confirm.</div></div></div>
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Record what DSDS does</div>
       <div class="step-desc">The date DSDS sent its closing notice and the last day of services. DSDS gives 10 days notice, and an appeal in that time keeps services going.</div></div></div>
+    <div class="step-desc" style="margin:6px 0 8px"><strong>Our 21-day notice.</strong> When we are the ones asking to end services, the letter gives the consumer and DSDS 21 days written notice. Services go on for those 21 days unless DSDS makes other arrangements, or services are paused after DSDS is told (fraud, threats or abuse).</div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Mark inactive after DSDS closes the case</div>
       <div class="step-desc">The hub will not let you do it sooner. Then finish <strong>Consumers &gt; Tax &amp; EIN &gt; Leaving</strong>. The EIN belongs to the consumer and goes with them.</div></div></div>
     <div class="step-desc" style="margin-top:8px">When a consumer lets an attendant go, use <strong>No longer working</strong> on the attendant and record why, how the consumer told us, the date and their words.</div>
@@ -6538,7 +6539,9 @@ function endingCard(c) {
       (s.cite ? '<br><span class="end-cite">' + esc(s.cite) + '</span>' : '') +
       (s.print && r.letter ? '<br><a href="#" onclick="openLetter(\'' + id + '\');return false">' + (e.letter ? 'Open the letter' : 'Write the letter') + '</a>' +
         (e.letter ? ' <span class="end-cite">saved ' + esc(new Date(e.letter.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) + ' by ' + esc(e.letter.by || '') + ' · <a href="#" onclick="printLetter(getData(\'consumers\').find(x => x.id === \'' + id + '\'));return false">Print again</a></span>' : '') +
-        '<br><span class="end-cite">Mail or hand it to the consumer. Send DSDS a copy the same day.</span>' : '') +
+        '<br><span class="end-cite">Mail or hand it to the consumer. Send DSDS a copy the same day.</span>' +
+        (v && v.date ? '<br><span class="end-cite"><strong>21 days end ' + esc(_niceDay(CDSRules.noticeEnds(v.date))) + '.</strong> Services go on until then, unless DSDS makes other arrangements or services are paused.</span>'
+                     : '<br><span class="end-cite">The 21 days start the day it is sent. Services go on for those 21 days unless DSDS makes other arrangements or services are paused.</span>') : '') +
       (s.form ? '<br><a href="' + CDSRules.DSDS_FORM + '" target="_blank" rel="noopener">Open the DSDS form</a> <span class="end-cite">then check it in Fusion, PCCP Request tab</span>' : '') +
       '</span>' + dateIn(v && v.date, "endSetStep('" + id + "','" + s.k + "',this.value)") +
       (v && v.date ? '<span class="who">by ' + esc(v.by || '') + '</span>' : '') + '</div>';

@@ -42,6 +42,14 @@ ok(L.facts === 'offered help twice', 'what happened comes from the notes');
 ok(/Only DSDS can close/.test(L.next) && /866-835-3505/.test(L.next), 'says only DSDS closes, with the DSDS number');
 ok(/15-8\.400\(7\)\(B\)/.test(L.cite), 'names the rule');
 ok(R.endingLetter({ name: 'X' }, { kind: 'death' }, '2026-10-22') === null, 'no letter for a death');
+// The 21-day notice (her decision 2026-11-13).
+ok(R.noticeEnds('2026-10-22') === '2026-11-12' && R.noticeEnds('') === '', '21 days from the day the notice is sent');
+ok(/your 21-day written notice/.test(L.next) && /through November 12, 2026/.test(L.next) && /Personal Care Provider Manual, section 2\.2/.test(L.cite), 'the letter gives the 21 days and the last day of them');
+const LP = R.endingLetter({ name: 'Ruth Caldwell' }, { kind: 'threats', steps: { paused: { date: '2026-10-21' } } }, '2026-10-22');
+ok(/paused as of October 21, 2026/.test(LP.next) && !/will go on as your care plan says/.test(LP.next), 'services already paused: the letter says so instead of promising 21 more days');
+const LF = R.endingLetter({ name: 'Ruth Caldwell' }, { kind: 'facility' }, '2026-10-22');
+ok(LF && !/21-day/.test(LF.next) && !/2\.2/.test(LF.cite), 'a nursing home move is not our notice: no 21 days in that letter');
+ok(/21-day notice/.test(R.endingReason('noAttendant').steps.find(s => s.k === 'letter').t), 'the step names the 21 days');
 ok(!Object.values(L).join(' ').includes('\u2014'), 'no em dashes in the letter');
 
 // ── the morning list (step 5) ──
