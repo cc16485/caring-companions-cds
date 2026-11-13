@@ -15936,11 +15936,13 @@ function renderDailyRoutine() {
   // Everyone / Mine (build step 5, 2026-10-23): Mine shows the parts of Today this person owns.
   const me = (_acWho() || '').trim().toLowerCase();
   let mine = false; try { mine = localStorage.getItem('cdsTodayMine') === '1'; } catch (e) {}
-  const shown = mine && me ? steps.filter(st => st.owner === me) : steps;
+  // Samantha signs in with either of her two addresses (LD_WHO_OWNERS): both are her (2026-11-13, Mine showed 0 on samantha@caringcds.com).
+  const isMe = o => o === me || (LD_WHO_OWNERS.includes(me) && LD_WHO_OWNERS.includes(String(o || '').toLowerCase()));
+  const shown = mine && me ? steps.filter(st => isMe(st.owner)) : steps;
   const others = steps.length - shown.length;
   const mineBar = me ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:-4px 0 10px">' +
       ['Everyone', 'Mine'].map(l => '<button class="btn btn-sm ' + ((l === 'Mine') === mine ? 'btn-primary' : 'btn-outline') + '" style="font-size:11.5px" onclick="_todayMineSet(' + (l === 'Mine') + ')">' +
-        l + (l === 'Mine' ? ' (' + steps.filter(st => st.owner === me).reduce((t, s) => t + s.items.length, 0) + ')' : '') + '</button>').join('') +
+        l + (l === 'Mine' ? ' (' + steps.filter(st => isMe(st.owner)).reduce((t, s) => t + s.items.length, 0) + ')' : '') + '</button>').join('') +
       (mine && others ? '<span style="font-size:12px;color:var(--gray-600)">' + others + (others === 1 ? ' part belongs' : ' parts belong') + ' to someone else.</span>' : '') + '</div>' : '';
 
   host.innerHTML =
