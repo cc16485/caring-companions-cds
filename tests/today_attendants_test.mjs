@@ -63,5 +63,9 @@ ok(empty && !empty.items.length && /Nothing is waiting/.test(empty.clear), 'a cl
 const mail = LA.morningEmail(withW, {}, now.getTime()).text;
 ok(mail.includes('Attendants') && mail.includes('      Gil Gray (FCSR overdue, late, was due Oct 1)'), 'the 8am email names them with the due date');
 
+// A check that did not run is not a possible match (2026-11-13).
+{ const w2 = R.attendantWork({ tasks: [{ id: 'tb', kind: 'oig_check', title: 'The OIG list did not download this month. Check exclusions.oig.hhs.gov by hand until it is fixed.', due_at: '2026-11-11T14:00:00Z' }], applications: [], roster: [], autoOig: {} }, new Date('2026-11-13T12:00:00')) || [];
+  ok(!w2.some(i => /possible match/.test(i.t)) && w2.some(i => /did not finish/.test(i.t) && i.bad && i.people[0].act === 'oig'), 'a failed OIG download is its own red line, never called a possible match'); }
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

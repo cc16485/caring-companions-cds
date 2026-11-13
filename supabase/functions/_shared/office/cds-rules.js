@@ -542,6 +542,7 @@
     const day = iso => iso ? isoLocal(new Date(iso)) : '';
     const tasks = (w.tasks || []).filter(t => t && !t.done_at);
     const oig = tasks.filter(t => t.kind === 'oig_check');
+    const oigMatch = oig.filter(t => /^OIG possible match/i.test(String(t.title || ''))), oigBroken = oig.filter(t => !/^OIG possible match/i.test(String(t.title || '')));
     const steps = tasks.filter(t => /^packet_/.test(t.kind));
     const withTask = new Set(steps.map(t => t.pool_id).filter(Boolean));
     const taskWho = t => ({ name: t.caregiver || 'New attendant', why: t.title, due: day(t.due_at), id: t.id, pool: t.pool_id || '', act: 'task' });
@@ -565,8 +566,12 @@
     return [
       w.error && { t: 'The attendant to-dos could not be read: ' + w.error, go: 'activeattendants', bad: true },
       i9.length && { t: plural(i9.length, 'attendant', 'attendants') + ' worked before I-9 Section 2 was done (3 business days)', go: 'activeattendants', bad: true, people: i9 },
-      oig.length && { t: plural(oig.length, 'OIG possible match', 'OIG possible matches') + ' to decide today', go: 'activeattendants', bad: true,
-                      people: byDue(oig.map(t => Object.assign(taskWho(t), { name: t.caregiver || 'OIG check', act: 'oig' }))) },
+      // A real possible match and a check that did not run are different jobs (2026-11-13: the November list did not
+      // download and Today called it "1 OIG possible match to decide"). Match to-dos are titled "OIG possible match: ...".
+      oigMatch.length && { t: plural(oigMatch.length, 'OIG possible match', 'OIG possible matches') + ' to decide today', go: 'activeattendants', bad: true,
+                      people: byDue(oigMatch.map(t => Object.assign(taskWho(t), { name: t.caregiver || 'OIG check', act: 'oig' }))) },
+      oigBroken.length && { t: 'The monthly OIG check did not finish. Nobody is a match; the check itself needs fixing', go: 'activeattendants', bad: true,
+                      people: byDue(oigBroken.map(t => Object.assign(taskWho(t), { name: 'OIG check', act: 'oig' }))) },
       steps.length && { t: plural(steps.length, 'office step', 'office steps') + ' for new attendants', go: 'activeattendants',
                         bad: steps.some(t => /^Consumer waiting/.test(t.title) || (t.due_at && day(t.due_at) <= today)),
                         people: byDue(steps.map(taskWho)) },
@@ -792,7 +797,7 @@
       to: (c.name || '') + (c.mailAddress ? '\n' + c.mailAddress : ''),
       dcn: c.dcn || '',
       subject: 'Request to close your Consumer Directed Services (CDS)',
-      opening: 'Dear ' + (c.name || '') + ',\n\nCaring Companions CDS is asking the Missouri Department of Health and Senior Services, Division of Senior and Disability Services (DSDS), to close your Consumer Directed Services with our agency. We are sending this letter to you and to DSDS.',
+      opening: 'Dear ' + (c.name || '') + ',\n\nCaring Companions CDS (' + VENDOR_LEGAL + ') is asking the Missouri Department of Health and Senior Services, Division of Senior and Disability Services (DSDS), to close your Consumer Directed Services with our agency. We are sending this letter to you and to DSDS.',
       reason: r.letter,
       facts: (ending.notes || '').trim(),
       next: (!r.steps.some(s => s.k === 'letter') ? ''
@@ -812,6 +817,9 @@
     return d.toISOString().slice(0, 10);
   }
   const longDay = iso => iso ? new Date(String(iso).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
+  // The vendor as the state knows it (her word 2026-11-13: the state has not approved the name change, so CDS is still
+  // under the main business name). Used once on anything that goes to DSDS or MMAC. Change it here when the state approves.
+  const VENDOR_LEGAL = 'Troutman Enterprises, LLC DBA Caring Companions In-Home Senior Care';
   const endingReason = id => ENDING_REASONS.find(r => r.id === id) || null;
   // The required steps still missing a date, and whether DSDS's closing date is in.
   function endingMissing(ending) {
@@ -1150,7 +1158,8 @@
     { key: 'q2',     title: 'Q2 Financial & Service Report (Apr to Jun)', due: y => [y, 7, 31] },
     { key: 'q3',     title: 'Q3 Financial & Service Report (Jul to Sep)', due: y => [y, 10, 31] },
     { key: 'q4',     title: 'Q4 Financial & Service Report (Oct to Dec)', due: y => [y + 1, 1, 31] },
-    { key: 'annual', title: 'Annual Service Report',                      due: y => [y + 1, 1, 31] },
+    // Jan 30 (her yes 2026-11-13): MMAC's notice says Jan 31, the Personal Care Provider Manual says Jan 30; the earlier one is safe.
+    { key: 'annual', title: 'Annual Service Report',                      due: y => [y + 1, 1, 30] },
     { key: 'des',    title: 'DES wage reports in UInteract, one per registered consumer', quarterly: true },
     // 2026-10-23 (her answers): fiscal year ends Dec 31, so the CPA audit is due 150 days later, May 30.
     { key: 'audit',  title: 'Annual CPA audit (last year, ending Dec 31)', due: y => [y, 5, 30] },
@@ -1261,6 +1270,6 @@
                     dailyRoutine, STATE_WAIT, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, fusionDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT, caregiverPlan, CAREGIVER_PLAN,
-                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, noticeEnds, endingLetter, closureItems,
+                    DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, noticeEnds, VENDOR_LEGAL, endingLetter, closureItems,
                     CHANGE_KINDS, changeDue, changeMissing, changeItems, hospitalShifts };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

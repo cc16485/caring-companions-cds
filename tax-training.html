@@ -490,18 +490,18 @@ const STEPS = [
   {
     id:'irs8821', track:'payroll', pip:'IRS 8821', title:'IRS Form 8821 — Tax Information Authorization',
     field:'irs8821',
-    badges:[['b-mail','Post or fax'],['b-wet','Wet signature'],['b-time','Not audited']],
+    badges:[['b-online','Online'],['b-time','Not audited']],
     body:`
       <p>Authorizes Caring Companions to receive the consumer's IRS correspondence and to speak to the IRS about
       them. Not part of the audit, but it is what makes step&nbsp;2 possible: without it the IRS will not release
       a 147C letter to us.</p>
-      <div class="gotcha"><b>Wet signature.</b> An original signature may be required. Do not rely on e-sign for
-        this without confirming with the accountant first.</div>
+      <div class="gotcha"><b>Online only.</b> The consumer signs it in the Hub enrollment packet. An e-signed 8821
+        cannot be faxed or mailed, so it goes in at IRS.gov/Submit8821.</div>
       <h3>Do this</h3>
       <ol class="do">
         <li>Complete Form 8821 with the consumer's <b>name and EIN</b>.</li>
         <li>The <b>consumer signs</b> it.</li>
-        <li>Post or fax it to the IRS per the address on the form's own instructions.</li>
+        <li>Submit it online at <b>IRS.gov/Submit8821</b>. The Next line on Tax Setup takes you there.</li>
         <li>Keep a copy in the consumer's file.</li>
       </ol>`,
     copy:[]
@@ -527,7 +527,7 @@ const STEPS = [
   {
     id:'mo2827', track:'payroll', pip:'MO 2827', title:'MO Form 2827 — Missouri Power of Attorney',
     field:'mo2827',
-    badges:[['b-mail','Submit to MO DOR'],['b-time','Not audited']],
+    badges:[['b-online','Email or fax'],['b-time','Not audited']],
     body:`
       <p>Lets us act for the consumer with the Missouri Department of Revenue on withholding matters, the state
       counterpart to the 8821.</p>
@@ -535,7 +535,7 @@ const STEPS = [
       <ol class="do">
         <li>Complete Form 2827 with the consumer's <b>MO Tax ID</b> and <b>EIN</b>.</li>
         <li>The consumer signs.</li>
-        <li>Submit to the Missouri Department of Revenue.</li>
+        <li>Email it to <b>businesstaxregister@dor.mo.gov</b>, or fax it to (573) 522-1722. Tax Setup has both buttons.</li>
         <li>Keep a copy in the consumer's file.</li>
       </ol>`,
     copy:[['MO DOR','573-751-5860']]

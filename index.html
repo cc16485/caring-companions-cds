@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=40"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=41"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=9"></script>
 <script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
@@ -1931,7 +1931,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
             </select></td>
           </tr>
           <tr>
-            <td colspan="2"><strong>Annual Service Report</strong></td><td><strong>January 31</strong></td>
+            <td colspan="2"><strong>Annual Service Report</strong></td><td><strong>January 30</strong></td>
             <td><select onchange="saveQuarterStatus('annual',this.value)" id="qstat_annual" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--gray-300)">
               <option value="pending">⬜ Pending</option>
               <option value="submitted">✅ Submitted</option>
@@ -2176,10 +2176,10 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       <div class="card">
         <div class="card-title"><span class="icon">⏱️</span> Service Delivery Timeliness Requirements</div>
         <ul class="checklist">
-          <li><input type="checkbox" onchange="saveCheck('time1',this.checked)" id="time1"><label for="time1">Begin services within <strong>7 calendar days</strong> of receiving service authorization (or start date on authorization, whichever is later)
-            <div class="note">If not started in time, written justification must be in participant's file AND sent to DHSS case manager. Reg: 19 CSR 15-8.400 §5; P&amp;P Policy 5</div></label></li>
+          <li><input type="checkbox" onchange="saveCheck('time1',this.checked)" id="time1"><label for="time1"><strong>Our office goal:</strong> begin services within <strong>7 calendar days</strong> of receiving service authorization (or start date on authorization, whichever is later)
+            <div class="note">This is our own standard, not a state deadline for CDS. If the first shift comes after the start date, record why on the consumer's profile. P&amp;P Policy 5</div></label></li>
           <li><input type="checkbox" onchange="saveCheck('time2',this.checked)" id="time2"><label for="time2">Stamp date received on each service authorization upon receipt
-            <div class="note">Required to document compliance with 7-day start rule</div></label></li>
+            <div class="note">So we can show when it came in, for our 7-day office goal</div></label></li>
           <li><input type="checkbox" onchange="saveCheck('time3',this.checked)" id="time3"><label for="time3">Notify DHSS within <strong>10 days</strong> of any change in participant's circumstances or place of residence
             <div class="note">Includes health changes affecting ability to self-direct. Reg: 19 CSR 15-8.400(4)(H); P&amp;P Policy 4</div></label></li>
           <li><input type="checkbox" onchange="saveCheck('time4',this.checked)" id="time4"><label for="time4">Notify participants within <strong>5 days by certified mail</strong> of any agency change (address, phone, hours, ownership)
@@ -2216,7 +2216,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
           <li><input type="checkbox" onchange="saveCheck('fin2',this.checked)" id="fin2"><label for="fin2">Annual CPA audit conducted (licensed in Missouri) and submitted within 150 days of fiscal year end
             <div class="note">Required if gross revenue ≥$200K; review allowed if &lt;$200K. RSMo 208.909</div></label></li>
           <li><input type="checkbox" onchange="saveCheck('fin3',this.checked)" id="fin3"><label for="fin3">Quarterly Financial & Service Reports submitted on time</label></li>
-          <li><input type="checkbox" onchange="saveCheck('fin4',this.checked)" id="fin4"><label for="fin4">Annual Service Report submitted by January 31</label></li>
+          <li><input type="checkbox" onchange="saveCheck('fin4',this.checked)" id="fin4"><label for="fin4">Annual Service Report submitted by January 30</label></li>
           <li><input type="checkbox" onchange="saveCheck('fin5',this.checked)" id="fin5"><label for="fin5">Invoices submitted within 30 days of end of service month (non-MO HealthNet consumers)
             <div class="note">90-day maximum; no reimbursement after agreement expiration. §3.3</div></label></li>
           <li><input type="checkbox" onchange="saveCheck('fin6',this.checked)" id="fin6"><label for="fin6">Overpayments reported and repaid to DHSS promptly</label></li>
@@ -6453,7 +6453,7 @@ function printLetter(c, letter) {
     (L.facts ? '<h2>What happened</h2><p>' + e2(L.facts) + '</p>' : '') +
     '<h2>What happens next</h2><ul>' + lines(L.next) + '</ul>' +
     '<p>If you have questions, call us at 417-218-2888.</p>' +
-    '<div class="sig">Sincerely,<div class="line"></div>' + esc(L.signer) + (L.title ? ', ' + esc(L.title) : '') + '<br>Caring Companions CDS</div>' +
+    '<div class="sig">Sincerely,<div class="line"></div>' + esc(L.signer) + (L.title ? ', ' + esc(L.title) : '') + '<br>Caring Companions CDS<br><span style="font-size:12px;color:#444">' + esc(CDSRules.VENDOR_LEGAL) + '</span></div>' +
     '<div class="cc">Copy sent to: Missouri Department of Health and Senior Services, Division of Senior and Disability Services (DSDS)<br>' + esc(L.cite) + '</div>' +
     '</body></html>';
   const w = window.open('', '_blank');
