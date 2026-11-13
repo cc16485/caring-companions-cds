@@ -43,6 +43,7 @@ ok(/Only DSDS can close/.test(L.next) && /866-835-3505/.test(L.next), 'says only
 ok(/15-8\.400\(7\)\(B\)/.test(L.cite), 'names the rule');
 ok(R.endingLetter({ name: 'X' }, { kind: 'death' }, '2026-10-22') === null, 'no letter for a death');
 // The 21-day notice (her decision 2026-11-13).
+ok(/Troutman Enterprises, LLC DBA Caring Companions In-Home Senior Care/.test(L.opening) && R.VENDOR_LEGAL === 'Troutman Enterprises, LLC DBA Caring Companions In-Home Senior Care', 'the letter names the vendor as the state knows it (her word 2026-11-13)');
 ok(R.noticeEnds('2026-10-22') === '2026-11-12' && R.noticeEnds('') === '', '21 days from the day the notice is sent');
 ok(/your 21-day written notice/.test(L.next) && /through November 12, 2026/.test(L.next) && /Personal Care Provider Manual, section 2\.2/.test(L.cite), 'the letter gives the 21 days and the last day of them');
 const LP = R.endingLetter({ name: 'Ruth Caldwell' }, { kind: 'threats', steps: { paused: { date: '2026-10-21' } } }, '2026-10-22');

@@ -92,5 +92,8 @@ ok(!line(fz({ at: '2026-10-23', by: 'z' }), /Check Fusion/), 'Fusion: checked to
 ok(!R.fusionDue({}, new Date('2026-10-24T12:00:00')).length && !R.fusionDue({}, new Date('2026-10-25T12:00:00')).length, 'Fusion: quiet on Saturday and Sunday');
 ok(R.fusionDue({}, new Date('2026-10-26T12:00:00')).length === 1, 'Fusion: back on Monday');
 
+// Annual Service Report: Jan 30 (her yes 2026-11-13).
+ok(R.reportDue('annual', new Date('2026-12-15T12:00:00')).due === '2027-01-30', 'Annual Service Report is due Jan 30');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
