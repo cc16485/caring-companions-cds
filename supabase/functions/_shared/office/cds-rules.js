@@ -484,7 +484,7 @@
       ppl.push({ name: c.name, id: c.id, month: 'visit:' + i, why: 'visit ' + monDay(v.date) + ' found services not given as authorized',
                  due: addDays(v.date, 10), act: 'dhss' });
     }));
-    return ppl.length ? [{ t: plural(ppl.length, 'change', 'changes') + ' to report to DHSS (10 days from the call)', go: 'consumers',
+    return ppl.length ? [{ t: plural(ppl.length, 'change', 'changes') + ' to report to DSDS (10 days from the call)', go: 'consumers',
                            bad: ppl.some(p => p.due <= today), people: ppl.sort((a, b) => a.due.localeCompare(b.due)) }] : [];
   }
   // Leads: waiting on the state over 21 days (call DSDS), and leads already reached with no call back

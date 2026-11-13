@@ -193,6 +193,8 @@ export function rosterDue(a, autoOig, now = new Date()) {
 // itself with the dates of their hiring checks, so every rule that reads the Roster covers them.
 const chiDay = iso => !iso ? '' : /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? String(iso)
   : new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+// Office staff cannot be an attendant for our consumers (19 CSR 15-8.400(8)(C)): same name as someone on Settings > Office staff.
+export const isOfficeStaff = (name, staff) => !!nameKey(name) && (staff || []).some(n => nameKey(n) === nameKey(name));
 // Their Roster record: by the application's id once linked, else the same name on a record not linked yet.
 export const rosterMatch = (roster, a) => (roster || []).find(r => r.poolId && r.poolId === a.pool_id)
   || (roster || []).find(r => !r.poolId && nameKey(r.name) === nameKey(a.name)) || null;
@@ -442,7 +444,7 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
       label: a.active ? 'Waiting on first shift' : a.label, tone: a.active ? 'b' : a.tone, track: tr, flag, since: a.step1_at || a.started_at,
       meta: [a.consumer ? (a.consumer_waiting ? 'For ' + a.consumer + ' (consumer waiting)' : 'For ' + a.consumer) : '',
         a.step1_at ? 'Step 1 signed ' + shortDay(String(a.step1_at).slice(0, 10)) : 'Started ' + shortDay(String(a.started_at || '').slice(0, 10)),
-        a.active ? 'Ready: their first clock-in in WellSky moves them to Working' : a.next].filter(Boolean).join(' · ') });
+        a.active ? 'Ready: remind the consumer they can call us for the first clock-in. The first shift in WellSky moves them to Working' : a.next].filter(Boolean).join(' · ') });
   }
   for (const a of roster) {
     if (waitingFirst.has(a.id)) continue;
@@ -896,6 +898,7 @@ export function mountHubPacket(el, opts) {
     const checks = (g.screening.checks || []);
     el.innerHTML = `<div class="btns" style="margin:0"><button class="pill-btn" data-act="back">← All attendants</button><button class="btn o" data-act="file">Print attendant file</button></div>
       <div class="card"><h2>${esc(g.pool.first + ' ' + g.pool.last)}</h2><span class="pill ${st.tone}">${esc(st.label)}</span>
+      ${isOfficeStaff(g.pool.first + ' ' + g.pool.last, opts.staff ? opts.staff() : []) ? `<div class="err" style="display:block"><b>This name is on our Office staff list.</b> Someone who works in this office cannot be a paid attendant for our consumers, except to fill in for no more than 3 days in 30 (19 CSR 15-8.400(8)(C)). Check with the owner before going on.</div>` : ''}
       ${nextCardHtml(nextHow(st, g))}${note ? `<p class="ok">${esc(note)}</p>` : ''}
       <dl><dt>Phone</dt><dd>${esc(g.pool.phone)}</dd><dt>Email</dt><dd>${esc(g.pool.email)}</dd><dt>Works for</dt><dd>${esc(p.consumer_name || '')}</dd>
       <dt>Caregiver list</dt><dd>${p.list_choice === 'join' ? 'Yes, wants to be listed' : 'No, works for their consumer only'}</dd></dl>
