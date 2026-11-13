@@ -165,7 +165,7 @@ const at = d => new Date(d + 'T12:00:00');
   ok(may && may.due === '2027-05-30' && may.days === 20 && !may.late, 'May: the CPA audit, due May 30');
   due = R.reportsDue({}, at('2026-11-05'));
   ok(due[0].key === 'q3' && due[0].late, 'a missed report stays on Today as late');
-  ok(R.reportsDue({}, at('2027-01-20')).map(r => r.key).join() === 'q4,annual,des,f941,mo941,w2', 'January: Q4, the annual report, DES, both 941s and W-2s (MO W-3 is Feb 28)');
+  ok(R.reportsDue({}, at('2027-01-20')).map(r => r.key).join() === 'annual,q4,des,f941,mo941,w2', 'January: the annual report first (Jan 30 since 2026-11-13), then Q4, DES, both 941s and W-2s (MO W-3 is Feb 28)');
   ok(!/Monthly check-in calls: /.test(html), 'Coming up no longer repeats the check-in count');
   ok(/id="qstat_des"/.test(html), 'Deadlines has a DES wage reports row');
 }
