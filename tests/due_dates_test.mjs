@@ -77,5 +77,14 @@ const rep = line(s1.items, /state report/);
 ok(rep && rep.people.map(p => p.key).join() === 'des,f941,mo941' && rep.people[0].act === 'report' && rep.people[0].due === '2026-10-31', 'Q3 marked sent: DES, Federal 941 and MO 941 left, Mark it sent');
 ok(!R.dailyRoutine({ consumers: [], pipeline: [] }, now).find(s => s.n === 1).items.length, 'no quarterStatus handed in: no reports line');
 
+// The daily Fusion look (2026-11-13): weekdays, until Checked that day; only when the hub hands fusionCheck in.
+const fz = d => R.dailyRoutine({ consumers: [], pipeline: [], fusionCheck: d }, now).find(s => s.n === 1).items;
+const f1 = line(fz({}), /Check Fusion/);
+ok(f1 && f1.people.length === 1 && f1.people[0].act === 'fusion' && f1.people[0].due === '2026-10-23' && f1.people[0].why === 'not checked yet', 'Fusion: never checked shows on step 1 with a Checked button');
+ok(/last checked Oct 22/.test(line(fz({ at: '2026-10-22', by: 'z' }), /Check Fusion/).people[0].why), 'Fusion: checked yesterday shows again, says when');
+ok(!line(fz({ at: '2026-10-23', by: 'z' }), /Check Fusion/), 'Fusion: checked today is gone');
+ok(!R.fusionDue({}, new Date('2026-10-24T12:00:00')).length && !R.fusionDue({}, new Date('2026-10-25T12:00:00')).length, 'Fusion: quiet on Saturday and Sunday');
+ok(R.fusionDue({}, new Date('2026-10-26T12:00:00')).length === 1, 'Fusion: back on Monday');
+
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
