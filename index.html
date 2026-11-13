@@ -5474,7 +5474,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=25');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=26');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5483,6 +5483,7 @@ async function renderActiveAttendants() {
         await setData('attendants', list);
         renderAttendants(); updateDashboard(); renderAttendantCheck();
       },
+      onList: syncApplicationAttendants,
       wellsky: () => getObj('wellskyCheck'),
       corrections: () => getData('evvCorrections'),   // for the attendant file's shifts fixed by hand
       who: () => ((document.getElementById('header_user') || {}).textContent || '').trim(),
@@ -15731,6 +15732,33 @@ function _todayDhssReported(btn) {
 // the Roster from this page, the automatic OIG clears from cds-oig. Loaded when Today draws, again
 // after 2 minutes or on Refresh. A load that fails says so on Today; nothing goes quiet.
 let _todayAtt = { at: 0, busy: false, data: null, error: '' };
+// Attendants hired through the online application get a Roster record by themselves the day their
+// onboarding is finished (2026-11-13, her yes; rules in hub-packet.js rosterPlan). The record carries the
+// dates of their hiring checks, so rechecks, "No longer working", Today and a Starting consumer's
+// attendant step all cover them. A record someone already made (the WellSky Add button) is linked and
+// only its blank dates are filled. Runs wherever the application list loads; a second run changes nothing.
+let _appSync = { busy: false };
+async function syncApplicationAttendants(packets) {
+  if (_appSync.busy || !Array.isArray(packets) || typeof cdsMatchApi !== 'function') return false;
+  _appSync.busy = true;
+  let changed = false;
+  try {
+    const HP = await import('./caregiver-match/hub-packet.js?v=26');
+    for (const a of HP.rosterPlan(packets, getData('attendants'))) {
+      let g;
+      try { g = await cdsMatchApi('packetGet', { pool_id: a.pool_id }); }
+      catch (e) { console.error('application attendant ' + a.pool_id + ':', e); continue; }   // their row says "Recheck dates not set up yet"
+      const list = getData('attendants').map(x => Object.assign({}, x)), r = HP.rosterMatch(list, a);
+      if (r && r.status === 'inactive') continue;
+      if (r) Object.assign(r, HP.rosterPatchFromPacket(r, a, g)); else list.push(HP.rosterRowFromPacket(a, g));
+      await setData('attendants', list);
+      changed = true;
+    }
+  } catch (e) { console.error('application attendants:', e); }
+  _appSync.busy = false;
+  if (changed) { try { renderAttendantCheck(); updateDashboard(); } catch (e) { console.error(e); } }
+  return changed;
+}
 async function _todayAttLoad(force) {
   if (_todayAtt.busy || typeof _db === 'undefined' || !_db) return;
   if (!force && _todayAtt.at && Date.now() - _todayAtt.at < 120000) return;
@@ -15739,6 +15767,7 @@ async function _todayAttLoad(force) {
     const [t, p] = await Promise.all([cdsMatchApi('tasks'), cdsMatchApi('packetList')]);
     _todayAtt.data = Object.assign(_todayAtt.data || {}, { tasks: t.tasks || [], applications: p.attendants || [] });
     _todayAtt.error = '';
+    syncApplicationAttendants(p.attendants || []).then(ch => { if (ch) { try { renderDailyRoutine(); } catch (e) { console.error(e); } } });
   } catch (e) { _todayAtt.error = e.message || String(e); }
   // EVV forms sent in online (2026-10-23): for the EVV due dates on Today and the 5% standard.
   try {
@@ -15763,8 +15792,12 @@ function _todayAttWork() {
   let oigPeople = null;
   try { oigPeople = _dashOig; } catch (e) {}   // declared further down the page
   Object.entries(oigPeople || {}).forEach(([ref, x]) => {
-    if (/^attendant:/.test(ref) && x && (x.result === 'clear' || x.review === 'not_them') && x.checked_at)
-      auto[ref.slice(10)] = new Date(x.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+    // An application attendant's Roster id is "pool-<id>"; their check under the application ("pool:<id>") counts too, newest wins.
+    const id = /^attendant:/.test(ref) ? ref.slice(10) : /^pool:/.test(ref) ? 'pool-' + ref.slice(5) : '';
+    if (id && x && (x.result === 'clear' || x.review === 'not_them') && x.checked_at) {
+      const day = new Date(x.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+      if (!auto[id] || day > auto[id]) auto[id] = day;
+    }
   });
   // First worked shift per attendant (WellSky), for the I-9 due date of anyone not finished onboarding.
   const first = {}, sh = getObj('wellskyCheck').shifts, today = _todayIso();

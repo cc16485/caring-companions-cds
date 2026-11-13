@@ -186,6 +186,46 @@ export function rosterDue(a, autoOig, now = new Date()) {
   return { rows, label, tone: over ? 'r' : soonR || miss.length ? 'y' : 'g', due: !!(over || soonR), missing: miss.length > 0 };
 }
 
+// ---------- Attendants from the online application join the Roster (2026-11-13, her yes) ----------
+// Until now someone hired through the application sat in Working as "All checks good" for good: no EDL or
+// FCSR recheck dates, no "No longer working", and a Starting consumer never saw them as their attendant.
+// Now, the day their onboarding is finished (packetList .active), the hub makes their Roster record by
+// itself with the dates of their hiring checks, so every rule that reads the Roster covers them.
+const chiDay = iso => !iso ? '' : /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? String(iso)
+  : new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+// Their Roster record: by the application's id once linked, else the same name on a record not linked yet.
+export const rosterMatch = (roster, a) => (roster || []).find(r => r.poolId && r.poolId === a.pool_id)
+  || (roster || []).find(r => !r.poolId && nameKey(r.name) === nameKey(a.name)) || null;
+// The finished applications that still need a Roster record made, or one linked and its blank dates filled.
+// Someone marked "No longer working" is left alone.
+export function rosterPlan(packets, roster) {
+  return (packets || []).filter(a => a.active && a.pool_id).filter(a => { const r = rosterMatch(roster, a);
+    return !r || (r.status !== 'inactive' && !r.poolSynced); });
+}
+// packetGet -> the day each hiring check came back clear (EDL with the DMH registry, OIG with the Missouri Medicaid list).
+export function checkDatesFromPacket(g) {
+  const sc = (g && g.screening) || {}, checks = sc.checks || [];
+  const newest = keys => checks.filter(c => keys.includes(c.key) && c.clear && c.at).map(c => chiDay(c.at)).sort().pop() || '';
+  return { fcsrDate: sc.screened ? chiDay(sc.result_at || sc.reviewed_at) : '', edlDate: newest(['edl', 'edr']), leieDate: newest(['oig', 'mo_medicaid']) };
+}
+export function rosterRowFromPacket(a, g, now = new Date()) {
+  const pool = (g && g.pool) || {};
+  return { id: 'pool-' + a.pool_id, poolId: a.pool_id, poolSynced: true, name: a.name, wellskyName: '', email: pool.email || '', phone: pool.phone || '',
+    fcsrNum: '', consumer: a.consumer || '', hiredate: chiDay(a.active_at), ...checkDatesFromPacket(g),
+    empeon: '', outOfState: '', everify: '', spouseCheck: '', contract: '', evv: '', status: 'active', welcomeSent: false, welcomeSentDate: '',
+    addedFrom: 'Application', addedBy: 'the hub', addedAt: now.toISOString() };
+}
+// Linking a record somebody already made (the WellSky Add button): only blanks are filled, no date moves.
+export function rosterPatchFromPacket(r, a, g) {
+  const d = checkDatesFromPacket(g), pool = (g && g.pool) || {}, patch = { poolId: a.pool_id, poolSynced: true };
+  for (const k of ['fcsrDate', 'edlDate', 'leieDate']) if (!r[k] && d[k]) patch[k] = d[k];
+  if (!r.consumer && a.consumer) patch.consumer = a.consumer;
+  if (!r.phone && pool.phone) patch.phone = pool.phone;
+  if (!r.email && pool.email) patch.email = pool.email;
+  if (!r.hiredate && a.active_at) patch.hiredate = chiDay(a.active_at);
+  return patch;
+}
+
 // Check proof from GHL (2026-10-22): after the office reviews the dates, each attendant's Roster
 // date moves forward to the newest confirmed check, never back.
 const PROOF_FIELD = { edl: 'edlDate', fcsr: 'fcsrDate', oig: 'leieDate' };
@@ -373,14 +413,25 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
   const workMeta = (consumers, w) => [consumers ? 'Works for ' + consumers : '',
     w && w.hours ? w.hours + ' hrs this month' : '', w && w.last ? 'last shift ' + lastWords(w.last, now) : ''].filter(Boolean).join(' · ');
   const starting = [], working = [], quiet = [];
+  // One row per person (2026-11-13). Someone from the application who has a Roster record shows as that
+  // record once they have worked a shift (real recheck dates, No longer working), and only on Onboarding
+  // before that. Someone marked "No longer working" does not come back through their application.
+  const waitingFirst = new Set();
 
   for (const a of packets) {
     const w = find(a.name), shift = !!(w && w.last);
+    // Let go after they were hired: gone. Finished a new application after being let go: shown, with what to do.
+    const gone = a.active ? rosterMatch(ended, a) : null;
+    const again = !!(gone && gone.ended && gone.ended.on && chiDay(a.active_at) > gone.ended.on);
+    if (gone && !again) continue;
+    const ros = a.active ? rosterMatch(roster, a) : null;
     if (a.active && shift) {
-      working.push({ kind: 'packet', id: a.pool_id, name: a.name, label: 'All checks good', tone: 'g', due: false, missing: false,
+      if (ros) continue;
+      working.push({ kind: 'packet', id: a.pool_id, name: a.name, label: again ? 'Hired again: make them active on the Inactive tab' : 'Recheck dates not set up yet', tone: 'y', due: false, missing: true,
         meta: workMeta(w.consumers.join(' and ') || a.consumer, w) });
       continue;
     }
+    if (ros) waitingFirst.add(ros.id);
     const tr = a.steps ? trackOf(a.steps, shift) : null;
     const since = a.updated_at || a.step1_at || a.started_at;
     let flag = null;
@@ -394,6 +445,7 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
         a.active ? 'Ready: their first clock-in in WellSky moves them to Working' : a.next].filter(Boolean).join(' · ') });
   }
   for (const a of roster) {
+    if (waitingFirst.has(a.id)) continue;
     const w = find(a.wellskyName || a.name), d = rosterDue(a, autoOig(a.id), now);
     const row = { kind: 'roster', id: a.id, name: a.name, label: d.label, tone: d.tone, due: d.due, missing: d.missing, last: w ? w.last : '' };
     if (!ws.have || (w && w.last >= cutoff)) working.push({ ...row, meta: workMeta((w && w.consumers.join(' and ')) || a.consumer, w) });
@@ -593,9 +645,12 @@ export function attendantFileHtml({ name, roster, packet, proofs = [], wellsky, 
 export function mountHubPacket(el, opts) {
   const { api } = opts;
   const roster = () => (opts.roster ? opts.roster() : []).filter(a => a.status !== 'inactive');
-  const autoOig = id => { const p = opts.oigPeople && (opts.oigPeople() || {})['attendant:' + id];
-    return p && (p.result === 'clear' || p.review === 'not_them') && p.checked_at
-      ? new Date(p.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) : null; };   // the Central day, not the UTC one
+  // Someone from the application (Roster id "pool-<id>") is also checked under their application, so the newer of the two counts.
+  const autoOig = id => { const all = (opts.oigPeople && opts.oigPeople()) || {};
+    const days = ['attendant:' + id, /^pool-/.test(String(id)) ? 'pool:' + String(id).slice(5) : ''].map(ref => all[ref])
+      .filter(p => p && (p.result === 'clear' || p.review === 'not_them') && p.checked_at)
+      .map(p => new Date(p.checked_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }));   // the Central day, not the UTC one
+    return days.sort().pop() || null; };
   const ended = () => (opts.roster ? opts.roster() : []).filter(a => a.status === 'inactive');
   // Tabs (her ask 2026-10-22): Onboarding / Working / Inactive. Opens on Onboarding when someone is in it.
   let list = [], open = null, err = '', tab = null, query = '';
@@ -622,6 +677,8 @@ export function mountHubPacket(el, opts) {
         try { const g = await api('packetGet', { pool_id: a.pool_id }); a.steps = g.status.steps; a.updated_at = g.packet.updated_at; } catch (e) { /* the row still shows, without the track */ }
       }));
     } catch (e) { list = []; err = e.message; }
+    // Finished applications get their Roster record here (index.html syncApplicationAttendants).
+    if (opts.onList && list.length) { try { await opts.onList(list); } catch (e) { console.error('application attendants:', e); } }
     draw();
   }
   const groups = () => buildGroups({ packets: list, roster: roster(), ended: ended(), autoOig, wellsky: opts.wellsky ? opts.wellsky() : null });
@@ -899,6 +956,7 @@ export function mountHubPacket(el, opts) {
       <p class="small">OIG every month (runs by itself), EDL every 3 months, FCSR every year. Use the date on the search result you have on file.</p>
       <div class="err" id="hp_err"></div>${note ? `<div class="ok">${esc(note)}</div>` : ''}
       <h3>Papers and proof on file</h3>
+      ${a.poolId ? `<p class="small">Hired through the online application. Their hiring checks and signed forms are on it.</p><div class="btns"><button class="btn o" data-open="packet:${esc(a.poolId)}">Open their hiring papers</button></div>` : ''}
       <div id="hp_proofs" class="small">Loading…</div>
       <div class="copy"><b>Add a recheck</b>
         <div><select id="hp_pk" aria-label="Which check"><option value="edl">EDL</option><option value="fcsr">FCSR</option><option value="oig">OIG</option></select>
@@ -945,6 +1003,8 @@ export function mountHubPacket(el, opts) {
       const ORDER = ['application', 'onboarding', 'fcsr', 'edl', 'oig'], when = x => x.checked_on || x.date_found || '9999';
       const items = got.slice().sort((a, b) => ORDER.indexOf(a.check) - ORDER.indexOf(b.check) || when(a).localeCompare(when(b)));
       if (!open || open.id !== id) return;
+      // Hired through the application: their papers are on it, so nothing needs bringing in from GHL.
+      if (!items.length && (roster().find(x => x.id === id) || {}).poolId) { box.innerHTML = '<p>No recheck proof added yet. Add each recheck below when it is run.</p>'; return; }
       box.innerHTML = items.length ? `${items.some(x => x.check === 'application') ? '' : '<p>No application on file. Bring it in from GHL, or add the PDF below.</p>'}<table><tbody>${items.map(x => `<tr><td><b>${CHECK_LABEL[x.check]}</b>${IS_CHECK(x.check) ? `<div class="small">${items.findIndex(y => y.check === x.check) === items.indexOf(x) ? 'Pre-hire' : 'Recheck'}</div>` : ''}</td><td>${esc(fmtD(x.checked_on || x.date_found) || (IS_CHECK(x.check) ? 'No date yet' : ''))}</td>
         <td>${paperLink(x)}</td><td>${x.source === 'ghl' ? 'From GHL' : 'Added in the hub'}</td></tr>`).join('')}</tbody></table>`
         : '<p>No proof in the hub yet.</p><div class="btns"><button class="btn" data-act="ghl-import">Bring in papers and checks from GHL</button></div><p>This brings in everyone\'s application, onboarding papers and FCSR, EDL and OIG PDFs at once. Or add a recheck below.</p>';

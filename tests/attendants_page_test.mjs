@@ -85,7 +85,9 @@ eq(G.working.map(r => r.name), ['Anita Smith', 'Jeana Wise'], 'Working: a WellSk
 eq(G.working[0].meta, 'Works for Susan Barnwell · 14.75 hrs this month · last shift yesterday', 'the card says who, how much, how recent');
 eq(G.working[1].kind, 'packet', 'a packet attendant with a shift counts as Working');
 eq(G.quiet.map(r => [r.name, r.label]), [['Andrew Wiggins', 'Last shift Sep 5'], ['Kiersten Ackerman', 'No WellSky shifts']], 'Not working lately: newest last shift first');
-eq(G.tiles, { starting: 3, working: 2, due: 1, dates: 2, quiet: 2 }, 'the tiles (a missing date counts even when another check is overdue)');
+// 2026-11-13: a working application attendant with no Roster record yet counts as dates to add (was "All checks good").
+eq(G.tiles, { starting: 3, working: 2, due: 1, dates: 3, quiet: 2 }, 'the tiles (a missing date counts even when another check is overdue)');
+eq(G.working[1].label, 'Recheck dates not set up yet', 'a working application attendant with no Roster record says so');
 const E = H.buildGroups({ packets: [], roster: [], ended: [{ id: 'x1', name: 'Faith Long', consumer: 'Michael Gasper', status: 'inactive' }, { id: 'x2', name: 'Anita Smith', wellskyName: 'Smith, Anita', status: 'inactive' }], wellsky, now: NOW });
 eq(E.ended.map(r => [r.name, r.meta]), [['Anita Smith', 'No record of how the consumer told us · last shift Oct 21'], ['Faith Long', 'No record of how the consumer told us · was with Michael Gasper']], 'No longer working: listed for the Inactive tab, with last shift when WellSky has one');
 const none = H.buildGroups({ packets: [], roster, autoOig: () => null, wellsky: null, now: NOW });
