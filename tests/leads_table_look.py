@@ -93,7 +93,7 @@ with sync_playwright() as pw:
     l = by.get('Leona Marsh', {})
     ck('Leona (PCCP, day 6): sent with eMOMED and FUSION ticks, Day 6, Waiting on State', 'eMOMED ✓' in l.get('cells', [''] * 4)[2] and 'FUSION ✓' in l['cells'][2] and l['cells'][3].startswith('Day 6') and l['wait'].startswith('State'), l)
     v = by.get('Vernon Pike', {})
-    ck('Vernon (day 14): gold, check in this week', v.get('cells', [''] * 4)[3].startswith('Day 14') and 'lt-today' in v['cls'] and 'Check in with the state' in v['wait'], v)
+    ck('Vernon (day 14): gold, check in this week', v.get('cells', [''] * 4)[3].startswith('Day 14') and 'lt-today' in v['cls'] and 'if DSDS has called or visited' in v['wait'], v)
     h = by.get('Hazel Dunn', {})
     ck('Hazel (approved, packet 4 of 9): State approved with DCN and hours, packet waiting, Waiting on Consumer, Move button', 'DCN 87654321' in h.get('cells', [''] * 7)[3] and '20 hrs' in h['cells'][3] and h['cells'][4] == '4 of 9 signed' and h['wait'].startswith('Consumer') and h['cells'][6] == 'Move to Consumers', h)
     e = by.get('Earl Simmons', {})

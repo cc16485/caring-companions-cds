@@ -254,9 +254,16 @@
   // Waiting on the state (2026-11-05): a referral or transfer sent, and no authorization back after the days set in
   // Admin (STATE_WAIT_DAYS until changed). A past assessment date restarts the count; a future one waits for it.
   // ctxOf(c) -> { auth } as the hub knows it. Returns [{ id, name, why, since, days, requestId }], longest wait first.
+  // One clock everywhere (her yes 2026-11-13; cds-rules.js STATE_WAIT holds the same numbers for leads):
+  //   referral: day 14 ask the consumer whether DSDS has called or visited; day 21 call DSDS (the state gives
+  //             itself 15 business days to assess, HCBS Manual 4.15). Once the assessment has happened the
+  //             count restarts from it and day 14 is already a call to DSDS.
+  //   transfer: day 7 call DSDS.
   const STATE_WAIT_DAYS = { referral: 14, transfer: 7 };
+  const STATE_CALL_DAYS = { referral: 21 };
   function stateWaits(data, todayIso, ctxOf, waitDays) {
     const W = Object.assign({}, STATE_WAIT_DAYS, waitDays || {});
+    const callAt = Math.max(STATE_CALL_DAYS.referral, W.referral);
     const dayN = d => Math.floor(Date.parse(todayIso + 'T12:00:00') / 864e5) - Math.floor(Date.parse(String(d).slice(0, 10) + 'T12:00:00') / 864e5);
     const out = [];
     (data.consumers || []).filter(isStarting).forEach(c => {
@@ -271,8 +278,9 @@
       }
       const n = dayN(since), limit = move ? W.transfer : W.referral;
       if (n < limit) return;
-      out.push({ id: c.id, name: c.name, since, days: n, requestId: st.requestId || '',
-        why: what + ' ' + n + ' days ago, no authorization yet. Check with DSDS' + (st.requestId ? ' (request ' + st.requestId + ')' : '') });
+      const ask = !move && what === 'Referral sent' && n < callAt;   // not assessed yet and inside the state's own time
+      out.push({ id: c.id, name: c.name, since, days: n, requestId: st.requestId || '', call: !ask,
+        why: what + ' ' + n + ' days ago, no authorization yet. ' + (ask ? 'Ask the consumer if DSDS has called or visited' : 'Call DSDS') + (st.requestId ? ' (request ' + st.requestId + ')' : '') });
     });
     return out.sort((a, b) => b.days - a.days);
   }
@@ -618,5 +626,5 @@
 
   root.CDSStarting = { parseEmomed, niceName, SOURCES, DEFAULT_RULES, FAM, normCodes, decide, medicaidState, startingSteps, readyGate, STEP_TITLES,
                        applicationFollowups, STAGES, FOLLOWUP_DAYS, isStarting, DEFAULT_RESOURCES, DEFAULT_TEMPLATES,
-                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, parseDob, HELP, startDateAlerts, stateWaits, STATE_WAIT_DAYS, readyList, readyForActive, ageOn };
+                       fillTemplate, identifierProblems, recentSends, callPlan, callFlags, outsideArea, PRESCREEN_KEYS, mapPrescreen, STATE_CALL_DAYS, parseDob, HELP, startDateAlerts, stateWaits, STATE_WAIT_DAYS, readyList, readyForActive, ageOn };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

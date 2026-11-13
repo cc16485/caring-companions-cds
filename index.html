@@ -25,8 +25,8 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=38"></script>
-<script src="supabase/functions/_shared/office/starting-rules.js?v=8"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=40"></script>
+<script src="supabase/functions/_shared/office/starting-rules.js?v=9"></script>
 <script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=8"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
@@ -2067,7 +2067,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
         <div class="card-title"><span class="icon">📱</span> EVV — Electronic Visit Verification</div>
         <ul class="checklist">
           <li><input type="checkbox" onchange="saveCheck('evv1',this.checked)" id="evv1"><label for="evv1">EVV system operational — <strong>WellSky Personal Care</strong>
-            <div class="note">Our EVV vendor: WellSky Personal Care | Staff portal: mycaringcds.com | Syncs to Sandata EVV Aggregator (EAS). Reg: 13 CSR 70-3.320</div></label></li>
+            <div class="note">Our EVV vendor: WellSky Personal Care | Syncs to Sandata EVV Aggregator (EAS). Reg: 13 CSR 70-3.320</div></label></li>
           <li><input type="checkbox" onchange="saveCheck('evv2',this.checked)" id="evv2"><label for="evv2">Registered with Sandata EVV Aggregator (EAS) — MOAltEVV@Sandata.com</label></li>
           <li><input type="checkbox" onchange="saveCheck('evv3',this.checked)" id="evv3"><label for="evv3">EVV captures all required elements: participant ID, attendant ID (FCSR#), start/stop time, date, tasks, provider ID, manual adjustments</label></li>
           <li><input type="checkbox" onchange="saveCheck('evv4',this.checked)" id="evv4"><label for="evv4">EVV training provided to all consumers</label></li>
@@ -2232,6 +2232,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       <div class="step-desc"><strong>Open the DSDS form</strong> and fill in the Closure section with the reason. Mail the consumer the letter the hub writes. If the consumer wants to stop, they call DSDS at 866-835-3505 to confirm.</div></div></div>
     <div class="step"><div class="step-num">3</div><div class="step-content"><div class="step-title">Record what DSDS does</div>
       <div class="step-desc">The date DSDS sent its closing notice and the last day of services. DSDS gives 10 days notice, and an appeal in that time keeps services going.</div></div></div>
+    <div class="step-desc" style="margin:6px 0 8px"><strong>Our 21-day notice.</strong> When we are the ones asking to end services, the letter gives the consumer and DSDS 21 days written notice. Services go on for those 21 days unless DSDS makes other arrangements, or services are paused after DSDS is told (fraud, threats or abuse).</div>
     <div class="step"><div class="step-num">4</div><div class="step-content"><div class="step-title">Mark inactive after DSDS closes the case</div>
       <div class="step-desc">The hub will not let you do it sooner. Then finish <strong>Consumers &gt; Tax &amp; EIN &gt; Leaving</strong>. The EIN belongs to the consumer and goes with them.</div></div></div>
     <div class="step-desc" style="margin-top:8px">When a consumer lets an attendant go, use <strong>No longer working</strong> on the attendant and record why, how the consumer told us, the date and their words.</div>
@@ -2312,7 +2313,6 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div class="card">
       <div class="card-title"><span class="icon">🔗</span> Key Websites & Portals</div>
       <table><tbody>
-        <tr><td><strong>🏠 Caring Companions Staff Portal (EVV / Payroll)</strong></td><td><a href="https://mycaringcds.com" target="_blank" style="color:var(--primary-light);font-weight:700">mycaringcds.com</a></td></tr>
         <tr><td><strong>🏠 Caring Companions Website</strong></td><td><a href="https://caringcds.com" target="_blank">caringcds.com</a></td></tr>
         <tr><td><strong>🏠 Find CDS Caregivers (Job Board)</strong></td><td><a href="https://findcdscaregivers.com" target="_blank">findcdscaregivers.com</a></td></tr>
         <tr><td><strong>🖥️ WellSky Personal Care (EVV Vendor)</strong></td><td><a href="https://troutman.clearcareonline.com" target="_blank" rel="noopener">troutman.clearcareonline.com</a></td></tr>
@@ -6539,7 +6539,9 @@ function endingCard(c) {
       (s.cite ? '<br><span class="end-cite">' + esc(s.cite) + '</span>' : '') +
       (s.print && r.letter ? '<br><a href="#" onclick="openLetter(\'' + id + '\');return false">' + (e.letter ? 'Open the letter' : 'Write the letter') + '</a>' +
         (e.letter ? ' <span class="end-cite">saved ' + esc(new Date(e.letter.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) + ' by ' + esc(e.letter.by || '') + ' · <a href="#" onclick="printLetter(getData(\'consumers\').find(x => x.id === \'' + id + '\'));return false">Print again</a></span>' : '') +
-        '<br><span class="end-cite">Mail or hand it to the consumer. Send DSDS a copy the same day.</span>' : '') +
+        '<br><span class="end-cite">Mail or hand it to the consumer. Send DSDS a copy the same day.</span>' +
+        (v && v.date ? '<br><span class="end-cite"><strong>21 days end ' + esc(_niceDay(CDSRules.noticeEnds(v.date))) + '.</strong> Services go on until then, unless DSDS makes other arrangements or services are paused.</span>'
+                     : '<br><span class="end-cite">The 21 days start the day it is sent. Services go on for those 21 days unless DSDS makes other arrangements or services are paused.</span>') : '') +
       (s.form ? '<br><a href="' + CDSRules.DSDS_FORM + '" target="_blank" rel="noopener">Open the DSDS form</a> <span class="end-cite">then check it in Fusion, PCCP Request tab</span>' : '') +
       '</span>' + dateIn(v && v.date, "endSetStep('" + id + "','" + s.k + "',this.value)") +
       (v && v.date ? '<span class="who">by ' + esc(v.by || '') + '</span>' : '') + '</div>';
@@ -9916,8 +9918,8 @@ const OUTREACH_CONFIGS = {
     title: 'Background Check Cleared',
     infoBar: '✅ Notify the attendant that their background check has cleared and they are approved.',
     emailSubject: 'You\'re Approved to Begin! — Caring Companions CDS',
-    buildEmail: (fn) => `Hi ${fn},\n\nGreat news — your background check has cleared! ✅\n\nYou are officially approved to begin serving your consumer. We will be reaching out shortly with your start date and schedule details.\n\nIn the meantime, if you haven\'t already, please make sure you have:\n• Completed all Empeon paperwork\n• Watched all orientation videos at caringcds.com/orientation\n• Set up your WellSky EVV access at mycaringcds.com\n\nThank you for your patience through the process — we\'re excited to have you on the team!\n\nSamantha\nCaring Companions In Home Senior Care | CDS Division\nintake@caringcds.com`,
-    buildSMS: (fn) => `Great news ${fn}! 🎉 Your background check cleared — you\'re approved to begin! We\'ll be in touch soon with your start details. Make sure your Empeon paperwork is complete and check out mycaringcds.com for EVV setup. Questions? Reply anytime!`,
+    buildEmail: (fn) => `Hi ${fn},\n\nGreat news — your background check has cleared! ✅\n\nYou are officially approved to begin serving your consumer. We will be reaching out shortly with your start date and schedule details.\n\nIn the meantime, if you haven\'t already, please make sure you have:\n• Completed all Empeon paperwork\n• Watched all orientation videos at caringcds.com/orientation\n• Set up the WellSky Personal Care app on your phone for clocking in\n\nThank you for your patience through the process — we\'re excited to have you on the team!\n\nSamantha\nCaring Companions In Home Senior Care | CDS Division\nintake@caringcds.com`,
+    buildSMS: (fn) => `Great news ${fn}! 🎉 Your background check cleared — you\'re approved to begin! We\'ll be in touch soon with your start details. Make sure your Empeon paperwork is complete and the WellSky Personal Care app is on your phone. Questions? Reply anytime!`,
     sentField: null, entityType: 'attendant'
   },
   orientation_nudge: {
@@ -13626,7 +13628,7 @@ function efaxPacketForm(fileKey) {
   const subject = spec.label.split(' /')[0] + ' — ' + c.name;
   const body =
     'Caring Companions Consumer Directed Services, LLC\n' +
-    '1331 N Stewart Ave Ste A, Springfield MO 65802\n' +
+    '1331 N Stewart Ave Ste B, Springfield MO 65802\n' +
     'Phone: 866-863-5151   Fax: 417-719-7870\n\n' +
     'Please find attached ' + spec.label + ' for ' + c.name + '.\n';
   window.location.href = 'mailto:' + spec.efax + '@efaxsend.com' +
@@ -17813,7 +17815,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=12"></script>
+<script src="starting/hub-starting.js?v=13"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>

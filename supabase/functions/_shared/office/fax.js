@@ -146,7 +146,7 @@ export function createFax({ db, store, now = () => Date.now(), token = () => Mat
         }
         faxes.push({ id: r.id, token: r.token, to: spec.to + '@efaxsend.com', filename: r.doc_name, pdf: bytesToBase64(pdf),
           subject: spec.label + ' for ' + r.consumer_name + ' · ' + r.token,
-          body: 'Caring Companions Consumer Directed Services, LLC\n1331 N Stewart Ave Ste A, Springfield MO 65802\nPhone: 866-863-5151   Fax: 417-719-7870\n\n' +
+          body: 'Caring Companions Consumer Directed Services, LLC\n1331 N Stewart Ave Ste B, Springfield MO 65802\nPhone: 866-863-5151   Fax: 417-719-7870\n\n' +
                 'Please find attached ' + spec.label + ' for ' + r.consumer_name + ', sent to ' + spec.office + '.\n\nReference ' + r.token + '\n' });
       }
       return { ok: true, faxes };

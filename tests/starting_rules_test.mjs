@@ -137,12 +137,17 @@ ok(P(Object.assign({}, tr, { county: '' })).missing.includes('their county'), 't
 const SC = (st, extra) => Object.assign({ id: 'w' + Math.random(), name: 'Wes Example', status: 'starting', starting: st }, extra || {});
 const T0 = '2026-11-20';
 let sw = S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-01', requestId: 'R-123' })] }, T0, () => ({ auth: false }));
-ok(sw.length === 1 && sw[0].days === 19 && sw[0].why === 'Referral sent 19 days ago, no authorization yet. Check with DSDS (request R-123)', 'referral 19 days, no authorization: on Today, with the request ID');
+ok(sw.length === 1 && sw[0].days === 19 && sw[0].why === 'Referral sent 19 days ago, no authorization yet. Ask the consumer if DSDS has called or visited (request R-123)' && sw[0].call === false, 'referral 19 days, no authorization: on Today, with the request ID');
 ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-10' })] }, T0, () => ({})).length === 0, 'referral 10 days: not yet (14)');
 ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-10' })] }, T0, () => ({}), { referral: 7 }).length === 1, 'Admin days count');
 ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-11-01' })] }, T0, () => ({ auth: true })).length === 0, 'authorization on file: nothing');
 ok(S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-10-01', assessment: '2026-11-25' })] }, T0, () => ({})).length === 0, 'assessment still ahead: wait for it');
+sw = S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-10-30' })] }, T0, () => ({}));
+ok(sw.length === 1 && sw[0].days === 21 && /Call DSDS$/.test(sw[0].why) && sw[0].call === true, 'referral day 21: call DSDS (the one clock, 2026-11-13)');
+sw = S.stateWaits({ consumers: [SC({ kind: 'move', transferEntered: '2026-11-13' })] }, T0, () => ({}));
+ok(sw.length === 1 && /Transfer entered 7 days ago, no authorization yet. Call DSDS$/.test(sw[0].why), 'transfer day 7: call DSDS');
 sw = S.stateWaits({ consumers: [SC({ kind: 'new', referralSent: '2026-10-01', assessment: '2026-11-01' })] }, T0, () => ({}));
+ok(sw[0].call === true && /Call DSDS$/.test(sw[0].why), 'assessed 19 days ago: already a call to DSDS, not a question for the consumer');
 ok(sw.length === 1 && sw[0].why.startsWith('DSDS assessment 19 days ago'), 'past assessment restarts the count');
 ok(S.stateWaits({ consumers: [SC({ kind: 'move', transferEntered: '2026-11-12' })] }, T0, () => ({})).length === 1 && S.stateWaits({ consumers: [SC({ kind: 'move', transferEntered: '2026-11-15' })] }, T0, () => ({})).length === 0, 'transfer: 7 days');
 ok(S.stateWaits({ consumers: [SC({ kind: 'new' }), Object.assign(SC({ kind: 'new', referralSent: '2026-10-01' }), { status: 'active' })] }, T0, () => ({})).length === 0, 'not sent yet, or already Active: nothing');

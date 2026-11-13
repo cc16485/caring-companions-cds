@@ -162,7 +162,7 @@ with sync_playwright() as pw:
     ck('the State tab says when Today will ask', 'within 14 days' in pg.inner_text('#prof_body'))
     ck('1 day after the referral: not on Today yet', 'no authorization yet' not in pg.evaluate("()=>StartHub.todayHtml()"))
     pg.evaluate("d=>{ const list=getData('consumers'); list[0].starting.referralSent=d; setData('consumers', list); }", day(-20))
-    ck('20 days, no authorization: on Today with the request ID', 'Referral sent 20 days ago, no authorization yet. Check with DSDS (request R-2026-0042)' in pg.evaluate("()=>StartHub.todayHtml()"), pg.evaluate("()=>StartHub.todayHtml()"))
+    ck('20 days, no authorization: on Today with the request ID', 'Referral sent 20 days ago, no authorization yet. Ask the consumer if DSDS has called or visited (request R-2026-0042)' in pg.evaluate("()=>StartHub.todayHtml()"), pg.evaluate("()=>StartHub.todayHtml()"))
     shot(pg, '06b-state-request-id-desktop')
     pg.evaluate("()=>{ _store.authorizations = { records: { a1: { consumer: 'Pat Example', planStart: '%s', planEnd: '%s', months: [] } } }; renderProfile(); }" % (day(0), day(180)))
     ck('authorization on file moves the step', 'On file' in pg.inner_text('#prof_body'))

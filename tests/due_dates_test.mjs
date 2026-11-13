@@ -43,7 +43,7 @@ const dh = R.dhssChanges([
 ok(dh.length === 1 && dh[0].people.length === 2 && dh[0].bad, 'DHSS: Ann and Ben, not Cal (reported) or Dee (no change); red');
 ok(dh[0].people[0].name === 'Ann Alpha' && dh[0].people[0].due === '2026-10-20' && /Fell/.test(dh[0].people[0].why) && dh[0].people[0].act === 'dhss' && dh[0].people[0].month === '2026-10', 'Ann: due Oct 20 with the note');
 
-// Leads: waiting on the state over 21 days; reached with no call back date (1 business day).
+// Leads: waiting on the state 21 days (7 for a transfer); reached with no call back date (1 business day).
 const ld = R.leadDeadlines([
   { id: 'L1', name: 'Sue State', type: 'referral', status: 'submitted', stateSubmit: '2026-09-25' },     // 28 days
   { id: 'L2', name: 'Tim Wait', type: 'referral', status: 'submitted', stateSubmit: '2026-10-15' },      // 8 days: fine
@@ -51,6 +51,12 @@ const ld = R.leadDeadlines([
   { id: 'L4', name: 'Val Dated', type: 'lead', status: 'contacted', followup: '2026-10-30', notes: [{ date: '2026-10-21', text: 'x' }] }], [], '2026-10-23');
 const st = line(ld, /state/), nd = line(ld, /call back date/);
 ok(st && st.people.length === 1 && st.people[0].name === 'Sue State' && st.people[0].due === '2026-10-16' && st.people[0].act === 'lead', 'Sue: on the state 28 days, call DSDS (was due day 21)');
+{ const S2 = (await import(ROOT + '/supabase/functions/_shared/office/starting-rules.js'), globalThis.CDSStarting);
+  const tr = R.leadDeadlines([{ id: 'L5', name: 'Tia Transfer', type: 'pccp', status: 'submitted', stateSubmit: '2026-10-16' },      // 7 days
+                              { id: 'L6', name: 'Rex Referral', type: 'referral', status: 'submitted', stateSubmit: '2026-10-02' }], [], '2026-10-23');   // 21 days
+  const t2 = line(tr, /state/);
+  ok(t2 && t2.people.map(p => p.name).sort().join() === 'Rex Referral,Tia Transfer' && t2.people.find(p => p.name === 'Tia Transfer').due === '2026-10-23', 'one clock: a transfer on day 7 and a referral on day 21 are both on Today');
+  ok(S2 && S2.STATE_WAIT_DAYS.referral === R.STATE_WAIT.referral.ask && S2.STATE_CALL_DAYS.referral === R.STATE_WAIT.referral.call && S2.STATE_WAIT_DAYS.transfer === R.STATE_WAIT.transfer.call, 'leads and Starting hold the same numbers'); }
 ok(nd && nd.people.length === 1 && nd.people[0].name === 'Uma Undated' && nd.people[0].due === '2026-10-22' && nd.bad, 'Uma: reached Wed Oct 21, a call back date was due Thu Oct 22');
 
 // I-9: 3 business days after the first day worked (hub knows first shifts).
