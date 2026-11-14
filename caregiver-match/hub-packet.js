@@ -973,7 +973,7 @@ export function mountHubPacket(el, opts) {
       <input type="file" id="hp_proof" accept="image/*,application/pdf" hidden>
       <h3>Not working anymore?</h3>
       <div id="hp_leave"><div class="btns"><button class="btn o" data-act="leave">No longer working</button></div>
-      <p class="small">Moves them off this list and stops their rechecks. You can make them active again on the old Roster.</p></div>
+      <p class="small">Moves them off this list and stops their rechecks. You can make them active again on the Inactive tab.</p></div>
       <div class="cds-comm-history" data-refs="attendant:${esc(a.id)}" data-phones="${esc(a.phone || '')}"></div></div>`;
     if (window.cdsCommHistory) window.cdsCommHistory(el);
     loadProofs(a.id);

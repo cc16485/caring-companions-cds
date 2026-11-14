@@ -119,7 +119,7 @@ with sync_playwright() as pw:
     ck('onboarding attendant shows on the profile', 'Kris Newperson' in att and 'onboarding' in att and 'Other Person' not in att and 'none in payroll yet' not in att, att)
 
     # The Attendants page button.
-    pg.evaluate("async ()=>{ const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=27'); const el = document.createElement('div'); el.id = 'hp_test'; document.body.prepend(el);"
+    pg.evaluate("async ()=>{ const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=28'); const el = document.createElement('div'); el.id = 'hp_test'; document.body.prepend(el);"
                 " mountHubPacket(el, { api: cdsMatchApi, roster: () => [], addAttendant: reload => openAddAttendant('', reload) }); }"); pg.wait_for_timeout(800)
     hb = pg.locator('#hp_test button', has_text='+ Add an attendant')
     ck('Attendants page has the button', hb.count() == 1)
