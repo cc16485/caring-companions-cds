@@ -1,3 +1,4 @@
+import { createFromVoicemail } from './lead-from-voicemail.js';
 // CDS Communication & Follow-Up Center, step 1 (2026-10-22, her approved design, mockup
 // artifact 6DTNtZDFccu8i3ZbJZhmee).
 //
@@ -750,7 +751,10 @@ export function createComms(deps) {
       let n = {};
       const ns = await noteSettings(), vs = await voicemailSettings();
       if ((ns && ns.live === true) || vs) n = await makeNotes(ns, vs).catch(e => ({ noteError: String(e && e.message || e).slice(0, 300) }));
-      return { ok: true, phoneBook: book, ...read, ...c, ...n };
+      // A voicemail that sounds like a new lead goes onto Leads by itself (2026-11-13, lead-from-voicemail.js).
+      let vl = {};
+      if (vs) vl = await createFromVoicemail({ db: deps.db, now: nowMs }).run(vs).catch(e => ({ leadsError: String(e && e.message || e).slice(0, 300) }));
+      return { ok: true, phoneBook: book, ...read, ...c, ...n, ...vl };
     } catch (e) {
       await saveState({ last_error: String(e && e.message || e).slice(0, 300), last_error_at: iso(nowMs()) }).catch(() => {});
       throw e;

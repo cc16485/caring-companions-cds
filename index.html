@@ -7697,7 +7697,7 @@ async function _importWebsiteLeads() {
       email: r.email || '',
       firstContact: (r.submitted_at || '').split('T')[0],
       // a caller the Caring Companions office sent over (2026-11-01, lead-from-cc.js)
-      source: r.from_kind === 'cc_lead' ? 'Caring Companions line' : r.source ? 'Website: ' + r.source : 'Website',
+      source: r.from_kind === 'cc_lead' ? 'Caring Companions line' : r.from_kind === 'voicemail' ? 'Voicemail on the CDS line' : r.source ? 'Website: ' + r.source : 'Website',
       status: 'new',
       followup: '', stateSubmit: '', currentAgency: '', dcn: '', hours: '',
       // fromForm: this note is the family's own words, not a call (cds-rules.js leadWaiting).
