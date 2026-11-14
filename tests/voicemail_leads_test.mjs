@@ -50,6 +50,8 @@ await pg.exec(strip(readFileSync(ROOT + '/comm_center.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/comm_center_step2.sql', 'utf8')));
 await pg.exec(strip(readFileSync(ROOT + '/call_notes.sql', 'utf8')));
 const VM_SQL = strip(readFileSync(ROOT + '/voicemail_leads.sql', 'utf8'));
+await pg.exec(VM_SQL);
+await pg.exec(strip(readFileSync(ROOT + '/call_answers.sql', 'utf8')));   // cds_call_notes.answers (2026-11)
 await pg.exec(VM_SQL); await pg.exec(VM_SQL);
 ok(true, 'voicemail_leads.sql runs twice');
 const vs0 = (await pg.query(`select value from cds_match_settings where key='voicemail_leads'`)).rows[0].value;
