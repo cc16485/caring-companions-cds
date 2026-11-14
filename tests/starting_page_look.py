@@ -95,6 +95,23 @@ with sync_playwright() as pw:
     pg.evaluate("()=>showPage('starting')"); pg.wait_for_timeout(200)
     ck('Robin now in the table, the old list gone', 'Sent to the state before Starting began' not in pg.inner_text('#startingPage') and '2 people said yes' in pg.inner_text('#stPageSum'))
 
+    # ---- 2026-11-14 her ask: "make this easy to click and add the start date that we gave to the state"
+    row = "#startingPage .lt-wrap tr:has-text('Robin Before')"
+    ck('start date: Robin (no date yet) has an Add date button', pg.inner_text(row + ' .st-date-b') == 'Add date')
+    pg.click(row + ' .st-date-b'); pg.wait_for_timeout(200)
+    ck('start date: pressing it opens a date box in the row, ready to type', pg.evaluate("()=>document.activeElement.classList.contains('st-date-in')"))
+    pg.evaluate("()=>StartHub.pageStart(getData('consumers').find(c=>c.name==='Robin Before').id,'0202-03-04')")
+    ck('start date: a half-typed year saves nothing', pg.evaluate("()=>!getData('consumers').find(c=>c.name==='Robin Before').cdsStartDate"))
+    pg.fill(row + ' .st-date-in', day(30)); pg.wait_for_timeout(300)
+    ck('start date: picking a day saves it on the consumer', pg.evaluate("()=>getData('consumers').find(c=>c.name==='Robin Before').cdsStartDate") == day(30))
+    ck('start date: the row now shows the date as a button, box closed', pg.evaluate("()=>!document.querySelector('#startingPage .st-date-in')") and pg.inner_text(row + ' .st-date-b') != 'Add date', pg.inner_text(row))
+    ck('start date: written in the history', 'Start date from the state set to' in pg.evaluate("()=>JSON.stringify(getData('consumers').find(c=>c.name==='Robin Before'))"))
+    pg.click(row + ' .st-date-b'); pg.wait_for_timeout(200); pg.fill(row + ' .st-date-in', day(40)); pg.wait_for_timeout(300)
+    ck('start date: press the date to change it', pg.evaluate("()=>getData('consumers').find(c=>c.name==='Robin Before').cdsStartDate") == day(40))
+    pg.click(row + ' .st-date-b'); pg.wait_for_timeout(150); pg.keyboard.press('Escape'); pg.keyboard.press('Escape'); pg.wait_for_timeout(150)   # the first one closes the calendar
+    ck('start date: Escape closes the box, nothing changed', pg.evaluate("()=>!document.querySelector('#startingPage .st-date-in') && getData('consumers').find(c=>c.name==='Robin Before').cdsStartDate") == day(40))
+    shot(pg, '02b-starting-page-start-date')
+
     # ---- Consumers: the Starting chip is gone (they have their own page)
     pg.evaluate("()=>showPage('consumers')"); pg.wait_for_timeout(200)
     ck('Consumers: no Starting chip', pg.evaluate("()=>document.getElementById('rosterSegStarting').hidden"))
@@ -102,6 +119,10 @@ with sync_playwright() as pw:
     # ---- phone
     pg.set_viewport_size({'width': 390, 'height': 900}); pg.evaluate("()=>showPage('starting')"); pg.wait_for_timeout(300)
     ck('phone: cards, no sideways scroll', pg.evaluate("()=>document.documentElement.scrollWidth <= 392"), pg.evaluate("()=>document.documentElement.scrollWidth"))
+    pg.click("#startingPage .lt-cards .lt-card:has-text('Dana Started') .st-date-b"); pg.wait_for_timeout(200)
+    ck('phone: the card has the date button and it opens the date box', pg.evaluate("()=>document.activeElement.classList.contains('st-date-in')"))
+    pg.fill("#startingPage .lt-cards .st-date-in", day(12)); pg.wait_for_timeout(300)
+    ck('phone: saved from the card', pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').cdsStartDate") == day(12))
     shot(pg, '03-starting-page-phone')
     pg.evaluate("()=>showPage('pipeline')"); pg.wait_for_timeout(300); shot(pg, '04-leads-phone')
     ck('no page errors', not errs, errs)

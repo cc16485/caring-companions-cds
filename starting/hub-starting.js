@@ -764,6 +764,22 @@
     return getData('pipeline').filter(p => !p.startingId).map(p => ({ p, c: CDSRules.leadCard(p, calls, today(), !!p.movedToConsumers || onRoster.has(String(p.name || '').trim().toLowerCase())) }))
       .filter(x => x.c.step === 'state' || x.c.step === 'ready');
   }
+  // Start date straight from the Starting page. Saves the same field as the State tab (c.cdsStartDate).
+  let _startEdit = '';
+  function pageStartEdit(cid) {
+    _startEdit = cid || ''; renderPage();
+    if (!cid) return;
+    const el = [...document.querySelectorAll('#startingPage .st-date-in')].find(x => x.offsetParent !== null);
+    if (el) { el.focus(); try { el.showPicker(); } catch (e) { /* older browsers: the box is there to type in */ } }
+  }
+  function pageStart(cid, v) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v || '') || +v.slice(0, 4) < 2020) return;   // half-typed year, or cleared: nothing saved
+    const c = getData('consumers').find(x => x.id === cid);
+    _startEdit = '';
+    if (c && (c.cdsStartDate || '') === v) return renderPage();
+    setStart(cid, v);
+  }
+  function pageStartBlur(cid) { setTimeout(() => { if (_startEdit === cid && !document.querySelector('#startingPage .st-date-in:focus')) { _startEdit = ''; renderPage(); } }, 200); }
   function renderPage() {
     const host = document.getElementById('startingPage');
     if (!host) return;
@@ -774,7 +790,14 @@
     const urgent = all.filter(r => r.st.next.urgent || r.st.medicaid.needsSupervisor).length;
     const who = r => [r.st.transfer ? 'Moving from another agency' : 'New to CDS', r.c.county, r.c.coordinator].filter(Boolean).map(esc).join(' · ');
     const next = r => '<b' + (r.st.next.urgent ? ' class="lt-red"' : '') + '>' + esc(r.st.next.t) + '</b>' + (r.st.next.d ? '<div class="lt-sub">' + esc(r.st.next.d) + '</div>' : '');
-    const start = r => r.c.cdsStartDate ? '<span class="' + (r.st.startAlert && r.st.startAlert.soon ? 'lt-red' : '') + '">' + esc(day(r.c.cdsStartDate)) + '</span>' : '<span class="lt-none">–</span>';
+    // 2026-11-14 her ask: "make this easy to click and add the start date". Press the cell, pick the day, it saves.
+    const start = r => {
+      const id = q(r.c.id), red = r.st.startAlert && r.st.startAlert.soon;
+      if (_startEdit === r.c.id) return '<input type="date" class="st-date-in" value="' + esc(r.c.cdsStartDate || '') + '" aria-label="Start date from the state for ' + esc(r.c.name) + '" onchange="StartHub.pageStart(\'' + id + '\',this.value)" onkeydown="if(event.key===\'Escape\')StartHub.pageStartEdit(\'\')" onblur="StartHub.pageStartBlur(\'' + id + '\')" style="font-size:13px;max-width:150px">';
+      return r.c.cdsStartDate
+        ? '<button type="button" class="lt-b lt-b-q st-date-b' + (red ? ' lt-red' : '') + '" title="Change the start date" onclick="StartHub.pageStartEdit(\'' + id + '\')"' + (red ? ' style="color:var(--danger);border-color:var(--danger)"' : '') + '>' + esc(day(r.c.cdsStartDate)) + '</button>'
+        : '<button type="button" class="lt-b lt-b-q st-date-b" onclick="StartHub.pageStartEdit(\'' + id + '\')">Add date</button>';
+    };
     const open = r => "openProfile('" + q(r.c.id) + "')";
     const table = '<div class="lt-wrap"><table class="lt-t" style="min-width:1100px"><thead><tr><th class="lt-n">Person</th>' +
       S.STEP_TITLES.map((t, i) => '<th' + (i === 0 ? ' class="lt-sep"' : '') + '>' + esc(t) + '</th>').join('') +
@@ -785,7 +808,7 @@
         : '<tr><td colspan="10" class="lt-empty">' + (all.length ? 'Nobody matches that search.' : 'Nobody is Starting. Press They said yes on a lead to start someone.') + '</td></tr>') +
       '</tbody></table></div>';
     const cards = '<div class="lt-cards">' + (rows.length ? rows.map(r => '<div class="lt-card' + (r.st.next.urgent ? ' lt-now' : '') + '"><div><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
-        '<div class="lt-sub">' + who(r) + (r.c.cdsStartDate ? ' · starts ' + esc(day(r.c.cdsStartDate)) : '') + '</div></div>' +
+        '<div class="lt-sub">' + who(r) + '</div><div class="lt-sub" style="margin-top:6px">Start date: ' + start(r) + '</div></div>' +
         '<div class="lt-pms">' + r.st.steps.map(s => '<span class="lt-pm' + (s.state === 'done' ? ' lt-pm-ok' : s.state === 'now' ? ' lt-pm-todo lt-pm-hi' : s.state === 'side' ? ' lt-pm-todo' : '') + '">' + esc(s.t) + '</span>').join('') + '</div>' +
         '<div class="lt-card-b"><span class="lt-sub" style="flex:1 1 180px">' + next(r) + '</span><button type="button" class="lt-b" onclick="' + esc(open(r)) + '">Open</button></div></div>').join('')
         : '<div class="lt-empty">' + (all.length ? 'Nobody matches that search.' : 'Nobody is Starting. Press They said yes on a lead to start someone.') + '</div>') + '</div>';
@@ -799,7 +822,7 @@
     const sum = document.getElementById('stPageSum');
     if (sum) sum.innerHTML = all.length + (all.length === 1 ? ' person said yes and is' : ' people said yes and are') + ' getting ready for their first shift.' +
       (urgent ? ' <strong>' + urgent + (urgent === 1 ? ' needs' : ' need') + ' you now.</strong>' : '') + ' They move to Consumers by themselves when WellSky shows their first shift.';
-    host.innerHTML = '<div class="lt">' + table + cards + '<div class="lt-key"><span><b class="lt-red">Red edge</b> start date is close or passed</span> · <span>✓ done</span> · <span>Next and Can do now open that step</span></div></div>' + legacy;
+    host.innerHTML = '<div class="lt">' + table + cards + '<div class="lt-key"><span><b class="lt-red">Red edge</b> start date is close or passed</span> · <span>✓ done</span> · <span>Next and Can do now open that step</span> · <span>Press the start date to add or change it</span></div></div>' + legacy;
   }
 
   // Today: Medicaid application follow-ups (owner shown) and Starting people waiting on an ME code review.
@@ -938,5 +961,5 @@
   }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
 })();
