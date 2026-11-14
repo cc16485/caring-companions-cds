@@ -2635,7 +2635,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       GoHighLevel, it never deletes, and it never changes anything in this hub. Safe to run as often as you like.
     </p>
     <p style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
-      Adding someone to the pipeline already tags them in GoHighLevel automatically. Use these buttons to catch up
+      Adding a lead, a consumer or an attendant already puts them in GoHighLevel by itself. Use these buttons to catch up
       anyone added before this was connected, or after editing a phone number or email.
     </p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -5037,7 +5037,28 @@ function getData(key) {
 // it. Everything else can keep ignoring the return value.
 function setData(key, val) {
   _store[key] = val;
-  return _dbUpsert(key, val);
+  const w = _dbUpsert(key, val);
+  if (key === 'consumers' || key === 'attendants') _ghlNewPeople(key, val, w);
+  return w;
+}
+// A consumer or attendant added in the hub goes to GoHighLevel by itself, the way a new lead does
+// (2026-11-14, Samantha: "yes"). The ids the hub loaded with are remembered; a save that carries an id
+// not seen before is a new person. Callers change the list in place before saving, so the list itself
+// cannot be compared. More than 5 new ids at once is a restore, not someone adding a person: left to
+// "Sync Everyone Now" on Automations. No phone and no email: nothing to match on, so nothing is sent.
+const _ghlSeen = {};
+function _ghlSeed() {
+  ['consumers', 'attendants'].forEach(k => { _ghlSeen[k] = new Set(getData(k).map(x => x && x.id).filter(Boolean).map(String)); });
+}
+function _ghlNewPeople(key, val, pending) {
+  const seen = _ghlSeen[key];
+  if (!seen || !Array.isArray(val)) return [];
+  const fresh = val.filter(x => x && x.id && !seen.has(String(x.id)));
+  val.forEach(x => { if (x && x.id) seen.add(String(x.id)); });
+  if (!fresh.length || fresh.length > 5) return [];
+  const go = fresh.filter(x => String(x.name || '').trim() && (String(x.phone || '').replace(/\D/g, '').length >= 10 || /@/.test(String(x.email || ''))));
+  go.forEach(x => { if (typeof syncOneToGhl === 'function') syncOneToGhl(key, x.id, x.name, pending); });
+  return go.map(x => x.id);
 }
 function getObj(key) {
   const v = _store[key];
@@ -5140,6 +5161,7 @@ async function _loadAllData() {
     .select('data_key, data_value')
     .eq('agency_id', AGENCY_ID);
   if (data) data.forEach(row => { _store[row.data_key] = row.data_value; });
+  _ghlSeed();   // who was already here: only people added after this go to GoHighLevel on their own
   // 2026-10-08: an old GoHighLevel key may still be saved in outreachSettings; never keep it in the page.
   if (_store.outreachSettings && typeof _store.outreachSettings === 'object') delete _store.outreachSettings.apiKey;
 
@@ -14529,12 +14551,12 @@ async function syncOneToGhl(list, id, name, pendingWrite) {
 
     if (body.configured === false) return;   // not connected yet; stay quiet
     const r = (body.report || {})[list];
-    if (r && r.synced) { _ghlToast('✅ ' + name + ' tagged in GoHighLevel.'); return; }
+    if (r && r.synced) { _ghlToast('✅ ' + name + ' is in GoHighLevel.'); return; }
 
     const why = (r && ((r.skipped[0] || {}).skipped || (r.failed[0] || {}).error)) || body.error || 'unknown reason';
-    _ghlToast('⚠️ ' + name + ' was saved here, but not tagged in GoHighLevel — ' + why, true);
+    _ghlToast('⚠️ ' + name + ' was saved here, but not added in GoHighLevel: ' + why, true);
   } catch (e) {
-    _ghlToast('⚠️ ' + name + ' was saved here, but not tagged in GoHighLevel — ' + e.message, true);
+    _ghlToast('⚠️ ' + name + ' was saved here, but not added in GoHighLevel: ' + e.message, true);
   }
 }
 
