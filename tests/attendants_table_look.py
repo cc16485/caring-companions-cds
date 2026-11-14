@@ -42,7 +42,7 @@ async([LIST, mode])=>{
   const api = async (a, b) => { CALLS.push([a, b]); if (a === 'packetList') return { attendants: JSON.parse(JSON.stringify(LIST)) };
     if (a === 'packetGet') return { pool: { first: 'Jeana', last: 'Wise' }, packet: {}, status: { steps: [], label: 'Run EDL and FCSR', tone: 'r', next: 'x' }, screening: { checks: window.CHECKS || [] }, forms: {}, answers: {} };
     if (a === 'recordCheck' && window.CHECKS) { const c = window.CHECKS.find(x => x.key === b.check_key); if (c && b.result === 'clear') { c.clear = true; c.at = b.checked_on; } } return { ok: true }; };
-  const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=27');
+  const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=28');
   let host = document.getElementById('att_test'); if (host) host.remove();
   host = document.createElement('div'); host.id = 'att_test'; host.style.cssText = 'position:fixed;inset:0;overflow:auto;background:#f6f7f5;z-index:99999;padding:16px';
   document.body.appendChild(host);

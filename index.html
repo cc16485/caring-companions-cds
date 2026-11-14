@@ -27,7 +27,7 @@
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
 <script src="supabase/functions/_shared/office/cds-rules.js?v=41"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=9"></script>
-<script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
+<script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><script src="annual/annual-report.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=8"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="followups-table.js?v=1"></script><!-- 2026-11-05 Follow-ups as one table (switch followupsTable) -->
@@ -1081,7 +1081,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       <li>Face-to-face visit with each consumer, in person, in the home. Today tells you at month 10. The visitor cannot be that consumer's attendant.</li>
       <li>For each consumer: pandemic policy given and trained, backup plan reviewed.</li>
       <li>FCSR recheck on each attendant.</li>
-      <li>Annual Service Report, CPA audit and the MMAC manager meeting: see <strong>Deadlines</strong>.</li>
+      <li>Annual Service Report: <strong>Money &gt; Start annual report</strong>. CPA audit and the MMAC manager meeting: see <strong>Deadlines</strong>.</li>
     </ul>
   </div>
   </div>
@@ -1168,7 +1168,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       <li><strong>Moved:</strong> a new address goes to DSDS. Check the new county is one of ours.</li>
       <li><strong>Health decline, or no longer able to direct their care:</strong> tell DSDS. If the attendant knew and did not report it, tell DSDS that too.</li>
       <li><strong>Services not delivered as authorized:</strong> tell DSDS.</li>
-      <li><strong>Abuse, neglect or exploitation:</strong> call 800-392-0210 right away, 7 a.m. to midnight every day.</li>
+      <li><strong>Abuse, neglect or exploitation:</strong> call 800-392-0210 right away, 7 a.m. to 8 p.m. every day. Any other time, report online at moapss.health.mo.gov.</li>
       <li><strong>A false EVV record is suspected:</strong> report to MMAC within 2 business days.</li>
       <li><strong>Medicaid lapsed or spenddown not met:</strong> nothing can be billed for that time. Help them fix it fast.</li>
       <li><strong>Hours:</strong> the monthly authorization is the hard limit. There is no daily limit, so a sick week can use more. Do not add shifts at month end to use up hours. One attendant at a time.</li>
@@ -1648,6 +1648,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-outline" onclick="renderPayroll()" style="font-size:12px">↻ Refresh</button>
       <button class="btn btn-primary" onclick="showPage('quarterly')">Start quarterly report</button>
+      <button class="btn btn-outline" onclick="showPage('annualreport')">Start annual report</button>
     </div>
   </div>
 
@@ -1809,18 +1810,18 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
 
 <!-- ==================== ATTENDANTS ==================== -->
 <div id="page-attendants" class="page">
+  <!-- Retired 2026-11-13 (her ask). Attendants are added, rechecked and ended on Attendants (Active Attendants), and
+       someone hired through the online application gets a roster record by itself. This page stays only for the older
+       details on each record and the past LEIE log. No adding, no removing and no copy-only message buttons here. -->
   <div class="section-header">
-    <div class="section-title">Attendant Roster</div>
+    <div class="section-title">Old attendant roster (kept for the record)</div>
     <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn btn-primary" onclick="openModal('addAttendantModal')">+ Add Attendant</button>
+      <button class="btn btn-primary" onclick="showPage('activeattendants')">Go to Attendants</button>
     </div>
   </div>
 
   <div class="alert alert-info">
-    📋 <strong>Onboarding via Empeon:</strong> Agency enters attendant name &amp; contact info in Empeon → attendant completes all hiring paperwork digitally → once FCSR, EDL, and OIG/LEIE checks clear, attendant is approved to begin serving a consumer.
-  </div>
-  <div class="alert alert-warn">
-    ⚠️ <strong>LEIE screening must be done MONTHLY</strong> for all employees and attendants. FCSR screening is required before hire and annually (recommended). EDL check required before hire and every quarter. Attendant cannot be the consumer's spouse. <strong>If attendant has lived outside Missouri in the last 5 years → fingerprint-based background check required</strong> (see below).
+    📋 <strong>This page is retired.</strong> Add an attendant, record a recheck and mark someone no longer working on <a href="#" onclick="showPage('activeattendants');return false" style="font-weight:700">Attendants</a>. The OIG check runs by itself every month. Nothing here is deleted: the older details on each record and the past LEIE log stay for an audit.
   </div>
 
   <!-- The WellSky attendant check card moved to Active Attendants (2026-10-21). -->
@@ -1856,7 +1857,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="icon">📋</span> Monthly LEIE Screening Log</div>
+    <div class="card-title"><span class="icon">📋</span> Past LEIE Screening Log</div>
     <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px">Record monthly OIG/LEIE screening completions for all staff and attendants. <a href="https://exclusions.oig.hhs.gov/" target="_blank" style="color:var(--primary-light)">Screen at exclusions.oig.hhs.gov →</a></p>
     <div class="table-wrap">
       <table>
@@ -1875,7 +1876,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
         </tbody>
       </table>
     </div>
-    <button class="btn btn-sm btn-primary" style="margin-top:12px" onclick="openModal('addLeieModal')">+ Log LEIE Screening</button>
+    <button class="btn btn-sm btn-primary" style="margin-top:12px" onclick="openModal('addLeieModal')">+ Log a check done by hand</button>
   </div>
 </div>
 
@@ -2771,7 +2772,7 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
   <div id="hp_root"></div>
   <!-- On a normal day the WellSky and OIG boxes above stay empty and say so here (her ask 2026-10-22). -->
   <p class="quiet-links" id="att_status" style="color:var(--gray-600);display:block"></p>
-  <p class="quiet-links"><a href="#roster" onclick="showPage('roster');return false">Old roster and monthly LEIE log</a></p>
+  <p class="quiet-links"><a href="#roster" onclick="showPage('roster');return false">Old roster details and past LEIE log (retired)</a></p>
 </div>
 
 <!-- ==================== BACKUP ATTENDANT POOL ==================== -->
@@ -2851,6 +2852,9 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
 </div>
 
 <!-- ==================== QUARTERLY REPORT ==================== -->
+<!-- Annual Service Report helper (2026-11-13, annual/annual-report.js). Money > Start annual report, #annualreport. -->
+<div id="page-annualreport" class="page"><div id="annualWrap"></div></div>
+
 <div id="page-quarterly" class="page">
   <div class="section-header">
     <div class="section-title">📋 Missouri CDS Quarterly Report Prep</div>
@@ -5176,7 +5180,8 @@ function _enableRealtime() {
     .subscribe();
 }
 
-const DATA_KEYS = ['consumers','attendants','pipeline','leieLog','evvCorrections','outreachLog','settings','complaints','payrollData'];
+// 'leieLogs' is the key the LEIE log really saves under ('leieLog' was a typo, so the log was missing from every backup until 2026-11-13).
+const DATA_KEYS = ['consumers','attendants','pipeline','leieLog','leieLogs','evvCorrections','outreachLog','settings','complaints','payrollData'];
 
 function exportData() {
   const backup = { exportedAt: new Date().toISOString(), version: 2 };
@@ -5305,7 +5310,7 @@ const PAGE_TO_SECTION = (() => {
     caregivermatch: 'directory', backuppool: 'directory', caregiverpool: 'directory', directory: 'directory',
     dirtasks: 'directory', dirmessages: 'directory',
     hours: 'hours', evv: 'hours', hoursevv: 'hours',
-    payroll: 'money', financials: 'money', quarterly: 'money', money: 'money',
+    payroll: 'money', financials: 'money', quarterly: 'money', annualreport: 'money', money: 'money',
     guides: 'help', help: 'help', marketing: 'marketing', owners: 'owners',
     automations: 'help', switches: 'help', settings: 'help'
   });
@@ -5427,6 +5432,7 @@ function showPage(id) {
   if (id === 'owners' && window.CDSOwners) CDSOwners.render();
   if (id === 'careplans') loadCarePlanPrefs();
   if (id === 'quarterly') renderQuarterlyReport();
+  if (id === 'annualreport' && window.CDSAnnual) CDSAnnual.render();
   if (id === 'financials' || id === 'payroll') renderFinancials();
   if (roster) renderAttendants();
   if (id === 'consumers' || id === 'pipeline') {
@@ -5509,7 +5515,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=27');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=28');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -7142,10 +7148,7 @@ function renderAttendants() {
       <td>${contractBadge}</td>
       <td>${evvBadge}</td>
       <td>
-        <button class="btn btn-sm ${a.welcomeSent ? 'btn-outline' : 'btn-primary'}" onclick="openWelcomeModal('${a.id}')" style="margin-bottom:4px;width:100%;font-size:11px">${a.welcomeSent ? '✓ Welcome Sent' : '📤 Send Welcome'}</button>
-        <button class="btn btn-sm btn-outline" onclick="openAttendantOutreach('${a.id}','bg_cleared')" style="margin-bottom:4px;width:100%;font-size:10px;color:var(--success)">✅ BG Cleared → Notify</button>
-        <button class="btn btn-sm btn-outline" onclick="openAttendantOutreach('${a.id}','orientation_nudge')" style="margin-bottom:4px;width:100%;font-size:10px;color:var(--primary)">📺 Orientation Nudge</button>
-        <button class="btn btn-sm btn-outline" onclick="updateScreenings('${a.id}')" style="margin-bottom:4px;width:100%;font-size:11px">Update Screenings</button>
+        <button class="btn btn-sm btn-outline" onclick="updateScreenings('${a.id}')" style="margin-bottom:4px;width:100%;font-size:11px">Edit details</button>
         <div style="font-size:10.5px;color:var(--gray-600);line-height:1.3">To end them: Attendants, their card, No longer working.</div>
       </td>
     </tr>`;
@@ -15793,7 +15796,7 @@ async function syncApplicationAttendants(packets) {
   _appSync.busy = true;
   let changed = false;
   try {
-    const HP = await import('./caregiver-match/hub-packet.js?v=27');
+    const HP = await import('./caregiver-match/hub-packet.js?v=28');
     for (const a of HP.rosterPlan(packets, getData('attendants'))) {
       let g;
       try { g = await cdsMatchApi('packetGet', { pool_id: a.pool_id }); }
