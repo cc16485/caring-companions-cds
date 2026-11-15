@@ -11412,6 +11412,31 @@ function empeonStatus(c) {
   return { needs, clean: !needs.length, placeholder: theirs === EMPEON_PLACEHOLDER };
 }
 
+// Notes tab: a box to add a note (her ask 2026-11-15, "I need to be able to add notes"). Notes stay one text
+// on the consumer (c.notes), so everything that already reads it keeps working; each new note goes on the end
+// as its own dated line with who wrote it.
+function consumerNotesHtml(c) {
+  const id = String(c.id).replace(/'/g, "\\'");
+  return '<div style="margin-top:12px">' +
+      '<textarea id="profNoteNew" rows="3" placeholder="Type a note" style="width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:10px;border:1.5px solid var(--gray-300);border-radius:8px"></textarea>' +
+      '<div style="margin-top:8px"><button type="button" class="btn btn-primary" onclick="addConsumerNote(\'' + id + '\')">Save note</button></div>' +
+    '</div>' +
+    (c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:14px">' + esc(c.notes) + '</div>'
+             : '<p style="font-size:14px;color:#55677a;margin-top:14px">No notes yet.</p>');
+}
+function addConsumerNote(id) {
+  const box = document.getElementById('profNoteNew');
+  const text = box ? box.value.trim() : '';
+  if (!text) { if (box) box.focus(); return; }
+  const list = getData('consumers'), c = list.find(x => String(x.id) === String(id));
+  if (!c) return;
+  const who = String((typeof _acWho === 'function' && _acWho()) || '').split('@')[0];
+  const line = _todayIso() + (who ? ' ' + who.charAt(0).toUpperCase() + who.slice(1) : '') + ': ' + text;
+  c.notes = c.notes ? String(c.notes).replace(/\s+$/, '') + '\n' + line : line;
+  setData('consumers', list);
+  (window.renderProfile || renderProfile)();
+}
+
 function renderProfile() {
   const host = document.getElementById('prof_body');
   const pick = document.getElementById('prof_pick');
@@ -11654,7 +11679,7 @@ function renderProfile() {
   else if (tab === 'docs') body = consumerDocsHtml(c);
   else if (tab === 'calls') body =
     '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"' + (commOn ? ' data-att="1"' : '') + '></div>';
-  else body = (c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>') +
+  else body = consumerNotesHtml(c) +
     // What linked family and attendants told us before (2026-10-29), from their leads.
     (function () { const ln = CDSRules.linkedNotes(c, getData('pipeline'));
       return ln.length ? '<div style="margin-top:16px"><b style="color:var(--primary);font-size:14px">From calls with their family and attendants</b>' +
@@ -17884,7 +17909,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=14"></script>
+<script src="starting/hub-starting.js?v=15"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 </body>
 </html>
