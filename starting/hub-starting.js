@@ -340,7 +340,7 @@
     else if (tab === 'tax') body = '<div class="field-note" style="margin:10px 0">The same Tax Setup as every consumer, open from day one.' + (st.transfer ? ' Moving from another agency: they already have an EIN; type it from Fusion.' : '') + '</div>' + btn('Tax setup', "openTaxSetup('" + q(c.id) + "')", true);
     else if (tab === 'docs') body = consumerDocsHtml(c);
     else if (tab === 'calls') body = '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"></div>';
-    else body = (c.notes ? '<div style="font-size:14px;line-height:1.7;white-space:pre-wrap;margin-top:10px">' + esc(c.notes) + '</div>' : '<p style="font-size:14px;color:#55677a;margin-top:10px">No notes yet.</p>');
+    else body = consumerNotesHtml(c);
     host.innerHTML = '<div class="card" style="padding:26px">' +
       '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div>' +
         '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap"><div class="cute-title" style="font-size:30px">' + esc(c.name) + '</div>' + (typeof nameEditLink === 'function' ? nameEditLink(c) : '') +
