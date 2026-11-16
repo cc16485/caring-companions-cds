@@ -326,18 +326,22 @@
     const bar = '<div class="st-bar" aria-label="Enrollment steps">' + st.steps.map(s => '<div class="st-step ' + s.state + '"><b>' + (s.state === 'done' ? '✓ ' : '') + esc(s.t) + '</b>' +
       '<small>' + (s.state === 'side' ? 'can start now' : s.state === 'now' ? 'next' : '') + '</small></div>').join('') + '</div>';
     const actBtn = { medicaid: btn('Open Medicaid', "_profTab='medicaid';renderProfile()"), state: btn('Open State and authorization', "_profTab='state';renderProfile()"),
-                     ready: btn('Open the checklist', "_profTab='ready';renderProfile()"), paperwork: btn('Open their lead for the packet', "StartHub.openLead('" + q(c.id) + "')"),
+                     ready: btn('Open the checklist', "_profTab='ready';renderProfile()"), paperwork: btn('Open the packet', "_profTab='tax';renderProfile()"),
                      attendant: btn('Open Attendants', "showPage('attendants')"), active: '' }[st.next.act] || '';
     const next = '<div class="cp-next warn"' + (st.next.urgent ? ' style="outline:2px solid var(--danger)"' : '') + '><div style="flex:1 1 300px"><div style="font-weight:600;color:#0D365F">Next step: ' + esc(st.next.t) + '</div>' +
       '<div style="font-size:13px;color:#55677a">' + esc(st.next.d) + '</div></div>' + actBtn + '</div>';
-    const also = st.also.length ? '<div class="st-also"><b>You can also do now, while you wait</b><ul>' + st.also.map(a => '<li>' + esc(a.t) + '</li>').join('') + '</ul></div>' : '';
+    // 2026-11-16 (her ask: "I can't find how to send the consumer their packet"): each side step is a link to where it is done.
+    const alsoGo = { paperwork: "_profTab='tax';renderProfile()", attendant: "showPage('attendants')", medicaid: "_profTab='medicaid';renderProfile()", state: "_profTab='state';renderProfile()", ready: "_profTab='ready';renderProfile()" };
+    const also = st.also.length ? '<div class="st-also"><b>You can also do now, while you wait</b><ul>' + st.also.map(a => '<li>' +
+      (alsoGo[a.act] ? '<a href="#" onclick="' + alsoGo[a.act] + ';return false">' + esc(a.t) + '</a>' : esc(a.t)) + '</li>').join('') + '</ul></div>' : '';
     let body = '';
     if (tab === 'overview') body = overviewHtml(c, ctx, st);
     else if (tab === 'contacts') body = rpCardHtml('consumer', c);
     else if (tab === 'medicaid') body = medicaidHtml(c, ctx, st);
     else if (tab === 'state') body = stateHtml(c, ctx);
     else if (tab === 'ready') body = readyHtml(c, st);
-    else if (tab === 'tax') body = '<div class="field-note" style="margin:10px 0">The same Tax Setup as every consumer, open from day one.' + (st.transfer ? ' Moving from another agency: they already have an EIN; type it from Fusion.' : '') + '</div>' + btn('Tax setup', "openTaxSetup('" + q(c.id) + "')", true);
+    else if (tab === 'tax') body = '<div id="profEnroll" style="margin-top:12px"><div class="field-note">Checking their enrollment packet...</div></div>' +
+      '<h4 style="margin:16px 0 4px;color:var(--primary)">Tax setup</h4><div class="field-note" style="margin:10px 0">The same Tax Setup as every consumer, open from day one.' + (st.transfer ? ' Moving from another agency: they already have an EIN; type it from Fusion.' : '') + '</div>' + btn('Tax setup', "openTaxSetup('" + q(c.id) + "')", true);
     else if (tab === 'docs') body = consumerDocsHtml(c);
     else if (tab === 'calls') body = '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"></div>';
     else body = consumerNotesHtml(c);
@@ -352,6 +356,12 @@
       dnsHtml(c) + bar + next + also +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body + '</div>';
     if (tab === 'medicaid') { preview(c.id); if (!med.verified) noMedicaidAfter('consumer', c); }
+    // The same packet card as Consumers and the lead: Send, each form, Sign as agent, the one-PDF download.
+    if (tab === 'tax' && typeof mountProfileEnroll === 'function') {
+      const hit = _profPacket[c.id] || {};
+      if ('err' in hit && !('packet' in hit)) { const el = document.getElementById('profEnroll'); if (el) el.innerHTML = '<div class="field-note" style="color:var(--danger)">Could not check their packet: ' + esc(hit.err) + '</div>'; }
+      else mountProfileEnroll(c);
+    }
     if (window.cdsCommHistory) window.cdsCommHistory(host);
     return true;
   }
@@ -438,7 +448,7 @@
       line('Medicaid', '<span style="color:' + (med.verified ? 'var(--success)' : '#9C6410') + '">' + esc(med.label) + '</span>' + (med.application && !med.verified ? ' <span class="field-note">(application: ' + esc((STAGE_LABEL[med.application.stage] || '').toLowerCase()) + ')</span>' : '')) +
       line('DSDS', ctx.auth ? 'Authorization on file' : st.transfer ? '<span style="color:#9C6410">Transfer: confirm the current authorization</span>' : c.starting && c.starting.referralSent ? 'Referral sent ' + esc(day(c.starting.referralSent)) + ', waiting' : '<span style="color:#9C6410">Referral needed</span>') +
       line('Attendant', ctx.attendant.linked ? esc(ctx.attendant.name || '') + (ctx.attendant.ready ? ', on the roster' : ', onboarding') : '<span style="color:#9C6410">Nobody linked yet</span>') +
-      line('Consumer packet', P ? esc(P.status || '') : '<span style="color:#9C6410">Not sent</span>') +
+      line('Consumer packet', (P ? esc(P.status || '') : '<span style="color:#9C6410">Not sent</span>') + ' <a href="#" onclick="_profTab=\'tax\';renderProfile();return false" style="font-size:12px;margin-left:8px">' + (P ? 'open' : 'send it') + '</a>') +
       line('Start date from the state', c.cdsStartDate ? esc(day(c.cdsStartDate)) + (st.startAlert && st.startAlert.soon ? ' <span style="color:var(--danger);font-weight:600">' + (st.startAlert.late ? 'passed, not ready' : st.startAlert.days + ' days left, not ready') + '</span>' : '') : '<span style="color:#9C6410">not on file yet</span>') +
       line('First shift', ctx.firstShift ? esc(day(ctx.firstShift)) : 'Not yet in WellSky') +
       line('Coordinator', ownerSelect('stCoordC', c.coordinator || meName(), "StartHub.setCoordinator('consumer','" + q(c.id) + "',this.value)")) +
