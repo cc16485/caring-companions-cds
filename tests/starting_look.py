@@ -125,7 +125,17 @@ with sync_playwright() as pw:
     pg.click('#prof_body button:has-text("Save note")'); pg.wait_for_timeout(100)
     ck('Notes tab: an empty box saves nothing', pg.evaluate("()=>getData('consumers')[0].notes") == saved)
     shot(pg, '04d-starting-profile-notes-tab')
-    pg.evaluate("()=>{_profTab='overview'; renderProfile();}")
+    # Send the packet from the Starting profile (her ask 2026-11-16: she could not find it while State approval was next)
+    pg.evaluate("()=>{ if (!_db) _db = {}; _profTab='overview'; renderProfile();}"); pg.wait_for_timeout(200)   # signed in: the card needs the database handle
+    ck('Overview: Consumer packet Not sent has a send it link', pg.locator('#prof_body a:has-text("send it")').count() == 1)
+    also_links = pg.evaluate("()=>[...document.querySelectorAll('#prof_body .st-also a')].map(a=>a.textContent)")
+    ck('also-do-now: Send the enrollment packet is a link', 'Send the enrollment packet' in also_links, also_links)
+    pg.click('#prof_body .st-also a:has-text("Send the enrollment packet")'); pg.wait_for_timeout(1200)
+    tax = pg.inner_text('#prof_body')
+    ck('also-do-now link opens Tax and EIN with the packet card and its Send button', pg.evaluate("()=>_profTab") == 'tax' and 'Enrollment packet' in tax and pg.locator('#profEnroll button:has-text("Send")').count() >= 1, tax[-600:])
+    ck('Tax and EIN still has Tax setup', pg.locator('#prof_body button:has-text("Tax setup")').count() == 1)
+    shot(pg, '04e-starting-profile-packet-card')
+    pg.evaluate("()=>{ _db = null; _profTab='overview'; renderProfile();}")
 
     # ---- 3. Medicaid tab: verify in eMOMED
     pg.evaluate("()=>{_profTab='medicaid'; renderProfile();}"); pg.wait_for_timeout(300)
