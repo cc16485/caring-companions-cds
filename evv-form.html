@@ -120,17 +120,19 @@
 <!-- FORM -->
 <div id="formPage">
 <div class="container">
+<!-- Forgot to clock out (2026-11-17): opened from the private link in the text, ?fix=... -->
+<div id="fixBanner" style="display:none;background:#eaf6f6;border-left:4px solid #54bdb8;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:16px;font-size:14px;line-height:1.65;color:#0e3860"></div>
 
 <!-- Save-to-phone + the standard. Shown first, deliberately: the goal is that this
      form is needed rarely, so the expectation is set before the fields. -->
-<div id="saveBar" style="background:#0e3860;color:#fff;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;line-height:1.6">
+<div id="saveBar" class="std-only" style="background:#0e3860;color:#fff;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;line-height:1.6">
   <div style="font-weight:700;margin-bottom:6px">📌 Save this form to your phone</div>
   <div style="opacity:.92">Add it to your home screen once and it is one tap whenever you need it. You will not have to hunt for the link again.</div>
   <div id="saveHow" style="margin-top:10px;background:rgba(255,255,255,.12);border-radius:8px;padding:10px 12px"></div>
   <button id="installBtn" style="display:none;margin-top:10px;background:#54bdb8;color:#0e3860;border:none;border-radius:8px;padding:9px 16px;font:700 13px Poppins,sans-serif;cursor:pointer">Add to home screen</button>
 </div>
 
-<div style="background:#fdf6e3;border-left:4px solid #b7770d;border-radius:0 8px 8px 0;padding:13px 16px;margin-bottom:18px;font-size:13.5px;line-height:1.65">
+<div class="std-only" style="background:#fdf6e3;border-left:4px solid #b7770d;border-radius:0 8px 8px 0;padding:13px 16px;margin-bottom:18px;font-size:13.5px;line-height:1.65">
   <div style="font-weight:700;color:#8d6314;margin-bottom:4px">Before you fill this in</div>
   Our goal is that <strong>95% or more of visits are clocked in and out correctly the first time</strong>, with no manual
   change from us. This form exists for the rare occasion something genuinely goes wrong: a dead phone, no signal, a
@@ -146,7 +148,7 @@
   <div class="page-sub">Complete all sections. Both the attendant and consumer must sign before submitting.</div>
 
   <!-- WHEN TO USE -->
-  <div style="background:#eaf4fb;border-left:4px solid #2980b9;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:12px">
+  <div class="std-only" style="background:#eaf4fb;border-left:4px solid #2980b9;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:12px">
     <div style="font-size:12px;font-weight:700;color:#1a5276;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">When to use this form</div>
     <div style="font-size:13px;color:#1a3a4f;line-height:1.7">
       Submit a correction only when a technical problem prevented you from completing your normal EVV check-in or check-out through WellSky at the time of the visit. Unsure whether your situation qualifies? Attendants: ask your consumer. Consumers: call the Caring Companions office before submitting.
@@ -154,7 +156,7 @@
   </div>
 
   <!-- WARNING -->
-  <div style="background:#fef9e7;border-left:4px solid #f39c12;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:16px">
+  <div class="std-only" style="background:#fef9e7;border-left:4px solid #f39c12;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:16px">
     <div style="font-size:12px;font-weight:700;color:#7d5a00;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⚠️ Important: do not rely on this form</div>
     <div style="font-size:13px;color:#5d4200;line-height:1.7">
       Manual corrections are reviewed by the office and flagged in WellSky. <strong>Frequent submissions may affect your standing and could trigger a compliance review.</strong> Missouri Medicaid requires EVV to be completed electronically at the time of the visit. This form is a last resort for genuine technical failures, not a backup for forgetting to clock in or out. If EVV problems keep happening, the attendant should tell the consumer, and the consumer should contact the office before the attendant's next shift.
@@ -221,6 +223,11 @@
             <input type="time" id="f_new_out">
           </div>
         </div>
+        <div class="form-group" id="fixOutDayWrap" style="display:none;margin-top:8px">
+          <label>Day you clocked out <span class="req">*</span></label>
+          <input type="date" id="f_new_out_day">
+        </div>
+        <div id="fixHours" style="display:none;margin-top:8px;font-size:13px;font-weight:600;color:#0e3860"></div>
       </div>
     </div>
   </div>
@@ -439,6 +446,7 @@ function _styleCheckboxes() {
 
 // ── SUBMIT ──
 async function submitForm() {
+  if (_fix) return submitFix();
   const errEl     = document.getElementById('submit_error');
   errEl.style.display = 'none';
   const attendant = document.getElementById('f_attendant').value.trim();
@@ -512,6 +520,94 @@ async function submitForm() {
   document.getElementById('successPage').style.display = 'block';
   window.scrollTo(0, 0);
 }
+
+// FORGOT TO CLOCK OUT (2026-11-17). The text's private link (?fix=...) opens this form filled in with the
+// shift WellSky shows as never clocked out. The attendant adds the real clock out time, the reason and the
+// tasks, and both the attendant and the consumer sign. It goes through the cds-clockout server, which saves it
+// as a normal EVV form linked to that shift. The office approves it on the hub and fixes WellSky.
+const _fix = new URLSearchParams(location.search).get('fix');
+let _fixShift = null;
+async function _fixCall(body) {
+  const r = await fetch(SUPABASE_URL + '/functions/v1/cds-clockout', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY },
+    body: JSON.stringify(Object.assign({ token: _fix }, body)) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'The form could not be reached. Please call the office at (417) 218-2888.');
+  return j;
+}
+function _fixEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+function _fixStop(msg) {
+  document.getElementById('formPage').style.display = 'none';
+  document.getElementById('successPage').style.display = 'block';
+  document.getElementById('success_detail').textContent = msg;
+  const again = document.querySelector('.another-btn'); if (again) again.style.display = 'none';
+}
+function _fixHours() {
+  const out = document.getElementById('f_new_out').value, day = document.getElementById('f_new_out_day').value, el = document.getElementById('fixHours');
+  if (!_fixShift || !out || !day) { el.style.display = 'none'; return; }
+  const mins = (Date.parse(day + 'T' + out + ':00Z') - Date.parse(_fixShift.date + 'T' + _fixShift.clockIn + ':00Z')) / 60000;
+  el.style.display = 'block';
+  el.style.color = mins > 0 && mins <= 1440 ? '#0e3860' : '#c0392b';
+  el.textContent = mins > 0 && mins <= 1440 ? 'That makes ' + (Math.round(mins / 6) / 10) + ' hours.' : 'The clock out has to be after ' + _fixShift.when + '.';
+}
+async function _fixStart() {
+  if (!_fix) return;
+  document.querySelectorAll('.std-only').forEach(el => { el.style.display = 'none'; });
+  let g;
+  try { g = await _fixCall({ action: 'form_get' }); }
+  catch (e) { _fixStop(e.message); return; }
+  if (g.state === 'answered') { _fixStop('This form was already sent. Thank you. The office will fix the shift in WellSky.'); return; }
+  if (g.state !== 'open') { _fixStop(g.state === 'expired' ? 'This link has expired. Please call the office at (417) 218-2888.' : 'This shift no longer needs a form. Questions? Call (417) 218-2888.'); return; }
+  const s = _fixShift = g.shift;
+  const consumerFirst = s.consumer.split(' ')[0];
+  const b = document.getElementById('fixBanner');
+  b.innerHTML = '<div style="font-weight:700;margin-bottom:4px">Your shift with ' + _fixEsc(s.consumer) + ' on ' + _fixEsc(s.when) + ' has no clock out.</div>'
+    + 'To be paid for it, put the time you really left, pick what happened, and sign. ' + _fixEsc(consumerFirst) + ' signs too, to say the time is right. Please send it today.';
+  b.style.display = 'block';
+  const set = (id, v) => { const el = document.getElementById(id); el.value = v; el.readOnly = true; el.style.background = '#f4f6f8'; };
+  set('f_attendant', s.attendant); set('f_consumer', s.consumer); set('f_visitdate', s.date);
+  set('f_orig_in', s.clockIn); set('f_new_in', s.clockIn);
+  document.getElementById('f_orig_out').closest('.form-group').style.display = 'none';
+  updatePayPeriod();
+  const day = document.getElementById('f_new_out_day');
+  day.value = s.date; day.min = s.date;
+  document.getElementById('fixOutDayWrap').style.display = 'block';
+  ['f_new_out', 'f_new_out_day'].forEach(id => document.getElementById(id).addEventListener('input', _fixHours));
+  const sel = document.getElementById('f_reason');
+  if ([...sel.options].some(o => o.value === 'Forgot to clock out' || o.text === 'Forgot to clock out')) sel.value = 'Forgot to clock out';
+  document.querySelector('.page-sub').textContent = 'Your part is the clock out time, the reason, the tasks and both signatures.';
+}
+async function submitFix() {
+  const errEl = document.getElementById('submit_error');
+  const show = m => { errEl.textContent = m; errEl.style.display = 'block'; };
+  errEl.style.display = 'none';
+  if (!document.getElementById('f_new_out').value) { show('Please put the time you clocked out.'); return; }
+  if (!_sigs.attendant) { show('Your signature is needed.'); return; }
+  if (!_sigs.consumer) { show(_fixShift.consumer.split(' ')[0] + ' needs to sign too.'); return; }
+  const btn = document.getElementById('submit_btn');
+  btn.textContent = 'Sending...'; btn.disabled = true;
+  const reason = document.getElementById('f_reason').value;
+  const answer = {
+    clockOutDate: document.getElementById('f_new_out_day').value,
+    clockOut: document.getElementById('f_new_out').value,
+    reason, reasonOther: document.getElementById('f_reason_other').value.trim(),
+    tasks: Array.from(document.querySelectorAll('input[name="tasks"]:checked')).map(cb => cb.value),
+    notes: document.getElementById('f_notes').value.trim(),
+    sigAttendant: document.getElementById('sig_attendant').toDataURL(),
+    sigConsumer: document.getElementById('sig_consumer').toDataURL(),
+  };
+  let r;
+  try { r = await _fixCall({ action: 'form_submit', answer }); }
+  catch (e) { show(e.message); btn.textContent = 'Submit Correction Form'; btn.disabled = false; return; }
+  // The office email every EVV form gets (Samantha and Krystal). The form is already saved.
+  try { fetch(SUPABASE_URL + '/functions/v1/evv-notify', { method: 'POST', keepalive: true,
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY },
+    body: JSON.stringify({ id: r.id }) }).catch(() => {}); } catch (e) {}
+  _fixStop('Thank you. We have your clock out time (' + r.hours + ' hours). The office will check it and fix the shift in WellSky.');
+  window.scrollTo(0, 0);
+}
+document.addEventListener('DOMContentLoaded', () => { _fixStart(); });
+// END FORGOT TO CLOCK OUT
 
 // ── RESET ──
 function resetForm() {
