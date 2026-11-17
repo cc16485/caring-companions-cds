@@ -246,7 +246,8 @@
       '.mw-tog-auto{font-size:12.5px;color:var(--mut);display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin-left:auto}',
       '.mw-msg{font-size:12.5px;color:var(--mut);min-height:18px;margin:-4px 0 8px}.mw-msg.mw-bad{color:#B42318;font-weight:700}',
       '.mw-key{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mut);margin:0 0 12px}.mw-key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}',
-      '.mw-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}',
+      '.mw-week{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) minmax(0,.8fr);gap:8px}',
+      '.mw-wkend{display:flex;flex-direction:column;gap:8px;min-width:0}.mw-wkend .mw-day{min-height:0;flex:none}.mw-wkend .mw-day:last-child{flex:1 0 auto}',
       '@media (max-width:1100px){.mw-week{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}}',
       '.mw-day{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;min-width:0;min-height:170px;transition:background .15s,border-color .15s}',
       '.mw-day.today{border:2px solid var(--g);background:#F4FBF8}.mw-day.past{background:#fafbfc}',
@@ -265,7 +266,7 @@
       '.mw-tag.due{background:#D9822B;color:#fff}.mw-tag.mv{background:#fff;color:#3B6FD8}',
       '.mw-what{margin:5px 0 0 15px;padding:0;font-size:12px;line-height:1.45;color:var(--ink)}',
       '.mw-more{white-space:nowrap;border:0;background:none;padding:0;font:inherit;font-size:11.5px;font-weight:700;color:var(--ink);opacity:.8;cursor:pointer;text-decoration:underline}',
-      '.mw-foot{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:5px}.mw-acts{display:flex;gap:4px;flex:none}',
+      '.mw-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;margin-top:5px}.mw-acts{display:flex;gap:4px;flex:none}',
       '.mw-ic{width:24px;height:24px;border-radius:7px;border:1px solid rgba(13,54,95,.14);background:rgba(255,255,255,.75);cursor:pointer;font-size:12px;padding:0;color:var(--n);display:grid;place-items:center}',
       '.mw-ic:hover{background:#fff;border-color:#3B6FD8}',
       '.mw-auto{list-style:none;margin:6px 0 0;padding:0;font-size:11.5px;color:var(--mut);line-height:1.4}.mw-auto li{padding:3px 0;border-top:1px dashed var(--line)}.mw-auto b{color:#3d4752}',
@@ -354,7 +355,7 @@
   /* ---------- views ---------- */
   function weekView(now) {
     const from = monday(S.anchor), to = add(from, 6), list = occ(from, to);
-    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => {
+    const day = (i) => {
       const d = add(from, i), mine = list.filter((o) => o.date === d), k = dow(d);
       const auto = S.auto ? (AUTO[k] || []).map(([t, x]) => '<li>⏱ ' + (t ? '<b>' + esc(t) + '</b> ' : '') + esc(x) + '</li>').join('') : '';
       const left = mine.filter((o) => !o.done).length;
@@ -362,7 +363,9 @@
         + '<p class="mw-dn"><span>' + DAY[k] + (d === now ? '<span class="mw-now">Today</span>' : '') + '</span></p><p class="mw-dd">' + esc(nice(d, { weekday: undefined })) + (mine.length ? '<span>' + (mine.length - left) + ' of ' + mine.length + ' done</span>' : '') + '</p>'
         + (mine.length ? mine.map((o) => card(o, now)).join('') : '<p class="mw-empty">Nothing planned. Drop something here.</p>')
         + (auto ? '<ul class="mw-auto">' + auto + '</ul>' : '') + '</div>';
-    }).join('');
+    };
+    /* Her ask 11-17: Saturday and Sunday share one spot, so Monday to Friday get more room. */
+    const days = [0, 1, 2, 3, 4].map(day).join('') + '<div class="mw-wkend">' + day(5) + day(6) + '</div>';
     const done = list.filter((o) => o.done).length;
     const late = from <= now && now <= to ? occ(add(now, -21), add(now, -1)).filter((o) => !o.done) : [];
     const todays = list.filter((o) => o.date === now);
