@@ -98,7 +98,7 @@ W = C.buildWorksheet({ from: '2026-11-01', to: '2026-11-30', consumers: consumer
 let b = W.blocks[0];
 eq(b.lines.filter(l => l.code === 'T1019').map(l => l.mod + ' ' + l.units), ['U2 590', 'U6 70'], '590 State Plan, then 70 waiver');
 ok(b.lines.some(l => l.code === 'T2040' && l.units === 1 && l.from === '2026-11-01' && l.to === '2026-11-30'), 'FMS 1 for the month once waiver CDS was delivered');
-ok(b.stops.some(s => /case management contact/.test(s)), 'case management needs its contact written down');
+ok(!b.stops.length && !b.lines.some(l => l.code === 'T2024') && b.notes.some(s => /write down that month's contact date/.test(s)), 'no contact date: case management left off and said; the personal care still bills');
 W = C.buildWorksheet({ from: '2026-11-01', to: '2026-11-30', consumers: consumers.slice(0, 1), auths, logs: many, coverage: [{ from: '2026-11-01', to: '2026-11-30' }], claims: [], work: Object.assign({}, work, { cm: { a: { '2026-11': '2026-11-12' } } }), now: new Date(2026, 11, 2) });
 b = W.blocks[0];
 ok(b.lines.some(l => l.code === 'T2024'), 'case management billed once its contact is saved');
