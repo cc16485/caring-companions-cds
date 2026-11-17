@@ -28,6 +28,7 @@ async () => {
   const t = W().innerText;
   ok('it loads her saved marks from the server', calls[0] && calls[0].action === 'list', calls);
   ok('week view starts Monday Nov 16, Tuesday is today', qa('.mw-day')[0].dataset.date === '2026-11-16' && q('.mw-day.today').dataset.date === '2026-11-17');
+  ok('Saturday and Sunday share one spot after Friday', W().querySelector('.mw-week').children.length === 6 && [...q('.mw-wkend').querySelectorAll('.mw-day')].map((x) => x.dataset.date).join() === '2026-11-21,2026-11-22');
   ok('the five times together plus the Saturday EVV deadline', ['Money in: AxisCare billing and payroll prep', 'CDS payroll in Empeon and Medicaid', 'Marketing', 'Growth', 'Big picture', 'CDS EVV forms due'].every((x) => t.includes(x)), t.slice(0, 400));
   ok('Monday 9 AM is AxisCare, Tuesday 9:30 is Empeon payroll, Saturday is EVV', /Money in/.test(col('2026-11-16').innerText) && /9:30 AM[\s\S]*Empeon/.test(col('2026-11-17').innerText) && /EVV forms due/.test(col('2026-11-21').innerText));
   ok('dated things this week are on their day', /Medicaid claim cutoff/.test(col('2026-11-20').innerText) && /First Sunday EVV forms email/.test(col('2026-11-22').innerText));
