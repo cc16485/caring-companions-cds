@@ -1673,6 +1673,16 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div id="pdf_gaps" style="margin-top:12px"></div>
   </div>
 
+  <!-- Claims for eMOMED (2026-11-16, her switch 'claims'): drawn by claims/hub-claims.js -->
+  <div class="card" id="claimsCard" style="margin-bottom:18px;display:none">
+    <div class="card-title"><span class="icon">🧾</span> Claims for eMOMED</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      The lines to type into eMOMED Claim Management for the dates you pick, from the WellSky care logs and the DSDS
+      authorizations. Anything that would get a claim denied stops it here first. Mark each line sent with the ICN eMOMED gives it.
+    </div>
+    <div id="claimsRoot"></div>
+  </div>
+
   <div class="card" style="margin-bottom:18px">
     <div class="card-title"><span class="icon">📥</span> Upload a month of billing (WellSky)</div>
     <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
@@ -5157,9 +5167,12 @@ async function signOut() {
 
 async function _loadAllData() {
   // Load all main data keys
+  // The billing stores (Claims for eMOMED, 2026-11-16) grow with every shift and claim, so they load only when
+  // the Claims card opens (claimsLoad), never with the rest of the hub.
   const { data } = await _db.from('agency_data')
     .select('data_key, data_value')
-    .eq('agency_id', AGENCY_ID);
+    .eq('agency_id', AGENCY_ID)
+    .not('data_key', 'in', '(' + CLAIM_STORES.join(',') + ')');
   if (data) data.forEach(row => { _store[row.data_key] = row.data_value; });
   _ghlSeed();   // who was already here: only people added after this go to GoHighLevel on their own
   // 2026-10-08: an old GoHighLevel key may still be saved in outreachSettings; never keep it in the page.
@@ -5470,7 +5483,7 @@ function showPage(id) {
   // pipeline records), which finds the container by id wherever it now lives.
   if (id === 'statesubmissions') renderPipeline();
   if (id === 'taxcompliance') { renderTaxCompliance(); renderComplianceClocks(); }
-  if (id === 'payroll') renderPayroll();
+  if (id === 'payroll') { renderPayroll(); renderClaimsCard(); }
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'starting' && window.StartHub) StartHub.renderPage();
   if (id === 'hoursmonth') renderHoursMonth();
@@ -5583,6 +5596,50 @@ async function renderHoursMonth() {
       } });
   } catch (e) {
     root.innerHTML = '<div style="padding:24px;color:#a8342a">This month could not load: ' + String(e.message || e).replace(/</g, '&lt;') + '</div>';
+  }
+}
+
+// Claims for eMOMED (2026-11-16). The billing stores load only here (see _loadAllData).
+const CLAIM_STORES = ['careLogs', 'careLogsUploaded', 'emomedClaims'];
+let _claims = null;
+async function claimsLoad() {
+  const { data, error } = await _db.from('agency_data').select('data_key, data_value').eq('agency_id', AGENCY_ID).in('data_key', CLAIM_STORES);
+  if (error) throw new Error(error.message);
+  const by = {}; (data || []).forEach(r => { by[r.data_key] = r.data_value; });
+  return { careLogs: by.careLogs || {}, uploadedLogs: by.careLogsUploaded || {}, emomed: by.emomedClaims || {} };
+}
+async function claimsSaveStore(key, val) {
+  if (!CLAIM_STORES.includes(key)) throw new Error('not a billing store');
+  const { error } = await _db.from('agency_data').upsert({ agency_id: AGENCY_ID, data_key: key, data_value: val }, { onConflict: 'agency_id,data_key' });
+  if (error) throw new Error('It was not saved: ' + error.message);
+}
+// Hospital or rehab stays from the Something changed checklist: { consumerId: [{ from, to }] }.
+function claimsHospital() {
+  const out = {};
+  getData('consumers').forEach(c => {
+    const e = c.ending, back = (c.changes || []).filter(x => x.kind === 'home' && x.eventDate).map(x => x.eventDate).sort();
+    if (e && e.kind === 'hospital' && e.eventDate) (out[c.id] = out[c.id] || []).push({ from: e.eventDate, to: back.find(d => d >= e.eventDate) || '' });
+  });
+  return out;
+}
+async function renderClaimsCard() {
+  const card = document.getElementById('claimsCard');
+  if (!card) return;
+  const on = hubSwitchOn('claims');
+  card.style.display = on ? '' : 'none';
+  if (!on || !_db) return;
+  if (_claims) { _claims.draw(true); return; }
+  const root = document.getElementById('claimsRoot');
+  try {
+    const { mountClaims } = await import('./claims/hub-claims.js?v=1');
+    _claims = mountClaims(root, {
+      consumers: () => getData('consumers'), auths: () => getObj('authorizations'),
+      work: () => getObj('claimsWork'), saveWork: w => setObj('claimsWork', w),
+      load: claimsLoad, saveStore: claimsSaveStore, hospital: claimsHospital,
+      who: () => (_acWho() || '').split('@')[0], xlsx: async () => { await prLoadSheetJS(); return window.XLSX; },
+      toast: (m, warn) => _ghlToast((warn ? '⚠️ ' : '✅ ') + m, warn) });
+  } catch (e) {
+    root.innerHTML = '<div style="color:#a8342a">Claims could not load: ' + esc(String(e.message || e)) + '</div>';
   }
 }
 
@@ -10761,6 +10818,8 @@ const HUB_SWITCHES = [
   { key: 'faxLive', label: 'One-click fax',
     does: 'On: the SS-4, 2643A and 2827 steps on Tax Setup get a Fax it now button (the SS-4 only when there is no EIN yet and, for a transfer, after the existing-EIN check) (the 8821 goes online, an e-signed one cannot be faxed). The signed form is sent from zach@caringcds.com through eFax by the Google script in Zach\'s mailbox, and eFax\'s receipt is saved on the step by itself. Faxes that come in to (417) 719-7870 show on Today until someone marks them handled, and a fax that failed or has no receipt shows there too. Needs the Google script set up in zach@caringcds.com. Off: nothing is sent or taken in; Fax it via eFax works as before.' },
 ];
+HUB_SWITCHES.push({ key: 'claims', label: 'Claims for eMOMED',
+  does: 'On: Money shows Claims for eMOMED: for the dates you pick, each consumer\'s claim lines (T1019 U2 then U6, FMS, case management, supplies) worked out from the WellSky care logs and the DSDS authorizations, what stops a claim before eMOMED denies it, what is already billed (from the eMOMED claim list you upload), the next cutoff and payday, and Mark sent with the ICN. Off: hidden. The WellSky care logs are kept for billing either way.' });
 const hubSwitchOn = key => getObj(key).live === true;
 function renderHubSwitches() {
   const host = document.getElementById('hubSwitches');
@@ -10786,6 +10845,7 @@ function hubSwitch(key, on) {
   if (key === 'moForms' || key === 'moStaffOig') renderOfficeCard();
   if (key === 'starting' && window.StartHub) StartHub.renderAdmin();
   if (key === 'followupsTable' && document.getElementById('page-followups')?.classList.contains('active')) renderFollowups(false);
+  if (key === 'claims') { _claims = null; renderClaimsCard(); }
   if (key === 'authSlim') { _hx = null; renderMainTabs(PAGE_TO_SECTION.automations); renderSectionNav(PAGE_TO_SECTION.automations, 'automations'); }
 }
 
@@ -12160,6 +12220,11 @@ function parseAuthorizationPdf(text, fileName) {
   while ((m = re.exec(text)) !== null) {
     rows.push({ start: isoOf(m[1]), end: isoOf(m[2]), code: m[3], units: parseInt(m[4], 10) });
   }
+  // Claims for eMOMED (2026-11-16): the current form prints one section per service (PC - CDS, CDS - ILW,
+  // FMS, SMS, CM), each with its own prior authorization number. Keep both on every row, so State Plan
+  // (T1019 U2) and waiver (T1019 U6) units can be told apart. claims/claims.js reads the sections.
+  const secRows = (window.CDSClaims && window.CDSClaims.readAuthSections(text)) || [];
+  if (secRows.length) { rows.length = 0; secRows.forEach(r => rows.push(r)); }
   let format = 'monthly';
   if (!rows.length) {
     const old = /(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{2,5})\s*\n/.exec(text);
@@ -17911,5 +17976,7 @@ document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCoun
 </script>
 <script src="starting/hub-starting.js?v=16"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
+<!-- Claims for eMOMED (2026-11-16): the authorization reader uses its section reader -->
+<script type="module">import * as C from './claims/claims.js?v=1'; window.CDSClaims = C;</script>
 </body>
 </html>

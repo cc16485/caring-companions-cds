@@ -95,6 +95,19 @@ eq(nc.people.map(p => p.name), ['Cal Carr', 'Eve Ely'], 'the 40 goal now counts 
 r = await ingest({ db, now: () => t0 + 6e4 }, { kind: 'analytics', report: 'Authorization Care Logs', files: alFiles });
 v = await get('wellskyCheck');
 eq([r.ok, r.shifts, v.analytics.authLogs.shifts.length, !!v.analytics.firstLast], [true, 2, 2, true], 'the second report is saved next to the first');
+// Claims for eMOMED (2026-11-16): every care log is also kept in 'careLogs', with the days covered.
+let cl = await get('careLogs');
+eq([cl.logs.length, cl.logs[0].clockOut, cl.logs[1].clockOut, cl.coverage.length, cl.coverage[0].from], [2, '2026-10-15T16:26:23', null, 1, '2026-10-15'],
+   'care logs kept for billing; never clocked out kept as null; coverage starts at the first clock-in');
+const CL = await import(ROOT + '/supabase/functions/_shared/office/care-logs.js');
+let m = CL.mergeCareLogs(cl, [{ consumer: 'Carr, Cal', clockIn: '2026-10-20T08:02:15', clockOut: '2026-10-20T12:00:00' }, { consumer: 'Dunn, Dee', clockIn: '2026-10-25T08:00:00', clockOut: '2026-10-25T09:00:00' }], '2026-10-27T11:00:00Z');
+eq([m.logs.length, m.logs.find(x => x.consumer === 'Carr, Cal').clockOut], [3, '2026-10-20T12:00:00'], 'a later clock out fills in the same shift; a new shift is added');
+eq(m.coverage, [{ from: '2026-10-15', to: '2026-10-26' }], 'touching coverage joins into one range, through the day before the email');
+m = CL.mergeCareLogs(m, [{ consumer: 'Carr, Cal', clockIn: '2026-10-20T08:02:40', clockOut: null }], '2026-10-28T11:00:00Z');
+eq(m.logs.find(x => x.consumer === 'Carr, Cal').clockOut, '2026-10-20T12:00:00', 'a copy without a clock out never wipes one that has it');
+eq(CL.joinRanges([{ from: '2026-10-01', to: '2026-10-05' }, { from: '2026-10-08', to: '2026-10-09' }]).length, 2, 'a gap stays a gap');
+m = CL.mergeCareLogs({ logs: [{ consumer: 'Old, Ollie', clockIn: '2025-01-02T08:00:00', clockOut: '2025-01-02T09:00:00' }], coverage: [{ from: '2025-01-01', to: '2025-01-31' }] }, [], '2026-10-28T11:00:00Z');
+eq([m.logs.length, m.coverage.length], [0, 0], 'older than 400 days drops off');
 r = await ingest({ db, now: () => t0 + 12e4 }, { kind: 'analytics', report: 'Authorization Care Logs', files: [{ name: 'a.csv', text: 'Nope\n1\n' }] });
 v = await get('wellskyCheck');
 eq([r.ok, v.analyticsRun.ok, v.analytics.authLogs.shifts.length], [false, false, 2], 'an unreadable email keeps the last good report and records why');

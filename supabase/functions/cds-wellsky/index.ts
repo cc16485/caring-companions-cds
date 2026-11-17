@@ -12,7 +12,7 @@
 // From Google (header x-wellsky-key = secret WELLSKY_GOOGLE_KEY, 2026-10-21): only
 // { kind: 'analytics' | 'analytics_missing' | 'ping' }, the WellSky Analytics reports that
 // arrive by email (wellsky/google-script.gs, _shared/office/wellsky-analytics.js).
-// Writes only wellsky_inbox and agency_data 'wellskyCheck' and 'firstShifts'. Never sends a message to anyone.
+// Writes only wellsky_inbox and agency_data 'wellskyCheck', 'firstShifts' and 'careLogs' (billing, 2026-11-16). Never sends a message to anyone.
 import postgres from 'npm:postgres@3.4.4';
 import { ingest, submit, confirm } from '../_shared/office/wellsky-ingest.js';
 
