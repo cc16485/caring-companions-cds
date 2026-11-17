@@ -12225,6 +12225,10 @@ function parseAuthorizationPdf(text, fileName) {
   // (T1019 U2) and waiver (T1019 U6) units can be told apart. claims/claims.js reads the sections.
   const secRows = (window.CDSClaims && window.CDSClaims.readAuthSections(text)) || [];
   if (secRows.length) { rows.length = 0; secRows.forEach(r => rows.push(r)); }
+  // An agency-model care plan (PC - Agency, Caring Companions In-Home, with T1001 nurse visits) is not CDS:
+  // never read its T1019 rows as CDS units (2026-11-16, Karen Bohnstedt's while she switches to CDS).
+  else if (/Prior\s+Authorization\s*\n\s*PC\s*-\s*\n?\s*Agency/i.test(text) && !/Prior\s+Authorization\s*\n\s*(PC\s*-\s*CDS|CDS\s*-\s*ILW)/i.test(text))
+    return { error: 'this is an agency (PC - Agency) authorization, not CDS. Upload the CDS authorization once DSDS issues it' };
   let format = 'monthly';
   if (!rows.length) {
     const old = /(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{2,5})\s*\n/.exec(text);
@@ -12288,7 +12292,7 @@ async function profAuthUpload(cid, file) {
   if (!mine && theirs) c.dcn = r.dcn;
   r.consumer = c.name;
   const store = getAuths();
-  store.records[(r.dcn || r.name || c.name).toUpperCase()] = r;
+  { const k = (r.dcn || r.name || c.name).toUpperCase(); store.records[k] = window.CDSClaims ? CDSClaims.keepEarlier(store.records[k], r) : r; }   // keeps earlier months for billing
   setObj('authorizations', { loadedAt: _todayIso(), unitMinutes: store.unitMinutes, records: store.records });
   setData('consumers', consumers);
   renderProfile();
@@ -12324,7 +12328,7 @@ async function importAuthorizations(event) {
             hit.docs = (hit.docs || []).concat([doc]); keptPdf++; }
       catch (e) { notKept.push(files[i].name + ' (' + (e.message || e) + ')'); }
     }
-    store.records[(r.dcn || r.name).toUpperCase()] = r;
+    { const k = (r.dcn || r.name).toUpperCase(); store.records[k] = window.CDSClaims ? CDSClaims.keepEarlier(store.records[k], r) : r; }   // keeps earlier months for billing
     ok++;
   }
   setObj('authorizations', { loadedAt: _todayIso(),

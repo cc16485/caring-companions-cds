@@ -10,7 +10,7 @@ const ok = (c, m) => { if (c) pass++; else { failN++; console.log('FAIL', m); } 
 const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m + '\n   got:  ' + JSON.stringify(a) + '\n   want: ' + JSON.stringify(b));
 
 // ---------- the authorization's sections ----------
-const sec = (label, pa, rows) => 'Service Type\nStart Date\nEnd Date\nProvider\nGHE 1\nGHE 2\nPrior Authorization\n' + label + '\n04/01/2026\n02/28/2027\nSOME AGENCY LLC, 4170000000\nN/A\nN/A\n' + pa +
+const sec = (label, pa, rows) => 'Service Type\nStart Date\nEnd Date\nProvider\nGHE 1\nGHE 2\nPrior Authorization\n' + label + '\n04/01/2026\n02/28/2027\nTROUTMAN ENTERPRISES LLC, 4172348494\nN/A\nN/A\n' + pa +
   '\nStart Date\nEnd Date\nProcedure Code\nAuthorized Units\n' + rows.map(r => r.join('\n')).join('\n') + '\n';
 const pdf = 'Home & Community Based Services Care Plan\n' +
   sec('PC - CDS', '20260900000001', [['11/01/2026', '11/30/2026', 'T1019', '590'], ['12/01/2026', '12/31/2026', 'T1019', '602']]) +
@@ -23,6 +23,12 @@ eq(rows.map(r => r.svc + ' ' + r.code + ' ' + r.units), ['PC - CDS T1019 590', '
 eq(rows[3].pa, '20260900000003', 'each section keeps its own prior authorization number');
 eq(rows[0].start + ' ' + rows[0].end, '2026-11-01 2026-11-30', 'dates as ISO');
 eq(C.readAuthSections('Care Plan with no sections'), [], 'no sections: nothing (the old reader handles it)');
+// real layouts (2026-11-16): split headings, a meals section from the Area Agency on Aging, another vendor
+const split = 'Service\nType\nStart Date\nEnd Date\nProvider\nGHE 1\nGHE 2\nPrior\nAuthorization\nPC - CDS\n05/19/2026\n03/31/2027\nTROUTMAN ENTERPRISES LLC, 4172348494\nN/A\nN/A\n20261380000001\nStart Date\nEnd Date\nProcedure Code\nAuthorized Units\n11/01/2026\n11/30/2026\nT1019\n237\n' +
+  'Service\nType\nStart Date\nEnd Date\nProvider\nGHE 1\nGHE 2\nPrior\nAuthorization\nHDMS\n05/19\n/2026\n03/31\n/2027\nREGION X AREA AGENCY ON AGING, (417) 781-\n7562\nN/A\nN/A\n20261380000002\nStart Date\nEnd Date\nProcedure Code\nAuthorized Units\n11/01/2026\n11/30/2026\nS5170\n5\n';
+eq(C.readAuthSections(split).map(r => r.svc + ' ' + r.code + ' ' + r.units + ' ' + r.ours), ['PC - CDS T1019 237 true'], 'headings split over two lines read; the meals section is not ours and not CDS');
+const other = sec('PC - CDS', '20261620000001', [['11/01/2026', '11/30/2026', 'T1019', '589']]).replace('TROUTMAN ENTERPRISES LLC, 4172348494', 'ANOTHER HEALTH CARE SERVICE,\n6360000000');
+eq(C.readAuthSections(other).map(r => r.ours), [false], 'a section with another provider is marked not ours');
 
 // serviceOf for records read before sections existed
 const oldRec = { months: [{ start: '2026-11-01', code: 'T1019', units: 590 }, { start: '2026-11-01', code: 'T1019', units: 76 }, { start: '2026-11-01', code: 'T2040', units: 1 }] };
@@ -138,6 +144,17 @@ const k = 'a|2026-11|T1019 U2|2026-11-16|2026-11-17';
 W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths, logs, coverage: [{ from: '2026-11-01', to: '2026-11-30' }], claims: [], work: Object.assign({}, work, { sent: { [k]: { icn: '4926', at: 'x', by: 'sam' } } }), now });
 ok(W.blocks[0].lines[0].sent && W.totals.charge === 0, 'a line marked sent shows it and leaves the total');
 
+W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths: { records: { A: { dcn: '11111111', months: C.readAuthSections(other) } } }, logs, coverage: [{ from: '2026-11-01', to: '2026-11-30' }], claims: [], work, now });
+ok(W.blocks[0].stops.some(s => /names another provider/.test(s)) && !W.blocks[0].lines.length, 'another vendor\'s authorization is never billed');
+// a new plan keeps the old plan's earlier months for billing
+const oldPlan = { source: 'old.pdf', planStart: '2026-04-16', months: [{ svc: 'PC - CDS', start: '2026-09-01', end: '2026-09-30', code: 'T1019', units: 200 }, { svc: 'PC - CDS', start: '2026-10-01', end: '2026-10-31', code: 'T1019', units: 210 }, { svc: 'PC - CDS', start: '2026-11-01', end: '2026-11-30', code: 'T1019', units: 999 }] };
+const newPlan = { source: 'new.pdf', planStart: '2026-11-01', months: [{ svc: 'PC - CDS', start: '2026-11-01', end: '2026-11-30', code: 'T1019', units: 220 }] };
+const kept = C.keepEarlier(oldPlan, newPlan);
+eq([kept.months.length, kept.history.map(m => m.start + ' ' + m.units)], [1, ['2026-09-01 200', '2026-10-01 210']], 'old months before the new plan go to history; the new plan wins its own months');
+eq(C.keepEarlier(kept, Object.assign({}, newPlan)).history.length, 2, 'uploading the same plan again keeps history, no duplicates');
+W = C.buildWorksheet({ from: '2026-10-30', to: '2026-11-02', consumers: consumers.slice(0, 1), auths: { records: { A: Object.assign({ dcn: '11111111' }, kept) } },
+  logs: [log('Doe, Jan', '2026-10-30', '08:00', '09:00'), log('Doe, Jan', '2026-11-02', '08:00', '09:00')], coverage: [{ from: '2026-10-01', to: '2026-11-30' }], claims: [], work, now });
+eq(W.blocks.map(b => b.month + ' ' + b.stops.length + ' ' + b.lines.length), ['2026-10 0 1', '2026-11 0 1'], 'October bills on the old plan, November on the new');
 // Not Complete in WellSky, and matching by DCN (2026-11-16, her WellSky export)
 W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths,
   logs: [{ consumer: 'Somebody Else', dcn: '011111111', clockIn: '2026-11-16T08:00:00', clockOut: '2026-11-16T10:00:00' },
