@@ -15326,9 +15326,9 @@ async function loadClockoutFixes() {
   ];
   const h = j.textHours || {};
   const hr = x => ((+x % 12) || 12) + (+x < 12 ? 'am' : 'pm');
-  let html = '<div class="card" style="border-left:4px solid var(--accent)"><div class="card-title"><span class="icon">⏰</span> Forgot to clock out'
+  let html = '<div class="card" style="border-left:4px solid var(--accent)"><div class="card-title"><span class="icon">⏰</span> Missed clock in or out'
     + (j.live ? '' : ' <span class="badge badge-warn" style="margin-left:6px">Practice: texts are not sent</span>') + '</div>'
-    + '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:12px">Shifts WellSky shows with no clock out. The attendant gets one text with their EVV form link, ' + hr(h.from || 9) + ' to ' + hr(h.until || 19) + '. Not paid unless the form comes back and the shift is fixed in WellSky.</div>';
+    + '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:12px">Shifts WellSky shows with no clock out, or Not Complete at the exact scheduled times (nobody clocked in). The attendant gets one text with their EVV form link, ' + hr(h.from || 9) + ' to ' + hr(h.until || 19) + '. Not paid unless the form comes back and the shift is fixed in WellSky.</div>';
   const open = groups.filter(g => g[0] !== 'done').some(g => _coCards.some(g[2]));
   if (!open) html += '<div style="font-size:13px;color:var(--gray-600)">Nothing waiting.</div>';
   groups.forEach(([key, label, test]) => {
@@ -15343,11 +15343,13 @@ async function loadClockoutFixes() {
 function _coCardHtml(c, key) {
   const who = c.attendant ? esc(c.attendant) + (c.guessed ? ' <span style="font-size:11px;color:var(--gray-600)">(the hub’s attendant for ' + esc(c.consumer) + ')</span>' : '') : '<em>who worked it?</em>';
   let body = '<div style="font-weight:700;font-size:14px">' + who + ' for ' + esc(c.consumer) + '</div>'
-    + '<div style="font-size:12.5px;color:var(--gray-600);margin-top:2px">Clocked in ' + esc(c.when) + ', never clocked out. Pay week ends ' + esc(c.payroll.weekEnd) + ', payroll locks ' + esc(c.payroll.locks) + ' 3pm.</div>';
-  if (c.answer) {
+    + '<div style="font-size:12.5px;color:var(--gray-600);margin-top:2px">' + (c.kind === 'no_clock_in' ? 'Scheduled ' + esc(c.when) + ', nobody clocked in (Not Complete in WellSky, still counted and paid until fixed).' : 'Clocked in ' + esc(c.when) + ', never clocked out.') + ' Pay week ends ' + esc(c.payroll.weekEnd) + ', payroll locks ' + esc(c.payroll.locks) + ' 3pm.</div>';
+  if (c.answer && c.answer.worked === false) {
+    body += '<div style="margin-top:8px;padding:10px 12px;background:#fdecea;border-radius:8px;font-size:13px"><strong>The attendant says they did not work it.</strong> Approve, then delete the shift in WellSky so it is not counted or paid.</div>';
+  } else if (c.answer) {
     const a = c.answer;
     body += '<div style="margin-top:8px;padding:10px 12px;background:#eaf6f6;border-radius:8px;font-size:13px">'
-      + '<div><strong>Proposed fix:</strong> clock out ' + esc(a.clockOutWhen) + ', <strong' + (c.long ? ' style="color:var(--danger)"' : '') + '>' + esc(a.hours) + ' hours</strong>' + (c.long ? ' (over 12 hours: look closely)' : '') + '</div>'
+      + '<div><strong>Proposed fix:</strong> ' + (a.clockInWhen && c.kind === 'no_clock_in' ? 'clock in ' + esc(a.clockInWhen) + ', ' : '') + 'clock out ' + esc(a.clockOutWhen) + ', <strong' + (c.long ? ' style="color:var(--danger)"' : '') + '>' + esc(a.hours) + ' hours</strong>' + (c.long ? ' (over 12 hours: look closely)' : '') + '</div>'
       + '<div>Reason: ' + esc(a.reason) + '. ' + esc(a.tasks) + ' tasks ticked. Signed by the attendant and the consumer.' + (a.notes ? ' Note: ' + esc(a.notes) : '') + '</div></div>';
   }
   if (key === 'approved' && c.steps) body += '<ol style="margin:8px 0 0 18px;font-size:13px;line-height:1.6">' + c.steps.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>';
@@ -15358,7 +15360,7 @@ function _coCardHtml(c, key) {
   const btn = (label, act, cls) => '<button class="btn ' + (cls || 'btn-outline') + '" style="font-size:12px" onclick="_coDo(\'' + act + '\',\'' + c.id + '\',this)">' + label + '</button>';
   let btns = '';
   if (key === 'answered') btns = btn('Approve', 'approve', 'btn-primary') + btn('Not approved', 'deny');
-  if (key === 'approved') btns = btn('Done, fixed in WellSky', 'done', 'btn-primary') + btn('Not approved', 'deny');
+  if (key === 'approved') btns = btn(c.answer && c.answer.worked === false ? 'Done, deleted in WellSky' : 'Done, fixed in WellSky', 'done', 'btn-primary') + (c.answer && c.answer.worked === false ? '' : btn('Not approved', 'deny'));
   if (key === 'office' || key === 'waiting' || key === 'found') btns = btn(c.textStatus === 'office' ? 'New form link' : 'Copy form link to send', 'link') + btn('Not needed', 'skip');
   return '<div style="border:1.5px solid var(--gray-200);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#FAF9F6">' + body
     + (btns ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' + btns + '</div>' : '') + '</div>';
@@ -15383,12 +15385,12 @@ async function _coDo(action, id, btn) {
   try { r = await _coCall(body); }
   catch (e) { btn.disabled = false; alert(e.message); return; }
   // The EVV log below keeps every correction, like any other EVV form.
-  if (action === 'approve' && c.answer) {
+  if (action === 'approve' && c.answer && c.answer.worked !== false) {
     const list = getData('evvCorrections');
     if (!list.some(x => x.id === 'co_' + c.id)) {
       list.unshift({ id: 'co_' + c.id, attendant: c.attendant, consumer: c.consumer, visitdate: c.clockIn.slice(0, 10), submitdate: _todayIso(),
-        origIn: c.clockIn.slice(11, 16), origOut: '', newIn: c.clockIn.slice(11, 16), newOut: c.answer.clockOut.slice(11, 16), reason: c.answer.reason,
-        notes: c.answer.notes || '', tasks: [], formReceived: 'yes', wellskyDone: 'no', admin: '', wellskyDate: '', loggedBy: 'Forgot to clock out form', source: 'evv_form' });
+        origIn: c.clockIn.slice(11, 16), origOut: '', newIn: (c.answer.clockIn || c.clockIn).slice(11, 16), newOut: c.answer.clockOut.slice(11, 16), reason: c.answer.reason,
+        notes: c.answer.notes || '', tasks: [], formReceived: 'yes', wellskyDone: 'no', admin: '', wellskyDate: '', loggedBy: c.kind === 'no_clock_in' ? 'Missed clock in form' : 'Forgot to clock out form', source: 'evv_form' });
       setData('evvCorrections', list);
     }
   }

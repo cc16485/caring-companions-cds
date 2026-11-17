@@ -18,19 +18,27 @@
 //           has no write access for us: its Connect API is paid and contract-gated), then "Done, fixed in
 //           WellSky" closes it. Not approved = denied; the shift stays unpaid (her rule).
 //
+// MISSED CLOCK IN (2026-11-17, from the billing work): when nobody clocks in, WellSky turns the scheduled shift into a
+// "Not Complete" care log at the exact scheduled times. It counts against the consumer's monthly hours and the Empeon
+// export pays it. Same flow: the attendant is texted "did you work it?". Yes: the same form, with clock in AND clock
+// out. No: one tap, nothing to sign, and the office deletes the shift in WellSky. Only logs marked Not Complete whose
+// times sit on the quarter hour count (a real visit has uneven times). Never about skip_attendants (Samantha's own
+// FMS and case management placeholders for Susan Barnwell on the 2nd and 3rd).
+//
 // Switch: cds_match_settings 'clockout_texts'.live, starts false. While off everything above still runs and
 // every text is written to Messages as practice; nothing is sent. Texts reach attendants only, never the office.
 // No em dashes in anything a person reads (her rule).
 
 export const AGENCY_ID = 'caring-companions-cds';
 export const SETTING = 'clockout_texts';
-export const DEFAULTS = { live: false, open_hours: 12, look_back_days: 7, text_from: 9, text_until: 19, text_days: [0, 1, 2, 3, 4, 5, 6], link_days: 10 };
+export const DEFAULTS = { live: false, open_hours: 12, look_back_days: 7, text_from: 9, text_until: 19, text_days: [0, 1, 2, 3, 4, 5, 6], link_days: 10, skip_attendants: ['Samantha Troutman'] };
 export const LINK = 'hub.caringcds.com/evv-form?fix=';
 export const TZ = 'America/Chicago';
 // DRAFT wording, waiting for her OK before the switch goes on (her rule: texts short).
 export const SMS = 'Hi {first}, it\'s Caring Companions CDS. You did not clock out of your shift with {consumer} on {day}. To be paid for it, please fill out this form: {link}';
+export const SMS_IN = 'Hi {first}, it\'s Caring Companions CDS. WellSky shows no clock in for your shift with {consumer} on {day} at {time}. Did you work it? Tell us here: {link}';
 export const SMS_MAX = 200;
-export const REASONS = ['Forgot to clock out', 'Phone dead / no battery', 'App crashed or technical error', 'No cell service at consumer location',
+export const REASONS = ['Forgot to clock out', 'Forgot to clock in', 'Phone dead / no battery', 'App crashed or technical error', 'No cell service at consumer location',
   'WellSky app error / update disruption', 'Landline EVV not available', 'Other'];
 
 export class ClockoutError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
@@ -94,6 +102,33 @@ export function closedKeys(stores) {
   return out;
 }
 
+// Not Complete logs at the exact scheduled times (no clock in at all), once the scheduled end has passed in the data.
+const onSchedule = t => { const m = /T\d{2}:(\d{2})(?::(\d{2}))?/.exec(String(t || '')); return !!m && ['00', '15', '30', '45'].includes(m[1]) && (!m[2] || m[2] === '00'); };
+export const notComplete = x => !!(x && (x.incomplete === true || /not complete/i.test(String(x.status || ''))));
+export function missedClockIns(stores, nowMs, cfg = DEFAULTS) {
+  const by = new Map();
+  const up = stores.careLogsUploaded || {};
+  const cut = up.at ? centralNaive(Date.parse(up.at)) : centralNaive(nowMs);
+  const skip = new Set((cfg.skip_attendants || []).map(nameKey));
+  const now = centralNaive(nowMs), since = addDaysIso(now.slice(0, 10), -cfg.look_back_days);
+  for (const src of [[(stores.careLogs || {}).logs, cut], [up.logs, cut]]) for (const x of src[0] || []) {
+    if (!notComplete(x) || !x.consumer || !x.clockIn || !x.clockOut) continue;
+    if (!onSchedule(x.clockIn) || !onSchedule(x.clockOut)) continue;
+    if (x.attendant && skip.has(nameKey(x.attendant))) continue;
+    const clockIn = String(x.clockIn).slice(0, 16) + ':00', clockOut = String(x.clockOut).slice(0, 16) + ':00';
+    if (clockIn.slice(0, 10) < since || clockOut > src[1]) continue;
+    const k = shiftKey(x.consumer, clockIn);
+    if (!by.has(k)) by.set(k, { key: k, kind: 'no_clock_in', consumer: display(x.consumer), attendant: x.attendant ? display(x.attendant) : '', clockIn, clockOut, sources: ['upload'] });
+  }
+  return [...by.values()].sort((a, b) => a.clockIn < b.clockIn ? -1 : 1);
+}
+// Shifts still showing as Not Complete (a missed clock in that is gone or finished closes on its own).
+export function notCompleteKeys(stores) {
+  const out = new Set();
+  for (const src of [(stores.careLogs || {}).logs, (stores.careLogsUploaded || {}).logs]) for (const x of src || []) if (notComplete(x) && x.consumer) out.add(shiftKey(x.consumer, x.clockIn));
+  return out;
+}
+
 // ---------- 2. who to text ----------
 const ten = p => { const d = String(p || '').replace(/\D/g, ''); const t = d.length === 11 && d[0] === '1' ? d.slice(1) : d; return t.length === 10 ? '+1' + t : ''; };
 // roster = agency_data 'attendants' [{ name, phone, consumer, status }]; pool = attendant_pool rows.
@@ -115,6 +150,8 @@ export function whoWorked(shift, roster = [], pool = []) {
 }
 
 export function smsFor(row, link) {
+  if (row.kind === 'no_clock_in') return SMS_IN.replace('{first}', firstWord(row.attendant)).replace('{consumer}', firstWord(row.consumer))
+    .replace('{day}', shortDay(row.clock_in)).replace('{time}', clock(row.clock_in)).replace('{link}', link);
   return SMS.replace('{first}', firstWord(row.attendant)).replace('{consumer}', firstWord(row.consumer))
     .replace('{day}', shortDay(row.clock_in)).replace('{link}', link);
 }
@@ -126,6 +163,13 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const SIG = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
 export function checkAnswer(row, a, nowMs) {
   a = a || {};
+  if (row.kind === 'no_clock_in') {
+    if (a.worked === false) return { worked: false, notes: String(a.notes || '').trim().slice(0, 1000) };
+    const inDay = String(a.clockInDate || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(inDay) || !HHMM.test(String(a.clockIn || ''))) throw new ClockoutError('Please put the day and time you really clocked in.');
+    if (Math.abs(naiveMs(inDay + 'T12:00:00') - naiveMs(row.clock_in.slice(0, 10) + 'T12:00:00')) > 864e5) throw new ClockoutError('The clock in has to be on the day of the shift (' + shortDay(row.clock_in) + ').');
+    row = Object.assign({}, row, { clock_in: inDay + 'T' + a.clockIn + ':00' });
+  }
   const outDay = String(a.clockOutDate || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(outDay) || !HHMM.test(String(a.clockOut || ''))) throw new ClockoutError('Please put the day and time you really clocked out.');
   const clockOut = outDay + 'T' + a.clockOut + ':00';
@@ -142,13 +186,29 @@ export function checkAnswer(row, a, nowMs) {
     if (!SIG.test(String(a[k] || '')) || String(a[k]).length < 200) throw new ClockoutError(who + ' is needed.');
     if (String(a[k]).length > 400000) throw new ClockoutError(who + ' is too big. Please clear it and sign again.');
   }
-  return { clockOut, hours: Math.round(mins / 6) / 10, reason: reason === 'Other' ? other : reason, tasks, notes: String(a.notes || '').trim().slice(0, 1000),
+  return { worked: true, clockIn: row.clock_in, clockOut, hours: Math.round(mins / 6) / 10, reason: reason === 'Other' ? other : reason, tasks, notes: String(a.notes || '').trim().slice(0, 1000),
            sigAttendant: a.sigAttendant, sigConsumer: a.sigConsumer };
 }
 
 // What to change in WellSky, word for word. WellSky gives us no way to write, so a person does it.
 export function wellskySteps(row) {
   const a = row.answer || {};
+  if (row.kind === 'no_clock_in') {
+    const open = 'Open the care log for ' + (row.attendant || 'the attendant') + ' at ' + clock(row.clock_in) + ' to ' + clock(row.clock_out || row.clock_in) + ' (it says Not Complete)';
+    if (a.worked === false) return [
+      'In WellSky open Clients, then ' + row.consumer + ', then Daily Care Logs, and go to ' + shortDay(row.clock_in) + '.',
+      open + '.',
+      'The attendant says they did not work it: delete the shift. If WellSky will not delete it, set the caregiver Pay Method to Not Payable and Save.',
+      'Check it is gone from this week\'s Empeon export so it is not paid.',
+    ];
+    return [
+      'In WellSky open Clients, then ' + row.consumer + ', then Daily Care Logs, and go to ' + shortDay(row.clock_in) + '.',
+      open + ' and press Edit.',
+      'Set Clock In to ' + shortDay(a.clockIn) + ' ' + clock(a.clockIn) + ' and Clock Out to ' + shortDay(a.clockOut) + ' ' + clock(a.clockOut) + ' (' + a.hours + ' hours).',
+      'Set the status to Complete and Save.',
+      'Add a comment on the care log: "EVV correction form signed by attendant and consumer, reason: ' + a.reason + '."',
+    ];
+  }
   return [
     'In WellSky open Clients, then ' + row.consumer + ', then Daily Care Logs, and go to ' + shortDay(row.clock_in) + '.',
     'Open the care log for ' + (row.attendant || 'the attendant') + ' that clocked in at ' + clock(row.clock_in) + ' (it says In Progress) and press Edit.',
@@ -193,24 +253,29 @@ export function createClockout(deps) {
     if (!cfg.ready) return { ok: false, error: 'The setting ' + SETTING + ' is not set up yet (run the SQL first).' };
     const s = await store(['careLogs', 'careLogsUploaded', 'wellskyCheck', 'attendants']);
     const pool = await q(`select first_name, last_name, phone, archived from attendant_pool`).catch(() => []);
-    const found = openShifts(s, now(), cfg);
+    const skip = new Set((cfg.skip_attendants || []).map(nameKey));
+    const missed = missedClockIns(s, now(), cfg);
+    const found = [...openShifts(s, now(), cfg).map(x => Object.assign({ kind: 'no_clock_out' }, x)), ...missed];
     let added = 0;
     for (const sh of found) {
       const who = whoWorked(sh, Array.isArray(s.attendants) ? s.attendants : [], pool);
+      if (who.name && skip.has(nameKey(who.name))) continue;
       const status = !who.name ? 'no_attendant' : !who.phone ? 'no_phone' : 'found';
-      const r = await one(`insert into cds_clockout_fixes (shift_key, consumer, attendant, attendant_guessed, clock_in, sources, phone, status, problem)
-                           values ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9) on conflict (shift_key) do nothing returning id`,
-        [sh.key, sh.consumer, who.name || null, !!who.guessed, sh.clockIn, JSON.stringify(sh.sources), who.phone || null, status, who.why || null]);
+      const r = await one(`insert into cds_clockout_fixes (shift_key, kind, consumer, attendant, attendant_guessed, clock_in, clock_out, sources, phone, status, problem)
+                           values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11) on conflict (shift_key) do nothing returning id`,
+        [sh.key, sh.kind, sh.consumer, who.name || null, !!who.guessed, sh.clockIn, sh.clockOut || null, JSON.stringify(sh.sources), who.phone || null, status, who.why || null]);
       if (r) added++;
       // A phone added to the hub since: try again.
       else if (who.phone) await q(`update cds_clockout_fixes set phone=$2, attendant=coalesce(attendant,$3), status='found', problem=null, updated_at=now()
                                    where shift_key=$1 and status in ('no_phone','no_attendant')`, [sh.key, who.phone, who.name]);
     }
     // Fixed in WellSky some other way: close it, unless the attendant already answered (the office decides those).
-    const closed = closedKeys(s);
+    const closed = closedKeys(s), stillNotComplete = notCompleteKeys(s);
     let autoClosed = 0;
-    for (const r of await q(`select id, shift_key from cds_clockout_fixes where status = any($1)`, [OPEN])) {
-      if (closed.has(r.shift_key)) { await q(`update cds_clockout_fixes set status='closed', note='WellSky now shows a clock out.', updated_at=now() where id=$1`, [r.id]); autoClosed++; }
+    for (const r of await q(`select id, shift_key, kind from cds_clockout_fixes where status = any($1)`, [OPEN])) {
+      const gone = r.kind === 'no_clock_in' ? !stillNotComplete.has(r.shift_key) : closed.has(r.shift_key);
+      if (gone && r.kind === 'no_clock_in') { await q(`update cds_clockout_fixes set status='closed', note='WellSky no longer shows it as Not Complete.', updated_at=now() where id=$1`, [r.id]); autoClosed++; }
+      else if (gone) { await q(`update cds_clockout_fixes set status='closed', note='WellSky now shows a clock out.', updated_at=now() where id=$1`, [r.id]); autoClosed++; }
     }
     // Texts: one per shift, in text hours only (later ones wait for the next run).
     const texts = [];
@@ -241,25 +306,32 @@ export function createClockout(deps) {
     return row;
   }
   const naiveOf = v => v instanceof Date ? v.toISOString().slice(0, 19) : String(v).replace(' ', 'T').slice(0, 19);
-  const shape = row => Object.assign({}, row, { clock_in: naiveOf(row.clock_in) });
+  const shape = row => Object.assign({}, row, { clock_in: naiveOf(row.clock_in), clock_out: row.clock_out ? naiveOf(row.clock_out) : null, kind: row.kind || 'no_clock_out' });
   async function form(body) {
     const row = shape(await byToken(body && body.token));
     const expired = row.link_expires_at && Date.parse(row.link_expires_at) < now();
     const state = row.status === 'texted' ? (expired ? 'expired' : 'open') : ['answered', 'approved', 'fixed'].includes(row.status) ? 'answered' : 'closed';
-    const shift = { attendant: row.attendant, consumer: row.consumer, date: row.clock_in.slice(0, 10), clockIn: row.clock_in.slice(11, 16),
+    const shift = { kind: row.kind || 'no_clock_out', attendant: row.attendant, consumer: row.consumer, date: row.clock_in.slice(0, 10), clockIn: row.clock_in.slice(11, 16),
+                    clockOut: row.clock_out ? row.clock_out.slice(11, 16) : '', until: row.clock_out ? clock(row.clock_out) : '',
                     when: shortDay(row.clock_in) + ' at ' + clock(row.clock_in), reasons: REASONS };
     if (body.action === 'form_get') return { ok: true, state, shift };
     if (state !== 'open') throw new ClockoutError(state === 'answered' ? 'This form was already sent. Thank you.' : state === 'expired' ? 'This link has expired. Please call the office at (417) 218-2888.' : 'This shift no longer needs a form. Questions? Call (417) 218-2888.', 409);
     const a = checkAnswer(row, body.answer, now());
+    if (a.worked === false) {
+      const upd = await one(`update cds_clockout_fixes set status='answered', answer=$2::jsonb, answered_at=$3, updated_at=now() where id=$1 and status='texted' returning id`,
+        [row.id, JSON.stringify({ worked: false, notes: a.notes }), new Date(now()).toISOString()]);
+      if (!upd) throw new ClockoutError('This form was already sent. Thank you.', 409);
+      return { ok: true, worked: false };
+    }
     const today = centralNaive(now()).slice(0, 10);
     // Saved like every other EVV form (the hub's EVV forms page, the 8am email and the office email read it).
     const evv = await one(`insert into evv_submissions (agency_id, attendant, consumer, visitdate, submitdate, orig_in, orig_out, new_in, new_out, reason,
                              tasks_performed, notes, sig_attendant, sig_attendant_date, sig_consumer, sig_consumer_date, clockout_fix_id)
-                           values ($1,$2,$3,$4,$5,$6,null,$6,$7,$8,$9::jsonb,$10,$11,$5,$12,$5,$13) returning id`,
+                           values ($1,$2,$3,$4,$5,$6,$14,$15,$7,$8,$9::jsonb,$10,$11,$5,$12,$5,$13) returning id`,
       [AGENCY_ID, row.attendant, row.consumer, row.clock_in.slice(0, 10), today, row.clock_in.slice(11, 16), a.clockOut.slice(11, 16), a.reason,
        JSON.stringify(a.tasks), [a.clockOut.slice(0, 10) !== row.clock_in.slice(0, 10) ? 'Clocked out the next day, ' + shortDay(a.clockOut) + '.' : '', a.notes].filter(Boolean).join(' ') || null,
-       a.sigAttendant, a.sigConsumer, row.id]);
-    const answer = { clockOut: a.clockOut, hours: a.hours, reason: a.reason, tasks: a.tasks.length, notes: a.notes };
+       a.sigAttendant, a.sigConsumer, row.id, row.clock_out ? row.clock_out.slice(11, 16) : null, a.clockIn.slice(11, 16)]);
+    const answer = { worked: true, clockIn: a.clockIn, clockOut: a.clockOut, hours: a.hours, reason: a.reason, tasks: a.tasks.length, notes: a.notes };
     const upd = await one(`update cds_clockout_fixes set status='answered', evv_id=$2, answer=$3::jsonb, answered_at=$4, updated_at=now() where id=$1 and status='texted' returning id`,
       [row.id, evv.id, JSON.stringify(answer), new Date(now()).toISOString()]);
     if (!upd) { await q(`delete from evv_submissions where id=$1`, [evv.id]); throw new ClockoutError('This form was already sent. Thank you.', 409); }
@@ -274,12 +346,14 @@ export function createClockout(deps) {
   function card(r) {
     r = shape(r);
     const p = payroll(r.clock_in.slice(0, 10));
-    const out = { id: r.id, consumer: r.consumer, attendant: r.attendant || '', guessed: !!r.attendant_guessed, clockIn: r.clock_in,
-                  when: shortDay(r.clock_in) + ' at ' + clock(r.clock_in), status: r.status, problem: r.problem || '', textStatus: r.text_status || '',
+    const out = { id: r.id, kind: r.kind, consumer: r.consumer, attendant: r.attendant || '', guessed: !!r.attendant_guessed, clockIn: r.clock_in,
+                  when: shortDay(r.clock_in) + ' at ' + clock(r.clock_in) + (r.kind === 'no_clock_in' && r.clock_out ? ' to ' + clock(r.clock_out) : ''), status: r.status, problem: r.problem || '', textStatus: r.text_status || '',
                   textError: r.text_error || '', textedAt: r.texted_at, phone: maskPhone(r.phone), payroll: p, note: r.note || '',
                   decidedBy: firstName(r.decided_by), fixedBy: firstName(r.fixed_by), evvId: r.evv_id || null };
     if (r.answer) {
-      out.answer = Object.assign({}, r.answer, { clockOutWhen: shortDay(r.answer.clockOut) + ' at ' + clock(r.answer.clockOut) });
+      out.answer = r.answer.worked === false ? Object.assign({}, r.answer)
+        : Object.assign({}, r.answer, { clockOutWhen: shortDay(r.answer.clockOut) + ' at ' + clock(r.answer.clockOut),
+                                        clockInWhen: r.answer.clockIn ? shortDay(r.answer.clockIn) + ' at ' + clock(r.answer.clockIn) : '' });
       out.steps = wellskySteps(r);
       out.long = r.answer.hours > 12;
     }

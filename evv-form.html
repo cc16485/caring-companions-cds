@@ -521,7 +521,7 @@ async function submitForm() {
   window.scrollTo(0, 0);
 }
 
-// FORGOT TO CLOCK OUT (2026-11-17). The text's private link (?fix=...) opens this form filled in with the
+// FORGOT TO CLOCK OUT (2026-11-17, missed clock in added the same day). The text's private link (?fix=...) opens this form filled in with the
 // shift WellSky shows as never clocked out. The attendant adds the real clock out time, the reason and the
 // tasks, and both the attendant and the consumer sign. It goes through the cds-clockout server, which saves it
 // as a normal EVV form linked to that shift. The office approves it on the hub and fixes WellSky.
@@ -545,10 +545,12 @@ function _fixStop(msg) {
 function _fixHours() {
   const out = document.getElementById('f_new_out').value, day = document.getElementById('f_new_out_day').value, el = document.getElementById('fixHours');
   if (!_fixShift || !out || !day) { el.style.display = 'none'; return; }
-  const mins = (Date.parse(day + 'T' + out + ':00Z') - Date.parse(_fixShift.date + 'T' + _fixShift.clockIn + ':00Z')) / 60000;
+  const inT = _fixShift.kind === 'no_clock_in' ? document.getElementById('f_new_in').value : _fixShift.clockIn;
+  if (!inT) { el.style.display = 'none'; return; }
+  const mins = (Date.parse(day + 'T' + out + ':00Z') - Date.parse(_fixShift.date + 'T' + inT + ':00Z')) / 60000;
   el.style.display = 'block';
   el.style.color = mins > 0 && mins <= 1440 ? '#0e3860' : '#c0392b';
-  el.textContent = mins > 0 && mins <= 1440 ? 'That makes ' + (Math.round(mins / 6) / 10) + ' hours.' : 'The clock out has to be after ' + _fixShift.when + '.';
+  el.textContent = mins > 0 && mins <= 1440 ? 'That makes ' + (Math.round(mins / 6) / 10) + ' hours.' : 'The clock out has to be after the clock in.';
 }
 async function _fixStart() {
   if (!_fix) return;
@@ -556,11 +558,12 @@ async function _fixStart() {
   let g;
   try { g = await _fixCall({ action: 'form_get' }); }
   catch (e) { _fixStop(e.message); return; }
-  if (g.state === 'answered') { _fixStop('This form was already sent. Thank you. The office will fix the shift in WellSky.'); return; }
+  if (g.state === 'answered') { _fixStop('This form was already sent. Thank you. The office will take care of the shift in WellSky.'); return; }
   if (g.state !== 'open') { _fixStop(g.state === 'expired' ? 'This link has expired. Please call the office at (417) 218-2888.' : 'This shift no longer needs a form. Questions? Call (417) 218-2888.'); return; }
   const s = _fixShift = g.shift;
   const consumerFirst = s.consumer.split(' ')[0];
   const b = document.getElementById('fixBanner');
+  if (s.kind === 'no_clock_in') { _fixStartIn(s, b); return; }
   b.innerHTML = '<div style="font-weight:700;margin-bottom:4px">Your shift with ' + _fixEsc(s.consumer) + ' on ' + _fixEsc(s.when) + ' has no clock out.</div>'
     + 'To be paid for it, put the time you really left, pick what happened, and sign. ' + _fixEsc(consumerFirst) + ' signs too, to say the time is right. Please send it today.';
   b.style.display = 'block';
@@ -577,10 +580,44 @@ async function _fixStart() {
   if ([...sel.options].some(o => o.value === 'Forgot to clock out' || o.text === 'Forgot to clock out')) sel.value = 'Forgot to clock out';
   document.querySelector('.page-sub').textContent = 'Your part is the clock out time, the reason, the tasks and both signatures.';
 }
+// Missed clock in: first "did you work it?". Yes opens the form with both times to fill in; No is one tap.
+function _fixStartIn(s, b) {
+  const consumerFirst = s.consumer.split(' ')[0];
+  const body = document.querySelectorAll('#formPage .card, #submit_btn, .page-title, .page-sub, .required-note');
+  body.forEach(el => { el.dataset.fixHide = el.style.display || ''; el.style.display = 'none'; });
+  b.innerHTML = '<div style="font-weight:700;margin-bottom:4px">WellSky shows no clock in for your shift with ' + _fixEsc(s.consumer) + ' on ' + _fixEsc(s.when.split(' at ')[0]) + ', ' + _fixEsc(s.when.split(' at ')[1] || '') + (s.until ? ' to ' + _fixEsc(s.until) : '') + '.</div>'
+    + 'Did you work this shift?'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">'
+    + '<button type="button" id="fixYes" style="background:#0e3860;color:#fff;border:none;border-radius:8px;padding:11px 18px;font:700 14px Poppins,sans-serif;cursor:pointer">Yes, I worked it</button>'
+    + '<button type="button" id="fixNo" style="background:#fff;color:#0e3860;border:1.5px solid #0e3860;border-radius:8px;padding:11px 18px;font:700 14px Poppins,sans-serif;cursor:pointer">No, I did not work it</button></div>';
+  b.style.display = 'block';
+  document.getElementById('fixNo').onclick = async function () {
+    this.disabled = true;
+    try { await _fixCall({ action: 'form_submit', answer: { worked: false } }); }
+    catch (e) { this.disabled = false; alert(e.message); return; }
+    _fixStop('Thank you for telling us. The office will take this shift off, so it is not counted or paid.');
+  };
+  document.getElementById('fixYes').onclick = function () {
+    body.forEach(el => { el.style.display = el.dataset.fixHide; });
+    b.innerHTML = '<div style="font-weight:700;margin-bottom:4px">Your shift with ' + _fixEsc(s.consumer) + ' on ' + _fixEsc(s.when.split(' at ')[0]) + '.</div>'
+      + 'To be paid for it, put the times you really started and left, pick what happened, and sign. ' + _fixEsc(consumerFirst) + ' signs too, to say the times are right. Please send it today.';
+    const set = (id, v) => { const el = document.getElementById(id); el.value = v; el.readOnly = true; el.style.background = '#f4f6f8'; };
+    set('f_attendant', s.attendant); set('f_consumer', s.consumer); set('f_visitdate', s.date);
+    set('f_orig_in', s.clockIn); set('f_orig_out', s.clockOut);
+    updatePayPeriod();
+    const day = document.getElementById('f_new_out_day');
+    day.value = s.date; day.min = s.date;
+    document.getElementById('fixOutDayWrap').style.display = 'block';
+    ['f_new_in', 'f_new_out', 'f_new_out_day'].forEach(id => document.getElementById(id).addEventListener('input', _fixHours));
+    document.getElementById('f_reason').value = 'Forgot to clock in';
+    document.querySelector('.page-sub').textContent = 'Your part is the real clock in and clock out times, the reason, the tasks and both signatures.';
+  };
+}
 async function submitFix() {
   const errEl = document.getElementById('submit_error');
   const show = m => { errEl.textContent = m; errEl.style.display = 'block'; };
   errEl.style.display = 'none';
+  if (_fixShift.kind === 'no_clock_in' && !document.getElementById('f_new_in').value) { show('Please put the time you really started.'); return; }
   if (!document.getElementById('f_new_out').value) { show('Please put the time you clocked out.'); return; }
   if (!_sigs.attendant) { show('Your signature is needed.'); return; }
   if (!_sigs.consumer) { show(_fixShift.consumer.split(' ')[0] + ' needs to sign too.'); return; }
@@ -588,6 +625,7 @@ async function submitFix() {
   btn.textContent = 'Sending...'; btn.disabled = true;
   const reason = document.getElementById('f_reason').value;
   const answer = {
+    clockInDate: _fixShift.date, clockIn: document.getElementById('f_new_in').value,
     clockOutDate: document.getElementById('f_new_out_day').value,
     clockOut: document.getElementById('f_new_out').value,
     reason, reasonOther: document.getElementById('f_reason_other').value.trim(),

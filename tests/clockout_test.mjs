@@ -172,6 +172,55 @@ eq([r.failed], [1], 'a text GoHighLevel refuses is recorded as failed');
 L = await fix.act('krystal@mo-care.com', { action: 'list' });
 eq(L.cards.find(x => x.clockIn === '2026-11-14T08:00:00').textError, 'GoHighLevel 400: bad number', 'and the card shows why (no silent failures)');
 
+// ---------- missed clock in (Not Complete at the exact scheduled times) ----------
+const upl = { at: '2026-11-17T03:11:46Z', logs: [
+  { consumer: 'Crystal Dodd', attendant: 'Kiersten Ackerman', clockIn: '2026-11-14T09:00:00', clockOut: '2026-11-14T10:30:00', incomplete: true },
+  { consumer: 'Crystal Dodd', attendant: 'Kiersten Ackerman', clockIn: '2026-11-15T09:00:00', clockOut: '2026-11-15T10:30:00', incomplete: true },
+  { consumer: 'Crystal Dodd', attendant: 'Kiersten Ackerman', clockIn: '2026-10-01T11:00:00', clockOut: '2026-10-01T13:00:00', incomplete: true },   // older than 7 days
+  { consumer: 'Susan Barnwell', attendant: 'Samantha Troutman', clockIn: '2026-11-03T08:00:00', clockOut: '2026-11-03T08:15:00', incomplete: true }, // her FMS placeholder
+  { consumer: 'Huan Tran', attendant: 'Nuong Pham', clockIn: '2026-11-15T06:04:00', clockOut: '2026-11-15T08:41:00', incomplete: true },           // uneven: worked, just not finished
+  { consumer: 'Huan Tran', attendant: 'Nuong Pham', clockIn: '2026-11-16T22:00:00', clockOut: '2026-11-17T06:00:00', incomplete: true },           // not over yet in this data
+  { consumer: 'Kristie Melton', attendant: 'Larissa Melton', clockIn: '2026-11-15T09:00:00', clockOut: '2026-11-15T12:00:00' },                    // complete
+] };
+const cfg2 = Object.assign({}, C.DEFAULTS, { look_back_days: 7 });
+eq(C.missedClockIns({ careLogsUploaded: upl }, at('2026-11-17T15:00:00Z'), Object.assign({}, cfg2, { look_back_days: 30 })).map(s => [s.attendant, s.clockIn]),
+   [['Kiersten Ackerman', '2026-11-14T09:00:00'], ['Kiersten Ackerman', '2026-11-15T09:00:00']],
+   'only Not Complete logs on the exact schedule, over in the data, never Samantha\'s placeholders; uneven times are a real visit');
+eq(C.missedClockIns({ careLogsUploaded: upl }, at('2026-11-17T15:00:00Z'), cfg2).length, 2, 'the last 7 days only (October ones are left to the payroll check)');
+const smsIn = C.smsFor({ kind: 'no_clock_in', attendant: 'Kiersten Ackerman', consumer: 'Crystal Dodd', clock_in: '2026-11-14T09:00:00' }, C.LINK + 'AbCdEfGhIjKlMnOp');
+eq(smsIn, "Hi Kiersten, it's Caring Companions CDS. WellSky shows no clock in for your shift with Crystal on Sat 11/14 at 9:00 AM. Did you work it? Tell us here: hub.caringcds.com/evv-form?fix=AbCdEfGhIjKlMnOp", 'the missed clock in text');
+ok(smsIn.length <= C.SMS_MAX, 'short too (' + smsIn.length + ' characters)');
+
+await pg.query(`delete from cds_clockout_fixes`);
+await put('careLogs', { logs: [] }); await put('careLogsUploaded', upl);
+await put('attendants', [{ name: 'Kiersten Ackerman', consumer: 'Crystal Dodd', status: 'active', phone: '4175550111' }, { name: 'Samantha Troutman', consumer: 'Susan Barnwell', status: 'active', phone: '4175550000' }]);
+sent.length = 0; sendFails = false;
+NOW = at('2026-11-17T15:10:00Z');
+r = await fix.sweep();
+eq([r.added, r.sent], [2, 2], 'two missed clock ins, two texts');
+ok(sent.every(m => m.to === '+14175550111' && /no clock in/.test(m.body)), 'to Kiersten, never to Samantha');
+const toks = sent.map(m => /fix=([0-9A-Za-z]{16})/.exec(m.body)[1]);
+const gi = await fix.form({ action: 'form_get', token: toks[0] });
+eq([gi.shift.kind, gi.shift.clockIn, gi.shift.clockOut, gi.shift.until], ['no_clock_in', '09:00', '10:30', '10:30 AM'], 'the form knows it is a missed clock in, with the scheduled times');
+r = await fix.form({ action: 'form_submit', token: toks[0], answer: { worked: false } });
+eq(r.worked, false, '"No, I did not work it" needs no signature');
+await rejects(fix.form({ action: 'form_submit', token: toks[1], answer: Object.assign({}, answer, { clockOutDate: '2026-11-15', clockOut: '10:40', reason: 'Forgot to clock in' }) }),
+  'Please put the day and time you really clocked in.', 'worked: the clock in is needed too');
+r = await fix.form({ action: 'form_submit', token: toks[1], answer: Object.assign({}, answer, { clockInDate: '2026-11-15', clockIn: '09:12', clockOutDate: '2026-11-15', clockOut: '10:40', reason: 'Forgot to clock in' }) });
+eq(r.hours, 1.5, 'worked 9:12 to 10:40');
+eq((await pg.query(`select orig_in::text, orig_out::text, new_in::text, new_out::text from evv_submissions where id=$1`, [r.id])).rows[0],
+   { orig_in: '09:00:00', orig_out: '10:30:00', new_in: '09:12:00', new_out: '10:40:00' }, 'the EVV form keeps the scheduled times and the real ones');
+L = await fix.act('krystal@mo-care.com', { action: 'list' });
+const no = L.cards.find(x => x.clockIn === '2026-11-14T09:00:00'), yes = L.cards.find(x => x.clockIn === '2026-11-15T09:00:00');
+eq([no.kind, no.when, no.answer.worked], ['no_clock_in', 'Sat 11/14 at 9:00 AM to 10:30 AM', false], 'the card says not worked');
+ok(/delete the shift/.test(no.steps[2]) && /Not Payable/.test(no.steps[2]), 'not worked: delete it in WellSky (or Not Payable)');
+eq(yes.steps[2], 'Set Clock In to Sun 11/15 9:12 AM and Clock Out to Sun 11/15 10:40 AM (1.5 hours).', 'worked: both times to set');
+// The office deleted the 11/14 one in WellSky before anyone pressed anything: it is gone from the next upload.
+await pg.query(`update cds_clockout_fixes set status='texted', answer=null where clock_in='2026-11-14T09:00:00'`);
+await put('careLogsUploaded', Object.assign({}, upl, { logs: upl.logs.filter(x => x.clockIn !== '2026-11-14T09:00:00') }));
+r = await fix.sweep();
+eq(r.autoClosed, 1, 'a missed clock in WellSky no longer shows as Not Complete closes on its own');
+
 // ---------- the hub and the form pages ----------
 const page = readFileSync(ROOT + '/index.html', 'utf8');
 const form = readFileSync(ROOT + '/evv-form.html', 'utf8');

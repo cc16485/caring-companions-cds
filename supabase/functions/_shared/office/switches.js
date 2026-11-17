@@ -80,10 +80,10 @@ export const SWITCHES = [
   { key: 'voicemail_leads', field: 'live', label: 'Text when a voicemail sounds like a new lead',
     does: v => 'Every voicemail on the CDS lines is read. When one sounds like someone new asking about CDS, ' + ((v.emails || []).map(firstName).join(' and ') || 'nobody yet') + ' get' + ((v.emails || []).length === 1 ? 's' : '') + ' a text with a private link to hear it and call back, weekdays 9am to 4pm (later ones wait for 9am). No text if someone already called them back. Nothing is sent to the caller. While off, the texts are written as practice only.',
     on: 'The next voicemail that sounds like a new lead will text Samantha and Zach.', off: 'No voicemail texts. Voicemails are still read, and Follow-ups shows what they said.' },
-  { key: 'clockout_texts', field: 'live', label: 'Forgot to clock out texts', warn: 'This one reaches attendants.',
-    does: v => 'When WellSky shows a shift never clocked out, texts the attendant once, ' + hour(v.text_from ?? 9) + ' to ' + hour(v.text_until ?? 19)
+  { key: 'clockout_texts', field: 'live', label: 'Missed clock in or out texts', warn: 'This one reaches attendants.',
+    does: v => 'When WellSky shows a shift never clocked out, or Not Complete at the exact scheduled times (nobody clocked in), texts the attendant once, ' + hour(v.text_from ?? 9) + ' to ' + hour(v.text_until ?? 19)
       + ' Central, with a private link to the EVV Correction Form already filled in with that shift. The answer waits on the EVV forms page for the office to approve. While off, the texts are written to Messages as practice only.',
-    on: 'Attendants who did not clock out will get a text with their EVV form link.', off: 'No clock out texts. Shifts are still found and listed on the EVV forms page.' },
+    on: 'Attendants who missed a clock in or out will get a text with their EVV form link.', off: 'No clock in or out texts. Shifts are still found and listed on the EVV forms page.' },
 ];
 function hour(h) { h = +h; return (h % 12 || 12) + (h < 12 ? 'am' : 'pm'); }
 
