@@ -58,7 +58,7 @@ with sync_playwright() as pw:
     pg.goto(f'http://127.0.0.1:{PORT}/index.html'); pg.wait_for_timeout(1500)
     card = lambda: pg.inner_text('#claimsCard')
 
-    pg.evaluate(SETUP, [CONSUMERS, LOGS, False]); pg.evaluate("()=>showPage('payroll')"); pg.wait_for_timeout(300)
+    pg.evaluate(SETUP, [CONSUMERS, LOGS, False]); pg.evaluate("()=>showPage('moneyclaims')"); pg.wait_for_timeout(300)
     ck('switch off: no Claims card', not pg.locator('#claimsCard').is_visible())
     ck('the switch is listed in Settings', pg.evaluate("()=>HUB_SWITCHES.some(h=>h.key==='claims')"))
 
@@ -70,7 +70,7 @@ with sync_playwright() as pw:
     r['consumer'] = 'Jan Example'
     pg.evaluate("(r)=>{ _store.authorizations = { records: { '11111111': r } }; }", r)
 
-    pg.evaluate("()=>{ _store.claims = { live: true }; showPage('payroll'); }"); pg.wait_for_timeout(700)
+    pg.evaluate("()=>{ _store.claims = { live: true }; showPage('moneyclaims'); }"); pg.wait_for_timeout(700)
     ck('switch on: the card shows on Money', pg.locator('#claimsCard').is_visible())
     pg.fill('#clFrom', D1); pg.fill('#clTo', D2); pg.click('#clGo'); pg.wait_for_timeout(200)
     t = card()
