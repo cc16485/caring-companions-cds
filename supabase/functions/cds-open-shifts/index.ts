@@ -5,6 +5,7 @@
 // Sends through the CDS GoHighLevel sub-account only. It never changes a contact's name or anything else.
 import postgres from 'npm:postgres@3.4.4';
 import { createOpenShiftTexts } from '../_shared/office/open-shift-texts.js';
+import { createClockout } from '../_shared/office/clockout.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const GHL = 'https://services.leadconnectorhq.com';
@@ -33,8 +34,11 @@ async function contactFor(phone10: string, name: string) {
   return String(id);
 }
 
+const db = { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) };
 const job = createOpenShiftTexts({
-  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
+  db,
+  // The private link to the filled-in EVV form, and the office card (2026-11-17, clockout.js).
+  fixes: createClockout({ db }),
   async sms(phone10: string, text: string, name: string) {
     const contactId = await contactFor(phone10, name);
     await ghl('POST', '/conversations/messages', { type: 'SMS', contactId, message: text });

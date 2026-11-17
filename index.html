@@ -2452,6 +2452,9 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     </div>
   </div>
 
+  <!-- Forgot to clock out (2026-11-17): drawn by loadClockoutFixes() from the cds-clockout server function -->
+  <div id="clockoutCard" style="display:none"></div>
+
   <!-- FORM LINK ADMIN BAR -->
   <div style="background:#f0f7ff;border:1.5px solid #b8d4ef;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
     <div style="font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap">📋 Attendant Form Link</div>
@@ -5218,7 +5221,7 @@ function _enableRealtime() {
           if (id === 'attendants')   renderAttendants();
           if (id === 'activeattendants') renderAttendantCheck();
           if (id === 'profile')      renderProfile();
-          if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); }
+          if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); loadClockoutFixes(); }
           if (id === 'quarterly')    renderQuarterlyReport();
           if (id === 'financials')   renderFinancials();
         }
@@ -5509,7 +5512,7 @@ function showPage(id) {
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'starting' && window.StartHub) StartHub.renderPage();
   if (id === 'hoursmonth') renderHoursMonth();
-  if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); }
+  if (id === 'evvcorrections') { renderCorrections(); loadPendingSubmissions(); loadClockoutFixes(); }
   if (id === 'backuppool') renderBackupPool();
   if (id === 'caregivermatch') renderCaregiverMatch(dirView);
   if (id === 'activeattendants') { renderActiveAttendants(); renderAttendantCheck(); }
@@ -15289,6 +15292,120 @@ function renderCorrections() {
   }
 }
 
+// FORGOT TO CLOCK OUT (2026-11-17). The never-clocked-out text (switch "Never clocked out texts", consumer only)
+// carries a private link to the EVV form filled in with that shift. The signed answer shows here as a proposed
+// fix. Approve shows exactly what to change in WellSky (we cannot write to WellSky), then "Done, fixed in WellSky"
+// closes it and logs the correction below like any other EVV form.
+async function _coCall(body) {
+  const { data } = await _db.auth.getSession();
+  const jwt = data && data.session ? data.session.access_token : '';
+  let r;
+  try {
+    r = await fetch(SUPABASE_URL + '/functions/v1/cds-clockout', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + jwt }, body: JSON.stringify(body) });
+  } catch (e) { throw new Error('The never clocked out list could not be reached. Check the connection and try again.'); }
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 404 && !j.error) { const e = new Error('not set up'); e.notSetUp = true; throw e; }
+  if (!r.ok) throw new Error(j.error || 'The never clocked out list could not be reached.');
+  return j;
+}
+let _coCards = [];
+async function loadClockoutFixes() {
+  const host = document.getElementById('clockoutCard');
+  if (!host || !_db) return;
+  let j;
+  try { j = await _coCall({ action: 'list' }); }
+  catch (e) {
+    if (e.notSetUp) { host.style.display = 'none'; return; }
+    host.style.display = 'block';
+    host.innerHTML = '<div class="card"><div class="card-title"><span class="icon">⏰</span> Never clocked out</div><div class="alert alert-danger" style="font-size:13px"><div>' + esc(e.message) + '</div></div></div>';
+    return;
+  }
+  _coCards = j.cards || [];
+  const groups = [
+    ['answered', 'Form sent: check and approve', c => c.status === 'answered'],
+    ['approved', 'Approved: fix it in WellSky', c => c.status === 'approved'],
+    ['office', 'Needs the office', c => c.status === 'no_phone' || (c.status === 'waiting' && c.textStatus === 'failed')],
+    ['waiting', 'Texted, waiting for the form', c => c.status === 'waiting' && c.textStatus !== 'failed'],
+    ['done', 'Finished in the last 7 days', c => ['fixed', 'denied', 'closed'].includes(c.status)],
+  ];
+  let html = '<div class="card" style="border-left:4px solid var(--accent)"><div class="card-title"><span class="icon">⏰</span> Never clocked out'
+    + (j.live ? '' : ' <span class="badge badge-warn" style="margin-left:6px">Practice: texts are not sent</span>') + '</div>'
+    + '<div style="font-size:12.5px;color:var(--gray-600);margin-bottom:12px">Shifts WellSky shows clocked in and never clocked out. The consumer gets one text with a link to the EVV form filled in with the shift. Not paid unless the form comes back and the shift is fixed in WellSky.</div>';
+  if (!groups.filter(g => g[0] !== 'done').some(g => _coCards.some(g[2]))) html += '<div style="font-size:13px;color:var(--gray-600)">Nothing waiting.</div>';
+  groups.forEach(([key, label, test]) => {
+    const list = _coCards.filter(test);
+    if (!list.length) return;
+    html += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--primary);margin:14px 0 6px">' + esc(label) + ' (' + list.length + ')</div>';
+    list.forEach(c => { html += _coCardHtml(c, key); });
+  });
+  host.innerHTML = html + '</div>';
+  host.style.display = 'block';
+}
+function _coCardHtml(c, key) {
+  let body = '<div style="font-weight:700;font-size:14px">' + (c.attendant ? esc(c.attendant) : '<em>attendant not known</em>') + ' for ' + esc(c.consumer) + '</div>'
+    + '<div style="font-size:12.5px;color:var(--gray-600);margin-top:2px">Clocked in ' + esc(c.when) + ', never clocked out. Form due ' + esc(c.payroll.weekEnd) + ' at midnight.</div>';
+  if (c.answer) {
+    const a = c.answer;
+    body += '<div style="margin-top:8px;padding:10px 12px;background:#eaf6f6;border-radius:8px;font-size:13px">'
+      + '<div><strong>Proposed fix:</strong> clock out ' + esc(a.clockOutWhen) + ', <strong' + (c.long ? ' style="color:var(--danger)"' : '') + '>' + esc(a.hours) + ' hours</strong>' + (c.long ? ' (over 12 hours: look closely)' : '') + '</div>'
+      + '<div>Reason: ' + esc(a.reason) + '. ' + esc(a.tasks) + ' tasks ticked. Signed by the consumer and the attendant.' + (a.notes ? ' Note: ' + esc(a.notes) : '') + '</div></div>';
+  }
+  if (key === 'approved' && c.steps) body += '<ol style="margin:8px 0 0 18px;font-size:13px;line-height:1.6">' + c.steps.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>';
+  if (c.status === 'no_phone') body += '<div style="margin-top:6px;font-size:12.5px;color:var(--danger)">No phone on file for ' + esc(c.consumer) + ', so no text went. Copy the link and send it from the office line.</div>';
+  if (c.textError) body += '<div style="margin-top:6px;font-size:12.5px;color:var(--danger)">The text did not send: ' + esc(c.textError) + '</div>';
+  if (key === 'waiting') body += '<div style="margin-top:6px;font-size:12px;color:var(--gray-600)">' + (c.textStatus === 'office' ? 'Link made for the office to send.' : c.textStatus === 'practice' ? 'Practice: the text was written, not sent.' : 'Texted to the consumer.') + '</div>';
+  if (key === 'done') body += '<div style="margin-top:6px;font-size:12px;color:var(--gray-600)">' + esc({ fixed: 'Fixed in WellSky' + (c.fixedBy ? ' by ' + c.fixedBy : '') + '.', denied: 'Not approved' + (c.decidedBy ? ' by ' + c.decidedBy : '') + '. ' + (c.note || ''), closed: c.note || 'Closed.' }[c.status]) + '</div>';
+  const btn = (label, act, cls) => '<button class="btn ' + (cls || 'btn-outline') + '" style="font-size:12px" onclick="_coDo(\'' + act + '\',\'' + c.id + '\',this)">' + label + '</button>';
+  let btns = '';
+  if (key === 'answered') btns = btn('Approve', 'approve', 'btn-primary') + btn('Not approved', 'deny');
+  if (key === 'approved') btns = btn('Done, fixed in WellSky', 'done', 'btn-primary') + btn('Not approved', 'deny');
+  if (key === 'office' || key === 'waiting') btns = btn('Copy form link to send', 'link') + btn('Not needed', 'skip');
+  return '<div style="border:1.5px solid var(--gray-200);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#FAF9F6">' + body
+    + (btns ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' + btns + '</div>' : '') + '</div>';
+}
+async function _coDo(action, id, btn) {
+  const c = _coCards.find(x => x.id === id);
+  if (!c) return;
+  const body = { action, id };
+  if (action === 'deny') {
+    const note = prompt('Not approved: the shift stays unpaid. Why? (optional)');
+    if (note === null) return;
+    body.note = note;
+  }
+  if (action === 'skip' && !confirm('Take ' + c.consumer + ', ' + c.when + ' off the list? Nothing is sent.')) return;
+  btn.disabled = true;
+  let r;
+  try { r = await _coCall(body); }
+  catch (e) { btn.disabled = false; alert(e.message); return; }
+  // The EVV log below keeps every correction, like any other EVV form.
+  if (action === 'approve' && c.answer) {
+    const list = getData('evvCorrections');
+    if (!list.some(x => x.id === 'co_' + c.id)) {
+      list.unshift({ id: 'co_' + c.id, attendant: c.attendant, consumer: c.consumer, visitdate: c.clockIn.slice(0, 10), submitdate: _todayIso(),
+        origIn: c.clockIn.slice(11, 16), origOut: '', newIn: c.clockIn.slice(11, 16), newOut: c.answer.clockOut.slice(11, 16), reason: c.answer.reason,
+        notes: c.answer.notes || '', tasks: [], formReceived: 'yes', wellskyDone: 'no', admin: '', wellskyDate: '', loggedBy: 'Never clocked out form', source: 'evv_form' });
+      setData('evvCorrections', list);
+    }
+  }
+  if (action === 'done' || action === 'deny') {
+    const list = getData('evvCorrections');
+    const x = list.find(y => y.id === 'co_' + c.id);
+    if (x) {
+      if (action === 'done') { x.wellskyDone = 'yes'; x.wellskyDate = _todayIso(); x.admin = (document.getElementById('header_user') || {}).textContent || ''; }
+      else x.status = 'denied';
+      setData('evvCorrections', list);
+    }
+  }
+  if (action === 'link' && r.url) {
+    try { await navigator.clipboard.writeText(r.url); alert('Link copied. Send it to ' + c.consumer + ' from the office line in GoHighLevel:\n\n' + r.url); }
+    catch (e) { prompt('Copy this link and send it from the office line in GoHighLevel:', r.url); }
+  }
+  loadClockoutFixes();
+  if (typeof renderCorrections === 'function') renderCorrections();
+}
+// END FORGOT TO CLOCK OUT
+
 // ── PENDING SUBMISSIONS (from evv_submissions table) ──────────────────
 async function loadPendingSubmissions() {
   const container = document.getElementById('pendingSubmissionsBody');
@@ -15297,7 +15414,7 @@ async function loadPendingSubmissions() {
 
   container.innerHTML = '<p style="font-size:13px;color:var(--gray-600)">Loading…</p>';
 
-  const { data, error } = await _db.from('evv_submissions')
+  let { data, error } = await _db.from('evv_submissions')
     .select('*')
     .eq('agency_id', AGENCY_ID)
     .eq('processed', false)
@@ -15307,6 +15424,8 @@ async function loadPendingSubmissions() {
     container.innerHTML = `<p style="font-size:13px;color:var(--danger-light)">Error loading submissions: ${error.message}</p>`;
     return;
   }
+  // Forms that answer a "forgot to clock out" text are on their own card above (2026-11-17).
+  data = (data || []).filter(s => !s.clockout_fix_id);
 
   if (!data || data.length === 0) {
     badge.style.display = 'none';
