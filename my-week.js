@@ -9,7 +9,7 @@
    (cds-my-calendar in the CDS project), so it is the same on every device AND in both hubs.
    v3 (2026-11-17, "update my week in both hubs"): the operating week. Same five sessions; each starts with 15 minutes
    on what waits on her for that area. Monday team huddle; Tuesday is the whole CDS day (she owns CDS until 60
-   consumers); Wednesday covers all three brands; Thursday adds grants; Friday is Switch hour and the write-up review.
+   consumers); Wednesday is ads, referral sources and approvals for all three brands; Thursday is leads and hiring (grants removed, her word); Friday is Switch hour and the write-up review.
    The SAME file is in both hubs (Caring Companions hub and CDS hub): change it in both.
    Shown only to Samantha. Times are Central. No em dashes in anything she reads (her rule).
    ============================================================================= */
@@ -51,16 +51,19 @@
       'Fusion care plans, consumer calls and any DHSS report that is due.',
       'The CDS growth number: new leads, waiting on DHSS, authorized with no attendant yet, first shifts. The goal is 60, when Zach steps in.',
       'Katlin: what she fixed and what is stuck.' ] },
-    { id: 'w-mkt', dow: 3, time: '10:00 AM', icon: '📣', cat: 'marketing', t: 'Marketing, all three brands', what: [
-      'The holiday season push, Nov 20 to mid January.',
-      'Social posts, videos, Google posts, reviews and ads.',
-      'Partner outreach and the email campaigns.',
-      'Caring Companions every week, CDS every other week, Show-Me Neighbors the first Wednesday of the month.' ] },
-    { id: 'w-growth', dow: 4, time: '10:00 AM', icon: '🌱', cat: 'growth', t: 'Growth: leads, hiring and grants', what: [
+    /* 2026-11-17 her ask: "be clear on what marketing tasks i can do, look at ad results? reach out to potential referral
+       sources?" Posts, videos, Google posts, partner emails, review asks and lead emails already run on their own,
+       so this session is only what needs her. */
+    { id: 'w-mkt', dow: 3, time: '10:00 AM', icon: '📣', cat: 'marketing', t: 'Marketing: ads, referral sources, approvals', what: [
+      'Ad results, 10 minutes: Google Ads and the Caring Companions and CDS Facebook ads. What we spent, the calls and forms it brought, and one change.',
+      'Referral sources, 20 minutes: add 2 new places to the partner list (they then get the partner emails by themselves), and call or email 1 or 2 of them yourself. Krystal does the in-person visits.',
+      'Approve what is waiting for you: new videos, posts or emails.',
+      'New Google reviews: read them and thank the family.',
+      'Posts, videos, Google posts, partner emails, review asks and lead emails go out by themselves. Nothing to post by hand.' ] },
+    { id: 'w-growth', dow: 4, time: '10:00 AM', icon: '🌱', cat: 'growth', t: 'Growth: leads and hiring', what: [
       'New leads and how fast we call them.',
       'Referrals and Friends and Family.',
-      'Hiring: applicants, interviews and new caregivers.',
-      'Grants: one step each week.' ] },
+      'Hiring: applicants, interviews and new caregivers.' ] },
     { id: 'w-big', dow: 5, time: '10:00 AM', icon: '🧭', cat: 'big', t: 'Switch hour and big picture', what: [
       'Write-ups and coaching: approve what waits for you, look over what Krystal and Angiel decided.',
       'Switch on or drop each thing that is built and waiting. Anything waiting 3 weeks gets decided today.',
@@ -106,10 +109,8 @@
     ['2026-11-19', 'AxisCare support replies: the $10 pay rate and the Monday to Sunday week', 'money'],
     ['2026-11-19', 'Google Ads: yes or no on the caregiver jobs campaign', 'marketing'],
     ['2026-11-20', 'First Thanksgiving emails to clients, families and caregivers', 'marketing'],
-    ['2026-11-22', 'Rural workforce grant due (four answers from you first)', 'deadline'],
     ['2026-11-26', 'IHS ends in AxisCare: bill the rest in eMOMED', 'money'],
     ['2026-11-26', 'Google Ads two-week review', 'marketing'],
-    ['2026-12-01', 'One Start grant: draft the January application', 'growth'],
     ['2026-12-07', 'Holiday season check-in: what came in after Thanksgiving', 'marketing'],
     ['2026-12-10', 'First monthly lead email goes out', 'marketing'],
     ['2027-01-04', 'Holiday season check-in: what came in after Christmas', 'marketing'],
@@ -126,7 +127,7 @@
     5: [['', 'Caregivers paid (AxisCare, Viventium)'], ['5:00 PM', 'Medicaid claim cutoff, every other week']],
     6: [['11:59 PM', 'EVV forms due for this CDS pay week'], ['', 'CDS pay week ends']],
   };
-  const EVERY_DAY = ['6:30 AM WellSky check', 'Sandata check, once you are signed in', '8:30 AM Waiting on you (weekdays)', 'Clock-out texts to consumers, 9 AM to 6 PM'];
+  const EVERY_DAY = ['Facebook, Instagram, TikTok, YouTube and Google posts publish by themselves (scheduled into 2027)', '6:30 AM WellSky check', 'Sandata check, once you are signed in', '8:30 AM Waiting on you (weekdays)', 'Clock-out texts to consumers, 9 AM to 6 PM'];
   const DAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const EVERY_LABEL = { once: 'Just once', week: 'Every week', month: 'Every month', quarter: 'Every quarter', year: 'Every year' };
