@@ -7,6 +7,9 @@
    a real calendar. Week, Month and Year views; check things off; move them to the next day or drag them to any day;
    add her own things (once, every week, month, quarter or year). Everything she does is saved on the server
    (cds-my-calendar in the CDS project), so it is the same on every device AND in both hubs.
+   v3 (2026-11-17, "update my week in both hubs"): the operating week. Same five sessions; each starts with 15 minutes
+   on what waits on her for that area. Monday team huddle; Tuesday is the whole CDS day (she owns CDS until 60
+   consumers); Wednesday is ads, referral sources and approvals for all three brands; Thursday is leads and hiring (grants removed, her word); Friday is Switch hour and the write-up review.
    The SAME file is in both hubs (Caring Companions hub and CDS hub): change it in both.
    Shown only to Samantha. Times are Central. No em dashes in anything she reads (her rule).
    ============================================================================= */
@@ -28,27 +31,44 @@
 
   /* Every week. dow = day number (0 Sunday). These are our times together, plus the Saturday deadline. */
   const WEEKLY = [
+    /* v3 (2026-11-17, her "update my week in both hubs" after the operating week plan): each session runs the same way,
+       15 minutes on what waits on her for that area, 40 on the main work, 5 on what is next and who to tell. She owns CDS
+       until 60 consumers (then Zach steps in); write-ups are sent by the Care Coordinators and she oversees them.
+       Ids are kept, so her check-offs and moves stay with the same items. */
     { id: 'w-money', dow: 1, time: '9:00 AM', icon: '💵', cat: 'money', t: 'Money in: AxisCare billing and payroll prep', what: [
-      'First thing Monday. Open the AxisCare prep email (it comes from 5 AM).',
-      'Send the private pay invoices first, so the money comes in fastest.',
-      'Krystal fixes any $10 pay rates and missing clock times, then exports payroll to Viventium. Caregivers are paid Friday.' ] },
-    { id: 'w-cdspay', dow: 2, time: '9:30 AM', icon: '🩺', cat: 'cds', t: 'CDS payroll in Empeon and Medicaid', what: [
+      'First 15 minutes: the money items on your Waiting on you page.',
+      'Open the AxisCare prep email (it comes from 5 AM). Send the private pay invoices first, so the money comes in fastest.',
+      'Krystal fixes any $10 pay rates and missing clock times, then exports payroll to Viventium. Caregivers are paid Friday.',
+      'Money tab: answer the books questions, and reconcile one month of 2026 checking each week until it is caught up.' ] },
+    { id: 'w-huddle', dow: 1, time: '10:00 AM', icon: '🤝', cat: 'big', t: 'Team huddle, 15 minutes', what: [
+      'With Krystal and Angiel (Katlin by video if her hours allow). The same three questions every week:',
+      'What is at risk this week: shifts, clients, payroll?',
+      'Who needs help?',
+      'One win from last week.' ] },
+    { id: 'w-cdspay', dow: 2, time: '9:30 AM', icon: '🩺', cat: 'cds', t: 'CDS day: payroll, Medicaid and growth', what: [
       'Review CDS payroll in Empeon before it locks Wednesday at 3 PM. Attendants are paid Thursday.',
-      'Fix visits missing from Sandata and shifts never clocked out.',
-      'On cutoff weeks, get the Medicaid claims ready for Thursday.' ] },
-    { id: 'w-mkt', dow: 3, time: '10:00 AM', icon: '📣', cat: 'marketing', t: 'Marketing', what: [
-      'Social posts, videos and the holiday season push.',
-      'Google posts, reviews and ads.',
-      'Partner outreach and the email campaigns.' ] },
-    { id: 'w-growth', dow: 4, time: '10:00 AM', icon: '🌱', cat: 'growth', t: 'Growth', what: [
+      'Fix visits missing from Sandata and shifts never clocked out. On cutoff weeks, get the Medicaid claims ready for Thursday.',
+      'Fusion care plans, consumer calls and any DHSS report that is due.',
+      'The CDS growth number: new leads, waiting on DHSS, authorized with no attendant yet, first shifts. The goal is 60, when Zach steps in.',
+      'Katlin: what she fixed and what is stuck.' ] },
+    /* 2026-11-17 her ask: "be clear on what marketing tasks i can do, look at ad results? reach out to potential referral
+       sources?" Posts, videos, Google posts, partner emails, review asks and lead emails already run on their own,
+       so this session is only what needs her. */
+    { id: 'w-mkt', dow: 3, time: '10:00 AM', icon: '📣', cat: 'marketing', t: 'Marketing: ads, referral sources, approvals', what: [
+      'Ad results, 10 minutes: Google Ads and the Caring Companions and CDS Facebook ads. What we spent, the calls and forms it brought, and one change.',
+      'Referral sources, 20 minutes: add 2 new places to the partner list (they then get the partner emails by themselves), and call or email 1 or 2 of them yourself. Krystal does the in-person visits.',
+      'Approve what is waiting for you: new videos, posts or emails.',
+      'New Google reviews: read them and thank the family.',
+      'Posts, videos, Google posts, partner emails, review asks and lead emails go out by themselves. Nothing to post by hand.' ] },
+    { id: 'w-growth', dow: 4, time: '10:00 AM', icon: '🌱', cat: 'growth', t: 'Growth: leads and hiring', what: [
       'New leads and how fast we call them.',
       'Referrals and Friends and Family.',
       'Hiring: applicants, interviews and new caregivers.' ] },
-    { id: 'w-big', dow: 5, time: '10:00 AM', icon: '🧭', cat: 'big', t: 'Big picture', what: [
+    { id: 'w-big', dow: 5, time: '10:00 AM', icon: '🧭', cat: 'big', t: 'Switch hour and big picture', what: [
       'Write-ups and coaching: approve what waits for you, look over what Krystal and Angiel decided.',
-      'The office team: Katlin, Angiel and coverage.',
-      'Ideas for the hubs and anything that is not working.',
-      'Plan next week.' ] },
+      'Switch on or drop each thing that is built and waiting. Anything waiting 3 weeks gets decided today.',
+      'One note to the team, ready to send to Krystal, Angiel and Katlin.',
+      'Plan next week. First Friday of the month: Show-Me Neighbors and side projects, 30 minutes.' ] },
     /* Her yes 11-17: payroll reports every payday, for the CDS hub and for the books (we clean up QuickBooks ourselves). */
     { id: 'w-empeon-rpt', dow: 4, time: 'After payday', icon: '📥', cat: 'cds', t: 'Empeon payroll reports to the CDS hub', links: [
       ['Sign in to Empeon', 'https://app.empeon.com'], ['Upload in the CDS hub', 'https://hub.caringcds.com/#payroll'] ], what: [
@@ -101,6 +121,15 @@
     ['2026-12-23', 'Enter claims early: the Dec 25 cutoff falls on Christmas', 'deadline'],
     ['2027-01-08', 'Medicaid claim cutoff, 5 PM', 'deadline'],
     ['2027-03-15', 'Clocks changed: EVV forms email moves to 5 PM Sunday', 'cds'],
+    ['2026-11-19', 'AxisCare support replies: the $10 pay rate and the Monday to Sunday week', 'money'],
+    ['2026-11-19', 'Google Ads: yes or no on the caregiver jobs campaign', 'marketing'],
+    ['2026-11-20', 'First Thanksgiving emails to clients, families and caregivers', 'marketing'],
+    ['2026-11-26', 'IHS ends in AxisCare: bill the rest in eMOMED', 'money'],
+    ['2026-11-26', 'Google Ads two-week review', 'marketing'],
+    ['2026-12-07', 'Holiday season check-in: what came in after Thanksgiving', 'marketing'],
+    ['2026-12-10', 'First monthly lead email goes out', 'marketing'],
+    ['2027-01-04', 'Holiday season check-in: what came in after Christmas', 'marketing'],
+    ['2027-02-22', 'Plan the address switch for the March office move', 'big'],
   ].map(([date, t, cat]) => ({ id: 'd-' + date.replace(/-/g, '') + '-' + hash(t),   /* id from the words, so adding a date never moves her check marks */ every: 'once', date, t, cat, icon: cat === 'deadline' ? '⏰' : '📌', what: [] }));
 
   /* What runs on its own, by day (not checkable, just so she knows). */
@@ -113,7 +142,7 @@
     5: [['', 'Caregivers paid (AxisCare, Viventium)'], ['5:00 PM', 'Medicaid claim cutoff, every other week']],
     6: [['11:59 PM', 'EVV forms due for this CDS pay week'], ['', 'CDS pay week ends']],
   };
-  const EVERY_DAY = ['6:30 AM WellSky check', 'Sandata check, once you are signed in', '8:30 AM Waiting on you (weekdays)', 'Clock-out texts to consumers, 9 AM to 6 PM'];
+  const EVERY_DAY = ['Facebook, Instagram, TikTok, YouTube and Google posts publish by themselves (scheduled into 2027)', '6:30 AM WellSky check', 'Sandata check, once you are signed in', '8:30 AM Waiting on you (weekdays)', 'Clock-out texts to consumers, 9 AM to 6 PM'];
   const DAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const MON = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const EVERY_LABEL = { once: 'Just once', week: 'Every week', month: 'Every month', quarter: 'Every quarter', year: 'Every year' };
@@ -436,7 +465,7 @@
       : '<p class="mw-msg">' + (!S.loaded ? 'Loading your check marks...' : esc(S.note || 'Check things off, move them with → or 📅, or drag them to another day. Saved for you in both hubs.')) + '</p>';
     w.innerHTML = '<div class="mw">'
       + '<div class="mw-head"><div class="mw-ring" style="--p:' + v.p + '" title="Done this ' + unit + '"><span>' + v.ring + '</span></div>'
-      + '<div><h2>My Week</h2><p class="sub">Our time together, your due dates and your own things. Times are Central.</p></div></div>'
+      + '<div><h2>My Week</h2><p class="sub">Our time together, your due dates and your own things. Each session: 15 minutes on what waits on you, 40 on the main work, 5 on what is next. Times are Central.</p></div></div>'
       + '<div class="mw-bar"><div class="mw-seg">' + ['week', 'month', 'year'].map((x) => '<button data-act="view" data-v="' + x + '" class="' + (S.view === x ? 'on' : '') + '">' + x[0].toUpperCase() + x.slice(1) + '</button>').join('') + '</div>'
       + '<button class="mw-btn" data-act="prev" aria-label="Back one ' + unit + '">‹</button><button class="mw-btn" data-act="today">Today</button><button class="mw-btn" data-act="next' + unit + '" aria-label="Forward one ' + unit + '">›</button>'
       + '<span class="mw-range">' + esc(v.range) + '</span><button class="mw-btn go" data-act="add">+ Add to my calendar</button>'

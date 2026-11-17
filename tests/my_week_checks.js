@@ -29,24 +29,24 @@ async () => {
   ok('it loads her saved marks from the server', calls[0] && calls[0].action === 'list', calls);
   ok('week view starts Monday Nov 16, Tuesday is today', qa('.mw-day')[0].dataset.date === '2026-11-16' && q('.mw-day.today').dataset.date === '2026-11-17');
   ok('Saturday and Sunday share one spot after Friday', W().querySelector('.mw-week').children.length === 6 && [...q('.mw-wkend').querySelectorAll('.mw-day')].map((x) => x.dataset.date).join() === '2026-11-21,2026-11-22');
-  ok('the five times together plus the Saturday EVV deadline', ['Money in: AxisCare billing and payroll prep', 'CDS payroll in Empeon and Medicaid', 'Marketing', 'Growth', 'Big picture', 'CDS EVV forms due'].every((x) => t.includes(x)), t.slice(0, 400));
-  ok('Monday 9 AM is AxisCare, Tuesday 9:30 is Empeon payroll, Saturday is EVV', /Money in/.test(col('2026-11-16').innerText) && /9:30 AM[\s\S]*Empeon/.test(col('2026-11-17').innerText) && /EVV forms due/.test(col('2026-11-21').innerText));
+  ok('the five times together, the Monday huddle and the Saturday EVV deadline (v3)', ['Money in: AxisCare billing and payroll prep', 'Team huddle, 15 minutes', 'CDS day: payroll, Medicaid and growth', 'Marketing: ads, referral sources, approvals', 'Growth: leads and hiring', 'Switch hour and big picture', 'CDS EVV forms due'].every((x) => t.includes(x)), t.slice(0, 400));
+  ok('Monday 9 AM is AxisCare and 10 AM the huddle, Tuesday 9:30 is the CDS day, Saturday is EVV', /Money in/.test(col('2026-11-16').innerText) && /10:00 AM[\s\S]*Team huddle/.test(col('2026-11-16').innerText) && /9:30 AM[\s\S]*CDS day/.test(col('2026-11-17').innerText) && /EVV forms due/.test(col('2026-11-21').innerText));
   ok('Thursday: Empeon reports with the Empeon sign-in and the CDS hub upload links', /Empeon payroll reports/.test(col('2026-11-19').innerText) && [...card('Empeon payroll reports').querySelectorAll('a.mw-link')].map((a) => a.href).join() === 'https://app.empeon.com/,https://hub.caringcds.com/#payroll');
   ok('Friday: Viventium payroll register with the Viventium sign-in link', /Viventium payroll register/.test(col('2026-11-20').innerText) && card('Viventium payroll register').querySelector('a.mw-link').href === 'https://hcm.viventium.com/apps/viventium' && card('Viventium payroll register').querySelector('a.mw-link').target === '_blank');
   ok('dated things this week are on their day', /Medicaid claim cutoff/.test(col('2026-11-20').innerText) && /First Sunday EVV forms email/.test(col('2026-11-22').innerText));
   ok('what runs on its own shows, and can be hidden', /CDS payroll locks/.test(col('2026-11-18').innerText) && /6:30 AM WellSky check/.test(t));
   const auto = document.getElementById('mwAuto'); auto.checked = false; auto.dispatchEvent(new Event('change', { bubbles: true })); await sleep(50);
   ok('hiding what runs on its own', !/CDS payroll locks/.test(W().innerText)); const a2 = document.getElementById('mwAuto'); a2.checked = true; a2.dispatchEvent(new Event('change', { bubbles: true })); await sleep(50);
-  ok('Monday\'s unchecked session shows under Still open from before', /Still open from before \(1\)/.test(W().innerText) && /Money in/.test(q('.mw-late').innerText));
+  ok('Monday\'s two unchecked sessions show under Still open from before', /Still open from before \(2\)/.test(W().innerText) && /Money in/.test(q('.mw-late').innerText) && /Team huddle/.test(q('.mw-late').innerText));
   // check off
-  await click(card('CDS payroll in Empeon').querySelector('.mw-chk'));
+  await click(card('CDS day').querySelector('.mw-chk'));
   let last = calls[calls.length - 1];
   ok('checking off saves to the server', last.action === 'mark' && last.key === 'w-cdspay@2026-11-17' && last.done === true, last);
-  ok('the card shows checked and the ring counts it', card('CDS payroll in Empeon').classList.contains('done') && /^1\//.test(q('.mw-ring').innerText), q('.mw-ring').innerText);
+  ok('the card shows checked and the ring counts it', card('CDS day').classList.contains('done') && /^1\//.test(q('.mw-ring').innerText), q('.mw-ring').innerText);
   ok('an Undo shows', !!document.getElementById('mwToast') && /Checked off/.test(document.getElementById('mwToast').innerText));
   await click(document.querySelector('#mwToast button'));
-  ok('Undo takes the check back on the server', !card('CDS payroll in Empeon').classList.contains('done') && !db.has('m:w-cdspay@2026-11-17'));
-  await click(card('CDS payroll in Empeon').querySelector('.mw-chk'));
+  ok('Undo takes the check back on the server', !card('CDS day').classList.contains('done') && !db.has('m:w-cdspay@2026-11-17'));
+  await click(card('CDS day').querySelector('.mw-chk'));
   // next day
   await click(card('Growth').querySelector('[data-act="next"]'));
   last = calls[calls.length - 1];
@@ -59,19 +59,19 @@ async () => {
   col('2026-11-21').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt })); await sleep(80);
   ok('dragging Marketing onto Saturday moves it', db.get('m:w-mkt@2026-11-18') && db.get('m:w-mkt@2026-11-18').data.to === '2026-11-21' && /Marketing/.test(col('2026-11-21').innerText));
   // pick a day
-  await click(card('Big picture').querySelector('[data-act="pick"]'));
+  await click(card('Switch hour').querySelector('[data-act="pick"]'));
   ok('📅 opens the day picker', !!q('.mw-pick') && /Next Monday/.test(q('.mw-pick').innerText));
   await click([...q('.mw-pick').querySelectorAll('button')].find((b) => b.innerText === 'Next Monday'));
-  ok('Next Monday moves Big picture to Nov 23', db.get('m:w-big@2026-11-20').data.to === '2026-11-23' && !card('Big picture'));
+  ok('Next Monday moves Big picture to Nov 23', db.get('m:w-big@2026-11-20').data.to === '2026-11-23' && !card('Switch hour'));
   await click(q('[data-act="nextweek"]'));
-  ok('next week shows Big picture on Monday Nov 23, still movable back', /Big picture/.test(col('2026-11-23').innerText) && /Moved from Fri/.test(card('Big picture').innerText));
-  await click(card('Big picture').querySelector('[data-act="pick"]'));
+  ok('next week shows Big picture on Monday Nov 23, still movable back', /Switch hour/.test(col('2026-11-23').innerText) && /Moved from Fri/.test(card('Switch hour').innerText));
+  await click(card('Switch hour').querySelector('[data-act="pick"]'));
   await click([...q('.mw-pick').querySelectorAll('button')].find((b) => /^Back to/.test(b.innerText)));
   ok('Back to its own day clears the move', !db.has('m:w-big@2026-11-20'));
   await click(q('[data-act="today"]'));
   // still open: move to today
   await click([...q('.mw-late').querySelectorAll('button')].find((b) => b.innerText === 'Move to today'));
-  ok('Move to today puts Monday\'s Money in on Tuesday', db.get('m:w-money@2026-11-16').data.to === '2026-11-17' && /Money in/.test(col('2026-11-17').innerText) && !q('.mw-late'));
+  ok('Move to today puts Monday\'s Money in on Tuesday (the huddle stays under still open)', db.get('m:w-money@2026-11-16').data.to === '2026-11-17' && /Money in/.test(col('2026-11-17').innerText) && !/Money in/.test((q('.mw-late') || { innerText: '' }).innerText));
   // a failure shows and nothing pretends to be saved
   fail = true; await click(card('Money in').querySelector('.mw-chk')); fail = false;
   ok('when the server cannot be reached it says so and the check goes back', /did not save: No connection/.test(W().innerText) && !card('Money in').classList.contains('done') && !!q('[data-act="retry"]'));
