@@ -2,6 +2,7 @@
 // Rows live in owner_calendar (my_calendar.sql). A mark = she checked an item off or moved it, for one day.
 // An item = something she added herself (once, every week, month, quarter or year).
 // Only her two sign-ins may use it. db.query(text, params) -> { rows }.
+import { isMustKey } from './my-week-musts.js';
 export const OWNERS = ['samantha@mo-care.com', 'samantha@caringcds.com'];
 export class CalError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 
@@ -27,7 +28,11 @@ export function cleanItem(x) {
 export function createCalendar({ db }) {
   async function list() {
     const r = await db.query('select id, kind, data, updated_at from owner_calendar order by id');
-    return { ok: true, rows: r.rows.map((x) => ({ id: x.id, kind: x.kind, data: x.data, at: x.updated_at })) };
+    /* the reminders sent (or that failed) in the last 3 weeks, so My Week can say so on the card (no silent failures) */
+    let rem = [];
+    try { rem = (await db.query("select key, at, ok, error from owner_reminder_sent where at > now() - interval '21 days' order by at")).rows; } catch (_) { rem = []; }
+    return { ok: true, rows: r.rows.map((x) => ({ id: x.id, kind: x.kind, data: x.data, at: x.updated_at })),
+      reminders: rem.map((x) => ({ key: x.key, at: x.at, ok: x.ok !== false, error: x.ok === false ? String(x.error || 'not sent') : '' })) };
   }
   async function mark(email, b) {
     if (!KEY.test(String(b.key || ''))) throw new CalError('That item could not be found.');
@@ -36,6 +41,9 @@ export function createCalendar({ db }) {
     const d = Object.assign({}, cur ? cur.data : {});
     if ('done' in b) d.done = !!b.done;
     if ('to' in b) {
+      /* 2026-11-17: a must-do item (billing, payroll, a cutoff) cannot be moved; it can only be checked off.
+         Moving one back to its own day (clearing an older move) is still allowed. */
+      if (isMustKey(b.key) && b.to && b.to !== b.key.split('@')[1]) throw new CalError('This one has a deadline, so it cannot be moved. Check it off when it is done.');
       if (b.to === null || b.to === '') delete d.to;
       else if (okDate(b.to)) d.to = b.to;
       else throw new CalError('Please pick a day to move it to.');

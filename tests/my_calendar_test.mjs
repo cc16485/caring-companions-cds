@@ -1,6 +1,7 @@
 // My Week calendar server (2026-11-17): only Samantha, marks (done / moved), her own items, bad input refused.
 // node tests/my_calendar_test.mjs
 import { createCalendar, cleanItem, CalError } from '../supabase/functions/_shared/office/my-calendar.js';
+import { hash as MUSTH } from '../supabase/functions/_shared/office/my-week-musts.js';
 const rows = new Map();
 const db = { query: async (t, p = []) => {
   if (/^select id, kind/.test(t)) return { rows: [...rows.values()].sort((a, b) => a.id.localeCompare(b.id)) };
@@ -19,14 +20,25 @@ const S = 'samantha@mo-care.com', C = 'Samantha@CaringCDS.com';
 ok('a coordinator is refused', await refused(() => cal.handle('krystal@mo-care.com', { action: 'list' }), 403));
 ok('no email is refused', await refused(() => cal.handle('', { action: 'list' }), 403));
 ok('Samantha (either sign-in, any case) can list', (await cal.handle(C, { action: 'list' })).ok && (await cal.handle(S, { action: 'list' })).rows.length === 0);
-let r = await cal.handle(S, { action: 'mark', key: 'w-money@2026-11-16', done: true });
-ok('check off saves done', r.data.done === true && rows.get('m:w-money@2026-11-16').updated_by === S);
-r = await cal.handle(C, { action: 'mark', key: 'w-money@2026-11-16', to: '2026-11-17' });
-ok('moving keeps the check and adds the day', r.data.done === true && r.data.to === '2026-11-17');
-r = await cal.handle(S, { action: 'mark', key: 'w-money@2026-11-16', done: false });
-ok('uncheck keeps the move', !('done' in r.data) && r.data.to === '2026-11-17');
-r = await cal.handle(S, { action: 'mark', key: 'w-money@2026-11-16', to: '2026-11-16' });
-ok('moving back to its own day with nothing else clears the row', r.data === null && !rows.has('m:w-money@2026-11-16'));
+let r = await cal.handle(S, { action: 'mark', key: 'w-mkt@2026-11-18', done: true });
+ok('check off saves done', r.data.done === true && rows.get('m:w-mkt@2026-11-18').updated_by === S);
+r = await cal.handle(C, { action: 'mark', key: 'w-mkt@2026-11-18', to: '2026-11-19' });
+ok('moving keeps the check and adds the day', r.data.done === true && r.data.to === '2026-11-19');
+r = await cal.handle(S, { action: 'mark', key: 'w-mkt@2026-11-18', done: false });
+ok('uncheck keeps the move', !('done' in r.data) && r.data.to === '2026-11-19');
+r = await cal.handle(S, { action: 'mark', key: 'w-mkt@2026-11-18', to: '2026-11-18' });
+ok('moving back to its own day with nothing else clears the row', r.data === null && !rows.has('m:w-mkt@2026-11-18'));
+// 2026-11-17: must-do items (billing, payroll, cutoffs) can be checked off but never moved
+ok('a must-do item cannot be moved, and she is told why', await refused(() => cal.handle(S, { action: 'mark', key: 'w-money@2026-11-16', to: '2026-11-17' })));
+r = await cal.handle(S, { action: 'mark', key: 'w-cdspay@2026-11-17', done: true });
+ok('...but it can be checked off', r.data.done === true);
+try { await cal.handle(S, { action: 'mark', key: 'w-cdspay@2026-11-17', to: '2026-11-20' }); } catch (e) { ok('...the words say it has a deadline', /has a deadline, so it cannot be moved/.test(e.message), e.message); }
+ok('...and the check stayed', rows.get('m:w-cdspay@2026-11-17').data.done === true && !rows.get('m:w-cdspay@2026-11-17').data.to);
+rows.set('m:w-viv-rpt@2026-11-20', { id: 'm:w-viv-rpt@2026-11-20', kind: 'mark', data: { to: '2026-11-23' } });
+r = await cal.handle(S, { action: 'mark', key: 'w-viv-rpt@2026-11-20', to: null });
+ok('an older move of a must-do item can still be put back on its own day', r.data === null);
+ok('a dated cutoff cannot be moved either', await refused(() => cal.handle(S, { action: 'mark', key: 'd-20261120-' + MUSTH('Medicaid claim cutoff, 5 PM') + '@2026-11-20', to: '2026-11-21' })));
+ok('list still works when the reminder table is not there yet', (await cal.handle(S, { action: 'list' })).reminders.length === 0);
 ok('a bad key is refused', await refused(() => cal.handle(S, { action: 'mark', key: 'DROP TABLE@x', done: true })));
 ok('a bad day is refused', await refused(() => cal.handle(S, { action: 'mark', key: 'w-big@2026-11-20', to: '2026-02-31' })));
 r = await cal.handle(S, { action: 'add', item: { t: '  Call the bank  ', date: '2026-11-19', every: 'month', time: '2 PM', cat: 'money' } });
