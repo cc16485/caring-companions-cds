@@ -111,7 +111,9 @@ const at = d => new Date(d + 'T12:00:00');
   });
   ok(resolve('attendants').page === 'activeattendants', 'the GoHighLevel Attendants link opens Active Attendants');
   ok(resolve('statesubmissions').page === 'consumers', 'State Submissions opens the Leads screen');
-  ok(resolve('financials').page === 'payroll', 'Financials opens the Money screen');
+  // Money sub tabs (2026-11-16, her ask "money page is one long page"): the Financial Dashboard is its own tab now.
+  ok(resolve('financials').page === 'financials' && resolve('financials').section === 'money', 'Financials opens Money, Dashboard');
+  ok(SECTIONS.find(s => s.id === 'money').tabs.map(t => t.page).join() === 'moneyclaims,payroll,moneybilling,financials,quarterly,annualreport', 'Money: Claims (switch), Payroll, Billing, Dashboard, Quarterly report, Annual report');
   // 2026-10-22 Caregiver Directory section (her yes): the pool is its own tab there, the old Caregiver List link opens the Directory.
   ok(resolve('backuppool').page === 'backuppool' && resolve('caregiverpool').page === 'backuppool', 'the old pool links open Sign-ups and county gaps');
   ok(resolve('caregivermatch').page === 'caregivermatch' && resolve('directory').page === 'caregivermatch', 'the old Caregiver List link and #directory open the Directory');
@@ -131,7 +133,7 @@ const at = d => new Date(d + 'T12:00:00');
   ok(resolve('hours').page === 'hoursmonth' && resolve('evv').page === 'evvcorrections', '#hours and #evv open the new section');
   ok(SECTIONS.find(s => s.id === 'help').tabs.map(t => t.label).join() === 'Deadlines,Compliance,Onboarding,Reference,Settings', 'Help ends with a Settings tab, the old Switches page');
   const tabCount = SECTIONS.reduce((t, s) => t + s.tabs.length, 0);
-  ok(tabCount <= 22, 'tabs (' + tabCount + '; Settings, Goals, 5 Caregiver Directory tabs, This month, How-to 11-13)');
+  ok(tabCount <= 28, 'tabs (' + tabCount + '; Settings, Goals, 5 Caregiver Directory tabs, This month, How-to 11-13, 6 Money tabs 11-16)');
   const today = SECTIONS.find(x => x.id === 'today');
   ok(today.tabs.map(t => t.page).join() === 'dashboard,followups,numbers,goals,howto', 'Today has Today, Follow-ups, Dashboard, Goals and How-to tabs (her calls 10-22, How-to 11-13)');
   ok(resolve('numbers').page === 'numbers' && resolve('numbers').section === 'today', '#numbers opens the Dashboard tab inside Today');

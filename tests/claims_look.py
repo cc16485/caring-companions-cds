@@ -18,7 +18,7 @@ MEND = ((T.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - dateti
 
 def sec(label, pa, rows):
     return ('Service Type\nStart Date\nEnd Date\nProvider\nGHE 1\nGHE 2\nPrior Authorization\n' + label + '\n' + us(M1) + '\n' + us(MEND) +
-            '\nSOME AGENCY LLC, 4170000000\nN/A\nN/A\n' + pa + '\nStart Date\nEnd Date\nProcedure Code\nAuthorized Units\n' + '\n'.join('\n'.join(r) for r in rows) + '\n')
+            '\nTROUTMAN ENTERPRISES LLC, 4172348494\nN/A\nN/A\n' + pa + '\nStart Date\nEnd Date\nProcedure Code\nAuthorized Units\n' + '\n'.join('\n'.join(r) for r in rows) + '\n')
 PDF = ('Participant Information: JAN EXAMPLE\nDCN: 11111111\nCare Plan Information ' + us(M1) + ' - ' + us(MEND) + '\nPC - CDS\n' +
        sec('PC - CDS', '20260900000001', [[us(M1), us(MEND), 'T1019', '40']]) + sec('FMS', '20260900000002', [[us(M1), us(MEND), 'T2040', '1']]) +
        sec('CDS - ILW', '20260900000003', [[us(M1), us(MEND), 'T1019', '20']]) + sec('CM', '20260900000005', [[us(M1), us(MEND), 'T2024', '1']]))
@@ -58,7 +58,7 @@ with sync_playwright() as pw:
     pg.goto(f'http://127.0.0.1:{PORT}/index.html'); pg.wait_for_timeout(1500)
     card = lambda: pg.inner_text('#claimsCard')
 
-    pg.evaluate(SETUP, [CONSUMERS, LOGS, False]); pg.evaluate("()=>showPage('payroll')"); pg.wait_for_timeout(300)
+    pg.evaluate(SETUP, [CONSUMERS, LOGS, False]); pg.evaluate("()=>showPage('moneyclaims')"); pg.wait_for_timeout(300)
     ck('switch off: no Claims card', not pg.locator('#claimsCard').is_visible())
     ck('the switch is listed in Settings', pg.evaluate("()=>HUB_SWITCHES.some(h=>h.key==='claims')"))
 
@@ -70,7 +70,7 @@ with sync_playwright() as pw:
     r['consumer'] = 'Jan Example'
     pg.evaluate("(r)=>{ _store.authorizations = { records: { '11111111': r } }; }", r)
 
-    pg.evaluate("()=>{ _store.claims = { live: true }; showPage('payroll'); }"); pg.wait_for_timeout(700)
+    pg.evaluate("()=>{ _store.claims = { live: true }; showPage('moneyclaims'); }"); pg.wait_for_timeout(700)
     ck('switch on: the card shows on Money', pg.locator('#claimsCard').is_visible())
     pg.fill('#clFrom', D1); pg.fill('#clTo', D2); pg.click('#clGo'); pg.wait_for_timeout(200)
     t = card()

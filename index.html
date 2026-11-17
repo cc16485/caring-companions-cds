@@ -1644,11 +1644,10 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
 <!-- ==================== PAYROLL & WAGES ==================== -->
 <div id="page-payroll" class="page">
   <div class="section-header">
-    <div class="section-title">Money</div>
+    <div class="section-title">Payroll</div>
+    <!-- The quarterly and annual report buttons moved to Money's own tabs (2026-11-16). -->
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-outline" onclick="renderPayroll()" style="font-size:12px">↻ Refresh</button>
-      <button class="btn btn-primary" onclick="showPage('quarterly')">Start quarterly report</button>
-      <button class="btn btn-outline" onclick="showPage('annualreport')">Start annual report</button>
     </div>
   </div>
 
@@ -1671,42 +1670,6 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
     <div id="pdf_status" style="font-size:12.5px;margin-top:10px"></div>
     <div id="pdf_unmapped" style="margin-top:12px"></div>
     <div id="pdf_gaps" style="margin-top:12px"></div>
-  </div>
-
-  <!-- Claims for eMOMED (2026-11-16, her switch 'claims'): drawn by claims/hub-claims.js -->
-  <div class="card" id="claimsCard" style="margin-bottom:18px;display:none">
-    <div class="card-title"><span class="icon">🧾</span> Claims for eMOMED</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
-      The lines to type into eMOMED Claim Management for the dates you pick, from the WellSky care logs and the DSDS
-      authorizations. Anything that would get a claim denied stops it here first. Mark each line sent with the ICN eMOMED gives it.
-    </div>
-    <div id="claimsRoot"></div>
-  </div>
-
-  <div class="card" style="margin-bottom:18px">
-    <div class="card-title"><span class="icon">📥</span> Upload a month of billing (WellSky)</div>
-    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
-      The revenue side. Payroll above is what we paid out; this is what was billed. Together they give the real
-      margin per consumer instead of a projection.
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Which month is this?</label><input type="month" id="bl_period"></div>
-      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
-        <input type="file" id="bl_file" accept=".csv,.xlsx,.xls" style="font-size:12px;margin-top:20px" onchange="blFileChosen(event)">
-      </div>
-    </div>
-    <div id="bl_mapper" style="display:none">
-      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:10px 0 6px">
-        Which column is which? Remembered for next month.
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Consumer</label><select id="bl_col_consumer"></select></div>
-        <div class="form-group"><label>Amount billed</label><select id="bl_col_amount"></select></div>
-        <div class="form-group"><label>Units or hours <span style="font-weight:400;color:var(--gray-600)">(optional)</span></label><select id="bl_col_units"></select></div>
-      </div>
-      <button class="btn" onclick="importBilling()" style="font-size:13px">Import this month</button>
-    </div>
-    <div id="bl_status" style="font-size:12.5px;margin-top:10px"></div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
@@ -1737,6 +1700,52 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
       Add each attendant's SSN from Empeon as you key it in.
     </div>
     <div id="pr_desblock"></div>
+  </div>
+
+</div>
+
+<!-- Money sub tabs (2026-11-16, her ask "money page is one long page"): Claims and Billing are their own tabs. -->
+<div id="page-moneyclaims" class="page">
+  <div class="section-header"><div class="section-title">Claims for eMOMED</div></div>
+  <div id="claimsOff" class="card" style="display:none;font-size:13.5px">Claims for eMOMED is switched off. Turn it on in Help, Settings, Claims for eMOMED.</div>
+  <!-- Claims for eMOMED (2026-11-16, her switch 'claims'): drawn by claims/hub-claims.js -->
+  <div class="card" id="claimsCard" style="margin-bottom:18px;display:none">
+    <div class="card-title"><span class="icon">🧾</span> Claims for eMOMED</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      The lines to type into eMOMED Claim Management for the dates you pick, from the WellSky care logs and the DSDS
+      authorizations. Anything that would get a claim denied stops it here first. Mark each line sent with the ICN eMOMED gives it.
+    </div>
+    <div id="claimsRoot"></div>
+  </div>
+
+</div>
+
+<div id="page-moneybilling" class="page">
+  <div class="section-header"><div class="section-title">Billing and margin</div></div>
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><span class="icon">📥</span> Upload a month of billing (WellSky)</div>
+    <div style="font-size:12px;color:var(--gray-600);margin-bottom:12px">
+      The revenue side. Payroll above is what we paid out; this is what was billed. Together they give the real
+      margin per consumer instead of a projection.
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Which month is this?</label><input type="month" id="bl_period"></div>
+      <div class="form-group" style="display:flex;flex-direction:column;justify-content:flex-end">
+        <input type="file" id="bl_file" accept=".csv,.xlsx,.xls" style="font-size:12px;margin-top:20px" onchange="blFileChosen(event)">
+      </div>
+    </div>
+    <div id="bl_mapper" style="display:none">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin:10px 0 6px">
+        Which column is which? Remembered for next month.
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Consumer</label><select id="bl_col_consumer"></select></div>
+        <div class="form-group"><label>Amount billed</label><select id="bl_col_amount"></select></div>
+        <div class="form-group"><label>Units or hours <span style="font-weight:400;color:var(--gray-600)">(optional)</span></label><select id="bl_col_units"></select></div>
+      </div>
+      <button class="btn" onclick="importBilling()" style="font-size:13px">Import this month</button>
+    </div>
+    <div id="bl_status" style="font-size:12.5px;margin-top:10px"></div>
   </div>
 
   <div class="card">
@@ -5315,7 +5324,14 @@ const SECTIONS = [
       { page: 'hoursmonth',     label: 'This month' },
       { page: 'authorizations', label: 'Authorizations' },
       { page: 'evvcorrections', label: 'EVV forms' } ] },
-  { id: 'money',      label: 'Money',       tabs: [] },
+  // Money sub tabs (2026-11-16, her ask): was one long page (payroll with the Financial Dashboard stacked under it).
+  { id: 'money',      label: 'Money',       tabs: [
+      { page: 'moneyclaims',  label: 'Claims', show: () => typeof hubSwitchOn === 'function' && hubSwitchOn('claims') },
+      { page: 'payroll',      label: 'Payroll' },
+      { page: 'moneybilling', label: 'Billing' },
+      { page: 'financials',   label: 'Dashboard' },
+      { page: 'quarterly',    label: 'Quarterly report' },
+      { page: 'annualreport', label: 'Annual report' } ] },
   // Marketing (her ask 2026-11-05: "I dont want this to get lost ... a marketing materials page/tab"): ads, videos,
   // photos, sign-up links and texts for leads (marketing/marketing.js). #marketing opens it.
   { id: 'marketing',  label: 'Marketing',   tabs: [] },
@@ -5372,13 +5388,11 @@ const PAGE_ALIASES = {
 };
 
 // Pages shown together, one above the other, so a section is one screen.
-const STACKED = {
-  payroll: ['financials']
-};
+const STACKED = {};
 // Caregiver Directory tabs that are views inside Caregiver Match.
 const DIR_VIEWS = { dirreview: 'review', dirnetwork: 'network', dirintros: 'intros', dirfamilies: 'families', dirtasks: 'tasks', dirmessages: 'messages' };
 const DIR_PAGE = Object.fromEntries(Object.entries(DIR_VIEWS).map(([k, v]) => [v, k]));
-const STACK_HOME = { statesubmissions: 'pipeline', financials: 'payroll' };
+const STACK_HOME = { statesubmissions: 'pipeline' };
 
 function renderMainTabs(activeSection) {
   const bar = document.getElementById('mainTabs');
@@ -5394,8 +5408,9 @@ function renderSectionNav(activeSection, activePage) {
   const sec = SECTIONS.find(x => x.id === activeSection);
   nav.classList.toggle('chips', !!(sec && sec.chips));
   // A section with one tab (Attendants since 2026-10-22) shows no tab bar: a lone button says nothing.
-  if (!sec || sec.tabs.length < 2) { nav.innerHTML = ''; return; }
-  nav.innerHTML = (sec.chips ? '<span class="nav-lead">Show</span>' : '') + sec.tabs.map(t =>
+  const tabs = sec ? sec.tabs.filter(t => !t.show || t.show() || t.page === activePage) : [];
+  if (!sec || tabs.length < 2) { nav.innerHTML = ''; return; }
+  nav.innerHTML = (sec.chips ? '<span class="nav-lead">Show</span>' : '') + tabs.map(t =>
     '<button class="' + (t.page === activePage ? 'on' : '') +
     '" onclick="showPage(\'' + t.page + '\')">' + esc(t.label) + (t.count && t.count() ? ' (' + t.count() + ')' : '') + '</button>').join('');
 }
@@ -5483,7 +5498,8 @@ function showPage(id) {
   // pipeline records), which finds the container by id wherever it now lives.
   if (id === 'statesubmissions') renderPipeline();
   if (id === 'taxcompliance') { renderTaxCompliance(); renderComplianceClocks(); }
-  if (id === 'payroll') { renderPayroll(); renderClaimsCard(); }
+  if (id === 'payroll' || id === 'moneybilling') renderPayroll();
+  if (id === 'moneyclaims') renderClaimsCard();
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'starting' && window.StartHub) StartHub.renderPage();
   if (id === 'hoursmonth') renderHoursMonth();
@@ -5627,11 +5643,12 @@ async function renderClaimsCard() {
   if (!card) return;
   const on = hubSwitchOn('claims');
   card.style.display = on ? '' : 'none';
+  const off = document.getElementById('claimsOff'); if (off) off.style.display = on ? 'none' : '';
   if (!on || !_db) return;
   if (_claims) { _claims.draw(true); return; }
   const root = document.getElementById('claimsRoot');
   try {
-    const { mountClaims } = await import('./claims/hub-claims.js?v=1');
+    const { mountClaims } = await import('./claims/hub-claims.js?v=2');
     _claims = mountClaims(root, {
       consumers: () => getData('consumers'), auths: () => getObj('authorizations'),
       work: () => getObj('claimsWork'), saveWork: w => setObj('claimsWork', w),
@@ -10845,7 +10862,7 @@ function hubSwitch(key, on) {
   if (key === 'moForms' || key === 'moStaffOig') renderOfficeCard();
   if (key === 'starting' && window.StartHub) StartHub.renderAdmin();
   if (key === 'followupsTable' && document.getElementById('page-followups')?.classList.contains('active')) renderFollowups(false);
-  if (key === 'claims') { _claims = null; renderClaimsCard(); }
+  if (key === 'claims') { _claims = null; renderClaimsCard(); renderMainTabs(PAGE_TO_SECTION.automations); renderSectionNav(PAGE_TO_SECTION.automations, 'automations'); }
   if (key === 'authSlim') { _hx = null; renderMainTabs(PAGE_TO_SECTION.automations); renderSectionNav(PAGE_TO_SECTION.automations, 'automations'); }
 }
 
@@ -12225,6 +12242,10 @@ function parseAuthorizationPdf(text, fileName) {
   // (T1019 U2) and waiver (T1019 U6) units can be told apart. claims/claims.js reads the sections.
   const secRows = (window.CDSClaims && window.CDSClaims.readAuthSections(text)) || [];
   if (secRows.length) { rows.length = 0; secRows.forEach(r => rows.push(r)); }
+  // An agency-model care plan (PC - Agency, Caring Companions In-Home, with T1001 nurse visits) is not CDS:
+  // never read its T1019 rows as CDS units (2026-11-16, Karen Bohnstedt's while she switches to CDS).
+  else if (/Prior\s+Authorization\s*\n\s*PC\s*-\s*\n?\s*Agency/i.test(text) && !/Prior\s+Authorization\s*\n\s*(PC\s*-\s*CDS|CDS\s*-\s*ILW)/i.test(text))
+    return { error: 'this is an agency (PC - Agency) authorization, not CDS. Upload the CDS authorization once DSDS issues it' };
   let format = 'monthly';
   if (!rows.length) {
     const old = /(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*\n\s*(\d{2,5})\s*\n/.exec(text);
@@ -12288,7 +12309,7 @@ async function profAuthUpload(cid, file) {
   if (!mine && theirs) c.dcn = r.dcn;
   r.consumer = c.name;
   const store = getAuths();
-  store.records[(r.dcn || r.name || c.name).toUpperCase()] = r;
+  { const k = (r.dcn || r.name || c.name).toUpperCase(); store.records[k] = window.CDSClaims ? CDSClaims.keepEarlier(store.records[k], r) : r; }   // keeps earlier months for billing
   setObj('authorizations', { loadedAt: _todayIso(), unitMinutes: store.unitMinutes, records: store.records });
   setData('consumers', consumers);
   renderProfile();
@@ -12324,7 +12345,7 @@ async function importAuthorizations(event) {
             hit.docs = (hit.docs || []).concat([doc]); keptPdf++; }
       catch (e) { notKept.push(files[i].name + ' (' + (e.message || e) + ')'); }
     }
-    store.records[(r.dcn || r.name).toUpperCase()] = r;
+    { const k = (r.dcn || r.name).toUpperCase(); store.records[k] = window.CDSClaims ? CDSClaims.keepEarlier(store.records[k], r) : r; }   // keeps earlier months for billing
     ok++;
   }
   setObj('authorizations', { loadedAt: _todayIso(),
@@ -17977,6 +17998,6 @@ document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCoun
 <script src="starting/hub-starting.js?v=16"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 <!-- Claims for eMOMED (2026-11-16): the authorization reader uses its section reader -->
-<script type="module">import * as C from './claims/claims.js?v=1'; window.CDSClaims = C;</script>
+<script type="module">import * as C from './claims/claims.js?v=2'; window.CDSClaims = C;</script>
 </body>
 </html>

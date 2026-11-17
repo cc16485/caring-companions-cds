@@ -57,22 +57,43 @@ export function normSvc(s) {
 // plan dates, the provider, GHE 1, GHE 2 and that section's prior authorization number, then rows of
 // start, end, procedure code, units. Returns [{ svc, pa, start, end, code, units }] or [] when the
 // text has no sections (older layouts are left to the hub's own reader).
+// Real PDFs (2026-11-16) also: print "Service Type" and "Prior Authorization" across two lines on some
+// pages; carry sections that are not ours (HDMS meals S5170 from the Area Agency on Aging, or every
+// section with another CDS vendor after a transfer). So a section only takes rows with its own code, and
+// each row says whether the section's provider is us (ours: false is never billed).
+export const OUR_PROVIDER = /TROUTMAN\s+ENTERPRISES/i;   // the CDS vendor (Caring Companions In-Home shares the phone, so never match on it)
 export function readAuthSections(text) {
-  const parts = String(text || '').split(/\bService Type\b/).slice(1);
+  const parts = String(text || '').split(/\bService\s+Type\b/).slice(1);
   const rows = [];
   for (const p of parts) {
-    const head = /Prior Authorization\s*\n\s*([A-Za-z][A-Za-z \-]{1,30}?)\s*\n/.exec(p);
+    const head = /Prior\s+Authorization\s*\n\s*([A-Za-z][A-Za-z \-]{1,30}?)\s*\n/.exec(p);
     if (!head) continue;
     const svc = normSvc(head[1]);
     if (!SERVICES[svc]) continue;
-    const pa = (/\b(\d{14})\b/.exec(p) || [])[1] || '';
+    const top = p.split(/Start\s+Date\s*\n\s*End\s+Date\s*\n\s*Procedure/)[0];
+    const pa = (/\b(\d{14})\b/.exec(top) || [])[1] || '';
+    const ours = OUR_PROVIDER.test(top);
     const re = /(\d{2}\/\d{2}\/\d{4})\s*\n\s*(\d{2}\/\d{2}\/\d{4})\s*\n\s*([TS]\d{4})\s*\n\s*(\d{1,5})/g;
     let m;
-    while ((m = re.exec(p)) !== null) rows.push({ svc, pa, start: iso(m[1]), end: iso(m[2]), code: m[3], units: +m[4] });
+    while ((m = re.exec(p)) !== null) if (m[3] === SERVICES[svc].code) rows.push({ svc, pa, ours, start: iso(m[1]), end: iso(m[2]), code: m[3], units: +m[4] });
   }
   return rows;
 }
 const iso = us => { const [m, d, y] = us.split('/'); return y + '-' + m.padStart(2, '0') + '-' + d.padStart(2, '0'); };
+
+// A new DSDS authorization replaces the consumer's record in the hub, but claims for the months before it
+// still need the old plan (Crystal Dodd's new plan starts Nov 1; Sep and Oct are on the old one). The old
+// record's months before the new plan starts are kept in `history`, which only the claims read, so the
+// rest of the hub (pages that show "units a month") sees just the current plan as before.
+export function keepEarlier(old, next) {
+  if (!old || !next || !next.planStart) return next;
+  const before = (old.months || []).concat(old.history || []).filter(m => m.start < next.planStart)
+    .map(m => Object.assign({}, m, { end: m.end >= next.planStart ? addDays(next.planStart, -1) : m.end, from: m.from || old.source || '' }));
+  const seen = new Set();
+  const history = before.filter(m => { const k = m.start + '|' + m.code + '|' + (m.svc || '') + '|' + m.units; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.start < b.start ? -1 : 1);
+  return history.length ? Object.assign({}, next, { history }) : next;
+}
 
 // ---------- the state's claim processing schedule ----------
 // MO HealthNet Claims Processing Schedule, State Fiscal Years 2026 and 2027 (eMOMED, read 2026-11-16).
@@ -209,7 +230,9 @@ export function buildWorksheet(input) {
     const key = nameKey(c.name);
     const recs = Object.values((input.auths && input.auths.records) || {}).filter(a =>
       (c.dcn && digits(a.dcn) === digits(c.dcn)) || nameKey(a.consumer || a.name) === key);
-    const myLogs = logs.filter(x => nameKey(x.consumer) === key && x.clockIn.slice(0, 10) >= from && x.clockIn.slice(0, 10) <= to);
+    // A care log with the consumer's DCN (WellSky's Insurance ID) matches on that; otherwise on the name.
+    const mine = x => x.dcn && c.dcn ? digits(x.dcn) === digits(c.dcn) : nameKey(x.consumer) === key;
+    const myLogs = logs.filter(x => mine(x) && x.clockIn.slice(0, 10) >= from && x.clockIn.slice(0, 10) <= to);
     const hist = billedFor(input.claims, c.dcn, rates['T1019 U2'] || 0);
     for (let ym = monthOf(from); ym <= monthOf(to); ym = monthOf(addDays(monthEnd(ym), 1))) {
       const mFrom = from > ym + '-01' ? from : ym + '-01', mTo = to < monthEnd(ym) ? to : monthEnd(ym);
@@ -217,10 +240,10 @@ export function buildWorksheet(input) {
       if (b) blocks.push(b);
     }
   }
-  const ready = blocks.filter(b => !b.stops.length);
+  const ready = blocks.filter(b => !b.stops.length && b.lines.some(l => !l.sent));
   return {
     blocks, uncovered, cutoff: nextCutoff(now),
-    totals: { consumers: new Set(blocks.map(b => b.consumerId)).size, ready: ready.length, stopped: blocks.length - ready.length,
+    totals: { consumers: new Set(blocks.map(b => b.consumerId)).size, ready: ready.length, stopped: blocks.filter(b => b.stops.length).length,
               charge: round2(ready.reduce((s, b) => s + b.lines.reduce((t, l) => t + (l.sent ? 0 : l.charge), 0), 0)) }
   };
 }
@@ -230,17 +253,22 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
   const stops = [], notes = [];
   // authorized units this month, per service, from every record that covers the month
   const auth = {}, pa = {};
-  let unknownT1019 = false;
-  for (const r of recs) for (const m of r.months || []) {
+  let unknownT1019 = false, otherVendor = false;
+  for (const r0 of recs) for (const m of (r0.months || []).concat(r0.history || [])) {
+    const r = { months: (r0.months || []).concat(r0.history || []) };
     if (!(m.start <= mTo && m.end >= mFrom)) continue;
+    if (m.ours === false) { otherVendor = true; continue; }
     const s = serviceOf(m, r);
     if (!s) { unknownT1019 = true; continue; }
     auth[s] = (auth[s] || 0) + (+m.units || 0);
     if (m.pa) pa[s] = m.pa;
   }
   const minutes = logs.reduce((s, x) => s + logMinutes(x), 0);
-  const open = logs.filter(x => !x.clockOut);
-  const days = [...new Set(logs.filter(x => x.clockOut).map(x => x.clockIn.slice(0, 10)))].sort();
+  // A shift never clocked out, or one WellSky marks Not Complete, holds its whole day back: the day is billed
+  // on its own claim once it is fixed, never half now and half later (that reads as a duplicate).
+  const open = logs.filter(x => !x.clockOut), unfinished = logs.filter(x => x.clockOut && x.incomplete);
+  const held = new Set(open.concat(unfinished).map(x => x.clockIn.slice(0, 10)));
+  const days = [...new Set(logs.filter(x => x.clockOut && !x.incomplete).map(x => x.clockIn.slice(0, 10)))].filter(d => !held.has(d)).sort();
   const anyAuth = Object.keys(auth).length > 0;
   if (!days.length && !open.length && !anyAuth) return null;     // nothing to bill and nothing authorized: leave them out
 
@@ -249,14 +277,16 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
   const coveredBy = d => already.claims.find(cl => !isAdjustment(cl) && cl.first <= d && d <= cl.last);
   const billedDays = days.filter(d => coveredBy(d));
   const newDays = days.filter(d => !coveredBy(d));
-  const newMin = logs.filter(x => x.clockOut && newDays.includes(x.clockIn.slice(0, 10))).reduce((s, x) => s + logMinutes(x), 0);
+  const newMin = logs.filter(x => x.clockOut && !x.incomplete && newDays.includes(x.clockIn.slice(0, 10))).reduce((s, x) => s + logMinutes(x), 0);
   const units = Math.floor(newMin / 15);
 
   if (!c.dcn) stops.push('No DCN on their profile.');
-  if (!anyAuth && !unknownT1019) stops.push('No DSDS authorization in the hub covers ' + niceMonth(ym) + '. Upload it on their profile, or check Prior Authorization Status in eMOMED.');
+  if (!anyAuth && otherVendor) stops.push('Their DSDS authorization for ' + niceMonth(ym) + ' names another provider, not Troutman Enterprises. Do not bill until DSDS moves it to us.');
+  else if (!anyAuth && !unknownT1019) stops.push('No DSDS authorization in the hub covers ' + niceMonth(ym) + '. Upload it on their profile, or check Prior Authorization Status in eMOMED.');
   if (unknownT1019) stops.push('Their authorization has two personal care lines and the hub cannot tell State Plan from waiver. Upload the authorization again so it is read with its sections.');
   if (!(work.dx || {})[c.id]) stops.push('No diagnosis code saved for them (eMOMED needs one on every claim).');
-  if (open.length) stops.push(open.length + (open.length === 1 ? ' shift was' : ' shifts were') + ' never clocked out (' + open.map(x => shortDay(x.clockIn)).join(', ') + '). Fix it in WellSky with an EVV correction form first.');
+  if (open.length) notes.push(open.length + (open.length === 1 ? ' shift was' : ' shifts were') + ' never clocked out (' + open.map(x => shortDay(x.clockIn)).join(', ') + '). Those days are left out: fix them in WellSky with an EVV correction form, then bill them on their own claim.');
+  if (unfinished.length) notes.push(unfinished.length + (unfinished.length === 1 ? ' care log is' : ' care logs are') + ' Not Complete in WellSky (' + runs([...new Set(unfinished.map(x => x.clockIn.slice(0, 10)))].sort()) + ', ' + hrs(Math.floor(unfinished.reduce((s, x) => s + logMinutes(x), 0) / 15)) + '). Those days are left out until they are finished in WellSky.');
   if (mFrom < limit) stops.push('Some of these dates are past the 12-month filing limit (' + shortDay(limit) + ').');
   const gap = uncovered.filter(d => d >= mFrom && d <= mTo);
   if (gap.length) stops.push('The hub does not have WellSky care logs for ' + runs(gap) + '. Upload the WellSky Care Logs report for those days.');
@@ -270,7 +300,7 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
   const leftU6 = Math.max(0, (auth['CDS - ILW'] || 0) - Math.max(0, already.units - (auth['PC - CDS'] || 0)));
   const u6 = Math.min(units - u2, leftU6);
   const over = units - u2 - u6;
-  if (over > 0) notes.push(over + ' units (' + hrs(over) + ') are over the authorization for ' + niceMonth(ym) + ' and cannot be billed.');
+  if (over > 0 && anyAuth) notes.push(over + ' units (' + hrs(over) + ') are over the authorization for ' + niceMonth(ym) + ' and cannot be billed.');
   if (already.units) notes.push('About ' + already.units + ' units are already billed in eMOMED for ' + niceMonth(ym) + ' (worked out from the money), so the authorization left is smaller.');
 
   const first = newDays[0] || mFrom, last = newDays[newDays.length - 1] || mTo;
