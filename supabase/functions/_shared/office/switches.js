@@ -80,6 +80,9 @@ export const SWITCHES = [
   { key: 'voicemail_leads', field: 'live', label: 'Text when a voicemail sounds like a new lead',
     does: v => 'Every voicemail on the CDS lines is read. When one sounds like someone new asking about CDS, ' + ((v.emails || []).map(firstName).join(' and ') || 'nobody yet') + ' get' + ((v.emails || []).length === 1 ? 's' : '') + ' a text with a private link to hear it and call back, weekdays 9am to 4pm (later ones wait for 9am). No text if someone already called them back. Nothing is sent to the caller. While off, the texts are written as practice only.',
     on: 'The next voicemail that sounds like a new lead will text Samantha and Zach.', off: 'No voicemail texts. Voicemails are still read, and Follow-ups shows what they said.' },
+  { key: 'open_shift_texts', field: 'live', label: 'Never clocked out texts', warn: 'This one reaches consumers and attendants.',
+    does: () => 'Once a WellSky shift has a clock in and no clock out for 12 hours, texts the consumer and the attendant once: the day, the clock in time, that it will not be paid as it is, and the EVV form link. Only 9am to 6pm. Shifts with no clock in at all are left alone. While off, the texts are written as practice only.',
+    on: 'Consumers and attendants will get a text about shifts with no clock out.', off: 'No clock out texts. They are written as practice only.' },
 ];
 function hour(h) { h = +h; return (h % 12 || 12) + (h < 12 ? 'am' : 'pm'); }
 
