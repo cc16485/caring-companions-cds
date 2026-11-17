@@ -4,6 +4,8 @@
    ... inside both subaccounts cds and caring companions in-home senior care, a tab for me in operations").
    Her "Yes, build it" to the draft: Mon 9:00 Money in, Tue 9:30 CDS payroll, Wed 10:00 Marketing, Thu 10:00 Growth,
    Fri 10:00 Big picture, plus everything that already runs on its own.
+   2026-11-17 (Samantha): write-ups are sent by the Care Coordinators and overseen by her, "put it in my
+   responsibilities": the Friday session starts with the write-up and coaching review.
    The SAME file is in both hubs (Caring Companions hub and CDS hub), so the two tabs always match: change it in both.
    Shown only to Samantha. Reads nothing and saves nothing; the week is written here. Times are Central.
    No em dashes in anything she reads (her rule).
@@ -31,6 +33,7 @@
       'Referrals and Friends and Family.',
       'Hiring: applicants, interviews and new caregivers.' ] },
     { k: 5, time: '10:00 AM', t: 'Big picture', icon: '🧭', what: [
+      'Write-ups and coaching: approve what waits for you, look over what Krystal and Angiel decided.',
       'The office team: Katlin, Angiel and coverage.',
       'Ideas for the hubs and anything that is not working.',
       'Plan next week.' ] },
