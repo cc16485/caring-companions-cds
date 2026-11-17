@@ -18,11 +18,10 @@ const authLogs = { at: '2026-11-17T12:20:00Z', shifts: [
 const P = plan({ authLogs, consumers, attendants, marks: {}, nowMs: NOW });
 ok(P.due.length === 2, 'two shifts due (Mary yesterday, unknown consumer)');
 const m = P.due.find(d => d.consumerName === 'Mary Smith');
-ok(m && m.to[0].phone10 === '4175550101' && m.to[1].phone10 === '4175550202', 'Mary and Jane phones found');
+ok(m && m.to.length === 1 && m.to[0].who === 'consumer' && m.to[0].phone10 === '4175550101', 'consumer only (the consumer is the boss)');
 ok(m.to[0].text.includes('Sun, Nov 16') === false && m.to[0].text.includes('Mon, Nov 16'), 'right weekday (Mon Nov 16)');
 ok(m.to[0].text.includes('9:05 AM') && m.to[0].text.includes('hub.caringcds.com/evv-form'), 'time and form link');
 ok(m.to[0].text.startsWith("Caring Companions CDS: Jane Doe's shift with you"), 'consumer wording');
-ok(m.to[1].text.startsWith('Caring Companions CDS: Your shift with Mary Smith'), 'attendant wording');
 ok(m.to.every(r => !/[—–]/.test(r.text)), 'no em dashes');
 ok(m.to.every(r => r.text.length <= 300), 'short (' + m.to[0].text.length + ' chars)');
 const u = P.due.find(d => d.consumerName === 'Here Nobody');
@@ -44,21 +43,21 @@ const sent = [];
 let db = fakeDb(false);
 let J = createOpenShiftTexts({ db, sms: async (...a) => sent.push(a), now: () => NOW });
 let r = await J.run();
-ok(r.ok && r.practice === 2 && r.sent === 0 && sent.length === 0, 'practice: nothing sent, 2 written');
+ok(r.ok && r.practice === 1 && r.sent === 0 && sent.length === 0, 'practice: nothing sent, 1 written');
 ok(db.data.openShiftTexts && Object.keys(db.data.openShiftTexts.shifts).length === 2, 'practice marks saved');
 r = await J.run(); ok(r.shifts === 0, 'second run texts nothing again');
 
 db = fakeDb(true); J = createOpenShiftTexts({ db, sms: async (...a) => sent.push(a), now: () => NOW });
-r = await J.run(); ok(r.sent === 2 && sent.length === 2 && sent[0][0] === '4175550101', 'live: Mary and Jane texted');
+r = await J.run(); ok(r.sent === 1 && sent.length === 1 && sent[0][0] === '4175550101', 'live: only Mary texted');
 db = fakeDb(true); J = createOpenShiftTexts({ db, sms: async () => { throw new Error('boom'); }, now: () => NOW });
-r = await J.run(); ok(r.failed === 2 && db.data.openShiftTexts.lastRun.failed === 2, 'failures counted, not silent');
+r = await J.run(); ok(r.failed === 1 && db.data.openShiftTexts.lastRun.failed === 1, 'failures counted, not silent');
 
 // hours
 const NIGHT = Date.parse('2026-11-17T04:00:00Z'); // 10pm Central
 db = fakeDb(true); J = createOpenShiftTexts({ db, sms: async (...a) => sent.push(a), now: () => NIGHT });
 r = await J.run({ force: true }); ok(r.skipped && /9am/.test(r.skipped), 'live never texts at night, even forced');
 db = fakeDb(false); J = createOpenShiftTexts({ db, sms: async (...a) => sent.push(a), now: () => NIGHT });
-r = await J.run({ force: true }); ok(r.practice === 2, 'practice can be forced at night');
+r = await J.run({ force: true }); ok(r.practice === 1, 'practice can be forced at night');
 // stale email
 db = fakeDb(true, '2026-11-14T12:00:00Z'); J = createOpenShiftTexts({ db, sms: async (...a) => sent.push(a), now: () => NOW });
 r = await J.run(); ok(!r.ok && /too old/.test(r.error), 'old WellSky email: no texts');
@@ -67,9 +66,9 @@ ok(texts({ clockIn: '2026-11-16T21:30:00', consumerName: 'A B', attendantName: '
 // no attendant column: the roster's one attendant for that consumer
 const R = plan({ authLogs: { shifts: [{ consumer: 'Smith, Mary', clockIn: '2026-11-16T09:05:00', clockOut: null }] }, consumers,
   attendants: [{ name: 'Jane Doe', phone: '4175550202', consumer: 'Mary Smith' }], marks: {}, nowMs: NOW });
-ok(R.due[0].to[1].phone10 === '4175550202' && R.due[0].to[0].text.includes("Jane Doe's"), 'attendant found from the roster');
+ok(R.due[0].to.length === 1 && R.due[0].to[0].text.includes("Jane Doe's"), 'attendant name from the roster, in the consumer text');
 const R2 = plan({ authLogs: { shifts: [{ consumer: 'Smith, Mary', clockIn: '2026-11-16T09:05:00', clockOut: null }] }, consumers,
   attendants: [{ name: 'Jane Doe', phone: '1', consumer: 'Mary Smith' }, { name: 'Ann Roe', phone: '4175550303', consumer: 'Mary Smith' }], marks: {}, nowMs: NOW });
-ok(R2.due[0].to[1].missing && R2.due[0].to[0].phone10, 'two attendants on the roster: consumer still texted, attendant left out with a reason');
+ok(R2.due[0].to[0].phone10 && R2.due[0].to[0].text.startsWith('Caring Companions CDS: The shift with you'), 'two attendants on the roster: consumer texted without a name');
 
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

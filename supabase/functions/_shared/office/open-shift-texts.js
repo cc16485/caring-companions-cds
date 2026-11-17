@@ -13,7 +13,7 @@
 //
 // Rules:
 //  - a shift counts once it has been open more than 12 hours (someone still on a long shift is left alone)
-//  - one text to the consumer and one to the attendant, ONCE per shift (marks in agency_data openShiftTexts)
+//  - one text to the CONSUMER only (her word 11-17: the consumer is the boss), ONCE per shift (marks in agency_data openShiftTexts)
 //  - only 9am to 6pm Central, any day (her rule: no night texts)
 //  - switch open_shift_texts (cds_match_settings, starts OFF): off = practice, the texts are written and
 //    saved as "would send" but nobody gets one
@@ -51,7 +51,6 @@ export function texts(s) {
   const tail = ` has a clock in time of ${time} and no clock out time, so right now it won't be paid. If you would like us to enter a clock out time, please complete the EVV form: ${FORM}`;
   return {
     consumer: `Caring Companions CDS: ${s.attendantName ? s.attendantName + "'s" : 'The'} shift with you on ${day}${tail}`,
-    attendant: `Caring Companions CDS: Your shift with ${s.consumerName} on ${day}${tail}`,
   };
 }
 
@@ -87,9 +86,8 @@ export function plan({ authLogs, consumers = [], attendants = [], marks = {}, no
     const to = [];
     const cp = c ? digits10(c.phone) : '';
     to.push(cp ? { who: 'consumer', name: consumerName, phone10: cp, text: words.consumer } : { who: 'consumer', name: consumerName, missing: c ? 'no phone on the consumer' : 'consumer not found in the hub' });
-    const ap = a ? digits10(a.phone) : '';
-    to.push(ap ? { who: 'attendant', name: attendantName, phone10: ap, text: words.attendant }
-               : { who: 'attendant', name: attendantName || 'unknown', missing: a ? 'no phone on the attendant' : !s.attendant ? 'no attendant name in the WellSky email and not exactly one attendant on the roster for this consumer' : 'attendant not found on the roster' });
+    // HER WORD 2026-11-17 "the consumer is the boss": the text goes to the consumer only; the attendant's
+    // name is in it so the consumer knows which shift. Nothing is sent to the attendant.
     out.due.push({ key, clockIn: String(s.clockIn).slice(0, 19), consumerName, attendantName, to });
   }
   return out;
