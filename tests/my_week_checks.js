@@ -70,8 +70,15 @@ async () => {
   ok('Back to its own day clears the move', !db.has('m:w-big@2026-11-20'));
   await click(q('[data-act="today"]'));
   // still open: move to today
-  await click([...q('.mw-late').querySelectorAll('button')].find((b) => b.innerText === 'Move to today'));
-  ok('Move to today puts Monday\'s Money in on Tuesday (the huddle stays under still open)', db.get('m:w-money@2026-11-16').data.to === '2026-11-17' && /Money in/.test(col('2026-11-17').innerText) && !/Money in/.test((q('.mw-late') || { innerText: '' }).innerText));
+  // 2026-11-17 must-do: Money in is billing and payroll, so it shows Overdue with no Move to today; the huddle can move
+  const lateRows = [...q('.mw-late').querySelectorAll('.row')];
+  const moneyRow = lateRows.find((r) => /Money in/.test(r.innerText)), huddleRow = lateRows.find((r) => /Team huddle/.test(r.innerText));
+  ok('must-do Money in: Overdue, no Move to today, but it can still be checked off', /Overdue/.test(moneyRow.innerText) && ![...moneyRow.querySelectorAll('button')].some((b) => b.innerText === 'Move to today') && [...moneyRow.querySelectorAll('button')].some((b) => b.innerText === 'Done'));
+  await click([...huddleRow.querySelectorAll('button')].find((b) => b.innerText === 'Move to today'));
+  ok('Move to today puts Monday\'s huddle on Tuesday (Money in stays under still open)', db.get('m:w-huddle@2026-11-16').data.to === '2026-11-17' && /Team huddle/.test(col('2026-11-17').innerText) && /Money in/.test(q('.mw-late').innerText));
+  ok('a must-do card has the lock and no move buttons, and cannot be dragged', /Must do/.test(card('CDS day').innerText) && !card('CDS day').querySelector('[data-act="next"],[data-act="pick"]') && card('CDS day').getAttribute('draggable') === 'false');
+  ok('a Medicaid cutoff is must-do too', /Must do/.test(card('Medicaid claim cutoff').innerText) && card('Medicaid claim cutoff').getAttribute('draggable') === 'false');
+  ok('other cards still move', !!card('Growth').querySelector('[data-act="next"]') && card('Growth').getAttribute('draggable') === 'true');
   // a failure shows and nothing pretends to be saved
   fail = true; await click(card('Money in').querySelector('.mw-chk')); fail = false;
   ok('when the server cannot be reached it says so and the check goes back', /did not save: No connection/.test(W().innerText) && !card('Money in').classList.contains('done') && !!q('[data-act="retry"]'));

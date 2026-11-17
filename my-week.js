@@ -85,6 +85,23 @@
       'Katlin enters the fixes in WellSky on Monday.' ] },
   ];
 
+  /* MUST-DO items (2026-11-17, her words: "make sure i can't move things that HAVE to be done - email and text me if
+     they arent done or checked off...things that have a due date/time like billing/payroll"). These can be checked off
+     but never moved (no arrow, no drag, no Move to today; the server refuses too). If one is not checked off by its time,
+     the server texts and emails her (cds-my-reminders). The list and times are the server's my-week-musts.js; the test
+     proves the two match. Dated items in the Due dates colour are must-do too. */
+  const MUST = {
+    'w-money': 'Due Monday by noon',
+    'w-cdspay': 'Due Wednesday by noon, before the 3 PM payroll lock',
+    'w-empeon-rpt': 'Due Friday by noon',
+    'w-viv-rpt': 'Due Friday by 5 PM',
+    'w-evv': 'Fixed deadline',
+    'q-empeon': 'Due by the end of the quarter',
+    'y-w2': 'Due Jan 31',
+    'y-q4sui': 'Fixed deadline',
+  };
+  const mustOf = (r) => (r && !r.own ? (MUST[r.id] || (r.every === 'once' && r.cat === 'deadline' ? 'Fixed deadline' : '')) : '');
+
   /* Every month, quarter and year. day 31 means the last day of the month. */
   const RULES = [
     { id: 'm-payroll-bank', every: 'month', day: 10, icon: '🏦', cat: 'money', t: 'Payroll matched to the bank', what: [
@@ -239,7 +256,7 @@
 
   /* ---------- state ---------- */
   const store = { get(k) { try { return localStorage.getItem('mw_' + k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem('mw_' + k, v); } catch (_) {} } };
-  const S = { target: 'mwWrap', view: store.get('view') || 'week', anchor: null, rows: new Map(), loaded: false, loading: false, err: '', note: '', auto: store.get('auto') !== '0', open: {}, form: null, pick: null, undo: null };
+  const S = { target: 'mwWrap', view: store.get('view') || 'week', anchor: null, rows: new Map(), loaded: false, loading: false, err: '', note: '', auto: store.get('auto') !== '0', open: {}, form: null, pick: null, undo: null, rem: {} };
   if (!['week', 'month', 'year'].includes(S.view)) S.view = 'week';
 
   async function load() {
@@ -247,6 +264,7 @@
     try {
       const j = await call({ action: 'list' });
       S.rows = new Map((j.rows || []).map((x) => [x.id, { kind: x.kind, data: x.data }]));
+      S.rem = {}; (j.reminders || []).forEach((x) => { S.rem[String(x.key).split('#')[0]] = x; });   /* the latest reminder per item and day */
       S.loaded = true; S.err = '';
     } catch (e) { S.err = 'Your check marks could not be loaded: ' + e.message; }
     S.loading = false;
@@ -318,6 +336,8 @@
       '.mw-auto{list-style:none;margin:6px 0 0;padding:0;font-size:11.5px;color:var(--mut);line-height:1.4}.mw-auto li{padding:3px 0;border-top:1px dashed var(--line)}.mw-auto b{color:#3d4752}',
       '.mw-empty{font-size:12px;color:#9aa4ae;margin:4px 0}',
       '.mw-late{background:#FFF8EC;border:1px solid #F3D7A7;border-radius:14px;padding:10px 12px;margin:0 0 12px}',
+      '.mw-tag.must{background:#FDECEC;color:#9B1C1C;font-weight:700}.mw-tag.rem{background:#E1F5EE;color:#085041}.mw-tag.remx{background:#B91C1C;color:#fff;font-weight:700}',
+      '.mw-card.must{cursor:default}.mw-over{color:#9B1C1C;font-size:12.5px}',
       '.mw-late h4{margin:0 0 6px;font-size:13px;color:#8A4A0C}.mw-late .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;padding:4px 0;border-top:1px solid #F6E4C4}.mw-late .row:first-of-type{border-top:0}',
       '.mw-late .row span{flex:1;min-width:160px}',
       '.mw-month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}',
@@ -360,18 +380,23 @@
   function card(o, now) {
     const r = o.r, open = !!S.open[o.key];
     const tags = [];
-    const due = dueLabel(r, o.orig); if (due) tags.push('<span class="mw-tag due">' + esc(due) + '</span>');
+    const must = mustOf(r);
+    const due = dueLabel(r, o.orig); if (due && !must) tags.push('<span class="mw-tag due">' + esc(due) + '</span>');
+    if (must) tags.push('<span class="mw-tag must" title="This has a deadline, so it cannot be moved. If it is not checked off in time, you get a text and an email.">🔒 Must do · ' + esc(due || must) + '</span>');
+    const rm = S.rem[o.key];
+    if (rm && !o.done) tags.push(rm.ok ? '<span class="mw-tag rem">Reminder sent ' + esc(new Date(rm.at).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'short', hour: 'numeric', minute: '2-digit' })) + '</span>'
+      : '<span class="mw-tag remx">The reminder could not be sent: ' + esc(rm.error) + '</span>');
     if (o.moved) tags.push('<span class="mw-tag mv" title="Moved from ' + esc(nice(o.orig)) + '">Moved from ' + esc(DAY[dow(o.orig)].slice(0, 3)) + (o.orig.slice(0, 7) === o.date.slice(0, 7) && Math.abs(D(o.date) - D(o.orig)) < 6048e5 ? '' : ' ' + esc(nice(o.orig, { weekday: undefined }))) + '</span>');
     if (r.own && r.every !== 'once') tags.push('<span class="mw-tag">' + esc(EVERY_LABEL[r.every]) + '</span>');
     (r.links || []).forEach(([l, u]) => tags.push('<a class="mw-link" href="' + esc(u) + '" target="_blank" rel="noopener" draggable="false">' + esc(l) + ' ↗</a>'));
     const what = r.what && r.what.length ? '<button class="mw-more" data-act="' + (open ? 'less' : 'more') + '" data-key="' + esc(o.key) + '">' + (open ? 'Less' : 'What to do') + '</button>' : '<span></span>';
     const list = open && r.what && r.what.length ? '<ul class="mw-what">' + r.what.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
     const pick = S.pick === o.key ? pickHtml(o, now) : '';
-    return '<div class="mw-card' + (o.done ? ' done' : '') + '" style="' + vars(r.cat) + '" draggable="true" data-key="' + esc(o.key) + '" data-date="' + o.date + '">'
+    return '<div class="mw-card' + (o.done ? ' done' : '') + (must ? ' must' : '') + '" style="' + vars(r.cat) + '" draggable="' + (must ? 'false' : 'true') + '" data-key="' + esc(o.key) + '" data-date="' + o.date + '">'
       + '<button class="mw-chk" data-act="check" data-key="' + esc(o.key) + '" aria-label="' + (o.done ? 'Not done' : 'Check off') + '" title="' + (o.done ? 'Not done after all' : 'Check it off') + '">' + (o.done ? '✓' : '') + '</button>'
       + '<div class="mw-body">' + (r.time ? '<span class="mw-tm">' + esc(r.time) + '</span>' : '') + '<span class="mw-t">' + (r.icon ? r.icon + ' ' : '') + esc(r.t) + '</span>' + tags.join('') + list
-      + '<div class="mw-foot">' + what + '<span class="mw-acts"><button class="mw-ic" data-act="next" data-key="' + esc(o.key) + '" title="Move to the next day" aria-label="Move to the next day">→</button>'
-      + '<button class="mw-ic" data-act="pick" data-key="' + esc(o.key) + '" title="Move to another day" aria-label="Move to another day">📅</button>'
+      + '<div class="mw-foot">' + what + '<span class="mw-acts">' + (must ? '' : '<button class="mw-ic" data-act="next" data-key="' + esc(o.key) + '" title="Move to the next day" aria-label="Move to the next day">→</button>'
+      + '<button class="mw-ic" data-act="pick" data-key="' + esc(o.key) + '" title="Move to another day" aria-label="Move to another day">📅</button>')
       + (r.own ? '<button class="mw-ic" data-act="remove" data-id="' + esc('i:' + r.id) + '" title="Remove this (every time it repeats)" aria-label="Remove">🗑</button>' : '')
       + '</span></div></div>' + pick + '</div>';
   }
@@ -385,7 +410,7 @@
       + '<input type="date" id="mwPickDate" value="' + o.date + '"><div class="q"><button class="mw-btn sm go" data-act="topick" data-key="' + esc(o.key) + '">Move</button><button class="mw-btn sm" data-act="unpick">Cancel</button></div></div>';
   }
   function chip(o) {
-    return '<div class="mw-chip' + (o.done ? ' done' : '') + '" style="' + vars(o.r.cat) + '" draggable="true" data-key="' + esc(o.key) + '" title="' + esc((o.r.time ? o.r.time + ' ' : '') + o.r.t) + '">'
+    return '<div class="mw-chip' + (o.done ? ' done' : '') + '" style="' + vars(o.r.cat) + '" draggable="' + (mustOf(o.r) ? 'false' : 'true') + '" data-key="' + esc(o.key) + '" title="' + esc((o.r.time ? o.r.time + ' ' : '') + o.r.t) + '">'
       + '<button class="mw-chk" data-act="check" data-key="' + esc(o.key) + '" aria-label="' + (o.done ? 'Not done' : 'Check off') + '">' + (o.done ? '✓' : '') + '</button><span>' + (o.r.icon || '') + ' ' + esc(o.r.t) + '</span></div>';
   }
   function formHtml(now) {
@@ -419,7 +444,7 @@
     const cheer = todays.length && todays.every((o) => o.done) ? '<div class="mw-cheer">🎉 Everything for today is checked off. Nice work.</div>' : '';
     return { range: nice(from, { weekday: undefined }) + ' to ' + nice(to, { weekday: undefined, year: 'numeric' }), p: list.length ? Math.round(done * 100 / list.length) : 0, ring: done + '/' + list.length,
       html: cheer + (late.length ? '<div class="mw-late"><h4>Still open from before (' + late.length + ')</h4>' + late.map((o) => '<div class="row" style="' + vars(o.r.cat) + '"><span>' + esc(nice(o.date)) + ': ' + (o.r.icon || '') + ' ' + esc(o.r.t) + '</span>'
-        + '<button class="mw-btn sm" data-act="to" data-key="' + esc(o.key) + '" data-to="' + now + '">Move to today</button><button class="mw-btn sm" data-act="check" data-key="' + esc(o.key) + '">Done</button></div>').join('') + '</div>' : '')
+        + (mustOf(o.r) ? '<b class="mw-over">🔒 Overdue</b>' : '<button class="mw-btn sm" data-act="to" data-key="' + esc(o.key) + '" data-to="' + now + '">Move to today</button>') + '<button class="mw-btn sm" data-act="check" data-key="' + esc(o.key) + '">Done</button></div>').join('') + '</div>' : '')
         + '<div class="mw-week">' + days + '</div>' };
   }
   function monthView(now) {
@@ -490,6 +515,7 @@
   function moveTo(key, to) {
     const o = findOcc(key); if (!o || !to) return;
     S.pick = null;
+    if (mustOf(o.r) && to !== o.orig) { S.note = ''; S.err = '"' + o.r.t.slice(0, 50) + '" has a deadline, so it cannot be moved. Check it off when it is done.'; draw(); return; }
     if (o.date === to) { draw(); return; }
     mark(key, { to: to === o.orig ? null : to }, 'Moved "' + o.r.t.slice(0, 40) + '" to ' + nice(to) + '.');
   }
@@ -577,5 +603,5 @@
   function pillSync() {
     document.querySelectorAll('[data-tab="myweek"],[data-mw-pill]').forEach((p) => { p.style.display = allowed() ? '' : 'none'; });
   }
-  window.MW = { WEEKLY, RULES, DATES, AUTO, EVERY_DAY, CATS, render, pillSync, allowed, me, occ, hits, _state: S, _load: load };
+  window.MW = { MUST, mustOf, WEEKLY, RULES, DATES, AUTO, EVERY_DAY, CATS, render, pillSync, allowed, me, occ, hits, _state: S, _load: load };
 })();
