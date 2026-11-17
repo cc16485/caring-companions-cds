@@ -31,6 +31,8 @@ async () => {
   ok('Saturday and Sunday share one spot after Friday', W().querySelector('.mw-week').children.length === 6 && [...q('.mw-wkend').querySelectorAll('.mw-day')].map((x) => x.dataset.date).join() === '2026-11-21,2026-11-22');
   ok('the five times together plus the Saturday EVV deadline', ['Money in: AxisCare billing and payroll prep', 'CDS payroll in Empeon and Medicaid', 'Marketing', 'Growth', 'Big picture', 'CDS EVV forms due'].every((x) => t.includes(x)), t.slice(0, 400));
   ok('Monday 9 AM is AxisCare, Tuesday 9:30 is Empeon payroll, Saturday is EVV', /Money in/.test(col('2026-11-16').innerText) && /9:30 AM[\s\S]*Empeon/.test(col('2026-11-17').innerText) && /EVV forms due/.test(col('2026-11-21').innerText));
+  ok('Thursday: Empeon reports with the Empeon sign-in and the CDS hub upload links', /Empeon payroll reports/.test(col('2026-11-19').innerText) && [...card('Empeon payroll reports').querySelectorAll('a.mw-link')].map((a) => a.href).join() === 'https://app.empeon.com/,https://hub.caringcds.com/#payroll');
+  ok('Friday: Viventium payroll register with the Viventium sign-in link', /Viventium payroll register/.test(col('2026-11-20').innerText) && card('Viventium payroll register').querySelector('a.mw-link').href === 'https://hcm.viventium.com/apps/viventium' && card('Viventium payroll register').querySelector('a.mw-link').target === '_blank');
   ok('dated things this week are on their day', /Medicaid claim cutoff/.test(col('2026-11-20').innerText) && /First Sunday EVV forms email/.test(col('2026-11-22').innerText));
   ok('what runs on its own shows, and can be hidden', /CDS payroll locks/.test(col('2026-11-18').innerText) && /6:30 AM WellSky check/.test(t));
   const auto = document.getElementById('mwAuto'); auto.checked = false; auto.dispatchEvent(new Event('change', { bubbles: true })); await sleep(50);
@@ -80,6 +82,7 @@ async () => {
   await click(q('[data-act="nextmonth"]'));
   const c15 = q('.mw-cell[data-date="2026-12-15"]');
   ok('December 15 has the Empeon CDS tax IDs, due Dec 31', c15 && /Empeon CDS tax IDs/.test(c15.innerText), c15 && c15.innerText);
+  ok('December 10 has payroll matched to the bank', /Payroll matched to the bank/.test(q('.mw-cell[data-date="2026-12-10"]').innerText));
   ok('December 7 has the monthly profit close', /Monthly profit close/.test(q('.mw-cell[data-date="2026-12-07"]').innerText));
   await click([...c15.querySelectorAll('.mw-chip')].find((c) => /Empeon CDS tax IDs/.test(c.innerText)).querySelector('.mw-chk'));
   ok('a month chip can be checked off', db.get('m:q-empeon@2026-12-15') && db.get('m:q-empeon@2026-12-15').data.done === true);

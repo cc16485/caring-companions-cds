@@ -49,6 +49,17 @@
       'The office team: Katlin, Angiel and coverage.',
       'Ideas for the hubs and anything that is not working.',
       'Plan next week.' ] },
+    /* Her yes 11-17: payroll reports every payday, for the CDS hub and for the books (we clean up QuickBooks ourselves). */
+    { id: 'w-empeon-rpt', dow: 4, time: 'After payday', icon: '📥', cat: 'cds', t: 'Empeon payroll reports to the CDS hub', links: [
+      ['Sign in to Empeon', 'https://app.empeon.com'], ['Upload in the CDS hub', 'https://hub.caringcds.com/#payroll'] ], what: [
+      'Attendants are paid today. Sign in to Empeon, open Reports, then File Room, and download this week\'s Check Register and Payroll Summary.',
+      'Upload both in the CDS hub: Money, then Payroll, Upload Empeon PDFs.',
+      'Claude uses them to put CDS attendant pay in the books.' ] },
+    { id: 'w-viv-rpt', dow: 5, time: 'After payday', icon: '📥', cat: 'money', t: 'Viventium payroll register for the books', links: [
+      ['Sign in to Viventium', 'https://hcm.viventium.com/apps/viventium'] ], what: [
+      'Caregivers are paid today. Sign in to Viventium and download this week\'s payroll register (Excel if it offers it, PDF is fine).',
+      'Save it in iCloud Drive, in the folder "Payroll reports".',
+      'Claude uses it to put caregiver pay in QuickBooks.' ] },
     { id: 'w-evv', dow: 6, time: 'by midnight', icon: '📝', cat: 'deadline', t: 'CDS EVV forms due', what: [
       'EVV forms must be in by Saturday at midnight to be fixed for this pay week.',
       'Katlin enters the fixes in WellSky on Monday.' ] },
@@ -56,6 +67,9 @@
 
   /* Every month, quarter and year. day 31 means the last day of the month. */
   const RULES = [
+    { id: 'm-payroll-bank', every: 'month', day: 10, icon: '🏦', cat: 'money', t: 'Payroll matched to the bank', what: [
+      'Claude checks last month\'s Viventium and Empeon reports against what left the bank and emails you what is off or missing.',
+      'Check it off once you have read that email.' ] },
     { id: 'm-close', every: 'month', day: 7, icon: '📊', cat: 'money', t: 'Monthly profit close in the Owners Hub', what: [
       'Close last month in the Owners Hub and look at the profit.' ] },
     { id: 'q-empeon', every: 'quarter', months: [3, 6, 9, 12], day: 15, icon: '🧾', cat: 'cds', t: 'Empeon CDS tax IDs', due: 'quarter-end', what: [
@@ -74,8 +88,10 @@
       'Empeon files it for every consumer whose IDs were in by December 31.' ] },
   ];
 
+  const hash = (x) => { let h = 7; for (const ch of x) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h.toString(36).slice(0, 6); };
   /* One-time dates. */
   const DATES = [
+    ['2026-11-19', 'Catch up: upload every Empeon Check Register and Payroll Summary since Jul 30 (pick them all at once)', 'cds'],
     ['2026-11-20', 'Medicaid claim cutoff, 5 PM', 'deadline'],
     ['2026-11-20', 'Look at the practice clock-out texts and decide on the switch', 'cds'],
     ['2026-11-22', 'First Sunday EVV forms email', 'cds'],
@@ -85,7 +101,7 @@
     ['2026-12-23', 'Enter claims early: the Dec 25 cutoff falls on Christmas', 'deadline'],
     ['2027-01-08', 'Medicaid claim cutoff, 5 PM', 'deadline'],
     ['2027-03-15', 'Clocks changed: EVV forms email moves to 5 PM Sunday', 'cds'],
-  ].map(([date, t, cat], i) => ({ id: 'd-' + date.replace(/-/g, '') + '-' + i, every: 'once', date, t, cat, icon: cat === 'deadline' ? '⏰' : '📌', what: [] }));
+  ].map(([date, t, cat]) => ({ id: 'd-' + date.replace(/-/g, '') + '-' + hash(t),   /* id from the words, so adding a date never moves her check marks */ every: 'once', date, t, cat, icon: cat === 'deadline' ? '⏰' : '📌', what: [] }));
 
   /* What runs on its own, by day (not checkable, just so she knows). */
   const AUTO = {
@@ -263,6 +279,7 @@
       '.mw-body{flex:1;min-width:0}.mw-tm{display:block;font-size:11.5px;font-weight:800;color:var(--ink);opacity:.85}',
       '.mw-t{display:block;font-size:13px;font-weight:800;color:var(--ink);line-height:1.3;overflow-wrap:anywhere}',
       '.mw-tag{display:inline-block;font-size:10.5px;font-weight:800;border-radius:99px;padding:1px 7px;margin:4px 4px 0 0;background:#fff;color:var(--ink)}',
+      '.mw-link{display:inline-block;font-size:11.5px;font-weight:800;border-radius:8px;padding:3px 8px;margin:5px 5px 0 0;background:var(--c);color:#fff!important;text-decoration:none}.mw-link:hover{filter:brightness(1.1)}',
       '.mw-tag.due{background:#D9822B;color:#fff}.mw-tag.mv{background:#fff;color:#3B6FD8}',
       '.mw-what{margin:5px 0 0 15px;padding:0;font-size:12px;line-height:1.45;color:var(--ink)}',
       '.mw-more{white-space:nowrap;border:0;background:none;padding:0;font:inherit;font-size:11.5px;font-weight:700;color:var(--ink);opacity:.8;cursor:pointer;text-decoration:underline}',
@@ -317,6 +334,7 @@
     const due = dueLabel(r, o.orig); if (due) tags.push('<span class="mw-tag due">' + esc(due) + '</span>');
     if (o.moved) tags.push('<span class="mw-tag mv" title="Moved from ' + esc(nice(o.orig)) + '">Moved from ' + esc(DAY[dow(o.orig)].slice(0, 3)) + (o.orig.slice(0, 7) === o.date.slice(0, 7) && Math.abs(D(o.date) - D(o.orig)) < 6048e5 ? '' : ' ' + esc(nice(o.orig, { weekday: undefined }))) + '</span>');
     if (r.own && r.every !== 'once') tags.push('<span class="mw-tag">' + esc(EVERY_LABEL[r.every]) + '</span>');
+    (r.links || []).forEach(([l, u]) => tags.push('<a class="mw-link" href="' + esc(u) + '" target="_blank" rel="noopener" draggable="false">' + esc(l) + ' ↗</a>'));
     const what = r.what && r.what.length ? '<button class="mw-more" data-act="' + (open ? 'less' : 'more') + '" data-key="' + esc(o.key) + '">' + (open ? 'Less' : 'What to do') + '</button>' : '<span></span>';
     const list = open && r.what && r.what.length ? '<ul class="mw-what">' + r.what.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '';
     const pick = S.pick === o.key ? pickHtml(o, now) : '';
