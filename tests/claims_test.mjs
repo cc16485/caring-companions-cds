@@ -116,7 +116,8 @@ ok(b.notes.some(n => /About 10 units are already billed/.test(n)), 'units alread
 // stops
 W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths, logs: logs.concat([log('Doe, Jan', '2026-11-17', '19:00', null)]), coverage: [{ from: '2026-11-17', to: '2026-11-30' }], claims: [], work, now });
 b = W.blocks[0];
-ok(b.stops.some(s => /never clocked out \(Nov 17\)/.test(s)), 'a shift never clocked out stops the claim');
+ok(b.notes.some(s => /never clocked out \(Nov 17\)/.test(s)), 'a shift never clocked out is named');
+eq(b.lines[0].from + ' ' + b.lines[0].to, '2026-11-16 2026-11-16', 'and its whole day is held back (Nov 17 had a good shift too)');
 ok(b.stops.some(s => /does not have WellSky care logs for Nov 16/.test(s)), 'a day the hub has no care logs for stops the claim');
 W = C.buildWorksheet({ from: '2025-11-01', to: '2025-11-30', consumers: consumers.slice(0, 1), auths: { records: { A: { dcn: '11111111', months: [{ svc: 'PC - CDS', start: '2025-11-01', end: '2025-11-30', code: 'T1019', units: 100 }] } } }, logs: [log('Doe, Jan', '2025-11-03', '08:00', '09:00')], coverage: [{ from: '2025-11-01', to: '2025-11-30' }], claims: [], work, now: new Date(2026, 10, 18) });
 ok(W.blocks[0].stops.some(s => /12-month filing limit/.test(s)), 'past 12 months stops');
@@ -136,6 +137,23 @@ ok(W.blocks[0].lines.some(l => l.code === 'T2028' && l.charge === 48.5), 'approv
 const k = 'a|2026-11|T1019 U2|2026-11-16|2026-11-17';
 W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths, logs, coverage: [{ from: '2026-11-01', to: '2026-11-30' }], claims: [], work: Object.assign({}, work, { sent: { [k]: { icn: '4926', at: 'x', by: 'sam' } } }), now });
 ok(W.blocks[0].lines[0].sent && W.totals.charge === 0, 'a line marked sent shows it and leaves the total');
+
+// Not Complete in WellSky, and matching by DCN (2026-11-16, her WellSky export)
+W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths,
+  logs: [{ consumer: 'Somebody Else', dcn: '011111111', clockIn: '2026-11-16T08:00:00', clockOut: '2026-11-16T10:00:00' },
+         { consumer: 'Doe, Jan', dcn: '11111111', clockIn: '2026-11-17T08:00:00', clockOut: '2026-11-17T10:00:00', incomplete: true }],
+  coverage: [{ from: '2026-11-01', to: '2026-11-30' }], claims: [], work, now });
+b = W.blocks[0];
+eq(b.lines.map(l => l.from + ' ' + l.units), ['2026-11-16 8'], 'a care log with the DCN matches whatever the name; the Not Complete day is held back');
+ok(b.notes.some(n => /1 care log is Not Complete in WellSky \(Nov 17, 2 hours\)/.test(n)), 'and named');
+const HC = await import(ROOT + '/claims/hub-claims.js');
+const rr = HC.readCareLogRows([['Client Name', 'Caregiver Name', 'Official Clock In', 'Official Clock Out', 'Status', 'Insurance ID'],
+  ['Doe, Jan', 'Hill, Hal', 46282.25, 46282.375, 'Complete', '011111111'], ['Doe, Jan', 'Hill, Hal', 46283.25, 46283.375, 'Not Complete', '011111111'],
+  ['Doe, Jan', 'Hill, Hal', 46284.25, '', 'In Progress', '011111111'], ['Doe, Jan', 'Hill, Hal', 46285.25, 46285.3, 'Cancelled by Client', '011111111']]);
+eq(rr.logs.map(x => [x.clockIn, x.clockOut, !!x.incomplete, x.dcn]), [['2026-09-17T06:00:00', '2026-09-17T09:00:00', false, '011111111'], ['2026-09-18T06:00:00', '2026-09-18T09:00:00', true, '011111111'], ['2026-09-19T06:00:00', null, false, '011111111']], 'WellSky export: Excel times, Not Complete kept and marked, In Progress has no clock out');
+eq(rr.skipped, 1, 'cancelled by client skipped');
+const fake = { utils: { decode_cell: k => ({ c: k.charCodeAt(0) - 65, r: +k.slice(1) - 1 }), encode_range: r => String.fromCharCode(65 + r.s.c) + (r.s.r + 1) + ':' + String.fromCharCode(65 + r.e.c) + (r.e.r + 1) } };
+eq(HC.fullRange(fake, { '!ref': 'A1:C1', A1: 1, C1: 1, V375: 1 })['!ref'], 'A1:V375', 'a sheet labelled one row long is read in full');
 
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);

@@ -7,7 +7,7 @@
 // mountClaims(el, deps) deps = { consumers(), auths(), work(), saveWork(w), load() -> { careLogs, uploadedLogs, emomed },
 //   saveStore(key, val), hospital(), who(), xlsx() (loads SheetJS), toast(msg, warn) }
 // No em dashes in anything a person reads.
-import * as C from './claims.js?v=1';
+import * as C from './claims.js?v=2';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => '$' + (+n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -155,7 +155,7 @@ export function mountClaims(el, deps) {
     if (/\.xlsx?$/i.test(file.name)) {
       const X = await deps.xlsx();
       const wb = X.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
-      return X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+      return X.utils.sheet_to_json(fullRange(X, wb.Sheets[wb.SheetNames[0]]), { header: 1, raw: true, defval: '' });
     }
     return parseCsv(await file.text());
   }
@@ -192,6 +192,18 @@ export function mountClaims(el, deps) {
   return { draw: async (reload) => { if (reload) { stores = null; await load(); } draw(); } };
 }
 
+// WellSky's Excel exports label the sheet as one row long (A1:C1) while holding every row (seen 2026-11-16 on
+// "care_logs by caregiver", 374 rows). Reading by that label gives an empty file, so the range is worked out
+// from the cells themselves.
+export function fullRange(X, sheet) {
+  const ks = Object.keys(sheet).filter(k => k[0] !== '!');
+  if (!ks.length) return sheet;
+  const r = { s: { r: Infinity, c: Infinity }, e: { r: 0, c: 0 } };
+  for (const k of ks) { const a = X.utils.decode_cell(k); r.s.r = Math.min(r.s.r, a.r); r.s.c = Math.min(r.s.c, a.c); r.e.r = Math.max(r.e.r, a.r); r.e.c = Math.max(r.e.c, a.c); }
+  sheet['!ref'] = X.utils.encode_range(r);
+  return sheet;
+}
+
 // A WellSky care log export (Reports, Custom, Care Logs), CSV or Excel. Headings vary, so they are found
 // by name: the client, the caregiver, clock in and clock out (date and time in one cell, or a date
 // column plus time columns). Rows whose status says not complete or cancelled are skipped.
@@ -201,18 +213,24 @@ export function readCareLogRows(rows) {
   const iN = col(/^client( last, first)? name$/, /^(client|patient|consumer)\b.*name/, /^(client|patient|consumer)$/),
         iC = col(/caregiver.*name/, /^caregiver$/, /attendant/),
         iI = col(/clock ?in/, /^start( time)?$/, /check ?in/), iO = col(/clock ?out/, /^end( time)?$/, /check ?out/),
-        iD = col(/^(date|care ?log date|visit date|shift date)$/), iS = col(/^status$/, /care ?log status/);
+        iD = col(/^(date|care ?log date|visit date|shift date)$/), iS = col(/^status$/, /care ?log status/),
+        iM = col(/^insurance id$/, /^(dcn|medicaid id|member id)$/);
   if (iN < 0 || iI < 0) return { logs: [], why: 'no client name or clock in column; headings: ' + (rows[0] || []).slice(0, 12).join(', '), skipped: 0 };
   const logs = []; let skipped = 0;
   for (const r of rows.slice(1)) {
     if (!r[iN]) continue;
-    if (iS >= 0 && /cancel|not complete|missed|deleted/i.test(String(r[iS]))) { skipped++; continue; }
+    const st = iS >= 0 ? String(r[iS] || '') : '';
+    if (/cancel|missed|deleted/i.test(st)) { skipped++; continue; }
     const base = iD >= 0 ? stamp(r[iD]) : '';
     const clockIn = stamp(r[iI], base), clockOut = iO >= 0 ? stamp(r[iO], base) : '';
     if (!clockIn) { skipped++; continue; }
     let out = clockOut || null;
     if (out && out < clockIn && out.slice(0, 10) === clockIn.slice(0, 10)) out = C.localIso(new Date(Date.parse(clockIn.slice(0, 10) + 'T12:00:00') + C.DAY)) + out.slice(10);   // past midnight
-    logs.push({ consumer: String(r[iN]).trim(), attendant: iC >= 0 ? String(r[iC] || '').trim() : '', clockIn, clockOut: out });
+    const x = { consumer: String(r[iN]).trim(), attendant: iC >= 0 ? String(r[iC] || '').trim() : '', clockIn, clockOut: out };
+    if (iM >= 0 && String(r[iM] || '').trim()) x.dcn = String(r[iM]).trim();
+    // "Not Complete" in WellSky: the care log is not finished, so it is not billed yet (the claim leaves that day out).
+    if (/not complete/i.test(st)) x.incomplete = true;
+    logs.push(x);
   }
   return { logs, skipped, why: '' };
 }

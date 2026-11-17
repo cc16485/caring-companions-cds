@@ -209,7 +209,9 @@ export function buildWorksheet(input) {
     const key = nameKey(c.name);
     const recs = Object.values((input.auths && input.auths.records) || {}).filter(a =>
       (c.dcn && digits(a.dcn) === digits(c.dcn)) || nameKey(a.consumer || a.name) === key);
-    const myLogs = logs.filter(x => nameKey(x.consumer) === key && x.clockIn.slice(0, 10) >= from && x.clockIn.slice(0, 10) <= to);
+    // A care log with the consumer's DCN (WellSky's Insurance ID) matches on that; otherwise on the name.
+    const mine = x => x.dcn && c.dcn ? digits(x.dcn) === digits(c.dcn) : nameKey(x.consumer) === key;
+    const myLogs = logs.filter(x => mine(x) && x.clockIn.slice(0, 10) >= from && x.clockIn.slice(0, 10) <= to);
     const hist = billedFor(input.claims, c.dcn, rates['T1019 U2'] || 0);
     for (let ym = monthOf(from); ym <= monthOf(to); ym = monthOf(addDays(monthEnd(ym), 1))) {
       const mFrom = from > ym + '-01' ? from : ym + '-01', mTo = to < monthEnd(ym) ? to : monthEnd(ym);
@@ -217,10 +219,10 @@ export function buildWorksheet(input) {
       if (b) blocks.push(b);
     }
   }
-  const ready = blocks.filter(b => !b.stops.length);
+  const ready = blocks.filter(b => !b.stops.length && b.lines.some(l => !l.sent));
   return {
     blocks, uncovered, cutoff: nextCutoff(now),
-    totals: { consumers: new Set(blocks.map(b => b.consumerId)).size, ready: ready.length, stopped: blocks.length - ready.length,
+    totals: { consumers: new Set(blocks.map(b => b.consumerId)).size, ready: ready.length, stopped: blocks.filter(b => b.stops.length).length,
               charge: round2(ready.reduce((s, b) => s + b.lines.reduce((t, l) => t + (l.sent ? 0 : l.charge), 0), 0)) }
   };
 }
@@ -239,8 +241,11 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
     if (m.pa) pa[s] = m.pa;
   }
   const minutes = logs.reduce((s, x) => s + logMinutes(x), 0);
-  const open = logs.filter(x => !x.clockOut);
-  const days = [...new Set(logs.filter(x => x.clockOut).map(x => x.clockIn.slice(0, 10)))].sort();
+  // A shift never clocked out, or one WellSky marks Not Complete, holds its whole day back: the day is billed
+  // on its own claim once it is fixed, never half now and half later (that reads as a duplicate).
+  const open = logs.filter(x => !x.clockOut), unfinished = logs.filter(x => x.clockOut && x.incomplete);
+  const held = new Set(open.concat(unfinished).map(x => x.clockIn.slice(0, 10)));
+  const days = [...new Set(logs.filter(x => x.clockOut && !x.incomplete).map(x => x.clockIn.slice(0, 10)))].filter(d => !held.has(d)).sort();
   const anyAuth = Object.keys(auth).length > 0;
   if (!days.length && !open.length && !anyAuth) return null;     // nothing to bill and nothing authorized: leave them out
 
@@ -249,14 +254,15 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
   const coveredBy = d => already.claims.find(cl => !isAdjustment(cl) && cl.first <= d && d <= cl.last);
   const billedDays = days.filter(d => coveredBy(d));
   const newDays = days.filter(d => !coveredBy(d));
-  const newMin = logs.filter(x => x.clockOut && newDays.includes(x.clockIn.slice(0, 10))).reduce((s, x) => s + logMinutes(x), 0);
+  const newMin = logs.filter(x => x.clockOut && !x.incomplete && newDays.includes(x.clockIn.slice(0, 10))).reduce((s, x) => s + logMinutes(x), 0);
   const units = Math.floor(newMin / 15);
 
   if (!c.dcn) stops.push('No DCN on their profile.');
   if (!anyAuth && !unknownT1019) stops.push('No DSDS authorization in the hub covers ' + niceMonth(ym) + '. Upload it on their profile, or check Prior Authorization Status in eMOMED.');
   if (unknownT1019) stops.push('Their authorization has two personal care lines and the hub cannot tell State Plan from waiver. Upload the authorization again so it is read with its sections.');
   if (!(work.dx || {})[c.id]) stops.push('No diagnosis code saved for them (eMOMED needs one on every claim).');
-  if (open.length) stops.push(open.length + (open.length === 1 ? ' shift was' : ' shifts were') + ' never clocked out (' + open.map(x => shortDay(x.clockIn)).join(', ') + '). Fix it in WellSky with an EVV correction form first.');
+  if (open.length) notes.push(open.length + (open.length === 1 ? ' shift was' : ' shifts were') + ' never clocked out (' + open.map(x => shortDay(x.clockIn)).join(', ') + '). Those days are left out: fix them in WellSky with an EVV correction form, then bill them on their own claim.');
+  if (unfinished.length) notes.push(unfinished.length + (unfinished.length === 1 ? ' care log is' : ' care logs are') + ' Not Complete in WellSky (' + runs([...new Set(unfinished.map(x => x.clockIn.slice(0, 10)))].sort()) + ', ' + hrs(Math.floor(unfinished.reduce((s, x) => s + logMinutes(x), 0) / 15)) + '). Those days are left out until they are finished in WellSky.');
   if (mFrom < limit) stops.push('Some of these dates are past the 12-month filing limit (' + shortDay(limit) + ').');
   const gap = uncovered.filter(d => d >= mFrom && d <= mTo);
   if (gap.length) stops.push('The hub does not have WellSky care logs for ' + runs(gap) + '. Upload the WellSky Care Logs report for those days.');
@@ -270,7 +276,7 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
   const leftU6 = Math.max(0, (auth['CDS - ILW'] || 0) - Math.max(0, already.units - (auth['PC - CDS'] || 0)));
   const u6 = Math.min(units - u2, leftU6);
   const over = units - u2 - u6;
-  if (over > 0) notes.push(over + ' units (' + hrs(over) + ') are over the authorization for ' + niceMonth(ym) + ' and cannot be billed.');
+  if (over > 0 && anyAuth) notes.push(over + ' units (' + hrs(over) + ') are over the authorization for ' + niceMonth(ym) + ' and cannot be billed.');
   if (already.units) notes.push('About ' + already.units + ' units are already billed in eMOMED for ' + niceMonth(ym) + ' (worked out from the money), so the authorization left is smaller.');
 
   const first = newDays[0] || mFrom, last = newDays[newDays.length - 1] || mTo;
