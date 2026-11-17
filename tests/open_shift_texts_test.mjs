@@ -23,7 +23,7 @@ ok(m.to[0].text.includes('Sun, Nov 16') === false && m.to[0].text.includes('Mon,
 ok(m.to[0].text.includes('9:05 AM') && m.to[0].text.includes('hub.caringcds.com/evv-form'), 'time and form link');
 ok(m.to[0].text.startsWith("Caring Companions CDS: Jane Doe's shift with you"), 'consumer wording');
 ok(m.to.every(r => !/[—–]/.test(r.text)), 'no em dashes');
-ok(m.to.every(r => r.text.length <= 300), 'short (' + m.to[0].text.length + ' chars)');
+ok(m.to.every(r => r.text.length <= 306), 'short (' + m.to[0].text.length + ' chars)');
 const u = P.due.find(d => d.consumerName === 'Here Nobody');
 ok(u && u.to.every(r => r.missing), 'unknown consumer: nothing sent, reason kept');
 ok(P.skipped.some(s => s.why.includes('12 hours')) && P.skipped.some(s => s.why.includes('not active')), 'still working and inactive skipped');
@@ -70,5 +70,10 @@ ok(R.due[0].to.length === 1 && R.due[0].to[0].text.includes("Jane Doe's"), 'atte
 const R2 = plan({ authLogs: { shifts: [{ consumer: 'Smith, Mary', clockIn: '2026-11-16T09:05:00', clockOut: null }] }, consumers,
   attendants: [{ name: 'Jane Doe', phone: '1', consumer: 'Mary Smith' }, { name: 'Ann Roe', phone: '4175550303', consumer: 'Mary Smith' }], marks: {}, nowMs: NOW });
 ok(R2.due[0].to[0].phone10 && R2.due[0].to[0].text.startsWith('Caring Companions CDS: The shift with you'), 'two attendants on the roster: consumer texted without a name');
+
+// her rule: EVV form by Saturday at midnight (NOW = Tue Nov 17 -> Sat, Nov 21)
+ok(m.to[0].text.includes('by Sat, Nov 21 at midnight for payroll'), 'names the coming Saturday deadline');
+ok(texts({ clockIn: '2026-11-20T09:00:00', consumerName: 'A', attendantName: 'B', sendNaive: '2026-11-21T10:00:00' }).consumer.includes('by Sat, Nov 21 at midnight'), 'sent on a Saturday: that same Saturday');
+ok(texts({ clockIn: '2026-11-21T09:00:00', consumerName: 'A', attendantName: 'B', sendNaive: '2026-11-22T10:00:00' }).consumer.includes('by Sat, Nov 28 at midnight'), 'sent on a Sunday: the next Saturday');
 
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

@@ -46,9 +46,17 @@ export function chi(ms) {
 const naiveMs = n => Date.parse(String(n).slice(0, 19) + 'Z');
 
 // The words. Kept short so it is one or two text messages.
+// HER RULE 2026-11-17: the EVV form must be in by Saturday at midnight to be fixed for payroll
+// (CDS pay week Sunday to Saturday). The text names the coming Saturday (today, if sent on a Saturday).
+export function dueSaturday(sendNaive) {
+  const d = new Date(String(sendNaive).slice(0, 10) + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + ((6 - d.getUTCDay() + 7) % 7));
+  return d.toISOString().slice(0, 10);
+}
 export function texts(s) {
   const day = dayOf(s.clockIn), time = timeOf(s.clockIn);
-  const tail = ` has a clock in time of ${time} and no clock out time, so right now it won't be paid. If you would like us to enter a clock out time, please complete the EVV form: ${FORM}`;
+  const due = dayOf(dueSaturday(s.sendNaive || s.clockIn) + 'T00:00:00');
+  const tail = ` has a clock in time of ${time} and no clock out time, so right now it won't be paid. To have us enter a clock out time, please complete the EVV form by ${due} at midnight for payroll: ${FORM}`;
   return {
     consumer: `Caring Companions CDS: ${s.attendantName ? s.attendantName + "'s" : 'The'} shift with you on ${day}${tail}`,
   };
@@ -82,7 +90,7 @@ export function plan({ authLogs, consumers = [], attendants = [], marks = {}, no
     const consumerName = c ? c.name : firstLast(s.consumer);
     const attendantName = a ? a.name : (s.attendant ? firstLast(s.attendant) : '');
     if (c && /^(inactive|closed|ended)$/i.test(String(c.status || ''))) { out.skipped.push({ key, why: 'consumer is not active' }); continue; }
-    const words = texts({ clockIn: s.clockIn, consumerName, attendantName });
+    const words = texts({ clockIn: s.clockIn, consumerName, attendantName, sendNaive: nowNaive });
     const to = [];
     const cp = c ? digits10(c.phone) : '';
     to.push(cp ? { who: 'consumer', name: consumerName, phone10: cp, text: words.consumer } : { who: 'consumer', name: consumerName, missing: c ? 'no phone on the consumer' : 'consumer not found in the hub' });
