@@ -18,6 +18,7 @@
 import './wellsky.js';
 const W = globalThis.CDSWellSky;
 import { readReport, mergeFirstFromAnalytics } from './wellsky-analytics.js';
+import { mergeCareLogs } from './care-logs.js';
 
 export const AGENCY_ID = 'caring-companions-cds';
 const MAX_TEXT = 3e6;
@@ -93,6 +94,13 @@ async function analytics(q, save, at, body) {
   const prevA = (cur && cur.v && cur.v.analytics) || {};
   const part = r.which === 'firstLast' ? { at, received, consumers: r.consumers, unread: r.unread, attendants: r.attendants || [] } : { at, received, shifts: r.shifts, unread: r.unread, columns: r.columns };
   await save({ analytics: Object.assign({}, prevA, { [r.which]: part }), analyticsRun: { at, report, ok: true, why: '' } });
+  if (r.which === 'authLogs') {
+    // Claims for eMOMED (2026-11-16): keep every care log, so a full billing period builds up.
+    const prev = (await q(`select data_value from agency_data where agency_id = $1 and data_key = 'careLogs'`, [AGENCY_ID]))[0];
+    const next = mergeCareLogs(prev && prev.data_value, r.shifts, received);
+    await q(`insert into agency_data (agency_id, data_key, data_value) values ($1, 'careLogs', $2::jsonb)
+             on conflict (agency_id, data_key) do update set data_value = excluded.data_value`, [AGENCY_ID, JSON.stringify(next)]);
+  }
   if (r.which === 'firstLast') {
     const prev = (await q(`select data_value from agency_data where agency_id = $1 and data_key = 'firstShifts'`, [AGENCY_ID]))[0];
     const next = mergeFirstFromAnalytics(prev && prev.data_value, r);
