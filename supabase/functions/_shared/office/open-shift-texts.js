@@ -17,6 +17,9 @@
 //  - only 9am to 6pm Central, any day (her rule: no night texts)
 //  - switch open_shift_texts (cds_match_settings, starts OFF): off = practice, the texts are written and
 //    saved as "would send" but nobody gets one
+//  - the filled-in form (2026-11-17, clockout.js): when deps.fixes is given, each text carries a private link
+//    (hub.caringcds.com/evv-form?fix=...) that opens the form filled in with that shift, and the answer goes to
+//    the office card on the EVV forms page. Without it, the plain form link as before.
 // No em dashes in anything a person reads (her rule).
 
 export const AGENCY_ID = 'caring-companions-cds';
@@ -56,7 +59,7 @@ export function dueSaturday(sendNaive) {
 export function texts(s) {
   const day = dayOf(s.clockIn), time = timeOf(s.clockIn);
   const due = dayOf(dueSaturday(s.sendNaive || s.clockIn) + 'T00:00:00');
-  const tail = ` has a clock in time of ${time} and no clock out time, so right now it won't be paid. To have us enter a clock out time, please complete the EVV form by ${due} at midnight for payroll: ${FORM}`;
+  const tail = ` has a clock in time of ${time} and no clock out time, so right now it won't be paid. To have us enter a clock out time, please complete the EVV form by ${due} at midnight for payroll: ${s.link || FORM}`;
   return {
     consumer: `Caring Companions CDS: ${s.attendantName ? s.attendantName + "'s" : 'The'} shift with you on ${day}${tail}`,
   };
@@ -101,7 +104,8 @@ export function plan({ authLogs, consumers = [], attendants = [], marks = {}, no
   return out;
 }
 
-// deps = { db: { query(text, params) -> { rows } }, sms(phone10, text, name) -> Promise, now?: () => ms }
+// deps = { db: { query(text, params) -> { rows } }, sms(phone10, text, name) -> Promise, now?: () => ms,
+//          fixes?: clockout.js createClockout(...) for the private form links and the office card }
 export function createOpenShiftTexts(deps) {
   const q = async (t, p = []) => (await deps.db.query(t, p)).rows;
   const now = () => (deps.now ? deps.now() : Date.now());
@@ -124,13 +128,23 @@ export function createOpenShiftTexts(deps) {
     const attendants = Array.isArray(s.attendants) ? s.attendants : Object.values(s.attendants || {});
     const P = plan({ authLogs, consumers, attendants, marks, nowMs: t });
     const sum = { ok: true, live, shifts: P.due.length, sent: 0, practice: 0, missing: 0, failed: 0 };
+    // Shifts the newest email shows clocked out: their form links close (fixed in WellSky some other way).
+    if (deps.fixes) sum.closed = await deps.fixes.closeFixed((authLogs.shifts || []).filter(x => x && x.clockOut && x.consumer && x.clockIn).map(keyOf));
     for (const d of P.due) {
       const rec = { at: new Date(t).toISOString(), clockIn: d.clockIn, consumer: d.consumerName, attendant: d.attendantName, live, to: [] };
+      if (deps.fixes) {
+        try {
+          const link = await deps.fixes.register({ key: d.key, consumer: d.consumerName, attendant: d.attendantName, clockIn: d.clockIn,
+                                                  sent: d.to.every(r => r.missing) ? 'no_phone' : (live ? 'sent' : 'practice') });
+          if (link) { rec.link = true; for (const r of d.to) if (r.text) r.text = texts({ clockIn: d.clockIn, consumerName: d.consumerName, attendantName: d.attendantName, sendNaive: c.naive, link }).consumer; }
+        } catch (e) { rec.linkError = String((e && e.message) || e).slice(0, 200); }   // the text still goes, with the plain form link
+      }
       for (const r of d.to) {
         if (r.missing) { rec.to.push({ who: r.who, name: r.name, missing: r.missing }); sum.missing++; continue; }
         if (!live) { rec.to.push({ who: r.who, name: r.name, phone10: r.phone10, text: r.text, practice: true }); sum.practice++; continue; }
         try { await deps.sms(r.phone10, r.text, r.name); rec.to.push({ who: r.who, name: r.name, phone10: r.phone10, text: r.text, sent: true }); sum.sent++; }
-        catch (e) { rec.to.push({ who: r.who, name: r.name, phone10: r.phone10, text: r.text, error: String((e && e.message) || e).slice(0, 200) }); sum.failed++; }
+        catch (e) { rec.to.push({ who: r.who, name: r.name, phone10: r.phone10, text: r.text, error: String((e && e.message) || e).slice(0, 200) }); sum.failed++;
+                    if (deps.fixes && rec.link) await deps.fixes.textResult(d.key, 'failed', String((e && e.message) || e).slice(0, 300)).catch(() => {}); }
       }
       marks[d.key] = rec;
     }
