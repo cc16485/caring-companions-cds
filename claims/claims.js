@@ -327,7 +327,8 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
   if (auth['CM']) {
     const cmDay = ((work.cm || {})[c.id] || {})[ym];
     if (!monthDone) notes.push('Case management is billed once for ' + niceMonth(ym) + ', on the claim that runs to the end of the month.');
-    else if (!cmDay) stops.push('Write down ' + niceMonth(ym) + '\'s case management contact (date) before billing T2024.');
+    // A missing contact holds back only the case management line, never the personal care (2026-11-17).
+    else if (!cmDay) notes.push('Case management (T2024) for ' + niceMonth(ym) + ' is not on this claim: write down that month\'s contact date to bill it.');
     else add('CM', 1, { from: ym + '-01', to: monthEnd(ym) });
   }
   for (const b of (work.buys || []).filter(x => x.consumerId === c.id && x.month === ym)) {
