@@ -907,17 +907,16 @@
         '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Done', 'StartHub.coordDecide(' + i.id + ",'done',StartHub.mountLeadHeard)", true) + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>'; }).join('') + chatBox + msgs + '</div>';
   }
   // ---------------------------------------------------------------- texting a new website lead (2026-11-17, her yes on the mockup)
-  const CHAT_STATUS = { new: 'Starting the conversation', asking: 'Texting with them', waiting: 'Needs a person', booked: 'Call booked with the consumer', followup: 'Follow up later', handoff: 'Needs a person to call', stopped: 'They asked us to stop texting', done: 'Done' };
-  const CHAT_LABEL = { consumer_first: 'Consumer', relation: 'Texting is their', consumer_phone: 'Consumer phone', county: 'County', medicaid: 'Medicaid', help: 'Help with', attendant: 'Caregiver in mind', attendant_relation: 'Caregiver is their', self_direct: 'Makes own decisions', other_agency: 'Other agency now', notes: 'Notes' };
+  const CHAT_STATUS = { new: 'Starting the conversation', asking: 'Texting with them', waiting: 'Needs a person', ready: 'Ready: call the consumer', followup: 'Follow up later', handoff: 'Needs a person to call', stopped: 'They asked us to stop texting', done: 'Done' };
+  const CHAT_LABEL = { consumer_first: 'Consumer', consumer_dob: 'Date of birth (check Medicaid)', relation: 'Texting is their', consumer_phone: 'Consumer phone', county: 'County', medicaid: 'Medicaid', help: 'Help with', attendant: 'Caregiver in mind', attendant_relation: 'Caregiver is their', self_direct: 'Makes own decisions', other_agency: 'Other agency now', notes: 'Notes' };
   const chatFor = leadId => (_co.chats || []).find(c => String(c.lead_id) === String(leadId)) || null;
-  function slotWords(k) { if (!k) return ''; const [d, t] = String(k).split('T'), [h, m] = t.split(':').map(Number); return shortDay(d) + ' at ' + (h % 12 || 12) + (m ? ':' + String(m).padStart(2, '0') : '') + (h < 12 ? ' AM' : ' PM'); }
   function chatHtml(leadId) {
     const c = chatFor(leadId); if (!c) return '';
     const a = c.answers || {};
-    const rows = Object.keys(CHAT_LABEL).filter(k => a[k]).map(k => '<div class="lt-sub" style="color:var(--gray-800)"><span style="color:var(--gray-600)">' + esc(CHAT_LABEL[k]) + ':</span> ' + esc(k === 'consumer_first' ? [a.consumer_first, a.consumer_last].filter(Boolean).join(' ') : k === 'consumer_phone' ? _laFmtPhone(a[k]) : a[k]) + '</div>').join('');
+    const rows = Object.keys(CHAT_LABEL).filter(k => a[k]).map(k => '<div class="lt-sub" style="color:var(--gray-800)"><span style="color:var(--gray-600)">' + esc(CHAT_LABEL[k]) + ':</span> ' + esc(k === 'consumer_first' ? [a.consumer_first, a.consumer_last].filter(Boolean).join(' ') : k === 'consumer_phone' ? _laFmtPhone(a[k]) : k === 'consumer_dob' ? day(a[k]) : a[k]) + '</div>').join('');
     const red = ['waiting', 'handoff'].includes(c.status);
     return '<div style="padding:8px 0;border-top:1px solid var(--gray-200)"><b>Texting with them:</b> <span' + (red ? ' class="lt-red"' : '') + '>' + esc(CHAT_STATUS[c.status] || c.status) + '</span>' +
-      (c.booked_at ? ' · <b>' + esc(slotWords(c.booked_at)) + '</b>' : '') + (c.followup ? ' · check back ' + esc(shortDay(c.followup)) : '') +
+(c.followup ? ' · check back ' + esc(shortDay(c.followup)) : '') +
       (c.note ? '<div class="lt-sub' + (red ? ' lt-red' : '') + '">' + esc(c.note) + '</div>' : '') + rows +
       (rows ? '<div style="margin-top:4px">' + btn('Put these answers on the lead', "StartHub.chatApply('" + q(String(leadId)) + "')", true) + '</div>' : '') +
       '<div class="lt-sub">Every text, word for word, is under Calls and texts below.</div></div>';
@@ -928,9 +927,10 @@
     const a = c.answers || {};
     edit('lead', leadId, p => {
       const lines = Object.keys(CHAT_LABEL).filter(k => a[k]).map(k => CHAT_LABEL[k] + ': ' + (k === 'consumer_first' ? [a.consumer_first, a.consumer_last].filter(Boolean).join(' ') : a[k]));
-      p.notes = (p.notes || []).concat([{ date: today(), text: 'From texting with them' + (c.booked_at ? ' (call booked ' + slotWords(c.booked_at) + ')' : '') + ':\n' + lines.join('\n') }]);
+      p.notes = (p.notes || []).concat([{ date: today(), text: 'From texting with them' + (c.status === 'ready' ? ' (ready to call the consumer)' : '') + ':\n' + lines.join('\n') }]);
+      if (a.consumer_dob && !p.dob) p.dob = a.consumer_dob;
       if (!p.county && a.county) p.county = a.county.replace(/\s+county$/i, '');
-      if (c.booked_at) p.followup = String(c.booked_at).slice(0, 10); else if (c.followup && !p.followup) p.followup = c.followup;
+      if (c.status === 'ready') p.followup = today(); else if (c.followup && !p.followup) p.followup = c.followup;
       if (a.attendant && !(p.attendant && p.attendant.name)) p.attendant = Object.assign({}, p.attendant, { name: a.attendant });
     });
     if (typeof _ghlToast === 'function') _ghlToast('✅ The answers from the texts are on the lead.');
