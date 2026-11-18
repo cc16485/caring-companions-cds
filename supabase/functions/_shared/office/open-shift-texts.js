@@ -11,8 +11,15 @@
 // .authLogs, last 7 days, a blank clock out = never clocked out). Only the NEWEST email counts, so a
 // shift the office already fixed or deleted in WellSky is never texted.
 //
+// LONG SHIFTS (2026-11-17, her rule): "in the future, I would like for that to be considered a non-clock out so it's
+// not payable and they get a text saying that we need to know the hours worked and they have to complete an evv form".
+// A shift that WAS clocked out but ran overnight (across midnight; WellSky splits it into ...23:59 + 00:00..., joined
+// back here) or longer than 8 hours is treated like a no clock-out: not paid until fixed, and the consumer gets a text
+// asking for the real hours worked on the EVV form. Her rule too: nobody stays clocked in more than 8 hours, so a
+// shift with no clock out is texted once it has been open more than 8 hours (was 12).
+//
 // Rules:
-//  - a shift counts once it has been open more than 12 hours (someone still on a long shift is left alone)
+//  - a shift with no clock out counts once it has been open more than 8 hours
 //  - one text to the CONSUMER only (her word 11-17: the consumer is the boss), ONCE per shift (marks in agency_data openShiftTexts)
 //  - only 9am to 6pm Central, any day (her rule: no night texts)
 //  - switch open_shift_texts (cds_match_settings, starts OFF): off = practice, the texts are written and
@@ -26,7 +33,9 @@ export const AGENCY_ID = 'caring-companions-cds';
 export const SETTING = 'open_shift_texts';
 export const MARKS = 'openShiftTexts';
 export const FORM = 'https://hub.caringcds.com/evv-form';
-export const OPEN_HOURS = 12;
+export const OPEN_HOURS = 8;
+export const LONG_HOURS = 8;
+export const LONG_FROM = '2026-11-18';      // her word "in the future": long shifts before this day were already paid and billed              // a finished shift longer than this (or across midnight) gets the long-shift text
 export const START_HOUR = 9, END_HOUR = 18;   // Central, texts only from 9:00 to 5:59pm
 export const MAX_AGE_DAYS = 8;                // the WellSky email only holds 7 days anyway
 
@@ -39,6 +48,30 @@ export function dayOf(naive) { const d = new Date(naive.slice(0, 10) + 'T12:00:0
 export function timeOf(naive) { const h = +naive.slice(11, 13); return ((h % 12) || 12) + ':' + naive.slice(14, 16) + ' ' + (h < 12 ? 'AM' : 'PM'); }
 export const digits10 = p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 11 && d[0] === '1' ? d.slice(1) : d.length === 10 ? d : ''; };
 export const keyOf = s => 'open|' + nameKey(s.consumer) + '|' + String(s.clockIn).slice(0, 16);
+export const longKeyOf = s => 'long|' + nameKey(s.consumer) + '|' + String(s.clockIn).slice(0, 16);
+
+// WellSky splits a shift at midnight into "...T23:59(:59)" and "next dayT00:00". Join those halves back into one
+// shift (same consumer, same attendant or both blank). Returns new objects; the input is not changed.
+export function joinSplits(shifts) {
+  const list = (shifts || []).filter(x => x && x.consumer && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(x.clockIn || '')))
+    .map(x => ({ ...x, clockIn: String(x.clockIn).slice(0, 19), clockOut: x.clockOut ? String(x.clockOut).slice(0, 19) : null }))
+    .sort((a, b) => (nameKey(a.consumer) + a.clockIn).localeCompare(nameKey(b.consumer) + b.clockIn));
+  const out = [];
+  for (const x of list) {
+    const prev = out[out.length - 1];
+    const nextDay = prev && prev.clockOut ? new Date(Date.parse(prev.clockOut.slice(0, 10) + 'T12:00:00Z') + 864e5).toISOString().slice(0, 10) : '';
+    if (prev && prev.clockOut && /T23:59/.test(prev.clockOut) && nameKey(prev.consumer) === nameKey(x.consumer)
+        && nameKey(prev.attendant) === nameKey(x.attendant) && x.clockIn.slice(0, 16) === nextDay + 'T00:00') {
+      prev.clockOut = x.clockOut; prev.joined = true; continue;
+    }
+    if (out.some(y => keyOf(y) === keyOf(x) && y.clockOut === x.clockOut)) continue;   // duplicate row
+    out.push(x);
+  }
+  return out;
+}
+const hoursOf = s => (Date.parse(s.clockOut + 'Z') - Date.parse(s.clockIn + 'Z')) / 36e5;
+// A finished shift that needs the long-shift text: across midnight, or longer than LONG_HOURS.
+export const isLong = s => !!(s && s.clockOut && (s.clockOut.slice(0, 10) !== s.clockIn.slice(0, 10) || hoursOf(s) > LONG_HOURS));
 
 // Central time parts for a UTC ms
 export function chi(ms) {
@@ -60,6 +93,13 @@ export function texts(s) {
   const day = dayOf(s.clockIn), time = timeOf(s.clockIn);
   const due = dayOf(dueSaturday(s.sendNaive || s.clockIn) + 'T00:00:00');
   const tail = ` has a clock in time of ${time} and no clock out time, so right now it won't be paid. To have us enter a clock out time, please complete the EVV form by ${due} at midnight for payroll: ${s.link || FORM}`;
+  if (s.clockOut) {
+    const h = Math.round(hoursOf(s) * 4) / 4, sameDay = s.clockOut.slice(0, 10) === s.clockIn.slice(0, 10);
+    const until = timeOf(s.clockOut) + (sameDay ? '' : ' on ' + dayOf(s.clockOut));
+    return {
+      consumer: `Caring Companions CDS: ${s.attendantName ? s.attendantName + "'s" : 'The'} shift with you on ${day} was clocked in from ${time} to ${until} (${h} hours). Shifts over 8 hours or overnight aren't paid until we know the real hours worked. Send them on the EVV form by ${due} at midnight: ${s.link || FORM}`,
+    };
+  }
   return {
     consumer: `Caring Companions CDS: ${s.attendantName ? s.attendantName + "'s" : 'The'} shift with you on ${day}${tail}`,
   };
@@ -69,20 +109,25 @@ export function texts(s) {
 // Returns { due: [{ key, clockIn, consumerName, attendantName, to: [{ who, name, phone10, text } | { who, name, missing }] }], skipped: [...] }
 export function plan({ authLogs, consumers = [], attendants = [], marks = {}, nowMs }) {
   const out = { due: [], skipped: [] };
-  const shifts = (authLogs && Array.isArray(authLogs.shifts)) ? authLogs.shifts : [];
+  const shifts = joinSplits((authLogs && Array.isArray(authLogs.shifts)) ? authLogs.shifts : []);
   const nowNaive = chi(nowMs).naive;
   const cBy = new Map(), aBy = new Map();
   for (const c of consumers) if (c && c.name) cBy.set(nameKey(c.name), c);
   for (const a of attendants) if (a && a.name && a.status !== 'inactive') aBy.set(nameKey(a.name), a);
   const seen = new Set();
   for (const s of shifts) {
-    if (!s || s.clockOut || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(String(s.clockIn || '')) || !s.consumer) continue;
-    const key = keyOf(s);
+    if (!s || !s.consumer) continue;
+    const long = isLong(s);
+    if (s.clockOut && !long) continue;                    // a normal finished shift: nothing to say
+    if (long && s.clockIn.slice(0, 10) < LONG_FROM) continue;   // before her rule started: already paid and billed
+    const key = long ? longKeyOf(s) : keyOf(s);
     if (seen.has(key)) continue; seen.add(key);
     const openH = (naiveMs(nowNaive) - naiveMs(s.clockIn)) / 36e5;
-    if (openH <= OPEN_HOURS) { out.skipped.push({ key, why: 'still within 12 hours of clocking in' }); continue; }
+    if (!long && openH <= OPEN_HOURS) { out.skipped.push({ key, why: 'still within ' + OPEN_HOURS + ' hours of clocking in' }); continue; }
     if (openH > MAX_AGE_DAYS * 24) { out.skipped.push({ key, why: 'older than ' + MAX_AGE_DAYS + ' days' }); continue; }
     if (marks[key]) { out.skipped.push({ key, why: 'already texted' }); continue; }
+    // already texted as a no clock-out while it was open: that text and its form link already ask for the hours
+    if (long && marks[keyOf(s)]) { out.skipped.push({ key, why: 'already texted while it had no clock out' }); continue; }
     const c = cBy.get(nameKey(s.consumer));
     // The WellSky email may have no attendant column: then the roster's one attendant for this consumer.
     let a = s.attendant ? aBy.get(nameKey(s.attendant)) : null;
@@ -93,13 +138,13 @@ export function plan({ authLogs, consumers = [], attendants = [], marks = {}, no
     const consumerName = c ? c.name : firstLast(s.consumer);
     const attendantName = a ? a.name : (s.attendant ? firstLast(s.attendant) : '');
     if (c && /^(inactive|closed|ended)$/i.test(String(c.status || ''))) { out.skipped.push({ key, why: 'consumer is not active' }); continue; }
-    const words = texts({ clockIn: s.clockIn, consumerName, attendantName, sendNaive: nowNaive });
+    const words = texts({ clockIn: s.clockIn, clockOut: long ? s.clockOut : null, consumerName, attendantName, sendNaive: nowNaive });
     const to = [];
     const cp = c ? digits10(c.phone) : '';
     to.push(cp ? { who: 'consumer', name: consumerName, phone10: cp, text: words.consumer } : { who: 'consumer', name: consumerName, missing: c ? 'no phone on the consumer' : 'consumer not found in the hub' });
     // HER WORD 2026-11-17 "the consumer is the boss": the text goes to the consumer only; the attendant's
     // name is in it so the consumer knows which shift. Nothing is sent to the attendant.
-    out.due.push({ key, clockIn: String(s.clockIn).slice(0, 19), consumerName, attendantName, to });
+    out.due.push({ key, kind: long ? 'long' : 'open', clockIn: String(s.clockIn).slice(0, 19), clockOut: long ? s.clockOut : null, consumerName, attendantName, to });
   }
   return out;
 }
@@ -129,14 +174,15 @@ export function createOpenShiftTexts(deps) {
     const P = plan({ authLogs, consumers, attendants, marks, nowMs: t });
     const sum = { ok: true, live, shifts: P.due.length, sent: 0, practice: 0, missing: 0, failed: 0 };
     // Shifts the newest email shows clocked out: their form links close (fixed in WellSky some other way).
-    if (deps.fixes) sum.closed = await deps.fixes.closeFixed((authLogs.shifts || []).filter(x => x && x.clockOut && x.consumer && x.clockIn).map(keyOf));
+    // A shift that was clocked out but ran overnight or over 8 hours still needs the form: its link stays open.
+    if (deps.fixes) sum.closed = await deps.fixes.closeFixed(joinSplits(authLogs.shifts || []).filter(x => x.clockOut && !isLong(x)).map(keyOf));
     for (const d of P.due) {
-      const rec = { at: new Date(t).toISOString(), clockIn: d.clockIn, consumer: d.consumerName, attendant: d.attendantName, live, to: [] };
+      const rec = { at: new Date(t).toISOString(), kind: d.kind, clockIn: d.clockIn, clockOut: d.clockOut || undefined, consumer: d.consumerName, attendant: d.attendantName, live, to: [] };
       if (deps.fixes) {
         try {
           const link = await deps.fixes.register({ key: d.key, consumer: d.consumerName, attendant: d.attendantName, clockIn: d.clockIn,
                                                   sent: d.to.every(r => r.missing) ? 'no_phone' : (live ? 'sent' : 'practice') });
-          if (link) { rec.link = true; for (const r of d.to) if (r.text) r.text = texts({ clockIn: d.clockIn, consumerName: d.consumerName, attendantName: d.attendantName, sendNaive: c.naive, link }).consumer; }
+          if (link) { rec.link = true; for (const r of d.to) if (r.text) r.text = texts({ clockIn: d.clockIn, clockOut: d.clockOut, consumerName: d.consumerName, attendantName: d.attendantName, sendNaive: c.naive, link }).consumer; }
         } catch (e) { rec.linkError = String((e && e.message) || e).slice(0, 200); }   // the text still goes, with the plain form link
       }
       for (const r of d.to) {
