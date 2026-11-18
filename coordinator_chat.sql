@@ -21,5 +21,5 @@ alter table public.cds_coord_msgs add constraint cds_coord_msgs_kind_check check
 -- Practice: every text waits on the lead for a person to press Send. Only website leads from now on.
 -- Her word 11-17: no set call times; it says we'll call the consumer and gets their phone, name and date of birth.
 update public.cds_match_settings set value = value || jsonb_build_object('lead_chat', coalesce(value->>'lead_chat', 'practice'),
-  'lead_chat_from', coalesce(value->>'lead_chat_from', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')))) where key = 'coordinator';
+  'lead_chat_from', coalesce(value->>'lead_chat_from', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))) where key = 'coordinator';
 notify pgrst, 'reload schema';
