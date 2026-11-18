@@ -28,7 +28,7 @@ ok(kinds.filter(k => k.startsWith('check:')).length === 1 && P.find(p => p.kind 
 ok(H.plan({ consumers, pipeline, items, attendants, auths: {}, today, lastHeard: { 'lead:L1': '2026-11-15T00:00:00Z' } }).every(p => p.kind !== 'check'), 'no check-in when they were heard from since');
 ok(H.plan({ consumers, pipeline, items: [], attendants, auths: { robinsample: true }, today }).every(p => p.kind !== 'dsds'), 'no DSDS text once authorized');
 const clockText = P.find(p => p.to_name === 'Pat Example').body;
-ok(/^Hi Pat, this is Krystal at Caring Companions\. Your CDS care starts Thursday, November 19!/.test(clockText) && /\(417\) 218-2888\.$/.test(clockText) && clockText.length < 320, 'consumer clock text: signed by her coordinator, the date, the line', clockText);
+ok(/^Hi Pat, this is Krystal at Caring Companions\. Your CDS care starts Thursday, November 19!/.test(clockText) && /set shifts .* or flexible shifts/.test(clockText) && /\(417\) 218-2888\.$/.test(clockText) && clockText.length < 480, 'consumer clock text: signed, the date, set or flexible shifts, the line', clockText);
 ok(!/[—–]/.test(P.map(p => p.body || '').join(' ')), 'no em dashes');
 ok(H.safeText('Your DCN is 12345678') === '' && H.safeText('It pays $15') === '' && H.safeText('Call (417) 218-2888 or 417-218-2888') !== '', 'no long numbers or money in a text; phone numbers are fine');
 ok(/Hi Joe/.test(H.checkRequest({ name: 'Joe Sample', what: 'x', when: '2026-11-10', from: 'Samantha' }, 'm').messages[0].content) === false && /Joe/.test(H.checkRequest({ name: 'Joe Sample', what: 'x', when: '2026-11-10', from: 'Samantha' }, 'm').messages[0].content), 'check-in prompt has their first name');
@@ -43,13 +43,17 @@ const db = { async query(t, p = []) {
   if (/kind = 'their_word' and status = 'open'/.test(t)) return { rows: items };
   if (/max\(source->>'at'\)/.test(t)) return { rows: [] };
   if (/select 1 from cds_coord_msgs where key/.test(t)) return { rows: T.msgs.filter(m => m.key === p[0]) };
+  if (/insert into cds_coord_msgs .*values \(\$1,'journey'/s.test(t)) { if (T.msgs.some(m => m.key === p[0])) return { rows: [] }; const m = { id: nid++, key: p[0], kind: 'journey', person_name: p[3], to_name: p[4], phone: p[5], body: p[6], status: 'draft' }; T.msgs.push(m); return { rows: [{ id: m.id }] }; }
   if (/insert into cds_coord_msgs/.test(t)) { T.msgs.push({ id: nid++, key: p[0], kind: p[1], person_name: p[5], to_name: p[6], phone: p[7], body: p[8], status: 'draft' }); return { rows: [] }; }
-  if (/select id from cds_coord_msgs where status = 'draft'/.test(t)) return { rows: T.msgs.filter(m => m.status === 'draft').map(m => ({ id: m.id })) };
+  if (/select id from cds_coord_msgs where status = 'draft'/.test(t)) return { rows: T.msgs.filter(m => m.status === 'draft' && ['clock', 'dsds', 'check'].includes(m.kind)).map(m => ({ id: m.id })) };
   if (/select \* from cds_coord_msgs where id/.test(t)) return { rows: T.msgs.filter(m => m.id === p[0]) };
   if (/update cds_coord_msgs set status = 'sent'/.test(t)) { Object.assign(T.msgs.find(m => m.id === p[0]), { status: 'sent', body: p[1], sent_by: p[2] }); return { rows: [] }; }
   if (/update cds_coord_msgs set status = 'failed'/.test(t)) { Object.assign(T.msgs.find(m => m.id === p[0]), { status: 'failed', error: p[1] }); return { rows: [] }; }
   if (/update cds_coord_msgs set status = 'skipped'/.test(t)) { const m = T.msgs.find(m => m.id === p[0] && ['draft', 'failed'].includes(m.status)); if (m) m.status = 'skipped'; return { rows: m ? [{ id: m.id }] : [] }; }
   if (/insert into cds_audit/.test(t)) { T.audit.push(p); return { rows: [] }; }
+  if (/key = 'welcome_texts'/.test(t)) return { rows: T.welcome ? [{ value: { live: true } }] : [] };
+  if (/from cds_enroll_packets/.test(t)) return { rows: [] };
+  if (/from orientation_completions/.test(t)) return { rows: [] };
   if (/from owner_reminders/.test(t)) return { rows: [{ email: 'owner@example.com' }] };
   if (/from cds_coord_items where created_at/.test(t)) return { rows: [{ person_name: 'Pat Example', kind: 'promise', data: { what: 'send the packet' } }] };
   if (/from cds_coord_items where status in/.test(t)) return { rows: [{ person_name: 'Pat Example', kind: 'attendant', data: { name: 'Lee Sample' }, status: 'suggested' }] };
@@ -80,6 +84,13 @@ hands = H.createHands({ db, ai, send, model: 'm', nowMs: at('2026-11-17T17:00:00
 r = await hands.work({ texts: 'on' });
 ok(r.sent === 1 && T.msgs[3].status === 'sent', 'on, in hours: the remaining draft goes by itself', r);
 ok((await hands.work({ texts: 'off' })).made === 0, 'off: nothing made');
+// the welcome journey: switch on, in hours, a consumer who said yes today gets the welcome by itself
+consumers.push({ id: 'C9', name: 'Kim Sample', status: 'starting', phone: '4175550199', coordinator: 'Samantha', starting: { at: '2026-11-17T15:00:00Z' } });
+T.welcome = true; const beforeJ = T.sent.length;
+hands = H.createHands({ db, ai, send, model: 'm', nowMs: at('2026-11-17T17:00:00Z') });
+r = await hands.work({ texts: 'practice' });
+ok(r.journey.made === 1 && r.journey.sent === 1 && T.sent.length === beforeJ + 1 && T.sent[T.sent.length - 1].phone === '+14175550199', 'welcome switch on: the welcome text goes by itself', r.journey);
+consumers.pop(); T.welcome = false;
 // the 4:30 email
 let e = await hands.dailyEmail({ email: true });
 ok(e.email === 'not yet', '11 AM: not yet', e);

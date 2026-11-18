@@ -26,7 +26,7 @@ export const AGENCY = 'caring-companions-cds';
 
 export const COORD_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['about_person', 'summary', 'promises', 'their_word', 'start_date', 'attendant', 'questions'],
+  required: ['about_person', 'summary', 'promises', 'their_word', 'start_date', 'attendant', 'questions', 'concerns'],
   properties: {
     about_person: { type: 'boolean' },
     summary: { type: 'string' },
@@ -36,7 +36,8 @@ export const COORD_SCHEMA = {
       properties: { date: { type: 'string' }, said_by: { type: 'string', enum: ['state', 'office', 'consumer', 'family', 'attendant', ''] }, note: { type: 'string' } } },
     attendant: { type: 'object', additionalProperties: false, required: ['name', 'phone', 'email', 'relation'],
       properties: { name: { type: 'string' }, phone: { type: 'string' }, email: { type: 'string' }, relation: { type: 'string' } } },
-    questions: { type: 'array', items: { type: 'string' } }
+    questions: { type: 'array', items: { type: 'string' } },
+    concerns: { type: 'array', items: { type: 'string' } }
   }
 };
 const SYSTEM = [
@@ -48,6 +49,7 @@ const SYSTEM = [
   'start_date: only when a start date for care was given or changed on this call (by the state, our office, or the family). date: YYYY-MM-DD, empty if it was only said that the date will change or is unknown. said_by: who gave it. note: a few words, for example "moving by December 1, will call with the new date".',
   'attendant: the person who will be the attendant, only when their name was said: full name as spelled on the call, phone digits only if said aloud, email exactly as spelled out, relation to the consumer in one or two words.',
   'questions: questions they asked that were not answered on the call.',
+  'concerns: anything a person at our office must handle soon, in a few words each: a health or safety worry, a fall or hospital stay, someone upset or unhappy, wanting to stop or change caregivers, a pay or hours dispute, a problem with the state or Medicaid, a possible abuse or neglect. Empty when there is none. Never put routine questions here.',
   'about_person: false when this is clearly not about this person (a wrong number, a different client). Also false when the call is about Caring Companions In-Home Senior Care work rather than CDS: a caregiver\'s shifts or schedule with a Caring Companions client, covering a shift, training or hiring for Caring Companions. Many people work for both; only CDS matters here (their own CDS enrollment, their attendant, their paperwork, the state, their start date, CDS clock-in and pay).',
   'The office staff are Samantha, Krystal (sometimes written Crystal), Zach and the Caring Companions team. Names in transcripts are often misspelled by the transcriber: prefer the spelling the hub has, or letters spelled out on the call.',
   'Never use em dashes. Plain words. Do not mention the transcript or yourself.'
@@ -74,7 +76,8 @@ export function cleanExtract(resp, callDay) {
   const out = { about: j.about_person !== false, summary: noDash(j.summary).slice(0, 600),
     promises: (j.promises || []).slice(0, 6).map(p => ({ what: noDash(p.what).slice(0, 240), due: day(p.due) || callDay })).filter(p => p.what),
     theirWord: (j.their_word || []).slice(0, 6).map(p => ({ what: noDash(p.what).slice(0, 240), due: day(p.check_on) })).filter(p => p.what),
-    questions: (j.questions || []).slice(0, 6).map(q => noDash(q).slice(0, 240)).filter(Boolean) };
+    questions: (j.questions || []).slice(0, 6).map(q => noDash(q).slice(0, 240)).filter(Boolean),
+    concerns: (j.concerns || []).slice(0, 4).map(q => noDash(q).slice(0, 240)).filter(Boolean) };
   const sd = j.start_date || {};
   out.startDate = (day(sd.date) || noDash(sd.note)) ? { date: day(sd.date), saidBy: ['state', 'office', 'consumer', 'family', 'attendant'].includes(sd.said_by) ? sd.said_by : '', note: noDash(sd.note).slice(0, 200) } : null;
   const a = j.attendant || {};
@@ -89,7 +92,8 @@ export function watchList(consumers, pipeline, attendants) {
   const out = [];
   const closed = s => /^closed|^lost|^not_?interested/i.test(String(s || ''));
   const real = x => !/^(example|test)\b/i.test(String(x && x.name || '').trim());   // practice records are never watched
-  (consumers || []).filter(c => c && c.status === 'starting' && real(c)).forEach(c => out.push({ kind: 'consumer', id: String(c.id), name: c.name || '', start: c.cdsStartDate || '',
+  const recent = c => c && c.status === 'active' && c.cdsStartDate && Date.parse(c.cdsStartDate + 'T12:00:00Z') > Date.now() - 45 * 864e5;
+  (consumers || []).filter(c => c && (c.status === 'starting' || recent(c)) && real(c)).forEach(c => out.push({ kind: 'consumer', id: String(c.id), name: c.name || '', start: c.cdsStartDate || '',
     attendant: (c.starting && c.starting.attendantName) || '', phones: [c.phone, ...(c.relatedPeople || []).map(p => p && p.phone)].map(ten).filter(Boolean),
     leadId: c.starting && c.starting.leadId ? String(c.starting.leadId) : '' }));
   const onList = new Set(out.map(p => p.leadId).filter(Boolean));
@@ -114,6 +118,7 @@ export function itemsFrom(person, source, x) {
     const it = base('attendant', x.attendant, 'suggested', source.at.slice(0, 10)); it.key = person.kind + ':' + person.id + ':attendant:' + short(x.attendant.name); items.push(it);
   }
   x.questions.forEach(q => items.push(base('question', { text: q }, 'open', source.at.slice(0, 10))));
+  (x.concerns || []).forEach(q => items.push(base('concern', { text: q }, 'open', source.at.slice(0, 10))));   // a person is needed: My Week today
   return items;
 }
 
@@ -128,6 +133,7 @@ export function weekLine(it, today) {
   if (it.kind === 'start_date') return { t: who + ': start date ' + (d.date ? 'heard on a call: ' + d.date : 'is changing') + ', confirm it', date: today };
   if (it.kind === 'attendant') return { t: who + ': add ' + d.name + ' as the attendant', date: today };
   if (it.kind === 'question') return { t: who + ' asked: ' + d.text, date: it.due || today };
+  if (it.kind === 'concern') return { t: who + ' needs you: ' + d.text, date: today };   // stays on today until answered
   return null;
 }
 

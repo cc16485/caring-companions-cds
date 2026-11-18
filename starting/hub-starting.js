@@ -865,7 +865,7 @@
   }
   // ---------------------------------------------------------------- the texts it wrote (part 2, 2026-11-17)
   // Practice: each one waits here for a person to read it, change it if they like, and press Send. On: they go by themselves.
-  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead' };
+  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead', journey: 'Welcome text' };
   const msgsFor = (kind, id) => (_co.msgs || []).filter(m => m.person_kind === kind && String(m.person_id) === String(id));
   function msgsHtml(kind, id) {
     const list = msgsFor(kind, id).filter(m => ['draft', 'failed'].includes(m.status));
@@ -971,10 +971,22 @@
     return '<div class="st-box" style="margin-top:12px;border-color:var(--primary)"><b style="color:var(--primary)">Heard on calls and texts</b>' + status +
       (rows || (texts ? '' : '<div class="lt-sub">Nothing waiting. What it hears shows here, and promises go onto What we promised.</div>')) + texts + '</div>';
   }
+  // Consumer orientation completions (caringcds.com/consumer-orientation posts them; the hub may read them), kept 5 minutes.
+  const _or = { list: null, at: 0, busy: false };
+  function orientList() {
+    if (!_or.busy && Date.now() - _or.at > 5 * 60e3 && typeof _db !== 'undefined' && _db && _db.from) {
+      _or.busy = true;
+      Promise.resolve().then(() => _db.from('orientation_completions').select('name,course,completed_at').eq('course', 'consumer').order('completed_at', { ascending: false }).limit(500))
+        .then(r => { if (r && !r.error) _or.list = r.data || []; }).catch(() => {}).finally(() => { _or.at = Date.now(); _or.busy = false; rerender(); });
+    }
+    return _or.list || [];
+  }
+  const nm = x => String(x || '').toLowerCase().replace(/[^a-z]/g, '');
   function trackerCtx(c) {
     const cx = ctxFor(c), P = packetOf(c);
     const roster = (getData('attendants') || []).filter(a => a.status !== 'inactive' && String(a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name)))[0] || null;
-    return Object.assign({}, cx, { today: today(), roster: roster ? { name: roster.name } : null, att: T().attendantFor(c, attRows()),
+    const done = orientList().find(o => nm(o.name) === nm(c.name));
+    return Object.assign({}, cx, { today: today(), roster: roster ? { name: roster.name } : null, att: T().attendantFor(c, attRows()), orientDone: done ? String(done.completed_at || '').slice(0, 10) || true : false,
       packet: P === undefined ? { status: 'checking' } : { signed: !!(P && P.signed_at), done: !!(P && P.status === 'Done'), status: P ? P.status : '' } });
   }
   function trackerOf(c) { return T().tracker(withHeard(c), trackerCtx(c)); }
