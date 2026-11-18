@@ -840,7 +840,8 @@
   function coordItems() {
     if (!_co.busy && Date.now() - _co.at > 2 * 60e3 && typeof _db !== 'undefined' && _db) {
       _co.busy = true;
-      Promise.all([coordCall({ action: 'list' }), coordCall({ action: 'msgs' }).catch(() => ({ msgs: [] }))]).then(([j, m]) => { _co.items = j.items || []; _co.state = j.state; _co.msgs = m.msgs || []; _co.err = ''; })
+      Promise.all([coordCall({ action: 'list' }), coordCall({ action: 'msgs' }).catch(() => ({ msgs: [] })), coordCall({ action: 'chats' }).catch(() => ({ chats: [] }))])
+        .then(([j, m, ch]) => { _co.items = j.items || []; _co.state = j.state; _co.msgs = m.msgs || []; _co.chats = ch.chats || []; _co.err = ''; })
         .catch(e => { _co.err = String(e && e.message || e); }).finally(() => { _co.at = Date.now(); _co.busy = false; rerender(); });
     }
     return _co.items || [];
@@ -864,7 +865,7 @@
   }
   // ---------------------------------------------------------------- the texts it wrote (part 2, 2026-11-17)
   // Practice: each one waits here for a person to read it, change it if they like, and press Send. On: they go by themselves.
-  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do' };
+  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead' };
   const msgsFor = (kind, id) => (_co.msgs || []).filter(m => m.person_kind === kind && String(m.person_id) === String(id));
   function msgsHtml(kind, id) {
     const list = msgsFor(kind, id).filter(m => ['draft', 'failed'].includes(m.status));
@@ -896,14 +897,44 @@
     let box = document.getElementById('lpHeard');
     if (!box) { box = document.createElement('div'); box.id = 'lpHeard'; lp.parentNode.insertBefore(box, lp); }
     const items = coordItems().filter(i => i.person_kind === 'lead' && String(i.person_id) === _leadHeardId && ['open', 'suggested'].includes(i.status));
-    const msgs = msgsHtml('lead', _leadHeardId);
-    if (!items.length && !msgs) { box.innerHTML = ''; return; }
+    const msgs = msgsHtml('lead', _leadHeardId), chatBox = chatHtml(_leadHeardId);
+    if (!items.length && !msgs && !chatBox) { box.innerHTML = ''; return; }
     const label = { promise: 'We promised', their_word: 'They said they would', question: 'They asked', attendant: 'Attendant', start_date: 'Start date' };
     box.innerHTML = '<div class="card" style="padding:16px 18px;margin-bottom:14px;border:1px solid var(--primary)"><b style="color:var(--primary)">Heard on calls and texts</b>' +
       items.map(i => { const d = i.data || {}; return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(label[i.kind] || i.kind) + ':</b> ' + esc(d.what || d.text || d.name || d.note || d.date || '') +
         (i.due ? ' <span class="lt-sub' + (i.kind === 'promise' && String(i.due).slice(0, 10) < today() ? ' lt-red' : '') + '">' + (i.kind === 'their_word' ? 'check on ' : 'due ') + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : '') +
         '<div class="lt-sub">' + esc([i.source && i.source.line === 'cc' ? 'From the Caring Companions line' : 'From the CDS line', i.source && i.source.at ? shortDay(String(i.source.at).slice(0, 10)) : ''].join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>' +
-        '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Done', 'StartHub.coordDecide(' + i.id + ",'done',StartHub.mountLeadHeard)", true) + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>'; }).join('') + msgs + '</div>';
+        '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Done', 'StartHub.coordDecide(' + i.id + ",'done',StartHub.mountLeadHeard)", true) + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>'; }).join('') + chatBox + msgs + '</div>';
+  }
+  // ---------------------------------------------------------------- texting a new website lead (2026-11-17, her yes on the mockup)
+  const CHAT_STATUS = { new: 'Starting the conversation', asking: 'Texting with them', waiting: 'Needs a person', booked: 'Call booked with the consumer', followup: 'Follow up later', handoff: 'Needs a person to call', stopped: 'They asked us to stop texting', done: 'Done' };
+  const CHAT_LABEL = { consumer_first: 'Consumer', relation: 'Texting is their', consumer_phone: 'Consumer phone', county: 'County', medicaid: 'Medicaid', help: 'Help with', attendant: 'Caregiver in mind', attendant_relation: 'Caregiver is their', self_direct: 'Makes own decisions', other_agency: 'Other agency now', notes: 'Notes' };
+  const chatFor = leadId => (_co.chats || []).find(c => String(c.lead_id) === String(leadId)) || null;
+  function slotWords(k) { if (!k) return ''; const [d, t] = String(k).split('T'), [h, m] = t.split(':').map(Number); return shortDay(d) + ' at ' + (h % 12 || 12) + (m ? ':' + String(m).padStart(2, '0') : '') + (h < 12 ? ' AM' : ' PM'); }
+  function chatHtml(leadId) {
+    const c = chatFor(leadId); if (!c) return '';
+    const a = c.answers || {};
+    const rows = Object.keys(CHAT_LABEL).filter(k => a[k]).map(k => '<div class="lt-sub" style="color:var(--gray-800)"><span style="color:var(--gray-600)">' + esc(CHAT_LABEL[k]) + ':</span> ' + esc(k === 'consumer_first' ? [a.consumer_first, a.consumer_last].filter(Boolean).join(' ') : k === 'consumer_phone' ? _laFmtPhone(a[k]) : a[k]) + '</div>').join('');
+    const red = ['waiting', 'handoff'].includes(c.status);
+    return '<div style="padding:8px 0;border-top:1px solid var(--gray-200)"><b>Texting with them:</b> <span' + (red ? ' class="lt-red"' : '') + '>' + esc(CHAT_STATUS[c.status] || c.status) + '</span>' +
+      (c.booked_at ? ' · <b>' + esc(slotWords(c.booked_at)) + '</b>' : '') + (c.followup ? ' · check back ' + esc(shortDay(c.followup)) : '') +
+      (c.note ? '<div class="lt-sub' + (red ? ' lt-red' : '') + '">' + esc(c.note) + '</div>' : '') + rows +
+      (rows ? '<div style="margin-top:4px">' + btn('Put these answers on the lead', "StartHub.chatApply('" + q(String(leadId)) + "')", true) + '</div>' : '') +
+      '<div class="lt-sub">Every text, word for word, is under Calls and texts below.</div></div>';
+  }
+  // The answers from the texts go onto the lead as one note, plus the county, the call day as the follow-up, and the caregiver.
+  function chatApply(leadId) {
+    const c = chatFor(leadId); if (!c) return;
+    const a = c.answers || {};
+    edit('lead', leadId, p => {
+      const lines = Object.keys(CHAT_LABEL).filter(k => a[k]).map(k => CHAT_LABEL[k] + ': ' + (k === 'consumer_first' ? [a.consumer_first, a.consumer_last].filter(Boolean).join(' ') : a[k]));
+      p.notes = (p.notes || []).concat([{ date: today(), text: 'From texting with them' + (c.booked_at ? ' (call booked ' + slotWords(c.booked_at) + ')' : '') + ':\n' + lines.join('\n') }]);
+      if (!p.county && a.county) p.county = a.county.replace(/\s+county$/i, '');
+      if (c.booked_at) p.followup = String(c.booked_at).slice(0, 10); else if (c.followup && !p.followup) p.followup = c.followup;
+      if (a.attendant && !(p.attendant && p.attendant.name)) p.attendant = Object.assign({}, p.attendant, { name: a.attendant });
+    });
+    if (typeof _ghlToast === 'function') _ghlToast('✅ The answers from the texts are on the lead.');
+    if (typeof renderLeadProfile === 'function') renderLeadProfile(); else mountLeadHeard();
   }
   function heardBadge(c) {
     const n = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status)).length + msgsFor('consumer', c.id).filter(m => m.status === 'draft').length;
@@ -1190,5 +1221,5 @@
   }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard, chatApply };
 })();
