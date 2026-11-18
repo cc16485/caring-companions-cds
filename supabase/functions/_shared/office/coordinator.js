@@ -48,7 +48,7 @@ const SYSTEM = [
   'start_date: only when a start date for care was given or changed on this call (by the state, our office, or the family). date: YYYY-MM-DD, empty if it was only said that the date will change or is unknown. said_by: who gave it. note: a few words, for example "moving by December 1, will call with the new date".',
   'attendant: the person who will be the attendant, only when their name was said: full name as spelled on the call, phone digits only if said aloud, email exactly as spelled out, relation to the consumer in one or two words.',
   'questions: questions they asked that were not answered on the call.',
-  'about_person: false when this is clearly not about this person (a wrong number, a different client).',
+  'about_person: false when this is clearly not about this person (a wrong number, a different client). Also false when the call is about Caring Companions In-Home Senior Care work rather than CDS: a caregiver\'s shifts or schedule with a Caring Companions client, covering a shift, training or hiring for Caring Companions. Many people work for both; only CDS matters here (their own CDS enrollment, their attendant, their paperwork, the state, their start date, CDS clock-in and pay).',
   'The office staff are Samantha, Krystal (sometimes written Crystal), Zach and the Caring Companions team. Names in transcripts are often misspelled by the transcriber: prefer the spelling the hub has, or letters spelled out on the call.',
   'Never use em dashes. Plain words. Do not mention the transcript or yourself.'
 ].join('\n');
@@ -88,11 +88,12 @@ export function cleanExtract(resp, callDay) {
 export function watchList(consumers, pipeline, attendants) {
   const out = [];
   const closed = s => /^closed|^lost|^not_?interested/i.test(String(s || ''));
-  (consumers || []).filter(c => c && c.status === 'starting').forEach(c => out.push({ kind: 'consumer', id: String(c.id), name: c.name || '', start: c.cdsStartDate || '',
+  const real = x => !/^(example|test)\b/i.test(String(x && x.name || '').trim());   // practice records are never watched
+  (consumers || []).filter(c => c && c.status === 'starting' && real(c)).forEach(c => out.push({ kind: 'consumer', id: String(c.id), name: c.name || '', start: c.cdsStartDate || '',
     attendant: (c.starting && c.starting.attendantName) || '', phones: [c.phone, ...(c.relatedPeople || []).map(p => p && p.phone)].map(ten).filter(Boolean),
     leadId: c.starting && c.starting.leadId ? String(c.starting.leadId) : '' }));
   const onList = new Set(out.map(p => p.leadId).filter(Boolean));
-  (pipeline || []).filter(p => p && p.id && !p.movedToConsumers && !p.startingId && !closed(p.status) && !onList.has(String(p.id))).forEach(p => out.push({ kind: 'lead', id: String(p.id), name: p.name || '',
+  (pipeline || []).filter(p => p && p.id && real(p) && !p.movedToConsumers && !p.startingId && !closed(p.status) && !onList.has(String(p.id))).forEach(p => out.push({ kind: 'lead', id: String(p.id), name: p.name || '',
     start: '', attendant: (p.attendant && p.attendant.name) || '', phones: [p.phone, (p.attendant || {}).phone, ...(p.relatedPeople || []).map(r => r && r.phone)].map(ten).filter(Boolean) }));
   (attendants || []).forEach(a => { const who = out.find(p => norm(p.name) && norm(a.consumer_name) === norm(p.name)); const ph = ten(a.phone); if (who && ph && !who.phones.includes(ph)) who.phones.push(ph); });
   out.forEach(p => { p.phones = [...new Set(p.phones)]; });
@@ -107,14 +108,21 @@ export function itemsFrom(person, source, x) {
   x.promises.forEach(p => items.push(base('promise', p, 'open', p.due)));
   x.theirWord.forEach(p => items.push(base('their_word', p, 'open', p.due)));
   if (x.startDate && (x.startDate.date ? x.startDate.date !== person.start : true)) items.push(base('start_date', x.startDate, 'suggested', source.at.slice(0, 10)));
-  if (x.attendant && norm(x.attendant.name) !== norm(person.attendant)) items.push(base('attendant', x.attendant, 'suggested', source.at.slice(0, 10)));
+  // An attendant: not the person themselves, not the one on file, and "Iris D." is the same as "Iris Dorsey" (first name + last initial).
+  const short = n => { const w = String(n || '').toLowerCase().replace(/[^a-z ]/g, '').split(/\s+/).filter(Boolean); return w.length ? w[0] + (w[1] || '').slice(0, 1) : ''; };
+  if (x.attendant && short(x.attendant.name) !== short(person.name) && short(x.attendant.name) !== short(person.attendant)) {
+    const it = base('attendant', x.attendant, 'suggested', source.at.slice(0, 10)); it.key = person.kind + ':' + person.id + ':attendant:' + short(x.attendant.name); items.push(it);
+  }
   x.questions.forEach(q => items.push(base('question', { text: q }, 'open', source.at.slice(0, 10))));
   return items;
 }
 
 // What My Week shows for an item (one line and a note), or null for items with nothing to do on a day.
+export const WEEK_BACK_DAYS = 7;   // older than a week: on the person's profile only, never filling My Week with old calls
 export function weekLine(it, today) {
   const d = it.data || {}, who = it.person_name;
+  const when = String(it.due || (it.source && it.source.at) || today).slice(0, 10);
+  if (when < new Date(Date.parse(today + 'T12:00:00Z') - WEEK_BACK_DAYS * 864e5).toISOString().slice(0, 10)) return null;
   if (it.kind === 'promise') return { t: who + ': we promised ' + d.what, date: it.due || today };
   if (it.kind === 'their_word') return { t: who + ': check on ' + d.what, date: it.due || today };
   if (it.kind === 'start_date') return { t: who + ': start date ' + (d.date ? 'heard on a call: ' + d.date : 'is changing') + ', confirm it', date: today };
@@ -196,7 +204,7 @@ export function createCoordinator({ db, ai, ccFeed, nowMs = () => Date.now() }) 
 
   // Her My Week: one item per open promise or suggestion, gone when the office marks it done or answers it.
   async function syncWeek(today) {
-    const open = await q("select id, kind, person_name, data, due from cds_coord_items where status in ('open','suggested')");
+    const open = await q("select id, kind, person_name, data, source, due::text as due from cds_coord_items where status in ('open','suggested')");
     const want = new Map();
     open.forEach(it => { const w = weekLine(it, today); if (w) want.set('i:coord-' + it.id, w); });
     const have = await q("select id from owner_calendar where id like 'i:coord-%'");
@@ -212,7 +220,7 @@ export function createCoordinator({ db, ai, ccFeed, nowMs = () => Date.now() }) 
 
   // The hub: open items for everyone (or one person), and the office's answer to one.
   async function list({ all = false } = {}) {
-    const items = await q(`select id, person_kind, person_id, person_name, kind, data, source, status, due, created_at, decided_by, decided_at from cds_coord_items
+    const items = await q(`select id, person_kind, person_id, person_name, kind, data, source, status, due::text as due, created_at, decided_by, decided_at from cds_coord_items
       where ${all ? "created_at > now() - interval '90 days'" : "status in ('open','suggested') or decided_at > now() - interval '30 days'"} order by created_at desc limit 500`);
     const s = await settings();
     return { items, state: s.state || null, live: s.live !== false };
