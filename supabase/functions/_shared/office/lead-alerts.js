@@ -347,7 +347,9 @@ export function createLeadAlerts(deps) {
     const mine = await one(`update cds_match_settings set value = jsonb_set(value, '{last_sent}', to_jsonb($1::text)), updated_at = now()
                             where key='morning_email' and coalesce(value->>'last_sent','') <> $1 returning key`, [c.date]);
     if (!mine && !force) return { ok: true, skipped: 'already sent today' };
-    const s = await store(['consumers', 'pipeline', 'authorizations', 'attendantWages']);
+    const s = await store(['consumers', 'pipeline', 'authorizations', 'attendantWages', 'checkinCalls']);
+    // a finished automated check-in call counts as the month's call, as on Today (2026-11-17)
+    if (Array.isArray(s.consumers)) R.mergeCheckinCalls(s.consumers, s.checkinCalls);
     const siteLeads = await q('select * from site_leads where agency_id=$1 and not coalesce(archived,false)', [AGENCY_ID]);
     const calls = (await callsFor(siteLeads.map(r => r.id))).concat(await commsCallsFor(siteLeads));
     // Communication Center (2026-10-22): once live, its follow-ups join step 4. (Website leads the office

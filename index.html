@@ -25,7 +25,7 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Shared with the 8am morning email so the two never disagree (2026-10-19). -->
-<script src="supabase/functions/_shared/office/cds-rules.js?v=42"></script>
+<script src="supabase/functions/_shared/office/cds-rules.js?v=43"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=9"></script>
 <script src="supabase/functions/_shared/office/start-tracker.js?v=1"></script><!-- 2026-11-17 the start tracker (shared with the CDS Coordinator) -->
 <script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><script src="my-week.js?v=20261117m"></script><script src="annual/annual-report.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
@@ -5204,6 +5204,8 @@ async function _loadAllData() {
     .eq('agency_id', AGENCY_ID)
     .not('data_key', 'in', '(' + CLAIM_STORES.join(',') + ')');
   if (data) data.forEach(row => { _store[row.data_key] = row.data_value; });
+  // A finished automated check-in call counts as that month's call (2026-11-17, checkin-calls.js).
+  if (window.CDSRules && CDSRules.mergeCheckinCalls) CDSRules.mergeCheckinCalls(_store.consumers, _store.checkinCalls);
   _ghlSeed();   // who was already here: only people added after this go to GoHighLevel on their own
   // 2026-10-08: an old GoHighLevel key may still be saved in outreachSettings; never keep it in the page.
   if (_store.outreachSettings && typeof _store.outreachSettings === 'object') delete _store.outreachSettings.apiKey;
@@ -6099,6 +6101,12 @@ function openContactLog(cid, key) {
 
   if (existing && (existing.health === 'yes' || existing.circ === 'yes')) {
     document.getElementById('clm_dhss_alert').style.display = 'block';
+  }
+  if (existing && existing.auto === 'voice') {
+    const f = document.getElementById('clm_from');
+    f.textContent = 'Recorded by the automated check-in call on ' + existing.date + '. Saving here replaces it with your own notes.';
+    f.style.display = 'block';
+    document.getElementById('clm_existing_note').style.display = 'none';
   }
 
   clmRefresh();
