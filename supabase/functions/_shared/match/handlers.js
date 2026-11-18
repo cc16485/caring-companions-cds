@@ -1417,6 +1417,25 @@ export function createMatch(deps) {
     const r = await packet.packetJob();
     let e; try { e = await enroll.enrollJob(); } catch (err) { e = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
     return { ...r, enroll: e };
+  },
+  // The CDS Coordinator sends packets (2026-11-18, her ask) through the very same code as the hub's buttons, as
+  // 'cds-coordinator'. Never twice: a packet that already went out (from the hub or before) is not sent again.
+  async coordEnrollSend({ lead, consumer_id }) {
+    const L = lead || {}, id = String(L.id || '').trim().slice(0, 80), cid = String(consumer_id || '').trim().slice(0, 80);
+    if (!id) fail('No lead');
+    const had = await one(`select lead_id from cds_enroll_packets where sent_at is not null and (lead_id = $1 or ($2 <> '' and consumer_id = $2)) limit 1`, [id, cid]);
+    if (had) return { ok: true, already: true };
+    const r = await enroll.office.enrollSend({ staff: 'cds-coordinator', lead: L });
+    if (cid) { try { await enroll.office.enrollLinkConsumer({ staff: 'cds-coordinator', lead_id: id, consumer_id: cid }); } catch { /* the profile still finds it by name */ } }
+    const m = r.messages || [];
+    return { ok: true, status: m.includes('sent') ? 'sent' : m.includes('practice') ? 'practice' : m.includes('failed') ? 'failed' : m.length ? 'held' : 'failed', messages: m };
+  },
+  async coordAttendantSend({ name, phone, email, consumer }) {
+    const s = await packet.office.packetStartFromLead({ staff: 'cds-coordinator', name, phone, email, consumer });
+    const had = await one(`select 1 as y from cds_outbox where pool_id = $1 and template = 'packet_att_link' and status = 'sent' limit 1`, [s.pool_id]);
+    if (had) return { ok: true, already: true, pool_id: s.pool_id };
+    const r = await packet.office.packetSendLink({ staff: 'cds-coordinator', pool_id: s.pool_id });
+    return { ok: true, status: r.status, pool_id: s.pool_id };
   } };
   const ROLES = { public: pub, family, caregiver, staff, job, consumer: { ...enroll.consumer, ...sign.consumer } };
   return {

@@ -132,6 +132,23 @@ with sync_playwright() as pw:
     pg.evaluate("()=>{ _profTab='overview'; renderProfile(); }"); pg.wait_for_timeout(200)
     pg.click('#page-profile input[aria-label="Done"] >> nth=0'); pg.wait_for_timeout(300)
     ck('checking off a heard promise answers it on the server', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='decide'&&b.id===7&&b.answer==='done')"), pg.evaluate("()=>window.__coordAsked"))
+    # ---- 2026-11-18: a phone found by name, a need, and a packet draft
+    pg.evaluate("""()=>{ const c = getData('consumers').find(x=>x.id==='C1'); const keep = c.phone; window.__keepPhone = keep; c.phone = ''; setData('consumers', getData('consumers').map(x=>x.id==='C1'?c:x));
+      window.__coordItems = [{ id: 31, person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', kind: 'contact', status: 'suggested', data: { for: 'consumer', name: 'Dana Started', phone: '4175550123', where: 'the Caring Companions line', calls: 3, last: '2026-11-16' }, source: { kind: 'lookup', at: '2026-11-18T15:00:00Z' } },
+        { id: 32, person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', kind: 'need_contact', status: 'open', data: { who: 'Andrea', what: 'the attendant application (and their last name)' }, source: {} }];
+      window.__coordMsgs = [{ id: 41, kind: 'packet', person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', to_name: 'Dana Started', last4: '0123', body: 'Send Dana Started the enrollment packet: their private link by text.', status: 'draft' }];
+      StartHub.coordRefresh(); }""")
+    pg.wait_for_timeout(600); pg.evaluate("()=>{ openProfile('C1'); _profTab='overview'; renderProfile(); }"); pg.wait_for_timeout(300)
+    pv = pg.inner_text('#page-profile')
+    ck('found by name: the phone, where, and check it is them', 'Found a phone for Dana Started' in pv and '(417) 555-0123' in pv and 'Caring Companions line, 3 calls' in pv and 'check it is really them' in pv, pv[:1500])
+    ck('need a phone: Andrea, with the last name ask', 'Need a phone for Andrea' in pv and 'last name' in pv)
+    ck('packet draft: words shown, not a text box to edit', 'Enrollment packet, ready to send' in pv and pg.evaluate("()=>!document.getElementById('stMsg41')"))
+    shot(pg, '02e-profile-found-phone')
+    pg.click('#page-profile button:has-text("Use it")'); pg.wait_for_timeout(400)
+    ck('Use it: the phone goes on the consumer, the item is answered', pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').phone") == '(417) 555-0123' and pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='decide'&&b.id===31&&b.answer==='used')"), pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').phone"))
+    pg.click('#page-profile button:has-text("Send") >> nth=0'); pg.wait_for_timeout(400)
+    ck('Send on the packet draft asks the Coordinator to send it', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='send'&&b.id===41)"))
+    pg.evaluate("()=>{ const c = getData('consumers').find(x=>x.id==='C1'); c.phone = window.__keepPhone; setData('consumers', getData('consumers').map(x=>x.id==='C1'?c:x)); window.__coordItems = []; window.__coordMsgs = []; StartHub.coordRefresh(); }"); pg.wait_for_timeout(500)
     # ---- part 2: texts it wrote, and the lead box
     pg.evaluate("""()=>{ window.__coordMsgs = [{ id: 31, kind: 'clock', person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', to_name: 'Dana Started', last4: '0111', status: 'draft',
         body: 'Hi Dana, this is Krystal at Caring Companions. Your CDS care starts soon! Any questions? Just reply here or call (417) 218-2888.' },
