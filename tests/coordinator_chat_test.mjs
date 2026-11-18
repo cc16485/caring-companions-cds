@@ -38,6 +38,7 @@ const T = { leads: [{ id: 'a1', submitted_at: '2026-11-17T20:14:00Z', phone: '41
 let cid = 1, mid = 1;
 const db = { async query(t, p = []) {
   if (/key = 'test_recipients'/.test(t)) return { rows: [{ value: { phones: T.tests } }] };
+  if (/key = 'lead_texts'/.test(t)) return { rows: T.leadTexts ? [{ value: { live: T.leadTexts === 'on' } }] : [] };
   if (/from site_leads l where l.submitted_at/.test(t)) return { rows: T.leads.filter(l => l.submitted_at > p[0] && l.phone && (!l.from_kind || l.from_kind === 'prospect') && !T.chats.some(c => c.site_lead_id === String(l.id))) };
   if (/insert into cds_lead_chats/.test(t)) { T.chats.push({ id: cid++, site_lead_id: p[0], lead_id: p[1], phone: p[2], name: p[3], status: 'new', answers: {}, last_seen_at: '2026-11-17T20:14:00Z', created_at: '2026-11-17T20:14:00Z' }); return { rows: [] }; }
   if (/from cds_lead_chats c\s+join site_leads/.test(t)) return { rows: T.chats.filter(c => ['new', 'asking', 'waiting'].includes(c.status)).map(c => Object.assign({}, T.leads.find(l => String(l.id) === c.site_lead_id), c)) };
@@ -53,7 +54,7 @@ const db = { async query(t, p = []) {
   if (/insert into cds_coord_msgs/.test(t)) { const m = { id: mid++, key: p[0], person_id: p[1], phone: p[4], body: p[5], status: 'draft' }; T.msgs.push(m); return { rows: [{ id: m.id }] }; }
   if (/update cds_coord_msgs set status = 'sent'/.test(t)) { T.msgs.find(m => m.id === p[0]).status = 'sent'; return { rows: [] }; }
   if (/update cds_coord_msgs set status = 'failed'/.test(t)) { Object.assign(T.msgs.find(m => m.id === p[0]), { status: 'failed', error: p[1] }); return { rows: [] }; }
-  if (/select id, phone, body from cds_coord_msgs where kind = 'chat' and status = 'draft'/.test(t)) return { rows: T.msgs.filter(m => m.status === 'draft') };
+  if (/select id, phone, body from cds_coord_msgs where kind = 'chat' and status = 'draft' and key like '%:auto'/.test(t)) return { rows: T.msgs.filter(m => m.status === 'draft' && /:auto$/.test(m.key)) };
   if (/select id, name, status, answers, followup/.test(t)) return { rows: T.chats.filter(c => c.id === p[0]) };
   if (/insert into owner_calendar/.test(t)) { T.cal.set(p[0], JSON.parse(p[1])); return { rows: [] }; }
   throw new Error('unexpected ' + t.slice(0, 80));
@@ -90,6 +91,23 @@ ok(r.stopped === 1 && T.chats.find(c => c.phone === '4175550111').status === 'st
 const before = asked.length; T.comms.push({ phone10: '4175550111', at: '2026-11-17T20:40:00Z', body: 'hello?' });
 await chat.run(set);
 ok(asked.length === before, 'nothing more after STOP');
+// The Switches card (her "lets go live with it"): on = sent by itself in hours, even when the setting says practice.
+T.leads.push({ id: 'a5', submitted_at: '2026-11-17T20:16:30Z', phone: '4175550133', from_kind: null, full_name: 'Sam Sample', form_name: 'Get care' });
+T.leadTexts = 'on'; const nSent = sent.length;
+r = await chat.run(set);
+ok(sent.length === nSent + 1 && sent[sent.length - 1].phone === '+14175550133', 'switch on: the first text goes by itself (2:16 PM, in hours)', sent.slice(-1));
+T.leads.push({ id: 'a6', submitted_at: '2026-11-17T20:16:40Z', phone: '4175550134', from_kind: null, full_name: 'Al Sample', form_name: 'Get care' });
+T.leadTexts = 'off'; const n2 = sent.length;
+r = await chat.run(set);
+ok(sent.length === n2 && T.msgs[T.msgs.length - 1].status === 'draft', 'switch off: back to waiting for Send');
+const night = C.createChat({ db, ai, send, nowMs: () => Date.parse('2026-11-18T04:00:00Z') });
+T.leads.push({ id: 'a7', submitted_at: '2026-11-17T20:16:50Z', phone: '4175550135', from_kind: null, full_name: 'Jo Sample', form_name: 'Get care' });
+T.leadTexts = 'on'; const n3 = sent.length;
+await night.run(set);
+ok(sent.length === n3 && T.msgs[T.msgs.length - 1].status === 'draft', 'switch on but 10 PM: waits for 9 AM');
+const morning = C.createChat({ db, ai, send, nowMs: () => Date.parse('2026-11-18T15:05:00Z') });
+await morning.run(set);
+ok(sent.length === n3 + 1 && sent[sent.length - 1].phone === '+14175550135', '9 AM: the night reply goes; old Practice drafts do not', sent.slice(-2).map(x => x.phone));
 r = await C.createChat({ db, ai, send, nowMs: () => NOW }).run({ lead_chat: 'off' });
 ok(r.chat === 'off', 'off: nothing at all');
 console.log(pass + ' passed, ' + failN + ' failed');
