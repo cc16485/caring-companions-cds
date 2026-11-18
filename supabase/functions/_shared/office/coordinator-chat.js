@@ -98,8 +98,11 @@ export function createChat({ db, ai, send, nowMs = () => Date.now() }) {
   async function testPhones() { const r = await one("select value from cds_match_settings where key = 'test_recipients'"); return ((r && r.value && r.value.phones) || []).map(ten).filter(Boolean); }
 
   async function run(set) {
-    const mode = ['off', 'practice', 'on'].includes(set.lead_chat) ? set.lead_chat : 'off';
+    let mode = ['off', 'practice', 'on'].includes(set.lead_chat) ? set.lead_chat : 'off';
     if (mode === 'off') return { chat: 'off' };
+    // The Switches card (2026-11-17, her "lets go live with it"): "Texting new website leads" on = texts go by themselves.
+    const sw = await one("select value from cds_match_settings where key = 'lead_texts'");
+    if (sw && sw.value && typeof sw.value === 'object') mode = sw.value.live === true ? 'on' : 'practice';
     const now = nowMs(), today = todayOf(now), tests = await testPhones(), hours = sendingHours(now);
     const from = set.lead_chat_from || new Date(now).toISOString();
     // 1. New website leads since the switch went on.
@@ -136,19 +139,20 @@ export function createChat({ db, ai, send, nowMs = () => Date.now() }) {
       const status = t.state === 'stop' ? 'stopped' : t.state === 'ready' ? 'ready' : t.state === 'followup' ? 'followup' : t.state === 'handoff' || t.state === 'not_a_fit' ? 'handoff' : 'asking';
       await q(`update cds_lead_chats set status = $2, answers = coalesce(answers, '{}'::jsonb) || $3::jsonb, followup = coalesce(nullif($4, '')::date, followup), note = nullif($5, '') where id = $1`,
         [c.id, status, JSON.stringify(t.answers), t.followup, t.handoff]);
-      const m = await one(`insert into cds_coord_msgs (key, kind, person_kind, person_id, person_name, to_name, phone, body, status)
-        values ($1, 'chat', 'lead', $2, $3, $4, $5, $6, 'draft') returning id`, ['chat:' + c.id + ':' + now, c.lead_id, c.name, c.name, c.phone, t.reply]);
-      made++;
       const live = mode === 'on' || tests.includes(c.phone);
+      // ':auto' = written while texting was on, so it may go by itself later (a night reply at 9 AM). A Practice draft never does.
+      const m = await one(`insert into cds_coord_msgs (key, kind, person_kind, person_id, person_name, to_name, phone, body, status)
+        values ($1, 'chat', 'lead', $2, $3, $4, $5, $6, 'draft') returning id`, ['chat:' + c.id + ':' + now + (live ? ':auto' : ''), c.lead_id, c.name, c.name, c.phone, t.reply]);
+      made++;
       if (live && (hours || tests.includes(c.phone))) {
         try { await send({ phone: '+1' + c.phone, text: t.reply }); await q(`update cds_coord_msgs set status = 'sent', sent_at = now(), sent_by = 'coordinator' where id = $1`, [m.id]); sent++; }
         catch (e) { await q(`update cds_coord_msgs set status = 'failed', error = $2 where id = $1`, [m.id, String(e && e.message || e).slice(0, 200)]); }
       }
       if (status === 'ready' || status === 'followup' || status === 'handoff') await weekFor(c.id);
     }
-    // 3. Practice drafts a person already sent count as the conversation; in 'on' mode, drafts made at night go at 9 AM.
+    // 3. In 'on' mode, replies written at night (':auto') go at 9 AM. Practice drafts wait for a person, always.
     if (mode === 'on' && hours) {
-      for (const d of await q(`select id, phone, body from cds_coord_msgs where kind = 'chat' and status = 'draft' and created_at > now() - interval '1 day' order by id limit 10`)) {
+      for (const d of await q(`select id, phone, body from cds_coord_msgs where kind = 'chat' and status = 'draft' and key like '%:auto' and created_at > now() - interval '1 day' order by id limit 10`)) {
         try { await send({ phone: '+1' + d.phone, text: d.body }); await q(`update cds_coord_msgs set status = 'sent', sent_at = now(), sent_by = 'coordinator' where id = $1`, [d.id]); sent++; }
         catch (e) { await q(`update cds_coord_msgs set status = 'failed', error = $2 where id = $1`, [d.id, String(e && e.message || e).slice(0, 200)]); }
       }
