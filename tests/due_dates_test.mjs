@@ -78,7 +78,7 @@ ok(!line(W.items({ lastRun: { ok: true }, live: true, shifts: Object.assign({ at
 ok(W.shiftsThisMonth(shifts, now) === 4 && W.EVV_GOAL === 0.05, 'shifts this month for the 5% EVV standard');
 
 // Reports line on Today (step 1) and its button.
-const s1 = R.dailyRoutine({ consumers: [], pipeline: [], quarterStatus: { q3: 'submitted', q3_for: '2026-10-31' } }, now).find(s => s.n === 1);
+const s1 = R.dailyRoutine({ consumers: [], pipeline: [], quarterStatus: { q3: 'submitted', q3_for: '2026-10-30' } }, now).find(s => s.n === 1);
 const rep = line(s1.items, /state report/);
 ok(rep && rep.people.map(p => p.key).join() === 'des,f941,mo941' && rep.people[0].act === 'report' && rep.people[0].due === '2026-10-31', 'Q3 marked sent: DES, Federal 941 and MO 941 left, Mark it sent');
 ok(!R.dailyRoutine({ consumers: [], pipeline: [] }, now).find(s => s.n === 1).items.length, 'no quarterStatus handed in: no reports line');
@@ -94,6 +94,22 @@ ok(R.fusionDue({}, new Date('2026-10-26T12:00:00')).length === 1, 'Fusion: back 
 
 // Annual Service Report: Jan 30 (her yes 2026-11-13).
 ok(R.reportDue('annual', new Date('2026-12-15T12:00:00')).due === '2027-01-30', 'Annual Service Report is due Jan 30');
+
+// Financial & Service Reports: 30 days after the quarter (rules check, her yes 2026-11-17); tax filings stay on the 31st.
+ok(['q1', 'q2', 'q3', 'q4'].map(k => R.reportDue(k, new Date('2026-06-15T12:00:00')).due.slice(5)).join() === '04-30,07-30,10-30,01-30' &&
+   R.reportDue('f941', new Date('2026-10-05T12:00:00')).due === '2026-10-31', 'F&S reports due the 30th; 941 still the 31st');
+// Suspected fraud to MMAC within 2 business days (13 CSR 70-3.320(2)(I)).
+const fr = line(R.dailyRoutine({ consumers: [{ id: 'c1', name: 'Ann Alpha', status: 'active' }], pipeline: [], complaints: [
+  { id: 'x1', date: '2026-10-22', consumerId: 'c1', category: 'falsification', status: 'open' },
+  { id: 'x2', date: '2026-10-22', category: 'program_fraud', status: 'unfounded' },
+  { id: 'x3', date: '2026-10-22', category: 'consumer_fraud', status: 'open', mmacReported: '2026-10-23' },
+  { id: 'x4', date: '2026-10-22', category: 'neglect', status: 'open' }] }, now).find(s => s.n === 1).items, /MMAC/);
+ok(fr && fr.bad && fr.people.length === 1 && fr.people[0].key === 'x1' && fr.people[0].act === 'mmac' && fr.people[0].name === 'Ann Alpha' && fr.people[0].due === '2026-10-26',
+   'fraud complaint on Today, due 2 business days later (Thu to Mon); unfounded, reported and non-fraud left off');
+ok(!line(R.dailyRoutine({ consumers: [], pipeline: [] }, now).find(s => s.n === 1).items, /MMAC/), 'no complaints handed in: no line (8am email unchanged)');
+// Bulk-entered months: counted as done, flagged as weak evidence.
+const bk = R.ongoingRequirements({ cdsStartDate: '2026-01-01', contacts: { '2026-09': { date: '2026-09-15', backfilled: true }, '2026-10': { date: '2026-10-15', notes: 'talked' } } }, now).monthly;
+ok(bk.bulk === 1 && bk.doneThisMonth, 'one bulk month counted, this month done');
 
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

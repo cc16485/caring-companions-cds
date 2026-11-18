@@ -25,7 +25,8 @@ ok(R.checkCurrent('audit2', { at: '2026-10-01' }, now) && !R.checkCurrent('audit
 ok(!R.checkCurrent('audit1', true, now) && R.checkCurrent('ops1', true, now), 'old dateless tick: not for a recurring box, still for a one-time box');
 ok(!R.CHECK_CYCLES.hipaa2 && !R.CHECK_CYCLES.emg1, 'HIPAA training and the disaster plan are yearly agency dates, not boxes');
 const due = R.checklistDue({ audit2: { at: '2026-10-02' } }, now)[0];
-ok(due && due.people.map(p => p.key).join() === 'audit1' && due.people[0].due === '2026-10-24', 'Today: this week\'s EVV review, due Saturday; quarter audits not yet (69 days left)');
+ok(due && due.people.map(p => p.key).join() === 'audit1,evv8' && due.people.every(p => p.due === '2026-10-24'), 'Today: this week\'s EVV review and aggregator log-in, due Saturday; quarter audits not yet (69 days left)');
+ok(R.CHECK_CYCLES.evv8.every === 'week' && !R.checklistDue({ audit1: { at: '2026-10-19' }, evv8: { at: '2026-10-20' } }, now).length, 'aggregator log-in ticked this week: gone (13 CSR 70-3.320(2)(K), 2026-11-17)');
 const dec = R.checklistDue({}, new Date('2026-12-10T12:00:00'))[0].people.map(p => p.key);
 ok(['audit1', 'audit2', 'audit3', 'emg3', 'staff4'].every(k => dec.includes(k)) && !dec.includes('audit4') && !dec.includes('fin3'), 'December: weekly, quarterly and yearly boxes; per-consumer contacts and reports stay off');
 const D = R.dashboardNumbers({ checks: { audit1: { at: '2026-10-19' }, audit2: true, ops1: true }, checklistTotal: 67, now });
