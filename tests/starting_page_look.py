@@ -38,7 +38,7 @@ async([PIPE, CONS, on, table])=>{
   window.__coordAsked = [];
   const realFetch = window.__realFetch || window.fetch; window.__realFetch = realFetch;
   window.fetch = async (u, o) => { if (String(u).includes('cds-coordinator')) { const b = JSON.parse(o.body); window.__coordAsked.push(b);
-      return new Response(JSON.stringify(b.action === 'list' ? { items: window.__coordItems || [], state: { last_run: new Date().toISOString() } } : { ok: true }), { status: 200 }); }
+      return new Response(JSON.stringify(b.action === 'list' ? { items: window.__coordItems || [], state: { last_run: new Date().toISOString() } } : b.action === 'msgs' ? { msgs: window.__coordMsgs || [] } : { ok: true }), { status: 200 }); }
     return realFetch(u, o); };
   cdsMatchApi = async (a) => a === 'enrollGet' ? { packet: null, status: { label: 'Not sent' } } : a === 'tasks' ? { tasks: [] } : {};
   window.syncOneToGhl = async () => {};
@@ -132,7 +132,25 @@ with sync_playwright() as pw:
     pg.evaluate("()=>{ _profTab='overview'; renderProfile(); }"); pg.wait_for_timeout(200)
     pg.click('#page-profile input[aria-label="Done"] >> nth=0'); pg.wait_for_timeout(300)
     ck('checking off a heard promise answers it on the server', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='decide'&&b.id===7&&b.answer==='done')"), pg.evaluate("()=>window.__coordAsked"))
-    pg.evaluate("()=>{ _profTab='ready'; renderProfile(); }"); pg.wait_for_timeout(200)
+    # ---- part 2: texts it wrote, and the lead box
+    pg.evaluate("""()=>{ window.__coordMsgs = [{ id: 31, kind: 'clock', person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', to_name: 'Dana Started', last4: '0111', status: 'draft',
+        body: 'Hi Dana, this is Krystal at Caring Companions. Your CDS care starts soon! Any questions? Just reply here or call (417) 218-2888.' },
+      { id: 32, kind: 'check', person_kind: 'lead', person_id: 'L2', person_name: 'Lee Sample', to_name: 'Lee', last4: '0188', status: 'draft', body: 'Hi Lee, just checking in. Just reply here or call (417) 218-2888.' }];
+      window.__coordItems.push({ id: 12, person_kind: 'lead', person_id: 'L2', person_name: 'Lee Sample', kind: 'their_word', data: { what: 'Text us the DCN' }, due: '2026-11-17', status: 'open', source: { line: 'cds', kind: 'call', at: '2026-11-10T15:00:00Z' } });
+      StartHub.coordRefresh(); }""")
+    pg.wait_for_timeout(600); pg.evaluate("()=>{ _profTab='overview'; renderProfile(); }"); pg.wait_for_timeout(300)
+    pv = pg.inner_text('#page-profile')
+    ck('profile: Texts it wrote, with the words, Send and Skip', 'Texts it wrote' in pv and 'Clock-in help before the start date' in pv and 'phone ending 0111' in pv, pv[:1500])
+    pg.fill('#stMsg31', 'Hi Dana, changed words. Just reply here or call (417) 218-2888.'); pg.click('#page-profile button:has-text("Send") >> nth=0'); pg.wait_for_timeout(400)
+    ck('Send sends the words as changed', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='send'&&b.id===31&&/changed words/.test(b.body))"), pg.evaluate("()=>window.__coordAsked.slice(-3)"))
+    shot(pg, '02e-profile-texts')
+    pg.evaluate("()=>openLeadProfile('L2')"); pg.wait_for_timeout(500)
+    lpv = pg.inner_text('#page-leadprofile')
+    ck('lead profile: Heard on calls and texts with their word and the check-in draft', 'Heard on calls and texts' in lpv and 'Text us the DCN' in lpv and 'Checking in on what they said' in lpv, lpv[:1200])
+    shot(pg, '02f-lead-heard')
+    pg.click('#lpHeard button:has-text("Skip")'); pg.wait_for_timeout(400)
+    ck('Skip on the lead answers it', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='skip'&&b.id===32)"))
+    pg.evaluate("()=>{ openProfile('C1'); _profTab='ready'; renderProfile(); }"); pg.wait_for_timeout(300)
     ck('clock-in call recorded with the question', pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').starting.clockCall.questions") == 'Which app do I download?' and 'Done' in pg.inner_text('#page-profile'))
     pg.evaluate("()=>showPage('starting')"); pg.wait_for_timeout(200)
     pg.click('#startingPage button:has-text("Start their profile")'); pg.wait_for_timeout(400)

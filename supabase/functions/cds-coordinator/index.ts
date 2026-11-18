@@ -8,7 +8,8 @@
 // It never texts, emails or calls anyone. Deploy: supabase functions deploy cds-coordinator --project-ref siivpekcaryeyttszwav --no-verify-jwt
 import postgres from 'npm:postgres@3.4.4';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
-import { createCoordinator, extractRequest, cleanExtract } from '../_shared/office/coordinator.js';
+import { createCoordinator, extractRequest, cleanExtract, COORD_MODEL } from '../_shared/office/coordinator.js';
+import { createHands } from '../_shared/office/coordinator-hands.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const ORIGINS = ['https://hub.caringcds.com'];
@@ -34,10 +35,32 @@ async function ccFeed(body: { phones: string[]; since: string }) {
   if (!r.ok) throw new Error('Caring Companions server ' + r.status + ': ' + String(j?.error || '').slice(0, 120));
   return j;
 }
+// Part 2 (2026-11-17): texts and the 4:30 email go through the CDS GoHighLevel sub-account only, like every CDS sender.
+const GHL = 'https://services.leadconnectorhq.com';
+const CDS_LOCATION = '4EFPkajwe0hHrqxvYkZ9';
+async function ghl(path: string, body: unknown) {
+  const r = await fetch(GHL + path, { method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer ' + env('CDS_GHL_TOKEN'),
+    Version: '2021-07-28', 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'CaringCompanionsCDSHub/1.0 (+https://hub.caringcds.com)' } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('GoHighLevel ' + r.status + ': ' + (j.message || ''));
+  return j;
+}
+async function send({ phone, email, text, subject, html }: { phone?: string; email?: string; text: string; subject?: string; html?: string }) {
+  const locationId = env('CDS_GHL_LOCATION_ID');
+  if (!env('CDS_GHL_TOKEN') || locationId !== CDS_LOCATION) throw new Error('GoHighLevel is not set to the CDS sub-account on the server');
+  const c = await ghl('/contacts/upsert', { locationId, ...(phone ? { phone } : { email }) });
+  const contactId = c?.contact?.id ?? c?.id;
+  if (!contactId) throw new Error('GoHighLevel did not return a contact');
+  await ghl('/conversations/messages', phone ? { type: 'SMS', contactId, message: text } : { type: 'Email', contactId, subject, html: html || text });
+}
 const coord = createCoordinator({
   ai, ccFeed,
   db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
 });
+
+const db2 = { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) };
+const hands = createHands({ db: db2, ai, send, model: COORD_MODEL });
+async function settingsNow() { const r = await sql`select value from cds_match_settings where key = 'coordinator'`; return (r[0]?.value || {}) as Record<string, unknown>; }
 
 // A made-up call, for the Desktop step's proof. Saves nothing.
 async function selftest() {
@@ -62,7 +85,17 @@ Deno.serve(async (req) => {
     const secret = env('CDS_JOB_SECRET');
     if (!secret || req.headers.get('x-cron-secret') !== secret) return json({ error: 'not allowed' }, 401);
     const body = await req.json().catch(() => ({}));
-    try { return json(body?.selftest === true ? await selftest() : await coord.run({ backfill: body?.backfill === true })); }
+    try {
+      if (body?.selftest === true) return json(await selftest());
+      // body {"email_test": true} (Desktop step only): the 4:30 email now, so she sees it arrive.
+      if (body?.email_test === true) return json(await hands.dailyEmail(await settingsNow(), { force: true }));
+      const heard = await coord.run({ backfill: body?.backfill === true });
+      const set = await settingsNow();
+      if (set.live === false) return json(heard);
+      const did = body?.backfill === true ? { texts: 'not during a backfill' } : await hands.work(set);
+      const mail = body?.backfill === true ? {} : await hands.dailyEmail(set);
+      return json({ ...heard, texts: did, ...mail });
+    }
     catch (e) { console.error(e); return json({ ok: false, error: String((e as Error)?.message || e) }, 500); }
   }
   const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
@@ -72,6 +105,9 @@ Deno.serve(async (req) => {
   try {
     if (body?.action === 'list') return json(await coord.list({ all: body.all === true }));
     if (body?.action === 'decide') return json(await coord.decide(u.data.user.email, body));
+    if (body?.action === 'msgs') return json(await hands.list());
+    if (body?.action === 'send') { const r = await hands.sendOne(body.id, u.data.user.email, typeof body.body === 'string' ? body.body : undefined); return json(r, r.ok ? 200 : 400); }
+    if (body?.action === 'skip') { const r = await hands.skip(body.id, u.data.user.email); return json(r, r.ok ? 200 : 400); }
     return json({ error: 'Unknown request' }, 400);
   } catch (e) { return json({ error: String((e as Error)?.message || e).slice(0, 200) }, 400); }
 });

@@ -86,6 +86,7 @@
   function mountLead(p) {
     const el = document.getElementById('lpStarting');
     if (!el) return;
+    try { mountLeadHeard(p); } catch (e) { /* the box is extra; the lead page must still draw */ }
     if (!on()) { el.innerHTML = ''; return; }
     if (p.startingId) {
       el.innerHTML = '<div class="card" style="padding:18px 20px;margin-bottom:14px"><b style="color:var(--primary)">Starting</b>' +
@@ -839,7 +840,7 @@
   function coordItems() {
     if (!_co.busy && Date.now() - _co.at > 2 * 60e3 && typeof _db !== 'undefined' && _db) {
       _co.busy = true;
-      coordCall({ action: 'list' }).then(j => { _co.items = j.items || []; _co.state = j.state; _co.err = ''; })
+      Promise.all([coordCall({ action: 'list' }), coordCall({ action: 'msgs' }).catch(() => ({ msgs: [] }))]).then(([j, m]) => { _co.items = j.items || []; _co.state = j.state; _co.msgs = m.msgs || []; _co.err = ''; })
         .catch(e => { _co.err = String(e && e.message || e); }).finally(() => { _co.at = Date.now(); _co.busy = false; rerender(); });
     }
     return _co.items || [];
@@ -861,8 +862,51 @@
     if (!heard.length) return c;
     return Object.assign({}, c, { starting: Object.assign({}, c.starting, { promises: ((c.starting || {}).promises || []).concat(heard) }) });
   }
+  // ---------------------------------------------------------------- the texts it wrote (part 2, 2026-11-17)
+  // Practice: each one waits here for a person to read it, change it if they like, and press Send. On: they go by themselves.
+  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do' };
+  const msgsFor = (kind, id) => (_co.msgs || []).filter(m => m.person_kind === kind && String(m.person_id) === String(id));
+  function msgsHtml(kind, id) {
+    const list = msgsFor(kind, id).filter(m => ['draft', 'failed'].includes(m.status));
+    const sent = msgsFor(kind, id).filter(m => m.status === 'sent').slice(0, 3);
+    if (!list.length && !sent.length) return '';
+    return '<div style="margin-top:8px"><b style="font-size:13px">Texts it wrote</b>' + list.map(m => '<div style="padding:8px 0;border-top:1px solid var(--gray-200)">' +
+        '<div class="lt-sub">' + esc(MSG_KIND[m.kind] || m.kind) + ' · to ' + esc(m.to_name || 'them') + ' (phone ending ' + esc(m.last4 || '') + ')' + (m.status === 'failed' ? ' · <span class="lt-red">did not go: ' + esc(m.error || '') + '</span>' : '') + '</div>' +
+        '<textarea id="stMsg' + m.id + '" rows="3" style="width:100%;font:inherit;font-size:13px;margin-top:4px">' + esc(m.body) + '</textarea>' +
+        '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Send', 'StartHub.msgSend(' + m.id + ')') + btn('Skip', 'StartHub.msgSkip(' + m.id + ')', true) + '</div></div>').join('') +
+      sent.map(m => '<div class="lt-sub" style="padding:4px 0;border-top:1px solid var(--gray-200)">Sent to ' + esc(m.to_name || '') + ' ' + esc(shortDay(String(m.sent_at || '').slice(0, 10))) + ': ' + esc(m.body) + '</div>').join('') + '</div>';
+  }
+  async function msgSend(id) {
+    const el = document.getElementById('stMsg' + id), body = el ? el.value : undefined;
+    try { await coordCall({ action: 'send', id, body }); const m = (_co.msgs || []).find(x => x.id === id); if (m) { m.status = 'sent'; m.body = body; m.sent_at = new Date().toISOString(); }
+      if (typeof _ghlToast === 'function') _ghlToast('✅ Sent.'); }
+    catch (e) { if (typeof _ghlToast === 'function') _ghlToast('⚠️ Not sent: ' + e.message, true); else alert('Not sent: ' + e.message); }
+    rerender(); mountLeadHeard();
+  }
+  async function msgSkip(id) {
+    try { await coordCall({ action: 'skip', id }); const m = (_co.msgs || []).find(x => x.id === id); if (m) m.status = 'skipped'; }
+    catch (e) { if (typeof _ghlToast === 'function') _ghlToast('⚠️ ' + e.message, true); }
+    rerender(); mountLeadHeard();
+  }
+  // A lead's profile: what it heard on their calls, and texts it wrote, in one box above the lead's own cards.
+  let _leadHeardId = '';
+  function mountLeadHeard(p) {
+    if (p) _leadHeardId = String(p.id);
+    const lp = document.getElementById('lpStarting'); if (!lp || !_leadHeardId) return;
+    let box = document.getElementById('lpHeard');
+    if (!box) { box = document.createElement('div'); box.id = 'lpHeard'; lp.parentNode.insertBefore(box, lp); }
+    const items = coordItems().filter(i => i.person_kind === 'lead' && String(i.person_id) === _leadHeardId && ['open', 'suggested'].includes(i.status));
+    const msgs = msgsHtml('lead', _leadHeardId);
+    if (!items.length && !msgs) { box.innerHTML = ''; return; }
+    const label = { promise: 'We promised', their_word: 'They said they would', question: 'They asked', attendant: 'Attendant', start_date: 'Start date' };
+    box.innerHTML = '<div class="card" style="padding:16px 18px;margin-bottom:14px;border:1px solid var(--primary)"><b style="color:var(--primary)">Heard on calls and texts</b>' +
+      items.map(i => { const d = i.data || {}; return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(label[i.kind] || i.kind) + ':</b> ' + esc(d.what || d.text || d.name || d.note || d.date || '') +
+        (i.due ? ' <span class="lt-sub' + (i.kind === 'promise' && String(i.due).slice(0, 10) < today() ? ' lt-red' : '') + '">' + (i.kind === 'their_word' ? 'check on ' : 'due ') + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : '') +
+        '<div class="lt-sub">' + esc([i.source && i.source.line === 'cc' ? 'From the Caring Companions line' : 'From the CDS line', i.source && i.source.at ? shortDay(String(i.source.at).slice(0, 10)) : ''].join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>' +
+        '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Done', 'StartHub.coordDecide(' + i.id + ",'done',StartHub.mountLeadHeard)", true) + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>'; }).join('') + msgs + '</div>';
+  }
   function heardBadge(c) {
-    const n = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status)).length;
+    const n = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status)).length + msgsFor('consumer', c.id).filter(m => m.status === 'draft').length;
     return n ? '<button type="button" class="lt-b lt-b-q" style="margin-top:4px" onclick="' + esc("_profTab='overview';openProfile('" + q(c.id) + "')") + '">Heard on a call: ' + n + ' to check</button>' : '';
   }
   function useStart(cid, id, date) { coordDecide(id, 'used', () => { if (date) setStart(cid, date); }); }
@@ -892,8 +936,9 @@
       return '';
     }).join('');
     const status = _co.err ? '<div class="lt-sub">' + esc(_co.err) + '</div>' : _co.state && _co.state.last_run ? '<div class="lt-sub">Listening on both lines. Last checked ' + esc(new Date(_co.state.last_run).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '.</div>' : '';
+    const texts = msgsHtml('consumer', c.id);
     return '<div class="st-box" style="margin-top:12px;border-color:var(--primary)"><b style="color:var(--primary)">Heard on calls and texts</b>' + status +
-      (rows || '<div class="lt-sub">Nothing waiting. What it hears shows here, and promises go onto What we promised.</div>') + '</div>';
+      (rows || (texts ? '' : '<div class="lt-sub">Nothing waiting. What it hears shows here, and promises go onto What we promised.</div>')) + texts + '</div>';
   }
   function trackerCtx(c) {
     const cx = ctxFor(c), P = packetOf(c);
@@ -1138,11 +1183,12 @@
   }
   // window.renderProfile is the hub's; renderProfile inside this file is the Starting one.
   function rerender() {
+    const lpp = document.getElementById('page-leadprofile'); if (lpp && lpp.classList.contains('active')) { try { mountLeadHeard(); } catch (e) {} }
     const pp = document.getElementById('page-profile'); if (pp && pp.classList.contains('active')) window.renderProfile();
     if (typeof renderConsumers === 'function') renderConsumers();
     const sp = document.getElementById('page-starting'); if (sp && sp.classList.contains('active')) renderPage();
   }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, coordItems, coordRefresh };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard };
 })();

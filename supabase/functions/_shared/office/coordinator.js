@@ -102,7 +102,7 @@ export function watchList(consumers, pipeline, attendants) {
 
 // The items one reading becomes. key makes each one once per person, ever (the same attendant heard on two calls is one item).
 export function itemsFrom(person, source, x) {
-  const items = [], src = { line: source.line, kind: source.kind, id: source.id, at: source.at, who: source.who || '', summary: x.summary };
+  const items = [], src = { line: source.line, kind: source.kind, id: source.id, at: source.at, who: source.who || '', phone10: source.phone10 || '', summary: x.summary };
   const base = (kind, data, status, due) => ({ person_kind: person.kind, person_id: person.id, person_name: person.name, kind, data, status, due: due || null, source: src,
     key: person.kind + ':' + person.id + ':' + kind + ':' + norm(data.what || data.name || data.date || data.note || data.text).slice(0, 60) });   // once per person, however many calls say it
   x.promises.forEach(p => items.push(base('promise', p, 'open', p.due)));
@@ -161,11 +161,11 @@ export function createCoordinator({ db, ai, ccFeed, nowMs = () => Date.now() }) 
       rows.forEach(r => {
         const p = byPhone.get(r.phone10); if (!p) return;
         const at = new Date(r.at).toISOString();
-        if (r.channel === 'call' && r.transcript && !seen.has('cds:' + r.id)) sources.push({ person: p, src: { line: 'cds', kind: 'call', id: 'cds:' + r.id, at, who: r.contact_name || '', transcript: r.transcript } });
-        if (r.channel === 'sms' && r.body) { const k = p.id + '@' + at.slice(0, 10); const g = texts.get(k) || { person: p, ids: [], lines: [], at, who: r.contact_name || '' };
+        if (r.channel === 'call' && r.transcript && !seen.has('cds:' + r.id)) sources.push({ person: p, src: { line: 'cds', kind: 'call', id: 'cds:' + r.id, at, who: r.contact_name || '', phone10: r.phone10, transcript: r.transcript } });
+        if (r.channel === 'sms' && r.body) { const k = p.id + '@' + at.slice(0, 10); const g = texts.get(k) || { person: p, ids: [], lines: [], at, who: r.contact_name || '', phone10: r.phone10 };
           g.ids.push(r.id); g.lines.push((r.direction === 'outbound' ? 'Office' : (r.contact_name || 'Them')) + ': ' + String(r.body).slice(0, 600)); g.at = at; texts.set(k, g); }
       });
-      texts.forEach((g, k) => { const id = 'cds-texts:' + k + ':' + g.ids.length; if (!seen.has(id)) sources.push({ person: g.person, src: { line: 'cds', kind: 'texts', id, at: g.at, who: g.who, transcript: g.lines.join('\n') } }); });
+      texts.forEach((g, k) => { const id = 'cds-texts:' + k + ':' + g.ids.length; if (!seen.has(id)) sources.push({ person: g.person, src: { line: 'cds', kind: 'texts', id, at: g.at, who: g.who, phone10: g.phone10, transcript: g.lines.join('\n') } }); });
     }
     // The Caring Companions line.
     let ccNote = '';
@@ -173,7 +173,7 @@ export function createCoordinator({ db, ai, ccFeed, nowMs = () => Date.now() }) 
       try {
         const feed = await ccFeed({ phones, since });
         (feed.calls || []).forEach(c => { const p = byPhone.get(ten(c.phone10 || c.phone)); const id = 'cc:' + c.id;
-          if (p && !seen.has(id) && (c.transcript || c.summary)) sources.push({ person: p, src: { line: 'cc', kind: 'call', id, at: c.at, who: c.who || '', transcript: c.transcript || '', summary: c.summary || '' } }); });
+          if (p && !seen.has(id) && (c.transcript || c.summary)) sources.push({ person: p, src: { line: 'cc', kind: 'call', id, at: c.at, who: c.who || '', phone10: ten(c.phone10 || c.phone), transcript: c.transcript || '', summary: c.summary || '' } }); });
       } catch (e) { ccNote = 'Caring Companions line not read: ' + String(e && e.message || e).slice(0, 160); }
     }
     sources.sort((a, b) => String(a.src.at).localeCompare(String(b.src.at)));
@@ -211,7 +211,8 @@ export function createCoordinator({ db, ai, ccFeed, nowMs = () => Date.now() }) 
     let put = 0, gone = 0;
     for (const [id, w] of want) {
       const r = await one(`insert into owner_calendar (id, kind, data, updated_at, updated_by) values ($1, 'item', $2::jsonb, now(), 'cds-coordinator')
-        on conflict (id) do nothing returning id`, [id, JSON.stringify({ t: w.t.slice(0, 160), date: w.date, time: '', every: 'once', cat: 'mine', note: 'From the CDS Coordinator. Done it? Check it off on the Starting page.', by: 'coordinator' })]);
+        on conflict (id) do update set data = excluded.data, updated_at = now() where owner_calendar.data->>'date' is distinct from excluded.data->>'date' or owner_calendar.data->>'t' is distinct from excluded.data->>'t'
+        returning id`, [id, JSON.stringify({ t: w.t.slice(0, 160), date: String(w.date).slice(0, 10), time: '', every: 'once', cat: 'mine', note: 'From the CDS Coordinator. Done it? Check it off on the Starting page.', by: 'coordinator' })]);
       if (r) put++;
     }
     for (const r of have) if (!want.has(r.id)) { await q('delete from owner_calendar where id = $1', [r.id]); await q("delete from owner_calendar where kind = 'mark' and id like $1", ['m:' + r.id.slice(2) + '@%']); gone++; }
