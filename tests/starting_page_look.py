@@ -154,6 +154,15 @@ with sync_playwright() as pw:
     ck('Put these answers: a note on the lead, follow-up today, the date of birth, the caregiver', pg.evaluate("()=>{ const p=getData('pipeline').find(x=>x.id==='L2'); return /From texting with them/.test(JSON.stringify(p.notes)) && p.followup===_todayIso() && p.dob==='1948-03-02' && p.attendant && p.attendant.name==='Lee Sample'; }"))
     pg.click('#lpHeard button:has-text("Skip")'); pg.wait_for_timeout(400)
     ck('Skip on the lead answers it', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='skip'&&b.id===32)"))
+    # ---- 2026-11-17 tax help: copy-and-paste sheets on the Tax and EIN tab
+    pg.evaluate("""()=>{ const prev = cdsMatchApi; cdsMatchApi = async (a, b) => a === 'enrollPdfData' ? { ssn: '123456789', answers: { first: 'Dana', last: 'Started', street: '1 Main St', city: 'Nixa', zip: '65714', county: 'Christian', first_pay: '2026-11-26' }, agency: { street: '100 Office Way', city: 'Springfield', state: 'MO', zip: '65804', signer: 'Office Signer', legal: 'Example Agency LLC', dba: 'Example Agency', phone: '417-555-0100', fax: '417-555-0101' } } : prev(a, b);
+      const c = getData('consumers').find(x=>x.id==='C1'); c.starting.leadId = 'L4'; openProfile('C1'); _profTab='tax'; renderProfile(); }"""); pg.wait_for_timeout(300)
+    pg.click('#thHelp button:has-text("Open the copy-and-paste sheets")'); pg.wait_for_timeout(400)
+    tv = pg.inner_text('#thHelp')
+    ck('tax tab: the four copy-and-paste sheets, SSN hidden', all(x in tv for x in ['IRS EIN application', 'Missouri tax registration', 'UInteract', 'Empeon']) and '***-**-6789' not in tv, tv[:400])
+    pg.evaluate("()=>document.querySelectorAll('#thHelp details').forEach(d=>d.open=true)"); pg.wait_for_timeout(200)
+    ck('tax tab: answers from the packet with Copy buttons, SSN masked', 'Christian County, MO' in pg.inner_text('#thHelp') and '***-**-6789' in pg.inner_text('#thHelp') and pg.evaluate("()=>document.querySelectorAll('#thHelp [data-copy]').length") > 10)
+    shot(pg, '02g-tax-sheets')
     pg.evaluate("()=>{ openProfile('C1'); _profTab='ready'; renderProfile(); }"); pg.wait_for_timeout(300)
     ck('clock-in call recorded with the question', pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').starting.clockCall.questions") == 'Which app do I download?' and 'Done' in pg.inner_text('#page-profile'))
     pg.evaluate("()=>showPage('starting')"); pg.wait_for_timeout(200)

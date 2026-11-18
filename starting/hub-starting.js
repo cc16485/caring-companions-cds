@@ -343,7 +343,8 @@
     else if (tab === 'state') body = stateHtml(c, ctx);
     else if (tab === 'ready') body = readyHtml(c, st);
     else if (tab === 'tax') body = '<div id="profEnroll" style="margin-top:12px"><div class="field-note">Checking their enrollment packet...</div></div>' +
-      '<h4 style="margin:16px 0 4px;color:var(--primary)">Tax setup</h4><div class="field-note" style="margin:10px 0">The same Tax Setup as every consumer, open from day one.' + (st.transfer ? ' Moving from another agency: they already have an EIN; type it from Fusion.' : '') + '</div>' + btn('Tax setup', "openTaxSetup('" + q(c.id) + "')", true);
+      '<h4 style="margin:16px 0 4px;color:var(--primary)">Tax setup</h4><div class="field-note" style="margin:10px 0">The same Tax Setup as every consumer, open from day one.' + (st.transfer ? ' Moving from another agency: they already have an EIN; type it from Fusion.' : '') + '</div>' + btn('Tax setup', "openTaxSetup('" + q(c.id) + "')", true) +
+      '<div id="thHelp"></div>';
     else if (tab === 'docs') body = consumerDocsHtml(c);
     else if (tab === 'calls') body = '<div class="cds-comm-history" data-refs="consumer:' + esc(c.id) + '" data-phones="' + esc(rpPhones(c)) + '" data-names="' + esc(rpNames(c)) + '"></div>';
     else body = consumerNotesHtml(c);
@@ -359,6 +360,7 @@
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body + '</div>';
     if (tab === 'medicaid') { preview(c.id); if (!med.verified) noMedicaidAfter('consumer', c); }
     // The same packet card as Consumers and the lead: Send, each form, Sign as agent, the one-PDF download.
+    if (tab === 'tax' && window.TaxHelp) TaxHelp.mount(c);   // 2026-11-17 copy-and-paste sheets and the EIN letter reader
     if (tab === 'tax' && typeof mountProfileEnroll === 'function') {
       const hit = _profPacket[c.id] || {};
       if ('err' in hit && !('packet' in hit)) { const el = document.getElementById('profEnroll'); if (el) el.innerHTML = '<div class="field-note" style="color:var(--danger)">Could not check their packet: ' + esc(hit.err) + '</div>'; }
