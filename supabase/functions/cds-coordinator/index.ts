@@ -10,6 +10,7 @@ import postgres from 'npm:postgres@3.4.4';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { createCoordinator, extractRequest, cleanExtract, COORD_MODEL } from '../_shared/office/coordinator.js';
 import { createHands } from '../_shared/office/coordinator-hands.js';
+import { createChat } from '../_shared/office/coordinator-chat.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const ORIGINS = ['https://hub.caringcds.com'];
@@ -60,6 +61,7 @@ const coord = createCoordinator({
 
 const db2 = { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) };
 const hands = createHands({ db: db2, ai, send, model: COORD_MODEL });
+const chat = createChat({ db: db2, ai, send });   // texting new website leads (2026-11-17), every 2 minutes, body {chat: true}
 async function settingsNow() { const r = await sql`select value from cds_match_settings where key = 'coordinator'`; return (r[0]?.value || {}) as Record<string, unknown>; }
 
 // A made-up call, for the Desktop step's proof. Saves nothing.
@@ -87,6 +89,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     try {
       if (body?.selftest === true) return json(await selftest());
+      if (body?.chat === true) { const set = await settingsNow(); return json(set.live === false ? { chat: 'the coordinator is off' } : await chat.run(set)); }
       // body {"email_test": true} (Desktop step only): the 4:30 email now, so she sees it arrive.
       if (body?.email_test === true) return json(await hands.dailyEmail(await settingsNow(), { force: true }));
       const heard = await coord.run({ backfill: body?.backfill === true });
@@ -106,6 +109,7 @@ Deno.serve(async (req) => {
     if (body?.action === 'list') return json(await coord.list({ all: body.all === true }));
     if (body?.action === 'decide') return json(await coord.decide(u.data.user.email, body));
     if (body?.action === 'msgs') return json(await hands.list());
+    if (body?.action === 'chats') return json(await chat.list());
     if (body?.action === 'send') { const r = await hands.sendOne(body.id, u.data.user.email, typeof body.body === 'string' ? body.body : undefined); return json(r, r.ok ? 200 : 400); }
     if (body?.action === 'skip') { const r = await hands.skip(body.id, u.data.user.email); return json(r, r.ok ? 200 : 400); }
     return json({ error: 'Unknown request' }, 400);
