@@ -1723,6 +1723,12 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
 
 </div>
 
+<!-- Weekly billing vs payroll (2026-11-17, her ask "a nice clean proof of billing and payroll numbers and what we make every week"): money/weekly.js -->
+<div id="page-moneyweekly" class="page">
+  <div class="section-header"><div class="section-title">Billing and payroll by week</div></div>
+  <div id="weeklyRoot"></div>
+</div>
+
 <div id="page-moneybilling" class="page">
   <div class="section-header"><div class="section-title">Billing and margin</div></div>
   <div class="card" style="margin-bottom:18px">
@@ -5353,6 +5359,8 @@ const SECTIONS = [
   // Money sub tabs (2026-11-16, her ask): was one long page (payroll with the Financial Dashboard stacked under it).
   { id: 'money',      label: 'Money',       tabs: [
       { page: 'moneyclaims',  label: 'Claims', show: () => typeof hubSwitchOn === 'function' && hubSwitchOn('claims') },
+      // Weekly (2026-11-17, her ask): billing vs payroll and what we made, per CDS pay week (money/weekly.js)
+      { page: 'moneyweekly',  label: 'Weekly' },
       { page: 'payroll',      label: 'Payroll' },
       { page: 'moneybilling', label: 'Billing' },
       { page: 'financials',   label: 'Dashboard' },
@@ -5396,7 +5404,7 @@ const PAGE_TO_SECTION = (() => {
 
 // Landing page when a section is opened by name rather than a specific page.
 const SECTION_DEFAULT = { today: 'dashboard', dashboard: 'dashboard', leads: 'pipeline', consumers: 'consumers',
-                          attendants: 'activeattendants', directory: 'dirreview', hours: 'hoursmonth', evv: 'evvcorrections', money: 'payroll', help: 'calendar', guides: 'calendar',
+                          attendants: 'activeattendants', directory: 'dirreview', hours: 'hoursmonth', evv: 'evvcorrections', money: 'moneyweekly', help: 'calendar', guides: 'calendar',
                           switches: 'automations', settings: 'automations' };
 
 // Spellings that are not themselves page ids, kept because they are live links.
@@ -5527,6 +5535,7 @@ function showPage(id) {
   if (id === 'taxcompliance') { renderTaxCompliance(); renderComplianceClocks(); }
   if (id === 'payroll' || id === 'moneybilling') renderPayroll();
   if (id === 'moneyclaims') renderClaimsCard();
+  if (id === 'moneyweekly') renderWeekly();
   if (id === 'authorizations') renderAuthorizations();
   if (id === 'starting' && window.StartHub) StartHub.renderPage();
   if (id === 'hoursmonth') renderHoursMonth();
@@ -5684,6 +5693,24 @@ async function renderClaimsCard() {
       toast: (m, warn) => _ghlToast((warn ? '⚠️ ' : '✅ ') + m, warn) });
   } catch (e) {
     root.innerHTML = '<div style="color:#a8342a">Claims could not load: ' + esc(String(e.message || e)) + '</div>';
+  }
+}
+
+// Money > Weekly (2026-11-17): reads the claims (lazy store), payrollWeeks, payrollTotals and the pay rate. Saves nothing.
+let _weekly = null;
+async function renderWeekly() {
+  const root = document.getElementById('weeklyRoot');
+  if (!root || !_db) return;
+  if (_weekly) { _weekly.draw(); return; }
+  try {
+    const { mountWeekly } = await import('./money/weekly.js?v=1');
+    _weekly = mountWeekly(root, {
+      load: async () => (await claimsLoad()).emomed,
+      schedule: () => (window.CDSClaims && window.CDSClaims.SCHEDULE) || [],
+      payrollWeeks: () => getObj('payrollWeeks'), runs: () => getObj('payrollTotals').runs || [],
+      payRate: () => getObj('rateSettings').pay || 15 });
+  } catch (e) {
+    root.innerHTML = '<div style="color:#a8342a">The weekly page could not load: ' + esc(String(e.message || e)) + '</div>';
   }
 }
 
