@@ -6,7 +6,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const C = await import(ROOT + '/supabase/functions/_shared/office/coordinator.js');
 let pass = 0, failN = 0;
 const ok = (c, m, x) => { if (c) pass++; else { failN++; console.log('FAIL', m, x !== undefined ? JSON.stringify(x).slice(0, 400) : ''); } };
-const NOW = Date.parse('2026-11-17T18:00:00Z');
+const NOW = Date.parse('2026-11-17T18:00:00Z');   // the fake calls below are from this week
 
 // watch list
 const consumers = [{ id: 'C1', name: 'Pat Example', status: 'starting', phone: '(417) 555-0142', cdsStartDate: '2026-11-18', starting: { leadId: 'L1' }, relatedPeople: [{ phone: '417-555-0150' }] },
@@ -33,6 +33,17 @@ ok(items.map(i => i.kind).join() === 'promise,their_word,start_date,attendant,qu
 ok(items.find(i => i.kind === 'promise').status === 'open' && items.find(i => i.kind === 'attendant').status === 'suggested', 'promises open, suggestions wait for the office');
 ok(new Set(items.map(i => i.key)).size === items.length && items[0].key.startsWith('consumer:C1:'), 'unique keys, per person');
 ok(C.weekLine(items[2], '2026-11-17').t === 'Pat Example: start date is changing, confirm it', 'My Week line', C.weekLine(items[2], '2026-11-17'));
+
+// 2026-11-17 tune: practice records, the person as their own attendant, "Iris D." = "Iris Dorsey", old items off My Week
+ok(C.watchList([{ id: 'X', name: 'Example CDS Consumer', status: 'starting' }], [{ id: 'Y', name: 'Test Lead', phone: '4175550101' }], []).length === 0, 'practice records are not watched');
+const self = C.itemsFrom(W[0], { line: 'cc', kind: 'call', id: 's', at: '2026-11-16T17:40:00Z' }, Object.assign({}, x, { attendant: { name: 'Pat E.', phone: '', email: '', relation: '' } }));
+ok(!self.some(i => i.kind === 'attendant'), 'the person is never their own attendant');
+const a1 = C.itemsFrom(W[0], { line: 'cc', kind: 'call', id: 'a', at: '2026-11-16T17:40:00Z' }, Object.assign({}, x, { attendant: { name: 'Iris Dorsey', phone: '', email: '', relation: '' } })).find(i => i.kind === 'attendant');
+const a2 = C.itemsFrom(W[0], { line: 'cc', kind: 'call', id: 'b', at: '2026-11-16T17:40:00Z' }, Object.assign({}, x, { attendant: { name: 'Iris D.', phone: '', email: '', relation: '' } })).find(i => i.kind === 'attendant');
+ok(a1.key === a2.key, 'Iris D. and Iris Dorsey are one suggestion', [a1.key, a2.key]);
+ok(C.weekLine({ kind: 'promise', person_name: 'Pat', data: { what: 'x' }, due: '2026-10-19' }, '2026-11-17') === null, 'a month-old promise stays off My Week');
+ok(C.weekLine({ kind: 'promise', person_name: 'Pat', data: { what: 'x' }, due: '2026-11-12' }, '2026-11-17').date === '2026-11-12', 'a promise from this week is on My Week');
+ok(/Caring Companions In-Home Senior Care work/.test(C.extractRequest(W[0], { line: 'cc', kind: 'call', id: 'z', at: '2026-11-16T00:00:00Z', summary: 'x' }, '2026-11-17').system), 'Caring Companions shift calls are not CDS');
 
 // a run against a fake database
 const DB = { settings: { coordinator: { live: true, per_run: 10 } }, agency: { consumers, pipeline }, packets: [{ phone: '417-555-0160', consumer_name: 'Pat Example' }],
@@ -62,7 +73,7 @@ const db = { async query(t, p = []) {
 } };
 const asked = [];
 const ai = async req => { asked.push(req.messages[0].content); return resp(/Lee here/.test(req.messages[0].content) ? Object.assign({}, good, { promises: [], their_word: [{ what: 'Text the DCN', check_on: '' }], start_date: { date: '', said_by: '', note: '' }, attendant: { name: '', phone: '', email: '', relation: '' }, questions: [] }) : good); };
-const ccFeed = async ({ phones, since }) => ({ calls: [{ id: 'c_1', at: '2026-10-19T15:52:00Z', phone10: '4175550142', who: 'Pat E.', summary: 'Gave her son Lee as the caregiver.' }, { id: 'x', at: '2026-11-17T10:00:00Z', phone10: '4175559999', summary: 'not ours' }] });
+const ccFeed = async ({ phones, since }) => ({ calls: [{ id: 'c_1', at: '2026-11-14T15:52:00Z', phone10: '4175550142', who: 'Pat E.', summary: 'Gave her son Lee as the caregiver.' }, { id: 'x', at: '2026-11-17T10:00:00Z', phone10: '4175559999', summary: 'not ours' }] });
 const coord = C.createCoordinator({ db, ai, ccFeed, nowMs: () => NOW });
 let r = await coord.run({ backfill: true });
 ok(r.ok && r.read === 3, 'read 3 sources: the CC call, the CDS call, Lee\'s texts', r);
