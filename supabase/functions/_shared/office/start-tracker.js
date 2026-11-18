@@ -17,10 +17,10 @@
 (function (root) {
   'use strict';
 
-  const DUE_BEFORE = { packet: 10, tax: 7, checks: 7, empeon: 3, clock: 2 };
+  const DUE_BEFORE = { packet: 10, tax: 7, checks: 7, empeon: 3, orient: 5, clock: 2 };
   const COLS = [
     ['medicaid', 'Medicaid'], ['referral', 'Referral'], ['packet', 'Packet'], ['tax', 'Tax set up'],
-    ['checks', 'Attendant checks'], ['empeon', 'Empeon and I-9'], ['clock', 'Clock-in call'], ['start', 'Start date']
+    ['checks', 'Attendant checks'], ['empeon', 'Empeon and I-9'], ['orient', 'Orientation'], ['clock', 'Clock-in call'], ['start', 'Start date']
   ];
 
   const ymd = d => d.toISOString().slice(0, 10);
@@ -111,6 +111,11 @@
     else if (!att.empeon) cells.empeon = { state: 'wait', t: 'Attendant in Empeon', owner: 'Attendant', due: due('empeon') };
     else if (!att.i9) cells.empeon = { state: 'now', t: 'ID call and I-9', owner, due: i9By || due('empeon'), note: i9By ? 'I-9 Section 2 by ' + i9By : '' };
     else cells.empeon = { state: 'done', t: 'Done' };
+    // 6b Consumer orientation (2026-11-17, her ask: "consumer needs to complete their packet and also be sent the orientation").
+    // Done when caringcds.com/consumer-orientation posts their completion (ctx.orientDone); the link goes once the packet is signed.
+    cells.orient = ctx.orientDone ? { state: 'done', t: 'Done' + (ctx.orientDone !== true ? ' ' + String(ctx.orientDone).slice(5, 10).replace('-', '/') : '') }
+      : pk.done || pk.signed ? { state: 'wait', t: 'Link sent, not done', owner: 'Consumer', due: due('orient') }
+      : { state: 'todo', t: 'After the packet', due: due('orient') };
     // 7 Clock-in call: both taught to clock in, questions answered, before the start date
     const prep = (c && c.firstShiftPrep) || {};
     const clockDone = !!(s.clockCall || (prep.toldClockIn && s.attClockIn));

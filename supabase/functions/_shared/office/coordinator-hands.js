@@ -14,6 +14,7 @@
 // not sure about. Never: Medicaid numbers, DCNs, diagnoses or money in a text; never a text at night.
 // No em dashes in anything a person reads (her rule).
 import './starting-rules.js';
+import { planJourney } from './coordinator-journey.js';
 const S = () => globalThis.CDSStarting;
 export const LINE = '(417) 218-2888';
 export const HUB = 'https://hub.caringcds.com/#starting';
@@ -30,7 +31,7 @@ const sign = who => (who && !/^office$/i.test(who) ? first(who) + ' at ' : '') +
 export const WORDS = {
   clockConsumer: (v) => 'Hi ' + first(v.name) + ', this is ' + sign(v.from) + '. Your CDS care starts ' + niceDay(v.start) + '! ' +
     (v.att ? first(v.att) + ' will clock in when they arrive and out when they leave, on the WellSky app or your home phone. ' : 'Your attendant will clock in when they arrive and out when they leave, on the WellSky app or your home phone. ') +
-    'Do you have any questions before then? Just reply here or call ' + LINE + '.',
+    'Would set shifts (we put the schedule in WellSky) or flexible shifts (a shift is started in the app when the work begins) work better for you? Any questions? Reply here or call ' + LINE + '.',
   clockAttendant: (v) => 'Hi ' + first(v.att) + ', this is ' + sign(v.from) + '. ' + first(v.name) + "'s CDS care starts " + niceDay(v.start) + '. ' +
     'Please make sure you can sign in to the WellSky app before then. Clock in when you arrive and out when you leave, every visit, or the hours cannot be paid. Any questions? Reply here or call ' + LINE + '.',
   dsds: (v) => 'Hi ' + first(v.name) + ', this is ' + sign(v.from) + '. We sent your CDS referral to the state on ' + niceDay(v.sent) + '. Has anyone from the state (DSDS) called or visited you yet? Just reply yes or no and we will take it from there.',
@@ -141,13 +142,30 @@ export function createHands({ db, ai, send, model, nowMs = () => Date.now() }) {
         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'draft') on conflict (key) do nothing`, [d.key, d.kind, d.item_id || null, d.person_kind, d.person_id, d.person_name, d.to_name || '', d.phone, body]);
       made++;
     }
+    // The welcome journey (2026-11-17, her yes): its own switch, "Welcome texts to new consumers" (welcome_texts.live).
+    const wsw = await one(`select value from cds_match_settings where key = 'welcome_texts'`);
+    const jLive = !!(wsw && wsw.value && wsw.value.live === true);
+    const hour = +new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(nowMs()));
+    const packets = await q(`select lead_id, consumer_id, signed_at from cds_enroll_packets`);
+    const orientations = await q(`select name, course, completed_at from orientation_completions where course = 'consumer'`).catch(() => []);
+    let jmade = 0, jsent = 0;
+    for (const d of planJourney({ consumers, attendants, packets, orientations, today, hour })) {
+      if (await one('select 1 from cds_coord_msgs where key = $1', [d.key])) continue;
+      const body = safeText(d.body); if (!body) continue;
+      const auto = jLive && sendingHours(nowMs());
+      const r = await one(`insert into cds_coord_msgs (key, kind, person_kind, person_id, person_name, to_name, phone, body, status)
+        values ($1,'journey',$2,$3,$4,$5,$6,$7,'draft') on conflict (key) do nothing returning id`, [d.key, d.person_kind, d.person_id, d.person_name, d.to_name || '', d.phone, body]);
+      if (!r) continue;
+      jmade++;
+      if (auto) { const x = await sendOne(r.id, 'coordinator'); if (x.ok) jsent++; }
+    }
     let sent = 0, failed = 0;
     if (mode === 'on' && sendingHours(nowMs())) {
-      for (const m of await q(`select id from cds_coord_msgs where status = 'draft' and created_at > now() - interval '3 days' order by id limit 10`)) {
+      for (const m of await q(`select id from cds_coord_msgs where status = 'draft' and kind in ('clock','dsds','check') and created_at > now() - interval '3 days' order by id limit 10`)) {
         const r = await sendOne(m.id, 'coordinator'); r.ok ? sent++ : failed++;
       }
     }
-    return { mode, made, skipped, sent, failed };
+    return { mode, made, skipped, sent, failed, journey: { live: jLive, made: jmade, sent: jsent } };
   }
   async function sendOne(id, by, body) {
     const m = await one(`select * from cds_coord_msgs where id = $1`, [+id]);
@@ -183,7 +201,7 @@ export function createHands({ db, ai, send, model, nowMs = () => Date.now() }) {
     if (!force && set.email_day === today) return { email: 'already sent today' };
     const to = await one(`select email from owner_reminders where id = 'samantha'`);
     if (!to || !to.email) return { email: 'no address' };
-    const fmt = i => i.person_name + ': ' + ({ promise: 'we promised ', their_word: 'they said they would ', question: 'they asked ', start_date: 'start date ', attendant: 'attendant ' }[i.kind] || '') + (i.data.what || i.data.text || i.data.name || i.data.date || i.data.note || '');
+    const fmt = i => i.person_name + ': ' + ({ promise: 'we promised ', their_word: 'they said they would ', question: 'they asked ', start_date: 'start date ', attendant: 'attendant ', concern: 'NEEDS YOU: ' }[i.kind] || '') + (i.data.what || i.data.text || i.data.name || i.data.date || i.data.note || '');
     const addedRows = await q(`select person_name, kind, data from cds_coord_items where created_at >= (now() at time zone 'America/Chicago')::date at time zone 'America/Chicago' order by id`);
     const open = await q(`select person_name, kind, data, due::text as due, status from cds_coord_items where status in ('open','suggested') order by due nulls last`);
     const msgs = await q(`select person_name, to_name, kind, status, error, sent_at from cds_coord_msgs where status in ('draft','failed') or sent_at >= now() - interval '1 day'`);
@@ -192,8 +210,8 @@ export function createHands({ db, ai, send, model, nowMs = () => Date.now() }) {
       added: addedRows.map(i => 'Heard: ' + fmt(i)),
       sent: msgs.filter(m => m.status === 'sent').map(m => 'Texted ' + m.to_name + ' (' + m.kind + ')'),
       late: open.filter(i => i.kind === 'promise' && i.due && i.due < today && i.due >= weekAgo).map(i => 'Late: ' + fmt(i)),
-      waiting: open.filter(i => ['start_date', 'attendant'].includes(i.kind) || (i.kind === 'promise' && i.due === today)).map(fmt),
-      drafts: msgs.filter(m => m.status === 'draft').map(m => m.to_name + ' (' + ({ clock: 'clock-in help', dsds: 'has the state called', check: 'check-in' }[m.kind] || m.kind) + ')'),
+      waiting: open.filter(i => ['start_date', 'attendant', 'concern'].includes(i.kind) || (i.kind === 'promise' && i.due === today)).map(fmt),
+      drafts: msgs.filter(m => m.status === 'draft').map(m => m.to_name + ' (' + ({ clock: 'clock-in help', dsds: 'has the state called', check: 'check-in', journey: 'welcome text' }[m.kind] || m.kind) + ')'),
       failed: msgs.filter(m => m.status === 'failed').map(m => 'Text to ' + m.to_name + ' did not go: ' + (m.error || '')) });
     try { await send({ email: to.email, subject: words.subject, text: words.text, html: words.html }); }
     catch (e) { return { email: 'failed: ' + String(e && e.message || e).slice(0, 160) }; }
