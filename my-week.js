@@ -197,9 +197,9 @@
     const out = [];
     S.rows.forEach((row, id) => {
       if (row.kind !== 'item') return;
-      const x = row.data || {}, [, m, d] = ymd(x.date);
-      const r = { id: id.slice(2), own: true, t: x.t, time: x.time || '', icon: '⭐', cat: x.cat || 'mine', what: x.note ? [x.note] : [], every: x.every || 'once', start: x.date, date: x.date };
-      if (r.every === 'week') r.dow = dow(x.date);
+      const x = row.data || {}, day = String(x.date || '').slice(0, 10), [, m, d] = ymd(day);   /* a date sent as a full timestamp still lands on its day (2026-11-17) */
+      const r = { id: id.slice(2), own: true, t: x.t, time: x.time || '', icon: '⭐', cat: x.cat || 'mine', what: x.note ? [x.note] : [], every: x.every || 'once', start: day, date: day };
+      if (r.every === 'week') r.dow = dow(day);
       if (r.every === 'month') r.day = d;
       if (r.every === 'quarter') { r.day = d; r.months = [0, 1, 2, 3].map((k) => ((m - 1 + k * 3) % 12) + 1); }
       if (r.every === 'year') { r.month = m; r.day = d; }
