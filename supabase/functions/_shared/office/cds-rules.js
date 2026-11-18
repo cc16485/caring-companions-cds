@@ -114,6 +114,9 @@
       last12.push({ month: k, done: !!contacts[k], log: contacts[k] || null });
     }
     const missed = last12.filter(m => !m.done && m.month < thisMonth).length;
+    // Months entered in bulk with no call details (2026-10-23 catch-up): they count as done, but an
+    // auditor may not accept them, so they are shown as weak evidence (her yes 2026-11-17).
+    const bulk = last12.filter(m => m.log && m.log.backfilled).length;
     const visits = Array.isArray(c.homeVisits) ? c.homeVisits.slice()
                  : (c.homeVisitDate ? [{ date: c.homeVisitDate, by: '', notes: '' }] : []);
     visits.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -131,7 +134,7 @@
       monthTen = iso(t);
     }
     return {
-      monthly: { doneThisMonth, thisMonth, last12, missed, everLogged: months.length },
+      monthly: { doneThisMonth, thisMonth, last12, missed, bulk, everLogged: months.length },
       annual:  { visits, lastVisit, anchor, due: visitDue, days: visitDays,
                  overdue: visitDays !== null && visitDays < 0,
                  soon: visitDays !== null && visitDays >= 0 && iso(today) >= monthTen,
@@ -211,6 +214,7 @@
           t: plural(r.length, 'state report or tax filing', 'state reports and tax filings') + ' due', go: 'calendar', bad: r.some(x => x.late || x.days <= 7),
           people: r.map(x => ({ name: x.title, why: x.late ? 'late' : x.days === 0 ? 'due today' : plural(x.days, 'day', 'days') + ' left', due: x.due, key: x.key, act: 'report' })) })) : []),
         ...(data.agencyDates ? agencyDatesDue(data.agencyDates, now) : []),
+        ...(data.complaints ? mmacFraudDue(data.complaints, data.consumers, now) : []),
         // The daily Fusion look (2026-11-13), only when the caller hands fusionCheck in (the hub does).
         ...(data.fusionCheck ? fusionDue(data.fusionCheck, now) : [])
       ].filter(Boolean),
@@ -361,6 +365,8 @@
   // training and disaster plan review are her yearly agency dates (AGENCY_DATES), not boxes here.
   const CHECK_CYCLES = {
     audit1: { every: 'week',    label: 'Weekly review of EVV records, tasks, visit notes and care plans', today: 7 },
+    // 13 CSR 70-3.320(2)(K) (eff. 11/30/2024): log in to the state EVV aggregator at least weekly (her yes 2026-11-17).
+    evv8:   { every: 'week',    label: 'Log in to the state EVV aggregator (Sandata EAS)', today: 7 },
     audit2: { every: 'quarter', label: 'Quarterly audit of billing, participant funds and grievance reports', today: 21 },
     audit3: { every: 'quarter', label: 'Quarterly payroll audit, employment taxes included', today: 21 },
     audit4: { every: 'month',   label: 'Monthly case management contact with each participant', today: 0 },
@@ -486,6 +492,22 @@
     }));
     return ppl.length ? [{ t: plural(ppl.length, 'change', 'changes') + ' to report to DSDS (10 days from the call)', go: 'consumers',
                            bad: ppl.some(p => p.due <= today), people: ppl.sort((a, b) => a.due.localeCompare(b.due)) }] : [];
+  }
+  // Suspected EVV falsification or fraud goes to MMAC within 2 business days of finding it
+  // (13 CSR 70-3.320(2)(I), eff. 11/30/2024; her yes 2026-11-17). From the complaint log: a fraud
+  // category, not marked unfounded, with no "Reported to MMAC" date.
+  const MMAC_FRAUD = ['falsification', 'program_fraud', 'consumer_fraud'];
+  const MMAC_FRAUD_LINE = 'MMAC fraud hotline 573-751-3285, MMAC.ReportFraud@dss.mo.gov';
+  function mmacFraudDue(complaints, consumers, now) {
+    const today = isoLocal(now || new Date());
+    const byId = new Map((consumers || []).map(c => [String(c.id), c]));
+    const ppl = (complaints || []).filter(x => x && MMAC_FRAUD.includes(x.category) && x.status !== 'unfounded' && !x.mmacReported && x.date)
+      .map(x => { const c = byId.get(String(x.consumerId || ''));
+        return { name: c ? c.name : 'Complaint ' + monDay(x.date), why: 'report suspected fraud to MMAC (found ' + monDay(x.date) + ')',
+                 due: addBusinessDays(String(x.date).slice(0, 10), 2), key: x.id, act: 'mmac' }; })
+      .sort((a, b) => a.due.localeCompare(b.due));
+    return ppl.length ? [{ t: plural(ppl.length, 'suspected fraud report', 'suspected fraud reports') + ' to send MMAC (2 business days)', go: 'quarterly',
+                           bad: true, people: ppl }] : [];
   }
   // Leads: waiting on the state over 21 days (call DSDS), and leads already reached with no call back
   // date (set one within 1 business day of the last contact). Same rule as the Leads page cards.
@@ -679,7 +701,7 @@
       steps: [S.learned, S.dsds, S.file] },
     { id: 'fraud', group: 'pause', t: 'Fraud or false records, including false EVV', letter: 'Records for your services were falsified. This may include false clock-in or clock-out (EVV) records. Missouri rules treat false records as fraud.',
       cite: '19 CSR 15-8.400(7)(A)2 and (5)(B)5',
-      tip: 'False EVV counts as fraud and is also reported to MMAC.',
+      tip: 'False EVV counts as fraud. Report it to MMAC within 2 business days (13 CSR 70-3.320(2)(I)): 573-751-3285 or MMAC.ReportFraud@dss.mo.gov.',
       steps: [S.learned, S.dsds, S.letter, S.paused, { k: 'mmac', t: 'Reported to MMAC', need: true }, S.file] },
     { id: 'noncompliance', group: 'pause', t: 'Keeps not following the care plan', letter: 'There have been repeated actions that go against your care plan and keep the services from working.',
       cite: '19 CSR 15-8.400(7)(A)3 and 15-8.200(8)(C)',
@@ -1155,9 +1177,10 @@
   // date it was made for (quarterStatus[key + '_for']), so last year's mark never hides this year's.
   const REPORTS = [
     { key: 'q1',     title: 'Q1 Financial & Service Report (Jan to Mar)', due: y => [y, 4, 30] },
-    { key: 'q2',     title: 'Q2 Financial & Service Report (Apr to Jun)', due: y => [y, 7, 31] },
-    { key: 'q3',     title: 'Q3 Financial & Service Report (Jul to Sep)', due: y => [y, 10, 31] },
-    { key: 'q4',     title: 'Q4 Financial & Service Report (Oct to Dec)', due: y => [y + 1, 1, 31] },
+    // 30 days after the quarter (her yes 2026-11-17, rules check): 19 CSR 15-8.400(5)(I) and MMAC CDS Assurances #14.
+    { key: 'q2',     title: 'Q2 Financial & Service Report (Apr to Jun)', due: y => [y, 7, 30] },
+    { key: 'q3',     title: 'Q3 Financial & Service Report (Jul to Sep)', due: y => [y, 10, 30] },
+    { key: 'q4',     title: 'Q4 Financial & Service Report (Oct to Dec)', due: y => [y + 1, 1, 30] },
     // Jan 30 (her yes 2026-11-13): MMAC's notice says Jan 31, the Personal Care Provider Manual says Jan 30; the earlier one is safe.
     { key: 'annual', title: 'Annual Service Report',                      due: y => [y + 1, 1, 30] },
     { key: 'des',    title: 'DES wage reports in UInteract, one per registered consumer', quarterly: true },
@@ -1169,7 +1192,7 @@
     { key: 'mow3',   title: 'MO W-3, one per consumer EIN', due: y => [y + 1, 2, 28] }
   ];
   const _iso = (y, m, d) => y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-  const QUARTER_DUE = [[4, 30], [7, 31], [10, 31], [1, 31]];
+  const QUARTER_DUE = [[4, 30], [7, 31], [10, 31], [1, 31]];   // tax filings (941, MO-941, DES): last day of the month after
   // The due date a report is "on" right now: the earliest one no more than 55 days past (a late one
   // stays on Today for 55 days, until the next quarter's report is close).
   function reportDue(key, now) {
@@ -1267,7 +1290,7 @@
   }
 
   root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
-                    dailyRoutine, STATE_WAIT, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, fusionDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
+                    dailyRoutine, MMAC_FRAUD, MMAC_FRAUD_LINE, mmacFraudDue, STATE_WAIT, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, fusionDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT, caregiverPlan, CAREGIVER_PLAN,
                     DSDS_FORM, DSDS_PHONE, ENDING_GROUPS, ENDING_REASONS, endingReason, endingMissing, appealEnds, noticeEnds, VENDOR_LEGAL, endingLetter, closureItems,
