@@ -3121,6 +3121,9 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
         <div class="clm-q"><div class="clm-row"><span>Any complaints?</span>
           <span class="clm-seg"><label><input type="radio" name="clm_complaint" value="no" checked onchange="clmRefresh()"><span>No</span></label><label><input type="radio" name="clm_complaint" value="yes" onchange="clmRefresh()"><span>Yes</span></label></span></div>
           <input type="text" id="clm_complaint_notes" class="form-input clm-note" data-show="clm_complaint=yes" placeholder="What was it, and what did we do?"></div>
+        <div class="clm-q"><div class="clm-row"><span>Need other help to keep living safely at home?</span>
+          <span class="clm-seg"><label><input type="radio" name="clm_needs" value="no" checked onchange="clmRefresh()"><span>No</span></label><label><input type="radio" name="clm_needs" value="yes" onchange="clmRefresh()"><span>Yes</span></label></span></div>
+          <input type="text" id="clm_needs_notes" class="form-input clm-note" data-show="clm_needs=yes" placeholder="What help do they need?"></div>
       </div>
     </div>
     <div class="clm-foot">
@@ -6077,6 +6080,7 @@ function openContactLog(cid, key) {
   document.getElementById('clm_health_notes').value = existing ? (existing.healthNotes||'') : '';
   document.getElementById('clm_circ_notes').value = existing ? (existing.circNotes||'') : '';
   document.getElementById('clm_complaint_notes').value = existing ? (existing.complaintNotes||'') : '';
+  document.getElementById('clm_needs_notes').value = existing ? (existing.needsNotes||'') : '';
   document.getElementById('clm_notes').value = existing ? (existing.notes||'') : '';
 
   // Radio buttons
@@ -6089,6 +6093,8 @@ function openContactLog(cid, key) {
   setRadio('clm_health', existing ? existing.health : 'no');
   setRadio('clm_circ', existing ? existing.circ : 'no');
   setRadio('clm_complaint', existing ? existing.complaint : 'no');
+  // Question 7 (2026-11-17): calls logged before it existed stay blank, never a made-up "No".
+  setRadio('clm_needs', existing ? existing.needs : 'no');
 
   if (existing && (existing.health === 'yes' || existing.circ === 'yes')) {
     document.getElementById('clm_dhss_alert').style.display = 'block';
@@ -6127,6 +6133,7 @@ function saveContactLog() {
   const healthVal = document.querySelector('input[name="clm_health"]:checked')?.value || 'no';
   const circVal = document.querySelector('input[name="clm_circ"]:checked')?.value || 'no';
   const complaintVal = document.querySelector('input[name="clm_complaint"]:checked')?.value || 'no';
+  const needsVal = document.querySelector('input[name="clm_needs"]:checked')?.value || '';
 
   const log = {
     date,
@@ -6143,6 +6150,8 @@ function saveContactLog() {
     circNotes: document.getElementById('clm_circ_notes').value,
     complaint: complaintVal,
     complaintNotes: document.getElementById('clm_complaint_notes').value,
+    needs: needsVal,
+    needsNotes: document.getElementById('clm_needs_notes').value,
     notes: document.getElementById('clm_notes').value,
     loggedAt: new Date().toISOString(),
     dhssFlag: healthVal === 'yes' || circVal === 'yes'
@@ -11267,7 +11276,7 @@ function saveBulkContacts() {
         // left blank on purpose — see the note on this function
         poc: '', util: '', utilNotes: '', sat: '', satNotes: '',
         health: '', healthNotes: '', circ: '', circNotes: '',
-        complaint: '', complaintNotes: '',
+        complaint: '', complaintNotes: '', needs: '', needsNotes: '',
         notes: 'Recorded in bulk on ' + enteredOn + '. Contact confirmed as completed; details not captured at entry.',
         loggedAt: new Date().toISOString(),
         backfilled: true,
@@ -11421,8 +11430,8 @@ async function buildAuditBinder(c, from, to) {
       ['Pandemic policy ' + mo.year + ': given', signed(mo.given)], ['Consumer trained', mo.trained ? day(mo.trained.at) + (mo.trained.by ? ' by ' + esc2(mo.trained.by) : '') : ''],
       ['Consumer trained the attendant', signed(mo.att)]]) : '<p class="none">The Missouri forms switch is off, so the signed forms are not shown. Turn on Settings > Missouri forms on the consumer profile.</p>'),
     S(8, 'Monthly contacts', '(5)(F)2', !req.monthly.missed && !thin,
-      tbl(['Date', 'How', 'Talked with', 'Plan of care', 'Health or life change', 'Notes'],
-        contacts.map(([, l]) => [day(l.date), esc2(l.method), esc2(l.person || ''), esc2(l.poc || ''), l.dhssFlag ? '<b>Yes</b> ' + esc2(l.healthNotes || l.circNotes || '') : 'No', esc2((l.notes || '').slice(0, 160))]),
+      tbl(['Date', 'How', 'Talked with', 'Plan of care', 'Health or life change', 'Other help needed', 'Notes'],
+        contacts.map(([, l]) => [day(l.date), esc2(l.method), esc2(l.person || ''), esc2(l.poc || ''), l.dhssFlag ? '<b>Yes</b> ' + esc2(l.healthNotes || l.circNotes || '') : 'No', l.needs === 'yes' ? '<b>Yes</b> ' + esc2(l.needsNotes || '') : (l.needs === 'no' ? 'No' : ''), esc2((l.notes || '').slice(0, 160))]),
         'No contacts recorded in this period.') +
       '<div class="small">' + contacts.length + ' contact(s) in this period · ' + req.monthly.missed + ' month(s) missed in the last year.</div>'),
     S(9, 'Face-to-face visits', '(5)(F)1, (8)(C)', visits.length && visits.every(v => v.time && v.by && v.present && v.service && v.quality && !v.attendantFillIn),
