@@ -25,8 +25,10 @@ with sync_playwright() as pw:
     vis = lambda sel: pg.locator(sel).first.is_visible()
 
     pg.evaluate("()=>showPage('money')"); pg.wait_for_timeout(300)
-    ck('switch off: Payroll, Billing, Dashboard, Quarterly report, Annual report (no Claims tab)', nav() == ['Payroll', 'Billing', 'Dashboard', 'Quarterly report', 'Annual report'], nav())
-    ck('Money opens on Payroll', on() == 'Payroll' and vis('text=Upload Empeon PDFs'), on())
+    ck('switch off: Weekly, Payroll, Billing, Dashboard, Quarterly report, Annual report (no Claims tab)', nav() == ['Weekly', 'Payroll', 'Billing', 'Dashboard', 'Quarterly report', 'Annual report'], nav())
+    ck('Money opens on Weekly (2026-11-17)', on() == 'Weekly', on())
+    pg.click('#sectionNav button:has-text("Payroll")'); pg.wait_for_timeout(200)
+    ck('Payroll tab: the Empeon upload', on() == 'Payroll' and vis('text=Upload Empeon PDFs'), on())
     ck('Payroll no longer carries billing, claims or the dashboard', not vis('text=Upload a month of billing') and not vis('#claimsCard') and not vis('#page-financials'))
     pg.screenshot(path=os.path.join(OUT, 'mt01-payroll.png'), full_page=True)
     pg.click('#sectionNav button:has-text("Billing")'); pg.wait_for_timeout(200)
