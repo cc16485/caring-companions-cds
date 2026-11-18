@@ -34,6 +34,12 @@ async([PIPE, CONS, on, table])=>{
   _store.leadsTable = table ? { live: true } : {};
   _store.authorizations = {}; _store.firstShifts = {}; _store.meRules = {}; _store.medicaidMessages = {};
   document.getElementById('header_user').textContent = 'samantha@caringcds.com';
+  (0,eval)("_db = (() => { const chain = new Proxy(function(){}, { get: (t, k) => k === 'then' ? (ok) => ok({ data: [], error: null }) : () => chain, apply: () => chain }); return { auth: { getSession: async () => ({ data: { session: { access_token: 't' } } }) }, from: () => chain, storage: { from: () => chain }, functions: { invoke: async () => ({ data: {}, error: null }) }, channel: () => chain }; })()");
+  window.__coordAsked = [];
+  const realFetch = window.__realFetch || window.fetch; window.__realFetch = realFetch;
+  window.fetch = async (u, o) => { if (String(u).includes('cds-coordinator')) { const b = JSON.parse(o.body); window.__coordAsked.push(b);
+      return new Response(JSON.stringify(b.action === 'list' ? { items: window.__coordItems || [], state: { last_run: new Date().toISOString() } } : { ok: true }), { status: 200 }); }
+    return realFetch(u, o); };
   cdsMatchApi = async (a) => a === 'enrollGet' ? { packet: null, status: { label: 'Not sent' } } : a === 'tasks' ? { tasks: [] } : {};
   window.syncOneToGhl = async () => {};
   const lo = document.getElementById('loginOverlay'); if (lo) lo.style.display = 'none';
@@ -105,6 +111,28 @@ with sync_playwright() as pw:
     ck('promise checked off', pg.evaluate("()=>!!getData('consumers').find(c=>c.id==='C1').starting.promises[0].done"))
     pg.evaluate("()=>{ _profTab='ready'; renderProfile(); }"); pg.wait_for_timeout(300)
     pg.fill('#stClockQs', 'Which app do I download?'); pg.click('#page-profile button:has-text("Clock-in call done")'); pg.wait_for_timeout(300)
+    # ---- 2026-11-17 the CDS Coordinator: what it heard on calls
+    pg.evaluate("""()=>{ window.__coordItems = [
+      { id: 7, person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', kind: 'promise', data: { what: 'Send Dana the clock-in steps' }, due: '2026-11-01', status: 'open', source: { line: 'cc', kind: 'call', at: '2026-10-30T15:00:00Z' } },
+      { id: 8, person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', kind: 'attendant', data: { name: 'Lee Sample', phone: '4175550160', email: 'lee@example.com', relation: 'son' }, status: 'suggested', source: { line: 'cc', kind: 'call', at: '2026-10-19T15:00:00Z', summary: 'Dana named her son.' } },
+      { id: 9, person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', kind: 'start_date', data: { date: '2026-12-01', saidBy: 'consumer', note: 'moving first' }, status: 'suggested', source: { line: 'cds', kind: 'call', at: '2026-11-16T15:00:00Z' } }];
+      StartHub.coordRefresh(); }""")
+    pg.wait_for_timeout(600); pg.evaluate("()=>{ showPage('starting'); }"); pg.wait_for_timeout(400)
+    ck('Starting row: Heard on a call badge', 'Heard on a call: 2 to check' in pg.inner_text("#startingPage .lt-wrap tr:has-text('Dana Started')"), pg.inner_text("#startingPage .lt-wrap tr:has-text('Dana Started')"))
+    pg.evaluate("()=>{ openProfile('C1'); _profTab='overview'; renderProfile(); }"); pg.wait_for_timeout(300)
+    pv = pg.inner_text('#page-profile')
+    ck('profile: Heard on calls and texts with the attendant and the start date', 'Heard on calls and texts' in pv and 'Lee Sample' in pv and 'Use Dec 1' in pv and 'Caring Companions line' in pv, pv[:1200])
+    ck('profile: the promise it heard is on What we promised, late', 'Send Dana the clock-in steps' in pv and 'from the call' in pv)
+    shot(pg, '02d-profile-heard')
+    pg.click('#page-profile button:has-text("Use Dec 1")'); pg.wait_for_timeout(400)
+    ck('Use the date: start date saved and the item answered', pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').cdsStartDate") == '2026-12-01' and pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='decide'&&b.id===9&&b.answer==='used')"))
+    pg.click('#page-profile button:has-text("Add them and text the application")'); pg.wait_for_timeout(300)
+    ck('Add them: the Add attendant box opens filled in', pg.evaluate("()=>[document.getElementById('aa_name').value, document.getElementById('aa_email').value]") == ['Lee Sample', 'lee@example.com'] and pg.evaluate("()=>document.getElementById('aa_for').value") == 'c:C1')
+    pg.evaluate("()=>closeModal('addAttModal')")
+    pg.evaluate("()=>{ _profTab='overview'; renderProfile(); }"); pg.wait_for_timeout(200)
+    pg.click('#page-profile input[aria-label="Done"] >> nth=0'); pg.wait_for_timeout(300)
+    ck('checking off a heard promise answers it on the server', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='decide'&&b.id===7&&b.answer==='done')"), pg.evaluate("()=>window.__coordAsked"))
+    pg.evaluate("()=>{ _profTab='ready'; renderProfile(); }"); pg.wait_for_timeout(200)
     ck('clock-in call recorded with the question', pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').starting.clockCall.questions") == 'Which app do I download?' and 'Done' in pg.inner_text('#page-profile'))
     pg.evaluate("()=>showPage('starting')"); pg.wait_for_timeout(200)
     pg.click('#startingPage button:has-text("Start their profile")'); pg.wait_for_timeout(400)

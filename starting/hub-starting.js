@@ -336,7 +336,7 @@
     const also = st.also.length ? '<div class="st-also"><b>You can also do now, while you wait</b><ul>' + st.also.map(a => '<li>' +
       (alsoGo[a.act] ? '<a href="#" onclick="' + alsoGo[a.act] + ';return false">' + esc(a.t) + '</a>' : esc(a.t)) + '</li>').join('') + '</ul></div>' : '';
     let body = '';
-    if (tab === 'overview') body = trackerHtml(c) + overviewHtml(c, ctx, st);
+    if (tab === 'overview') body = heardHtml(c) + trackerHtml(c) + overviewHtml(c, ctx, st);
     else if (tab === 'contacts') body = rpCardHtml('consumer', c);
     else if (tab === 'medicaid') body = medicaidHtml(c, ctx, st);
     else if (tab === 'state') body = stateHtml(c, ctx);
@@ -824,13 +824,84 @@
     }
     return undefined;   // not known yet
   }
+  // ---------------------------------------------------------------- the CDS Coordinator (2026-11-17, her ask)
+  // What it heard on calls and texts (both lines): promises go straight onto What we promised; a start date, an attendant,
+  // what they said they would do and questions wait here for the office. Kept two minutes.
+  const _co = { items: null, at: 0, busy: false, err: '' };
+  async function coordCall(body) {
+    const { data } = await _db.auth.getSession();
+    const r = await fetch(SUPABASE_URL + '/functions/v1/cds-coordinator', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + (data && data.session ? data.session.access_token : '') }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(r.status === 404 ? 'The CDS Coordinator is not installed yet.' : (j.error || 'The Coordinator answered ' + r.status + '.'));
+    return j;
+  }
+  function coordItems() {
+    if (!_co.busy && Date.now() - _co.at > 2 * 60e3 && typeof _db !== 'undefined' && _db) {
+      _co.busy = true;
+      coordCall({ action: 'list' }).then(j => { _co.items = j.items || []; _co.state = j.state; _co.err = ''; })
+        .catch(e => { _co.err = String(e && e.message || e); }).finally(() => { _co.at = Date.now(); _co.busy = false; rerender(); });
+    }
+    return _co.items || [];
+  }
+  function coordRefresh() { _co.at = 0; return coordItems(); }
+  const coordFor = c => coordItems().filter(i => i.person_kind === 'consumer' && String(i.person_id) === String(c.id));
+  async function coordDecide(id, action, then) {
+    try { await coordCall({ action: 'decide', id, answer: action }); const it = (_co.items || []).find(i => String(i.id) === String(id));
+      if (it) it.status = { done: 'done', undo: ['start_date', 'attendant'].includes(it.kind) ? 'suggested' : 'open', dismiss: 'dismissed', used: 'applied' }[action]; }
+    catch (e) { if (typeof _ghlToast === 'function') _ghlToast('⚠️ Not saved: ' + e.message, true); else alert('Not saved: ' + e.message); }
+    if (typeof then === 'function') then();
+    rerender();
+  }
+  // A promise it heard, as the tracker sees it (same shape as a typed one).
+  const asPromise = i => ({ id: 'co' + i.id, coId: i.id, what: i.data.what, due: i.due ? String(i.due).slice(0, 10) : '', owner: '', done: ['done', 'applied', 'dismissed'].includes(i.status) ? { at: i.decided_at || '', by: (i.decided_by || '').split('@')[0] } : null,
+    from: { kind: i.source && i.source.kind === 'texts' ? 'text' : 'call', at: i.source && i.source.at, line: i.source && i.source.line === 'cc' ? '417-234-8494' : 'CDS line' } });
+  function withHeard(c) {
+    const heard = coordFor(c).filter(i => i.kind === 'promise').map(asPromise);
+    if (!heard.length) return c;
+    return Object.assign({}, c, { starting: Object.assign({}, c.starting, { promises: ((c.starting || {}).promises || []).concat(heard) }) });
+  }
+  function heardBadge(c) {
+    const n = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status)).length;
+    return n ? '<button type="button" class="lt-b lt-b-q" style="margin-top:4px" onclick="' + esc("_profTab='overview';openProfile('" + q(c.id) + "')") + '">Heard on a call: ' + n + ' to check</button>' : '';
+  }
+  function useStart(cid, id, date) { coordDecide(id, 'used', () => { if (date) setStart(cid, date); }); }
+  function useAttendant(cid, id) {
+    const it = (_co.items || []).find(i => String(i.id) === String(id)); if (!it || typeof openAddAttendant !== 'function') return;
+    openAddAttendant('c:' + cid, () => { edit('consumer', cid, c => { c.starting = Object.assign({}, c.starting, { attendantName: it.data.name }); }); coordDecide(id, 'used'); });
+    document.getElementById('aa_name').value = it.data.name || '';
+    document.getElementById('aa_phone').value = it.data.phone ? _laFmtPhone(it.data.phone) : '';
+    document.getElementById('aa_email').value = it.data.email || '';
+  }
+  // The box on a Starting profile: what it heard that needs the office.
+  function heardHtml(c) {
+    const list = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status));
+    const cid = q(c.id);
+    const from = i => '<div class="lt-sub">' + esc([i.source && i.source.kind === 'texts' ? 'From texts' : 'From a call', i.source && i.source.at ? 'on ' + shortDay(String(i.source.at).slice(0, 10)) : '',
+      i.source && i.source.line === 'cc' ? 'on the Caring Companions line' : 'on the CDS line'].filter(Boolean).join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>';
+    const row = (i, text, buttons) => '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><div>' + text + '</div>' + from(i) + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' + buttons + '</div></div>';
+    const done = (i, label) => btn(label || 'Done', "StartHub.coordDecide(" + i.id + ",'done')", true), no = i => btn('Not right', "StartHub.coordDecide(" + i.id + ",'dismiss')", true);
+    const rows = list.map(i => {
+      const d = i.data || {};
+      if (i.kind === 'start_date') return row(i, '<b>Start date:</b> ' + (d.date ? esc(day(d.date)) : 'changing') + (d.saidBy ? ' (said by the ' + esc(d.saidBy) + ')' : '') + (d.note ? '. ' + esc(d.note) : '') + (c.cdsStartDate ? ' <span class="lt-sub">On file: ' + esc(day(c.cdsStartDate)) + '</span>' : ''),
+        (d.date ? btn('Use ' + esc(shortDay(d.date)), "StartHub.useStart('" + cid + "'," + i.id + ",'" + q(d.date) + "')") : '') + done(i, d.date ? 'Already handled' : 'Got it') + no(i));
+      if (i.kind === 'attendant') return row(i, '<b>Attendant:</b> ' + esc(d.name) + (d.relation ? ' (' + esc(d.relation) + ')' : '') + [d.phone ? ' · ' + esc(_laFmtPhone ? _laFmtPhone(d.phone) : d.phone) : '', d.email ? ' · ' + esc(d.email) : ''].join(''),
+        btn('Add them and text the application', "StartHub.useAttendant('" + cid + "'," + i.id + ")") + done(i, 'Already added') + no(i));
+      if (i.kind === 'their_word') return row(i, '<b>They said they would:</b> ' + esc(d.what) + (i.due ? ' <span class="lt-sub">check on ' + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : ''), done(i, 'They did') + no(i));
+      if (i.kind === 'question') return row(i, '<b>They asked:</b> ' + esc(d.text), done(i, 'Answered') + no(i));
+      return '';
+    }).join('');
+    const status = _co.err ? '<div class="lt-sub">' + esc(_co.err) + '</div>' : _co.state && _co.state.last_run ? '<div class="lt-sub">Listening on both lines. Last checked ' + esc(new Date(_co.state.last_run).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '.</div>' : '';
+    return '<div class="st-box" style="margin-top:12px;border-color:var(--primary)"><b style="color:var(--primary)">Heard on calls and texts</b>' + status +
+      (rows || '<div class="lt-sub">Nothing waiting. What it hears shows here, and promises go onto What we promised.</div>') + '</div>';
+  }
   function trackerCtx(c) {
     const cx = ctxFor(c), P = packetOf(c);
     const roster = (getData('attendants') || []).filter(a => a.status !== 'inactive' && String(a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name)))[0] || null;
     return Object.assign({}, cx, { today: today(), roster: roster ? { name: roster.name } : null, att: T().attendantFor(c, attRows()),
       packet: P === undefined ? { status: 'checking' } : { signed: !!(P && P.signed_at), done: !!(P && P.status === 'Done'), status: P ? P.status : '' } });
   }
-  function trackerOf(c) { return T().tracker(c, trackerCtx(c)); }
+  function trackerOf(c) { return T().tracker(withHeard(c), trackerCtx(c)); }
   const GO = { medicaid: "_profTab='medicaid';", referral: "_profTab='state';", start: "_profTab='state';", packet: "_profTab='tax';", tax: "_profTab='tax';", clock: "_profTab='ready';", promise: "_profTab='overview';" };
   function goTo(c, k) { return k === 'checks' || k === 'empeon' ? "showPage('attendants')" : (GO[k] || "_profTab='overview';") + "openProfile('" + q(c.id) + "')"; }
   const shortDay = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
@@ -843,11 +914,11 @@
   }
   // What we promised: from calls (the CDS Coordinator adds them, tagged with the call) and typed in by the office.
   function promisesHtml(c) {
-    const list = T().promises(c, today());
+    const list = T().promises(withHeard(c), today());
     const id = q(c.id);
     return '<div class="st-box" style="margin-top:12px"><b style="color:var(--primary)">What we promised</b>' +
       (list.length ? list.map(p => '<div style="display:flex;gap:8px;align-items:flex-start;' + (p.open ? '' : 'opacity:.6') + '">' +
-        '<input type="checkbox" ' + (p.open ? '' : 'checked ') + 'aria-label="Done" onchange="StartHub.promiseDone(\'' + id + '\',\'' + q(p.id) + '\',this.checked)" style="margin-top:3px">' +
+        '<input type="checkbox" ' + (p.open ? '' : 'checked ') + 'aria-label="Done" onchange="' + (p.coId ? 'StartHub.coordDecide(' + p.coId + ',this.checked?\'done\':\'undo\')' : 'StartHub.promiseDone(\'' + id + '\',\'' + q(p.id) + '\',this.checked)') + '" style="margin-top:3px">' +
         '<div style="flex:1"><div' + (p.late ? ' style="color:var(--danger);font-weight:600"' : '') + '>' + esc(p.what) + '</div><div class="lt-sub">' +
         [p.due ? (p.late ? 'late, was due ' : 'due ') + shortDay(p.due) : 'no date', p.owner || '', p.from && p.from.kind !== 'typed' ? 'from the ' + (p.from.kind === 'text' ? 'text' : 'call') + (p.from.at ? ' on ' + shortDay(String(p.from.at).slice(0, 10)) : '') + (p.from.line ? ' (' + p.from.line + ')' : '') : 'typed in',
          p.done ? 'done ' + shortDay(String(p.done.at).slice(0, 10)) + ' by ' + (p.done.by || '') : ''].filter(Boolean).map(esc).join(' · ') + '</div></div></div>').join('')
@@ -912,7 +983,7 @@
       cols.map(([, t], i) => '<th' + (i === 0 ? ' class="lt-sep"' : '') + '>' + esc(t) + '</th>').join('') +
       '<th class="lt-sep">Start date</th><th>We promised</th><th class="lt-sep">Next step</th></tr></thead><tbody>' +
       (rows.length ? rows.map(r => '<tr class="lt-r' + (r.t.urgent ? ' lt-now' : '') + '"><td class="lt-n"><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
-        '<div class="lt-sub">' + who(r) + '</div>' + (r.t.attName ? '<div class="lt-sub">Attendant: ' + esc(r.t.attName) + '</div>' : '') + '</td>' +
+        '<div class="lt-sub">' + who(r) + '</div>' + (r.t.attName ? '<div class="lt-sub">Attendant: ' + esc(r.t.attName) + '</div>' : '') + heardBadge(r.c) + '</td>' +
         cols.map(([k]) => trackCell(r.c, k, r.t.cells[k])).join('') +
         '<td class="lt-sep">' + start(r) + (r.t.cells.start.date ? '<div class="lt-sub' + (r.t.cells.start.state === 'late' || r.t.cells.start.days <= 7 ? ' lt-red' : '') + '">' + esc(r.t.cells.start.t) + '</div>' : '') + '</td>' +
         '<td>' + prom(r) + '</td><td class="lt-sep" style="min-width:220px">' + nextT(r) + '</td></tr>').join('')
@@ -1073,5 +1144,5 @@
   }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, coordItems, coordRefresh };
 })();
