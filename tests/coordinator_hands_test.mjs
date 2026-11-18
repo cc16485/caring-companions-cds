@@ -101,5 +101,8 @@ ok(e.email === 'sent' && T.sent.length === before + 1 && T.sent[before].email ==
 e = await hands.dailyEmail({ email: true, email_day: T.settings.email_day });
 ok(e.email === 'already sent today', 'once a day');
 ok(/Lee Sample/.test(T.sent[before].html) && !/[—–]/.test(T.sent[before].html), 'the email lists what waits on her, no em dashes');
+// the clock-in walkthrough link (her OK 11-17: "Yes, put it live")
+{ const v = { name: 'Christopher Montgomery-Williamson', att: 'Alexandria Montgomery', start: '2026-12-01', from: 'Samantha' };
+  for (const k of ['clockConsumer', 'clockAttendant']) { const t = H.safeText(H.WORDS[k](v)); ok(t && /caringcds\.com\/clock-in /.test(t), k + ' links caringcds.com/clock-in and still fits', t); } }
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);
