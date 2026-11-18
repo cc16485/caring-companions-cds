@@ -201,7 +201,10 @@ export function billedFor(claims, dcn, rate) {
     const ym = monthOf(c.first);
     byMonth[ym] = byMonth[ym] || { billed: 0, paid: 0, units: 0, claims: [] };
     byMonth[ym].billed += c.billed; byMonth[ym].paid += c.paid; byMonth[ym].claims.push(c);
-    if (rate > 0) byMonth[ym].units += Math.round(c.billed / rate);
+    // Claims with their day lines (2026-11-17): count the personal care units actually on them. Supplies, FMS and case
+    // management are not care hours. Claims kept only as totals: worked out from the money, as before.
+    if (Array.isArray(c.lines) && c.lines.length) byMonth[ym].units += c.lines.filter(l => l.code === 'T1019').reduce((n, l) => n + (+l.units || 0), 0) * (isAdjustment(c) ? -1 : 1);
+    else if (rate > 0) byMonth[ym].units += Math.round(c.billed / rate);
   }
   const lastBilled = live.filter(c => !isAdjustment(c)).map(c => c.last).sort().pop() || '';
   return { claims: mine, live, byMonth, lastBilled, denied: mine.filter(c => c.status === 'denied') };
@@ -274,7 +277,12 @@ function block(c, ym, mFrom, mTo, recs, logs, hist, work, hospital, limit, uncov
 
   // what is already billed in eMOMED this month (not denied), and days already covered by a claim
   const already = hist.byMonth[ym] || { units: 0, billed: 0, paid: 0, claims: [] };
-  const coveredBy = d => already.claims.find(cl => !isAdjustment(cl) && cl.first <= d && d <= cl.last);
+  // A day is already billed only if a personal care line on a claim names it (2026-11-17, her rule "bill every single unit":
+  // the old first-to-last range skipped Susan Barnwell's Nov 8-14 because her November claim carried supply lines dated
+  // Nov 8 and Nov 16). Claims kept only as totals still cover their whole range. A replaced claim covers nothing.
+  const coveredBy = d => already.claims.find(cl => !isAdjustment(cl) && cl.status !== 'replaced' && (Array.isArray(cl.lines) && cl.lines.length
+    ? cl.lines.some(l => l.code === 'T1019' && l.from <= d && d <= (l.to || l.from))
+    : cl.first <= d && d <= cl.last));
   const billedDays = days.filter(d => coveredBy(d));
   const newDays = days.filter(d => !coveredBy(d));
   const newMin = logs.filter(x => x.clockOut && !x.incomplete && newDays.includes(x.clockIn.slice(0, 10))).reduce((s, x) => s + logMinutes(x), 0);

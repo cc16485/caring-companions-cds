@@ -5684,7 +5684,7 @@ async function renderClaimsCard() {
   if (_claims) { _claims.draw(true); return; }
   const root = document.getElementById('claimsRoot');
   try {
-    const { mountClaims } = await import('./claims/hub-claims.js?v=3');
+    const { mountClaims } = await import('./claims/hub-claims.js?v=4');
     _claims = mountClaims(root, {
       consumers: () => getData('consumers'), auths: () => getObj('authorizations'),
       work: () => getObj('claimsWork'), saveWork: w => setObj('claimsWork', w),
@@ -18208,6 +18208,6 @@ document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCoun
 <script src="starting/hub-starting.js?v=21"></script>
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 <!-- Claims for eMOMED (2026-11-16): the authorization reader uses its section reader -->
-<script type="module">import * as C from './claims/claims.js?v=3'; window.CDSClaims = C;</script>
+<script type="module">import * as C from './claims/claims.js?v=4'; window.CDSClaims = C;</script>
 </body>
 </html>

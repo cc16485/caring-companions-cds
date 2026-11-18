@@ -119,6 +119,21 @@ eq(b.lines[0].from + ' ' + b.lines[0].units, '2026-11-17 40', 'the day already o
 ok(b.notes.some(n => /already on a claim/.test(n)) && b.notes.some(n => /Denied in eMOMED: claim 4926000000002/.test(n)), 'says what was left out and the denial');
 ok(b.notes.some(n => /About 10 units are already billed/.test(n)), 'units already billed worked out from the money');
 
+// 2026-11-17 (her rule "bill every single unit"): a claim with day lines covers only the days its care lines name. The old
+// first-to-last range skipped a week because a supply line was dated after the care days.
+const withLines = [{ icn: '4926000000009', dcn: '11111111', status: 'to be paid', billed: 120, paid: 0, first: '2026-11-02', last: '2026-11-17',
+  lines: [{ from: '2026-11-02', to: '2026-11-02', code: 'T1019', mod: 'U2', units: 12, charge: 62.76 }, { from: '2026-11-17', to: '2026-11-17', code: 'T2028', mod: 'U6', units: 1, charge: 57.24 }] }];
+W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths, logs, coverage: [{ from: '2026-11-01', to: '2026-11-30' }], claims: withLines, work, now });
+b = W.blocks[0];
+ok(b.lines.some(l => l.code === 'T1019' && l.from === '2026-11-16') && !b.notes.some(n => /already on a claim/.test(n)), 'days inside a claim range but not on its care lines are billed: ' + JSON.stringify(b.lines.map(l => l.from + ' ' + l.code)));
+ok(b.notes.some(n => /About 12 units are already billed/.test(n)), 'units already billed come from the care lines, not the money (supplies are not hours)');
+W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths, logs, coverage: [{ from: '2026-11-01', to: '2026-11-30' }], work, now,
+  claims: [{ ...withLines[0], lines: [{ from: '2026-11-16', to: '2026-11-16', code: 'T1019', mod: 'U2', units: 20, charge: 104.6 }] }] });
+ok(W.blocks[0].notes.some(n => /1 day in this range are already on a claim/.test(n)), 'a day on a care line is still left out');
+W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths, logs, coverage: [{ from: '2026-11-01', to: '2026-11-30' }], work, now,
+  claims: [{ ...withLines[0], status: 'replaced', lines: [{ from: '2026-11-16', to: '2026-11-16', code: 'T1019', mod: 'U2', units: 20, charge: 104.6 }] }] });
+ok(!W.blocks[0].notes.some(n => /already on a claim/.test(n)), 'a replaced claim covers nothing (its replacement does)');
+
 // stops
 W = C.buildWorksheet({ from: '2026-11-16', to: '2026-11-17', consumers: consumers.slice(0, 1), auths, logs: logs.concat([log('Doe, Jan', '2026-11-17', '19:00', null)]), coverage: [{ from: '2026-11-17', to: '2026-11-30' }], claims: [], work, now });
 b = W.blocks[0];

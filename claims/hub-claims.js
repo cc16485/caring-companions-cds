@@ -7,7 +7,7 @@
 // mountClaims(el, deps) deps = { consumers(), auths(), work(), saveWork(w), load() -> { careLogs, uploadedLogs, emomed },
 //   saveStore(key, val), hospital(), who(), xlsx() (loads SheetJS), toast(msg, warn) }
 // No em dashes in anything a person reads.
-import * as C from './claims.js?v=3';
+import * as C from './claims.js?v=4';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = n => '$' + (+n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
