@@ -55,6 +55,7 @@
     '.st-abd{display:flex;gap:8px;align-items:flex-start;background:#fbf1dc;border-radius:10px;padding:8px 10px;font-size:13px}' +
     '.st-dup{background:#fbf1dc;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:600}' +
     '.st-mini{display:flex;gap:3px;max-width:260px}.st-mini i{flex:1;height:7px;border-radius:4px;background:var(--gray-300)}.st-mini i.done{background:var(--accent)}.st-mini i.now{background:#9C6410}.st-mini i.side{background:#9cb8d6}' +
+    '.st-late{background:#fff!important;border:1.5px solid var(--danger)!important;color:var(--danger)!important}' +
     '@media (max-width:820px){.st-bar{grid-template-columns:repeat(2,minmax(0,1fr))}.st-medgrid,.st-form{grid-template-columns:minmax(0,1fr)}}' +
     '</style>');
   function rules() { const r = getObj('meRules'); return r && Array.isArray(r.codes) && r.codes.length ? r : S.DEFAULT_RULES; }
@@ -335,7 +336,7 @@
     const also = st.also.length ? '<div class="st-also"><b>You can also do now, while you wait</b><ul>' + st.also.map(a => '<li>' +
       (alsoGo[a.act] ? '<a href="#" onclick="' + alsoGo[a.act] + ';return false">' + esc(a.t) + '</a>' : esc(a.t)) + '</li>').join('') + '</ul></div>' : '';
     let body = '';
-    if (tab === 'overview') body = overviewHtml(c, ctx, st);
+    if (tab === 'overview') body = trackerHtml(c) + overviewHtml(c, ctx, st);
     else if (tab === 'contacts') body = rpCardHtml('consumer', c);
     else if (tab === 'medicaid') body = medicaidHtml(c, ctx, st);
     else if (tab === 'state') body = stateHtml(c, ctx);
@@ -718,7 +719,10 @@
         : btn('Mark ready for first shift', "StartHub.markReady('" + q(c.id) + "')", false, st.gateOk ? '' : ' disabled')) + '</div>' +
       '<div class="field-note" style="margin-top:8px">Press each one when it is done. The rest the Hub checks by itself.</div>' +
       btn('WellSky: authorization is in', "StartHub.prep('" + q(c.id) + "','authWellSky')", true) + ' ' + btn('WellSky: tasks are in', "StartHub.prep('" + q(c.id) + "','tasksWellSky')", true) + ' ' +
-      btn('Told the consumer how to clock in', "StartHub.prep('" + q(c.id) + "','toldClockIn')", true) + ' ' + btn('The attendant can clock in (WellSky app set up)', "StartHub.attClock('" + q(c.id) + "')", true);
+      btn('Told the consumer how to clock in', "StartHub.prep('" + q(c.id) + "','toldClockIn')", true) + ' ' + btn('The attendant can clock in (WellSky app set up)', "StartHub.attClock('" + q(c.id) + "')", true) +
+      '<div class="st-box" style="margin-top:14px"><b style="color:var(--primary)">Clock-in call</b><div class="lt-sub">Before the start date: call the consumer and the attendant, show them how to clock in and out (WellSky app or the home phone), and ask if they have any questions.</div>' +
+      (c.starting && c.starting.clockCall ? '<div style="color:var(--success);font-weight:600">Done ' + esc(day(c.starting.clockCall.at)) + ' by ' + esc(c.starting.clockCall.by || '') + (c.starting.clockCall.questions ? '. Questions: ' + esc(c.starting.clockCall.questions) : '') + '</div>'
+        : '<textarea id="stClockQs" rows="2" placeholder="Any questions they asked (optional)" style="font-size:13px"></textarea><div>' + btn('Clock-in call done', "StartHub.clockCall('" + q(c.id) + "')") + '</div>') + '</div>';
   }
   function markReady(cid) {
     const c = getData('consumers').find(x => x.id === cid);
@@ -790,6 +794,94 @@
     setStart(cid, v);
   }
   function pageStartBlur(cid) { setTimeout(() => { if (_startEdit === cid && !document.querySelector('#startingPage .st-date-in:focus')) { _startEdit = ''; renderPage(); } }, 200); }
+  // ---------------------------------------------------------------- the start tracker (2026-11-17, her ask)
+  // Attendant onboarding rows (Step 1, checks, Empeon, I-9) and each consumer's packet, read from the server and kept
+  // five minutes. The tracker rules are shared with the CDS Coordinator (start-tracker.js), so both say the same thing.
+  const T = () => window.CDSTracker;
+  const _trk = { att: null, attAt: 0, attBusy: false, pk: {} };
+  function attRows() {
+    if (!_trk.attBusy && Date.now() - _trk.attAt > 5 * 60e3 && typeof cdsMatchApi === 'function') {
+      _trk.attBusy = true;
+      Promise.resolve().then(() => cdsMatchApi('packetList', {})).then(r => {
+        _trk.att = ((r && r.attendants) || []).map(a => {
+          const c = (a.table && a.table.cells) || {}, ok = k => !c[k] || ['done', 'na'].includes(c[k].s);
+          return { pool_id: a.pool_id, name: a.name, consumer: a.consumer || '', active: !!a.active, step1: !!a.step1_at || !!a.active,
+            checksClear: !!a.active || (['fcsr', 'edl', 'oig', 'fp'].every(ok) && !!c.fcsr), invite: !!a.active || (c.invite || {}).s === 'done',
+            empeon: !!a.active || (c.empeon || {}).s === 'done', i9: !!a.active || (c.i9 || {}).s === 'done', hold: (a.table && a.table.hold) || '', next: a.next || '' };
+        });
+      }).catch(() => {}).finally(() => { _trk.attAt = Date.now(); _trk.attBusy = false; rerender(); });
+    }
+    return _trk.att || [];
+  }
+  function packetOf(c) {
+    const hit = (typeof _profPacket !== 'undefined' && _profPacket[c.id]) || null;
+    if (hit && 'packet' in hit) return hit.packet || null;
+    if (!_trk.pk[c.id] && typeof cdsMatchApi === 'function') {
+      _trk.pk[c.id] = true;
+      cdsMatchApi('enrollProfile', { consumer_id: c.id, name: c.name })
+        .then(r => { if (typeof _profPacket !== 'undefined') _profPacket[c.id] = { at: Date.now(), packet: r.packet }; })
+        .catch(() => {}).then(() => { const sp = document.getElementById('page-starting'); if (sp && sp.classList.contains('active')) renderPage(); });
+    }
+    return undefined;   // not known yet
+  }
+  function trackerCtx(c) {
+    const cx = ctxFor(c), P = packetOf(c);
+    const roster = (getData('attendants') || []).filter(a => a.status !== 'inactive' && String(a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name)))[0] || null;
+    return Object.assign({}, cx, { today: today(), roster: roster ? { name: roster.name } : null, att: T().attendantFor(c, attRows()),
+      packet: P === undefined ? { status: 'checking' } : { signed: !!(P && P.signed_at), done: !!(P && P.status === 'Done'), status: P ? P.status : '' } });
+  }
+  function trackerOf(c) { return T().tracker(c, trackerCtx(c)); }
+  const GO = { medicaid: "_profTab='medicaid';", referral: "_profTab='state';", start: "_profTab='state';", packet: "_profTab='tax';", tax: "_profTab='tax';", clock: "_profTab='ready';", promise: "_profTab='overview';" };
+  function goTo(c, k) { return k === 'checks' || k === 'empeon' ? "showPage('attendants')" : (GO[k] || "_profTab='overview';") + "openProfile('" + q(c.id) + "')"; }
+  const shortDay = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  function trackCell(c, k, x) {
+    const due = x.due ? '<div class="lt-sub' + (x.late ? ' lt-red' : '') + '">' + (x.late ? 'late, was due ' : 'by ') + esc(shortDay(x.due)) + '</div>' : '';
+    if (x.state === 'done') return '<td><span class="lt-ok">✓</span><div class="lt-sub">' + esc(x.t) + '</div></td>';
+    if (x.state === 'now') return '<td class="lt-hi"><button type="button" class="lt-b' + (x.late ? ' st-late' : '') + '" onclick="' + esc(goTo(c, k)) + '">' + esc(x.t) + '</button>' + due + '</td>';
+    if (x.state === 'wait') return '<td><span class="lt-sub" style="color:var(--gray-800)">' + esc(x.t) + '</span><div class="lt-sub">waiting on ' + esc(String(x.owner || '').toLowerCase()) + '</div>' + due + '</td>';
+    return '<td><span class="lt-none">–</span>' + (x.t && k !== 'start' ? '<div class="lt-sub">' + esc(x.t) + '</div>' : '') + '</td>';
+  }
+  // What we promised: from calls (the CDS Coordinator adds them, tagged with the call) and typed in by the office.
+  function promisesHtml(c) {
+    const list = T().promises(c, today());
+    const id = q(c.id);
+    return '<div class="st-box" style="margin-top:12px"><b style="color:var(--primary)">What we promised</b>' +
+      (list.length ? list.map(p => '<div style="display:flex;gap:8px;align-items:flex-start;' + (p.open ? '' : 'opacity:.6') + '">' +
+        '<input type="checkbox" ' + (p.open ? '' : 'checked ') + 'aria-label="Done" onchange="StartHub.promiseDone(\'' + id + '\',\'' + q(p.id) + '\',this.checked)" style="margin-top:3px">' +
+        '<div style="flex:1"><div' + (p.late ? ' style="color:var(--danger);font-weight:600"' : '') + '>' + esc(p.what) + '</div><div class="lt-sub">' +
+        [p.due ? (p.late ? 'late, was due ' : 'due ') + shortDay(p.due) : 'no date', p.owner || '', p.from && p.from.kind !== 'typed' ? 'from the ' + (p.from.kind === 'text' ? 'text' : 'call') + (p.from.at ? ' on ' + shortDay(String(p.from.at).slice(0, 10)) : '') + (p.from.line ? ' (' + p.from.line + ')' : '') : 'typed in',
+         p.done ? 'done ' + shortDay(String(p.done.at).slice(0, 10)) + ' by ' + (p.done.by || '') : ''].filter(Boolean).map(esc).join(' · ') + '</div></div></div>').join('')
+        : '<div class="lt-sub">Nothing yet. Promises from calls show here, and you can add one.</div>') +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px"><input id="stPrWhat" placeholder="What we promised" style="flex:1 1 220px;font-size:13px">' +
+      '<input id="stPrDue" type="date" aria-label="Due" style="font-size:13px">' + btn('Add', "StartHub.promiseAdd('" + id + "')", true) + '</div></div>';
+  }
+  function promiseAdd(cid) {
+    const what = String((document.getElementById('stPrWhat') || {}).value || '').trim(), due = (document.getElementById('stPrDue') || {}).value || '';
+    if (!what) return;
+    edit('consumer', cid, c => { c.starting = Object.assign({}, c.starting); c.starting.promises = (c.starting.promises || []).concat([{ id: 'p' + Date.now().toString(36), what: what.slice(0, 300), due, owner: c.coordinator || meName(), from: { kind: 'typed', at: nowIso(), by: meName() } }]); });
+    rerender();
+  }
+  function promiseDone(cid, pid, done) {
+    edit('consumer', cid, c => { const p = ((c.starting || {}).promises || []).find(x => x.id === pid); if (p) p.done = done ? { at: nowIso(), by: meName() } : null; });
+    rerender();
+  }
+  // The clock-in call (her words: "teach the consumer and their attendant how to clock in and see if they have any questions before their start date").
+  function clockCall(cid) {
+    const qs = String((document.getElementById('stClockQs') || {}).value || '').trim();
+    edit('consumer', cid, c => { c.starting = Object.assign({}, c.starting, { clockCall: { at: nowIso(), by: meName(), questions: qs.slice(0, 1000) } });
+      c.firstShiftPrep = Object.assign({}, c.firstShiftPrep, { toldClockIn: c.firstShiftPrep && c.firstShiftPrep.toldClockIn || { at: nowIso(), by: meName() } });
+      c.starting.attClockIn = c.starting.attClockIn || { at: nowIso(), by: meName() };
+      logTo(c, 'Clock-in call done: the consumer and the attendant know how to clock in.' + (qs ? ' Questions: ' + qs : '')); });
+    rerender();
+  }
+  function trackerHtml(c) {
+    const t = trackerOf(c);
+    return '<div class="st-box" style="margin-top:12px"><b style="color:var(--primary)">Start tracker</b>' +
+      T().COLS.map(([k, label]) => { const x = t.cells[k];
+        return '<div style="display:flex;gap:8px;align-items:baseline;font-size:13px"><span style="min-width:18px">' + (x.state === 'done' ? '✓' : x.state === 'wait' ? '…' : '○') + '</span>' +
+          '<span style="min-width:130px;color:var(--gray-600)">' + esc(label) + '</span><span style="flex:1' + (x.late ? ';color:var(--danger);font-weight:600' : '') + '">' + esc(x.t) +
+          (x.owner && x.state !== 'done' ? ' · ' + esc(x.owner) : '') + (x.due && x.state !== 'done' ? ' · ' + (x.late ? 'late, was due ' : 'by ') + esc(shortDay(x.due)) : '') + (x.note ? ' · ' + esc(x.note) : '') + '</span></div>'; }).join('') + '</div>' + promisesHtml(c);
+  }
   function renderPage() {
     const host = document.getElementById('startingPage');
     if (!host) return;
@@ -797,7 +889,7 @@
     const hit = c => !find || [c.name, c.county, c.coordinator, c.phone].some(v => String(v || '').toLowerCase().includes(find));
     const all = startingRows(), rows = all.filter(r => hit(r.c));
     const wl = waitingLeads().filter(x => !find || String(x.p.name || '').toLowerCase().includes(find));
-    const urgent = all.filter(r => r.st.next.urgent || r.st.medicaid.needsSupervisor).length;
+    const urgent = all.filter(r => r.st.next.urgent || r.st.medicaid.needsSupervisor || trackerOf(r.c).urgent).length;
     const who = r => [r.st.transfer ? 'Moving from another agency' : 'New to CDS', r.c.county, r.c.coordinator].filter(Boolean).map(esc).join(' · ');
     const next = r => '<b' + (r.st.next.urgent ? ' class="lt-red"' : '') + '>' + esc(r.st.next.t) + '</b>' + (r.st.next.d ? '<div class="lt-sub">' + esc(r.st.next.d) + '</div>' : '');
     // 2026-11-14 her ask: "make this easy to click and add the start date". Press the cell, pick the day, it saves.
@@ -809,18 +901,28 @@
         : '<button type="button" class="lt-b lt-b-q st-date-b" onclick="StartHub.pageStartEdit(\'' + id + '\')">Add date</button>';
     };
     const open = r => "openProfile('" + q(r.c.id) + "')";
-    const table = '<div class="lt-wrap"><table class="lt-t" style="min-width:1100px"><thead><tr><th class="lt-n">Person</th>' +
-      S.STEP_TITLES.map((t, i) => '<th' + (i === 0 ? ' class="lt-sep"' : '') + '>' + esc(t) + '</th>').join('') +
-      '<th class="lt-sep">Next step</th><th>Start date</th></tr></thead><tbody>' +
-      (rows.length ? rows.map(r => '<tr class="lt-r' + (r.st.next.urgent ? ' lt-now' : '') + '"><td class="lt-n"><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
-        '<div class="lt-sub">' + who(r) + '</div></td>' + r.st.steps.map(s => stepCell(r.c, s)).join('') +
-        '<td class="lt-sep" style="min-width:220px">' + next(r) + '</td><td>' + start(r) + '</td></tr>').join('')
-        : '<tr><td colspan="10" class="lt-empty">' + (all.length ? 'Nobody matches that search.' : 'Nobody is Starting. Press They said yes on a lead to start someone.') + '</td></tr>') +
+    // 2026-11-17 the start tracker: each step in the order the work happens, who owns it, and when it is due.
+    rows.forEach(r => { r.t = trackerOf(r.c); });
+    rows.sort((a, b) => (b.t.urgent - a.t.urgent) || String(a.t.start || '9999').localeCompare(String(b.t.start || '9999')) || a.st.count - b.st.count);
+    const nextT = r => { const n = r.t.next; return '<b' + (n.late || r.t.urgent ? ' class="lt-red"' : '') + '>' + esc(n.t) + '</b>' +
+      '<div class="lt-sub">' + [n.owner, n.due ? (n.late ? 'late, was due ' : 'by ') + shortDay(n.due) : ''].filter(Boolean).map(esc).join(' · ') + '</div>'; };
+    const prom = r => r.t.openPromises ? '<button type="button" class="lt-b lt-b-q' + (r.t.latePromises ? ' st-late' : '') + '" onclick="' + esc("_profTab='overview';" + open(r)) + '">' + r.t.openPromises + ' open' + (r.t.latePromises ? ', ' + r.t.latePromises + ' late' : '') + '</button>' : '<span class="lt-none">–</span>';
+    const cols = T().COLS.filter(([k]) => k !== 'start');
+    const table = '<div class="lt-wrap"><table class="lt-t" style="min-width:1250px"><thead><tr><th class="lt-n">Person</th>' +
+      cols.map(([, t], i) => '<th' + (i === 0 ? ' class="lt-sep"' : '') + '>' + esc(t) + '</th>').join('') +
+      '<th class="lt-sep">Start date</th><th>We promised</th><th class="lt-sep">Next step</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(r => '<tr class="lt-r' + (r.t.urgent ? ' lt-now' : '') + '"><td class="lt-n"><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
+        '<div class="lt-sub">' + who(r) + '</div>' + (r.t.attName ? '<div class="lt-sub">Attendant: ' + esc(r.t.attName) + '</div>' : '') + '</td>' +
+        cols.map(([k]) => trackCell(r.c, k, r.t.cells[k])).join('') +
+        '<td class="lt-sep">' + start(r) + (r.t.cells.start.date ? '<div class="lt-sub' + (r.t.cells.start.state === 'late' || r.t.cells.start.days <= 7 ? ' lt-red' : '') + '">' + esc(r.t.cells.start.t) + '</div>' : '') + '</td>' +
+        '<td>' + prom(r) + '</td><td class="lt-sep" style="min-width:220px">' + nextT(r) + '</td></tr>').join('')
+        : '<tr><td colspan="12" class="lt-empty">' + (all.length ? 'Nobody matches that search.' : 'Nobody is Starting. Press They said yes on a lead to start someone.') + '</td></tr>') +
       '</tbody></table></div>';
-    const cards = '<div class="lt-cards">' + (rows.length ? rows.map(r => '<div class="lt-card' + (r.st.next.urgent ? ' lt-now' : '') + '"><div><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
-        '<div class="lt-sub">' + who(r) + '</div><div class="lt-sub" style="margin-top:6px">Start date: ' + start(r) + '</div></div>' +
-        '<div class="lt-pms">' + r.st.steps.map(s => '<span class="lt-pm' + (s.state === 'done' ? ' lt-pm-ok' : s.state === 'now' ? ' lt-pm-todo lt-pm-hi' : s.state === 'side' ? ' lt-pm-todo' : '') + '">' + esc(s.t) + '</span>').join('') + '</div>' +
-        '<div class="lt-card-b"><span class="lt-sub" style="flex:1 1 180px">' + next(r) + '</span><button type="button" class="lt-b" onclick="' + esc(open(r)) + '">Open</button></div></div>').join('')
+    const cards = '<div class="lt-cards">' + (rows.length ? rows.map(r => '<div class="lt-card' + (r.t.urgent ? ' lt-now' : '') + '"><div><button type="button" class="lt-name" onclick="' + esc(open(r)) + '">' + esc(r.c.name) + '</button>' +
+        '<div class="lt-sub">' + who(r) + '</div><div class="lt-sub" style="margin-top:6px">Start date: ' + start(r) + (r.t.cells.start.date ? ' ' + esc(r.t.cells.start.t) : '') + '</div>' +
+        (r.t.openPromises ? '<div class="lt-sub' + (r.t.latePromises ? ' lt-red' : '') + '">We promised: ' + r.t.openPromises + ' open' + (r.t.latePromises ? ', ' + r.t.latePromises + ' late' : '') + '</div>' : '') + '</div>' +
+        '<div class="lt-pms">' + cols.map(([k, label]) => { const x = r.t.cells[k]; return '<span class="lt-pm' + (x.state === 'done' ? ' lt-pm-ok' : x.state === 'now' ? ' lt-pm-todo lt-pm-hi' : x.state === 'wait' ? ' lt-pm-todo' : '') + '"' + (x.late ? ' style="color:var(--danger)"' : '') + '>' + esc(label) + '</span>'; }).join('') + '</div>' +
+        '<div class="lt-card-b"><span class="lt-sub" style="flex:1 1 180px">' + nextT(r) + '</span><button type="button" class="lt-b" onclick="' + esc(open(r)) + '">Open</button></div></div>').join('')
         : '<div class="lt-empty">' + (all.length ? 'Nobody matches that search.' : 'Nobody is Starting. Press They said yes on a lead to start someone.') + '</div>') + '</div>';
     const legacy = !wl.length ? '' : '<div class="card" style="padding:16px 18px;margin-top:14px"><b style="color:var(--primary)">Sent to the state before Starting began</b>' +
       '<div class="lt-sub" style="margin:4px 0 8px;font-size:13px">These leads have no Starting profile yet. Start their profile to track them here with everything from their lead.</div>' +
@@ -832,7 +934,7 @@
     const sum = document.getElementById('stPageSum');
     if (sum) sum.innerHTML = all.length + (all.length === 1 ? ' person said yes and is' : ' people said yes and are') + ' getting ready for their first shift.' +
       (urgent ? ' <strong>' + urgent + (urgent === 1 ? ' needs' : ' need') + ' you now.</strong>' : '') + ' They move to Consumers by themselves when WellSky shows their first shift.';
-    host.innerHTML = '<div class="lt">' + table + cards + '<div class="lt-key"><span><b class="lt-red">Red edge</b> start date is close or passed</span> · <span>✓ done</span> · <span>Next and Can do now open that step</span> · <span>Press the start date to add or change it</span></div></div>' + legacy;
+    host.innerHTML = '<div class="lt">' + table + cards + '<div class="lt-key"><span><b class="lt-red">Red</b> late, or the start date is within a week</span> · <span>✓ done</span> · <span>A button is the next thing to do and opens that step</span> · <span>Due dates count back from the start date</span> · <span>Press the start date to add or change it</span></div></div>' + legacy;
   }
 
   // Today: Medicaid application follow-ups (owner shown) and Starting people waiting on an ME code review.
@@ -971,5 +1073,5 @@
   }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml };
 })();
