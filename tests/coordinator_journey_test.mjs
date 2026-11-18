@@ -32,5 +32,6 @@ ok(J.planJourney({ consumers: [C({ phone: '' })], attendants: [], packets: [], o
 const all = Object.values(J.JOURNEY_WORDS).map(f => f({ name: 'Pat Example', att: 'Lee Sample', from: 'Krystal', start: '2026-11-20', payday: '2026-11-26' })).join(' ');
 ok(!/[—–]/.test(all) && !/\bAI\b/.test(all) && !/\$\d/.test(all), 'no em dashes, never AI, no money amounts');
 ok(Object.values(J.JOURNEY_WORDS).every(f => f({ name: 'Pat Example', att: 'Lee Sample', from: 'Krystal', start: '2026-11-20', payday: '2026-11-26' }).length < 480), 'every text fits');
+ok(/caringcds\.com\/clock-in /.test(J.JOURNEY_WORDS.day1Attendant({ name: 'Pat Example', att: 'Lee Sample' })), 'start-day text to the attendant links the clock-in walkthrough');
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);

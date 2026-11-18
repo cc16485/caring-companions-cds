@@ -28,12 +28,13 @@ const daysTo = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a
 const sign = who => (who && !/^office$/i.test(who) ? first(who) + ' at ' : '') + 'Caring Companions';
 
 // The words. Short (one text, about 300 characters), warm, signed, the CDS line to call back.
+export const CLOCK_URL = 'caringcds.com/clock-in';
 export const WORDS = {
   clockConsumer: (v) => 'Hi ' + first(v.name) + ', this is ' + sign(v.from) + '. Your CDS care starts ' + niceDay(v.start) + '! ' +
     (v.att ? first(v.att) + ' will clock in when they arrive and out when they leave, on the WellSky app or your home phone. ' : 'Your attendant will clock in when they arrive and out when they leave, on the WellSky app or your home phone. ') +
-    'Would set shifts (we put the schedule in WellSky) or flexible shifts (a shift is started in the app when the work begins) work better for you? Any questions? Reply here or call ' + LINE + '.',
+    'Would set shifts (we put the schedule in WellSky) or flexible shifts (a shift is started in the app when the work begins) work better for you? See both, step by step: ' + CLOCK_URL + ' . Any questions? Reply here or call ' + LINE + '.',
   clockAttendant: (v) => 'Hi ' + first(v.att) + ', this is ' + sign(v.from) + '. ' + first(v.name) + "'s CDS care starts " + niceDay(v.start) + '. ' +
-    'Please make sure you can sign in to the WellSky app before then. Clock in when you arrive and out when you leave, every visit, or the hours cannot be paid. Any questions? Reply here or call ' + LINE + '.',
+    'Please make sure you can sign in to the WellSky app before then. Clock in when you arrive and out when you leave, every visit, or the hours cannot be paid. Step by step with the real app screens: ' + CLOCK_URL + ' . Any questions? Reply here or call ' + LINE + '.',
   dsds: (v) => 'Hi ' + first(v.name) + ', this is ' + sign(v.from) + '. We sent your CDS referral to the state on ' + niceDay(v.sent) + '. Has anyone from the state (DSDS) called or visited you yet? Just reply yes or no and we will take it from there.',
 };
 // Only words like these ever leave: no long numbers (DCN, Medicaid), no dollar amounts.

@@ -25,13 +25,14 @@ const niceDay = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', 
 const sign = who => (who && !/^office$/i.test(who) ? first(who) + ' at ' : '') + 'Caring Companions';
 export const LINE = '(417) 218-2888';
 export const ORIENT_URL = 'caringcds.com/consumer-orientation';
+export const CLOCK_URL = 'caringcds.com/clock-in';
 
 export const JOURNEY_WORDS = {
   welcome: v => 'Hi ' + first(v.name) + ', this is ' + sign(v.from) + '. Welcome! We are so glad you chose us for CDS. Over the next few weeks we will walk with you every step: the state, your paperwork, and getting ' + (v.att ? first(v.att) : 'your caregiver') + ' set up. We will text you as each step is done. Questions anytime: reply here or call ' + LINE + '.',
   orient: v => 'Hi ' + first(v.name) + ', thank you for signing your paperwork! The next step is a short online orientation about being in charge of your care in CDS: ' + ORIENT_URL + ' . Questions? Reply here or call ' + LINE + '.',
   orient2: v => 'Hi ' + first(v.name) + ', your CDS care starts ' + niceDay(v.start) + '. Have you had a chance to do the short orientation? It needs to be done before your start date: ' + ORIENT_URL + ' . Reply here if you need help with it.',
   day1Consumer: v => 'Good morning ' + first(v.name) + '! Today is the day ' + (v.att ? first(v.att) + ' starts' : 'your care starts') + '. Remember: clock in when the work starts and out when it ends, every visit. We are cheering you on. Call ' + LINE + ' if anything comes up.',
-  day1Attendant: v => 'Good morning ' + first(v.att) + '! Today you start with ' + first(v.name) + '. Clock in on the WellSky app when you start and out when you finish, every visit. You have got this! Questions: ' + LINE + '.',
+  day1Attendant: v => 'Good morning ' + first(v.att) + '! Today you start with ' + first(v.name) + '. Clock in on the WellSky app when you start and out when you finish, every visit (how: ' + CLOCK_URL + ' ). You have got this! Questions: ' + LINE + '.',
   howwent: v => 'Hi ' + first(v.name) + ', how did today go' + (v.att ? ' with ' + first(v.att) : '') + '? Did clocking in and out work okay? Just reply here.',
   week1: v => 'Hi ' + first(v.name) + ', it has been a week! How is everything going' + (v.att ? ' with ' + first(v.att) : '') + '? Anything we can help with? Just reply here.',
   week2: v => 'Hi ' + first(v.name) + ', checking in from Caring Companions. Is the schedule working for you? Any questions about clocking in or your hours? Just reply here.',
