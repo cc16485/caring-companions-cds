@@ -8,24 +8,25 @@ let pass = 0, failN = 0;
 const ok = (c, m, x) => { if (c) pass++; else { failN++; console.log('FAIL', m, x !== undefined ? JSON.stringify(x).slice(0, 500) : ''); } };
 // Tue Nov 17 2026, 2:16 PM Central
 const NOW = Date.parse('2026-11-17T20:16:00Z');
-const S = C.openSlots(NOW, null, ['2026-11-18T10:00']);
-ok(S[0] === '2026-11-18T10:30' && S.every(s => s >= '2026-11-18') && !S.includes('2026-11-18T10:00'), 'tomorrow first (today is past 3), booked times left out', S.slice(0, 3));
-ok(!S.some(s => s.startsWith('2026-11-21') || s.startsWith('2026-11-22')), 'no weekend times');
-ok(new Set(S.map(s => s.slice(0, 10))).size === 3 && S.includes('2026-11-20T14:30') && !S.some(s => s.endsWith('T15:00')), 'the next 3 working days, last call 2:30', S.slice(-2));
-ok(C.niceSlot('2026-11-19T14:00') === 'Thursday, Nov 19 at 2 PM', 'times in her words', C.niceSlot('2026-11-19T14:00'));
-const resp = o => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(Object.assign({ reply: 'x', state: 'asking', booked: '', followup: '', handoff: '', answers: { texting_for: '', consumer_first: '', consumer_last: '', relation: '', consumer_phone: '', county: '', medicaid: '', help: '', attendant: '', attendant_relation: '', self_direct: '', other_agency: '', notes: '' } }, o)) }] });
-let t = C.cleanTurn(resp({ reply: 'You are set for Thursday at 2.', state: 'booked', booked: '2026-11-19T14:00' }), S, '2026-11-17');
-ok(t.state === 'booked' && t.booked === '2026-11-19T14:00', 'a time that was offered is booked');
-t = C.cleanTurn(resp({ state: 'booked', booked: '2026-11-19T16:00' }), S, '2026-11-17');
-ok(t.state === 'asking' && !t.booked, 'a time she never set is not booked');
-ok(C.cleanTurn(resp({ reply: "I'm a real person here at the office." }), S, '2026-11-17').reply === '', 'never claims to be a person');
-ok(C.cleanTurn(resp({ reply: "I'm the Caring Companions text helper. A real person on our team reads every message, and Samantha will be the one who calls." }), S, '2026-11-17').reply !== '', 'the honest line passes');
-ok(C.cleanTurn(resp({ reply: 'What is her Medicaid number? 123456789' }), S, '2026-11-17').reply === '', 'no long numbers in a text');
-ok(!/\bAI\b/.test(C.cleanTurn(resp({ reply: 'Our AI helper is here.' }), S, '2026-11-17').reply), 'the word AI never leaves');
-ok(C.cleanTurn(resp({ answers: Object.assign({}, JSON.parse(resp({}).content[0].text).answers, { consumer_phone: '(417) 555-0177', county: 'Greene' }) }), S, '2026-11-17').answers.consumer_phone === '4175550177', 'consumer phone digits only');
-const req = C.chatRequest({ lead: { form_name: 'Get care', full_name: 'Tanya Sample', who_needs_care: 'My mom' }, convo: [], answers: {}, slots: S, nowLabel: 'Tuesday', first: true });
-ok(/WITH THE CONSUMER/.test(req.system) && /own OK/.test(req.system) && /NOT the consumer's spouse/.test(req.system) && /Phelps/.test(req.system), 'the rules: call with the consumer, spouse, our counties');
-ok(/FIRST text/.test(req.messages[0].content) && /Thursday, Nov 19 at 2 PM/.test(req.messages[0].content), 'first text, with her call times');
+const resp = o => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(Object.assign({ reply: 'x', state: 'asking', followup: '', handoff: '', answers: { texting_for: '', consumer_first: '', consumer_last: '', consumer_dob: '', relation: '', consumer_phone: '', county: '', medicaid: '', help: '', attendant: '', attendant_relation: '', self_direct: '', other_agency: '', notes: '' } }, o)) }] });
+const A = o => Object.assign({}, JSON.parse(resp({}).content[0].text).answers, o);
+let t = C.cleanTurn(resp({ reply: 'Samantha will give Linda a call soon.', state: 'ready', answers: A({ consumer_first: 'Linda', consumer_phone: '417-555-0177', consumer_dob: '1948-03-02' }) }), '2026-11-17', '4175550142');
+ok(t.state === 'ready' && t.answers.consumer_phone === '4175550177' && t.answers.consumer_dob === '1948-03-02', 'ready with the consumer phone and date of birth', t);
+t = C.cleanTurn(resp({ state: 'ready', answers: A({ texting_for: 'family', consumer_first: 'Linda' }) }), '2026-11-17', '4175550142');
+ok(t.state === 'asking', 'never ready without the consumer\'s phone');
+t = C.cleanTurn(resp({ state: 'ready', answers: A({ texting_for: 'self', consumer_first: 'Marcus' }) }), '2026-11-17', '4175550142');
+ok(t.state === 'ready' && t.answers.consumer_phone === '4175550142', 'texting for themself: their own number is the consumer phone');
+ok(C.cleanTurn(resp({ answers: A({ consumer_dob: '2030-01-01' }) }), '2026-11-17').answers.consumer_dob === undefined, 'a date of birth in the future is dropped');
+ok(C.cleanTurn(resp({ reply: 'Thanks, I have her birthday as 3/2/1948.' }), '2026-11-17').reply === '', 'never repeats a date of birth back');
+ok(C.cleanTurn(resp({ reply: "I'm a real person here at the office." }), '2026-11-17').reply === '', 'never claims to be a person');
+ok(C.cleanTurn(resp({ reply: "I'm the Caring Companions text helper. A real person on our team reads every message, and Samantha will be the one who calls." }), '2026-11-17').reply !== '', 'the honest line passes');
+ok(C.cleanTurn(resp({ reply: 'What is her Medicaid number? 123456789' }), '2026-11-17').reply === '', 'no long numbers in a text');
+ok(!/\bAI\b/.test(C.cleanTurn(resp({ reply: 'Our AI helper is here.' }), '2026-11-17').reply), 'the word AI never leaves');
+
+const req = C.chatRequest({ lead: { form_name: 'Get care', full_name: 'Tanya Sample', who_needs_care: 'My mom' }, convo: [], answers: {}, nowLabel: 'Tuesday', first: true });
+ok(/CONSUMER/.test(req.system) && /own OK/.test(req.system) && /NOT the consumer's spouse/.test(req.system) && /Phelps/.test(req.system), 'the rules: call with the consumer, spouse, our counties');
+ok(/Do NOT set or offer a time/.test(req.system) && /first and last name and date of birth/.test(req.system) && /Medicaid is active/.test(req.system), 'her way: no set time, name and birth date to check Medicaid first');
+ok(/FIRST text/.test(req.messages[0].content) && !/CALL TIMES/.test(req.messages[0].content), 'first text, no call times');
 ok(!/[—–]/.test(req.system), 'no em dashes in the instructions');
 
 // A run against a fake database
@@ -47,21 +48,20 @@ const db = { async query(t, p = []) {
   if (/select id from cds_coord_msgs where kind = 'chat' and person_id = \$1 and status = 'draft'/.test(t)) return { rows: T.msgs.filter(m => m.person_id === p[0] && m.status === 'draft') };
   if (/update cds_coord_msgs set status = 'skipped', error = 'they texted again/.test(t)) { T.msgs.find(m => m.id === p[0]).status = 'skipped'; return { rows: [] }; }
   if (/select dir, text from/.test(t)) return { rows: [...T.msgs.filter(m => m.person_id === p[0] && m.status === 'sent').map(m => ({ dir: 'out', text: m.body })), ...T.comms.filter(m => m.phone10 === p[1]).map(m => ({ dir: 'in', text: m.body }))] };
-  if (/select booked_at from cds_lead_chats/.test(t)) return { rows: T.chats.filter(c => c.booked_at).map(c => ({ booked_at: c.booked_at })) };
   if (/update cds_lead_chats set status = 'waiting'/.test(t)) { Object.assign(T.chats.find(c => c.id === p[0]), { status: 'waiting', note: p[1] }); return { rows: [] }; }
-  if (/update cds_lead_chats set status = \$2, answers/.test(t)) { const c = T.chats.find(c => c.id === p[0]); Object.assign(c, { status: p[1], answers: Object.assign({}, c.answers, JSON.parse(p[2])) }); if (p[3]) c.booked_at = p[3]; if (p[4]) c.followup = p[4]; c.note = p[5] || null; return { rows: [] }; }
+  if (/update cds_lead_chats set status = \$2, answers/.test(t)) { const c = T.chats.find(c => c.id === p[0]); Object.assign(c, { status: p[1], answers: Object.assign({}, c.answers, JSON.parse(p[2])) }); if (p[3]) c.followup = p[3]; c.note = p[4] || null; return { rows: [] }; }
   if (/insert into cds_coord_msgs/.test(t)) { const m = { id: mid++, key: p[0], person_id: p[1], phone: p[4], body: p[5], status: 'draft' }; T.msgs.push(m); return { rows: [{ id: m.id }] }; }
   if (/update cds_coord_msgs set status = 'sent'/.test(t)) { T.msgs.find(m => m.id === p[0]).status = 'sent'; return { rows: [] }; }
   if (/update cds_coord_msgs set status = 'failed'/.test(t)) { Object.assign(T.msgs.find(m => m.id === p[0]), { status: 'failed', error: p[1] }); return { rows: [] }; }
   if (/select id, phone, body from cds_coord_msgs where kind = 'chat' and status = 'draft'/.test(t)) return { rows: T.msgs.filter(m => m.status === 'draft') };
-  if (/select id, name, status, answers, booked_at/.test(t)) return { rows: T.chats.filter(c => c.id === p[0]) };
+  if (/select id, name, status, answers, followup/.test(t)) return { rows: T.chats.filter(c => c.id === p[0]) };
   if (/insert into owner_calendar/.test(t)) { T.cal.set(p[0], JSON.parse(p[1])); return { rows: [] }; }
   throw new Error('unexpected ' + t.slice(0, 80));
 } };
 let turn = 0, asked = [];
 const ai = async req => { asked.push(req.messages[0].content); turn++;
   if (/FIRST text/.test(req.messages[0].content)) return resp({ reply: 'Hi Tanya, this is Caring Companions in Springfield. Thanks for asking about care for your mom! Would texting a few quick questions be easier, or would you rather we call?' });
-  if (/THEM: 2 works/.test(req.messages[0].content)) return resp({ reply: 'You are set for Thursday at 2. Samantha will call Linda from (417) 218-2888.', state: 'booked', booked: '2026-11-19T14:00', answers: Object.assign({}, JSON.parse(resp({}).content[0].text).answers, { consumer_first: 'Linda', consumer_phone: '4175550177', county: 'Greene', medicaid: 'yes', attendant: 'Tanya', relation: 'daughter' }) });
+  if (/THEM: Linda Sample 3\/2\/1948/.test(req.messages[0].content)) return resp({ reply: 'Thank you! Samantha will give Linda a call soon from (417) 218-2888.', state: 'ready', answers: Object.assign({}, JSON.parse(resp({}).content[0].text).answers, { consumer_first: 'Linda', consumer_last: 'Sample', consumer_dob: '1948-03-02', consumer_phone: '4175550177', county: 'Greene', medicaid: 'yes', attendant: 'Tanya', relation: 'daughter' }) });
   return resp({ reply: 'Great. What does Linda need the most help with?' }); };
 const sent = []; const send = async m => { sent.push(m); };
 let chat = C.createChat({ db, ai, send, nowMs: () => NOW });
@@ -77,12 +77,12 @@ T.comms.push({ phone10: '4175550142', at: '2026-11-17T20:20:00Z', body: 'Texting
 r = await chat.run(set);
 ok(r.made === 1 && /What does Linda need/.test(T.msgs[2].body), 'their reply gets one reply', T.msgs.map(m => m.body));
 T.msgs[2].status = 'sent';
-T.comms.push({ phone10: '4175550142', at: '2026-11-17T20:25:00Z', body: '2 works' });
+T.comms.push({ phone10: '4175550142', at: '2026-11-17T20:25:00Z', body: 'Linda Sample 3/2/1948, her cell is 417-555-0177' });
 r = await chat.run(set);
 const tanya = T.chats.find(c => c.name === 'Tanya Sample');
-ok(tanya.status === 'booked' && tanya.booked_at === '2026-11-19T14:00', 'call booked at one of her times');
+ok(tanya.status === 'ready' && tanya.answers.consumer_dob === '1948-03-02', 'ready to call, with what the office needs to check Medicaid');
 const wk = T.cal.get('i:chat-' + tanya.id);
-ok(wk && wk.date === '2026-11-19' && wk.time === '2:00 PM' && /Call Linda at \(417\) 555-0177: their OK for the referral/.test(wk.t), 'on My Week: the call WITH THE CONSUMER, day and time', wk);
+ok(wk && wk.date === '2026-11-17' && !wk.time && /Check Medicaid, then call Linda Sample at \(417\) 555-0177: their OK for the referral/.test(wk.t), 'on My Week: check Medicaid then call the consumer, today (it is 2:16 PM, before 3), no set time', wk);
 ok(/THEM: Texting is great/.test(asked[asked.length - 1]) && /US: Hi Tanya/.test(asked[asked.length - 1]), 'Claude sees the whole conversation');
 T.comms.push({ phone10: '4175550111', at: '2026-11-17T20:30:00Z', body: 'STOP' });
 r = await chat.run(set);

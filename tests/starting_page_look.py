@@ -136,7 +136,7 @@ with sync_playwright() as pw:
     pg.evaluate("""()=>{ window.__coordMsgs = [{ id: 31, kind: 'clock', person_kind: 'consumer', person_id: 'C1', person_name: 'Dana Started', to_name: 'Dana Started', last4: '0111', status: 'draft',
         body: 'Hi Dana, this is Krystal at Caring Companions. Your CDS care starts soon! Any questions? Just reply here or call (417) 218-2888.' },
       { id: 32, kind: 'check', person_kind: 'lead', person_id: 'L2', person_name: 'Lee Sample', to_name: 'Lee', last4: '0188', status: 'draft', body: 'Hi Lee, just checking in. Just reply here or call (417) 218-2888.' }];
-      window.__coordChats = [{ id: 4, lead_id: 'L2', name: 'Lee Sample', status: 'booked', booked_at: '2026-11-19T14:00', answers: { consumer_first: 'Linda', consumer_last: 'Sample', relation: 'daughter', consumer_phone: '4175550177', county: 'Greene', medicaid: 'yes', help: 'bathing, dressing', attendant: 'Lee Sample' }, last4: '0188' }];
+      window.__coordChats = [{ id: 4, lead_id: 'L2', name: 'Lee Sample', status: 'ready', answers: { consumer_first: 'Linda', consumer_last: 'Sample', consumer_dob: '1948-03-02', relation: 'daughter', consumer_phone: '4175550177', county: 'Greene', medicaid: 'yes', help: 'bathing, dressing', attendant: 'Lee Sample' }, last4: '0188' }];
       window.__coordItems.push({ id: 12, person_kind: 'lead', person_id: 'L2', person_name: 'Lee Sample', kind: 'their_word', data: { what: 'Text us the DCN' }, due: '2026-11-17', status: 'open', source: { line: 'cds', kind: 'call', at: '2026-11-10T15:00:00Z' } });
       StartHub.coordRefresh(); }""")
     pg.wait_for_timeout(600); pg.evaluate("()=>{ _profTab='overview'; renderProfile(); }"); pg.wait_for_timeout(300)
@@ -148,10 +148,10 @@ with sync_playwright() as pw:
     pg.evaluate("()=>openLeadProfile('L2')"); pg.wait_for_timeout(500)
     lpv = pg.inner_text('#page-leadprofile')
     ck('lead profile: Heard on calls and texts with their word and the check-in draft', 'Heard on calls and texts' in lpv and 'Text us the DCN' in lpv and 'Checking in on what they said' in lpv, lpv[:1200])
-    ck('lead profile: texting with them, call booked with the consumer, the answers', 'Call booked with the consumer' in lpv and 'Linda Sample' in lpv and 'Put these answers on the lead' in lpv, lpv[:1500])
+    ck('lead profile: texting with them, ready to call the consumer, the answers', 'Ready: call the consumer' in lpv and 'Date of birth (check Medicaid)' in lpv and 'Linda Sample' in lpv and 'Put these answers on the lead' in lpv, lpv[:1500])
     shot(pg, '02f-lead-heard')
     pg.click('#lpHeard button:has-text("Put these answers on the lead")'); pg.wait_for_timeout(400)
-    ck('Put these answers: a note on the lead, the call day as the follow-up, the caregiver', pg.evaluate("()=>{ const p=getData('pipeline').find(x=>x.id==='L2'); return /From texting with them/.test(JSON.stringify(p.notes)) && p.followup==='2026-11-19' && p.attendant && p.attendant.name==='Lee Sample'; }"))
+    ck('Put these answers: a note on the lead, follow-up today, the date of birth, the caregiver', pg.evaluate("()=>{ const p=getData('pipeline').find(x=>x.id==='L2'); return /From texting with them/.test(JSON.stringify(p.notes)) && p.followup===_todayIso() && p.dob==='1948-03-02' && p.attendant && p.attendant.name==='Lee Sample'; }"))
     pg.click('#lpHeard button:has-text("Skip")'); pg.wait_for_timeout(400)
     ck('Skip on the lead answers it', pg.evaluate("()=>window.__coordAsked.some(b=>b.action==='skip'&&b.id===32)"))
     pg.evaluate("()=>{ openProfile('C1'); _profTab='ready'; renderProfile(); }"); pg.wait_for_timeout(300)
