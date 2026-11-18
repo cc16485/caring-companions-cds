@@ -83,6 +83,9 @@ export const SWITCHES = [
   { key: 'open_shift_texts', field: 'live', label: 'Never clocked out texts', warn: 'This one reaches consumers.',
     does: () => 'Once a WellSky shift has a clock in and no clock out for 12 hours, texts the consumer once: the attendant, the day, the clock in time, that it will not be paid as it is, and the EVV form link. Only 9am to 6pm. Shifts with no clock in at all are left alone. While off, the texts are written as practice only.',
     on: 'Consumers will get a text about shifts with no clock out.', off: 'No clock out texts. They are written as practice only.' },
+  { key: 'checkin_calls', field: 'live', label: 'Monthly check-in calls', warn: 'This one calls consumers.',
+    does: () => 'On the 1st of each month (through the 7th for anyone not called yet), 10am to 5pm, every active consumer with a phone gets one automated check-in call from 417-218-2888: the Caring Companions check-in line asks the 7 monthly questions. A finished call is saved as that month\'s check-in. Any concern, change or request becomes a follow-up card to call them back. No answer: the month stays open on Today for the office. While off, nobody is called.',
+    on: 'Active consumers will get the check-in call starting on the 1st.', off: 'No check-in calls. The office makes the monthly calls.' },
 ];
 function hour(h) { h = +h; return (h % 12 || 12) + (h < 12 ? 'am' : 'pm'); }
 

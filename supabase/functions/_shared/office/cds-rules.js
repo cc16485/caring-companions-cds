@@ -1289,7 +1289,28 @@
                       pct: revenue > 0 ? Math.round((revenue - labor) / revenue * 100) : 0, rates, range } };
   }
 
-  root.CDSRules = { einClock, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
+  // Monthly check-in calls (2026-11-17, checkin-calls.js): a finished automated call is that month's check-in.
+  // store = agency_data checkinCalls ({ months: { 'yyyy-mm': { consumerId: { state, log } } } }). Fills
+  // c.contacts[month] in memory only where nothing is logged for that month (a person's own log always wins).
+  // Returns how many months were filled.
+  function mergeCheckinCalls(consumers, store) {
+    const months = (store && store.months) || {};
+    const byId = new Map((consumers || []).filter(Boolean).map(c => [String(c.id), c]));
+    let n = 0;
+    for (const [ym, m] of Object.entries(months)) {
+      for (const [id, e] of Object.entries(m || {})) {
+        if (!e || e.state !== 'recorded' || !e.log) continue;
+        const c = byId.get(String(id));
+        if (!c) continue;
+        if (!c.contacts || typeof c.contacts !== 'object') c.contacts = {};
+        if (c.contacts[ym]) continue;
+        c.contacts[ym] = e.log; n++;
+      }
+    }
+    return n;
+  }
+
+  root.CDSRules = { einClock, mergeCheckinCalls, desThreshold, ongoingRequirements, taxDone, leadWaiting, siteLeadWaiting, followDue,
                     dailyRoutine, MMAC_FRAUD, MMAC_FRAUD_LINE, mmacFraudDue, STATE_WAIT, TODAY_OWNERS, TODAY_PARTS, CHECK_CYCLES, periodEnd, checkCurrent, checklistDue, AGENCY_DATES, agencyDatesDue, fusionDue, isActive, activeNow, attendantWork, attendantChecks, evvAndPayroll, dhssChanges, leadDeadlines, addBusinessDays, isFormNote, siteLeadName, CLOSED, CLOSED_LABELS, cameIn, firstShiftPrep, PREP_STEPS, LATE_REASONS,
                     leadCard, formWho, formLabel, formAbout, LEAD_KINDS, CONTACT_ROLES, relatedPeople, linkLead, addContact, unlinkContact, careFor, linkedNotes, isoLocal, cameInIso, lastContactIso, REPORTS, reportDue, reportSubmitted, reportsDue, dashboardNumbers,
                     whoCalled, WHO_CALLED, WHO_NEXT, caregiverPlan, CAREGIVER_PLAN,
