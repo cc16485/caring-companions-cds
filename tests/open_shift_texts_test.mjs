@@ -1,5 +1,5 @@
 // node tests/open_shift_texts_test.mjs
-import { plan, texts, createOpenShiftTexts, keyOf } from '../supabase/functions/_shared/office/open-shift-texts.js';
+import { plan, texts, createOpenShiftTexts, keyOf, longKeyOf, joinSplits, isLong, OPEN_HOURS, LONG_FROM } from '../supabase/functions/_shared/office/open-shift-texts.js';
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 
 // 2026-11-17 15:00 UTC = 9:00 AM Central
@@ -26,7 +26,7 @@ ok(m.to.every(r => !/[—–]/.test(r.text)), 'no em dashes');
 ok(m.to.every(r => r.text.length <= 306), 'short (' + m.to[0].text.length + ' chars)');
 const u = P.due.find(d => d.consumerName === 'Here Nobody');
 ok(u && u.to.every(r => r.missing), 'unknown consumer: nothing sent, reason kept');
-ok(P.skipped.some(s => s.why.includes('12 hours')) && P.skipped.some(s => s.why.includes('not active')), 'still working and inactive skipped');
+ok(P.skipped.some(s => s.why.includes('8 hours')) && P.skipped.some(s => s.why.includes('not active')), 'still working and inactive skipped');
 ok(plan({ authLogs, consumers, attendants, marks: { [keyOf(authLogs.shifts[0])]: { at: 'x' } }, nowMs: NOW }).due.length === 1, 'already texted shift skipped');
 
 // the job
@@ -75,5 +75,38 @@ ok(R2.due[0].to[0].phone10 && R2.due[0].to[0].text.startsWith('Caring Companions
 ok(m.to[0].text.includes('by Sat, Nov 21 at midnight for payroll'), 'names the coming Saturday deadline');
 ok(texts({ clockIn: '2026-11-20T09:00:00', consumerName: 'A', attendantName: 'B', sendNaive: '2026-11-21T10:00:00' }).consumer.includes('by Sat, Nov 21 at midnight'), 'sent on a Saturday: that same Saturday');
 ok(texts({ clockIn: '2026-11-21T09:00:00', consumerName: 'A', attendantName: 'B', sendNaive: '2026-11-22T10:00:00' }).consumer.includes('by Sat, Nov 28 at midnight'), 'sent on a Sunday: the next Saturday');
+
+// HER RULE 2026-11-17: overnight or over 8 hours = treated like a no clock-out: not paid, consumer texted for the real hours
+ok(OPEN_HOURS === 8, 'no clock out: texted after 8 hours (was 12)');
+const NOW2 = Date.parse('2026-11-24T15:00:00Z');   // Tue Nov 24, 9 AM Central (after the rule started)
+const split = [
+  { consumer: 'Smith, Mary', attendant: 'Jane Doe', clockIn: '2026-11-22T10:51:50', clockOut: '2026-11-22T23:59:59' },
+  { consumer: 'Smith, Mary', attendant: 'Jane Doe', clockIn: '2026-11-23T00:00:00', clockOut: '2026-11-23T09:51:50' },
+  { consumer: 'Smith, Mary', attendant: 'Jane Doe', clockIn: '2026-11-23T13:00:00', clockOut: '2026-11-23T16:00:00' },   // normal
+  { consumer: 'Smith, Mary', attendant: 'Jane Doe', clockIn: '2026-11-21T06:00:00', clockOut: '2026-11-21T15:30:00' },   // 9.5 h same day
+  { consumer: 'Smith, Mary', attendant: 'Jane Doe', clockIn: '2026-11-20T08:00:00', clockOut: '2026-11-20T16:00:00' },   // exactly 8 h: fine
+];
+const J2 = joinSplits(split);
+ok(J2.length === 4 && J2.some(x => x.joined && x.clockIn === '2026-11-22T10:51:50' && x.clockOut === '2026-11-23T09:51:50'), 'midnight halves joined into one 23 h shift');
+ok(J2.filter(isLong).length === 2, 'overnight and 9.5 h are long; 3 h and exactly 8 h are not');
+const L = plan({ authLogs: { shifts: split }, consumers, attendants, marks: {}, nowMs: NOW2 });
+ok(L.due.length === 2 && L.due.every(d => d.kind === 'long'), 'two long-shift texts');
+const ov = L.due.find(d => d.clockIn === '2026-11-22T10:51:50');
+ok(ov && ov.to[0].text.includes('from 10:51 AM to 9:51 AM on Mon, Nov 23') && ov.to[0].text.includes('(23 hours)'), 'overnight wording with both days and hours: ' + (ov && ov.to[0].text));
+ok(ov.to[0].text.includes("aren't paid until we know the real hours worked") && ov.to[0].text.includes('EVV form by Sat, Nov 28 at midnight'), 'asks for the real hours on the EVV form by Saturday');
+ok(ov.to.every(r => !/[—–]/.test(r.text)) && ov.to[0].text.length <= 306, 'no em dashes, short (' + ov.to[0].text.length + ' chars)');
+const nine = L.due.find(d => d.clockIn === '2026-11-21T06:00:00');
+ok(nine && nine.to[0].text.includes('from 6:00 AM to 3:30 PM (9.5 hours)'), 'same-day long shift wording');
+ok(plan({ authLogs: { shifts: split }, consumers, attendants, marks: { [longKeyOf(J2.find(x => x.joined))]: { at: 'x' } }, nowMs: NOW2 }).due.length === 1, 'long shift texted once');
+ok(plan({ authLogs: { shifts: split }, consumers, attendants, marks: { [keyOf(split[0])]: { at: 'x' } }, nowMs: NOW2 }).due.length === 1, 'already texted as a no clock-out while open: no second text');
+// the form link of a long shift is not closed just because it now has a clock out
+{ const closed = []; const fixes = { closeFixed: async k => { closed.push(...k); return k.length; }, register: async () => 'https://hub.caringcds.com/evv-form?fix=abc', textResult: async () => {} };
+  const db2 = fakeDb(false); db2.data.wellskyCheck.analytics.authLogs.shifts = split;
+  db2.data.wellskyCheck.analytics.authLogs.at = '2026-11-24T12:20:00Z';
+  const r2 = await createOpenShiftTexts({ db: db2, sms: async () => {}, now: () => NOW2, fixes }).run();
+  ok(r2.practice === 2 && !closed.includes(keyOf(split[0])) && !closed.includes(keyOf(split[3])) && closed.includes(keyOf(split[2])), 'long shifts keep their form link open; normal shifts close theirs');
+  const rec = db2.data.openShiftTexts.shifts[longKeyOf(J2.find(x => x.joined))];
+  ok(rec && rec.kind === 'long' && rec.to[0].text.includes('evv-form?fix=abc'), 'practice record keeps kind and the private link'); }
+ok(LONG_FROM === '2026-11-18' && plan({ authLogs: { shifts: [{ consumer: 'Smith, Mary', attendant: 'Jane Doe', clockIn: '2026-11-11T04:26:37', clockOut: '2026-11-11T19:26:37' }] }, consumers, attendants, marks: {}, nowMs: NOW }).due.length === 0, 'long shifts before Nov 18 (already paid and billed) get no text: her word "in the future"');
 
 console.log(fails ? fails + ' FAILED' : 'all passed'); process.exit(fails ? 1 : 0);

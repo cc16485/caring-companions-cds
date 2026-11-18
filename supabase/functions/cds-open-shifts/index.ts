@@ -1,5 +1,6 @@
 // cds-open-shifts (2026-11-17): texts the consumer (only; the consumer is the boss) once when a WellSky shift was
-// clocked in and never clocked out, so they can send the EVV form. Logic: _shared/office/open-shift-texts.js.
+// clocked in and never clocked out (8 hours), or ran overnight or over 8 hours (her rule 2026-11-17: treated like a
+// no clock-out), so they can send the EVV form with the real hours. Logic: _shared/office/open-shift-texts.js.
 // Called hourly by the schedule (header x-cron-secret = CDS_JOB_SECRET). Sends only when switch
 // open_shift_texts is on; while off, the texts are saved as practice and nobody gets one.
 // Sends through the CDS GoHighLevel sub-account only. It never changes a contact's name or anything else.
