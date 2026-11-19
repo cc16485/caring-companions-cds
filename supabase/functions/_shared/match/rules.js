@@ -35,7 +35,7 @@ export const DEFAULT_REQUIRED_CHECKS = [
   { key: 'edl', label: 'DHSS Employee Disqualification List (EDL)', source: 'fcsr' },
   // 'edr' (DMH Employee Disqualification Registry) removed 2026-11-18, her word: "we dont serve DMH clients".
   { key: 'oig', label: 'Federal OIG exclusion list', source: 'search' },
-  { key: 'mo_medicaid', label: 'Missouri Medicaid exclusion check', source: 'search' },
+  // 'mo_medicaid' (Missouri Medicaid exclusion) removed 2026-11-18, her word: "take of Missouri Medicaid exclusion".
   { key: 'age18', label: 'Age 18 or older', source: 'dob' },
   { key: 'id_match', label: 'Identity matches the screening', source: 'office' },
 ];

@@ -172,7 +172,7 @@ ok(!/—/.test(src), 'no em dashes in the page');
   const st0 = { step1: true, checksClear: false, active: false, label: 'Run EDL and FCSR' };
   const scr0 = { registered: false, screened: false, findings: false, raw: {}, steps: [0, 0, 0, 0, 0, 0, { checks: [{ key: 'edl', clear: false }, { key: 'edr', clear: false }, { key: 'oig', clear: true, at: '2026-10-20' }, { key: 'mo_medicaid', clear: false }] }] };
   let row = P.tableRow({ answers: {}, step1_signed_at: '2026-10-19T15:00:00Z' }, {}, scr0, st0);
-  ok(row.cells.fcsr.t === 'Copy for FCSR' && row.cells.edl.t === 'Copy for EDL' && row.cells.oig.s === 'todo' && row.cells.fp.s === 'na' && row.hold === 'office' && row.job === 'fcsr', 'server row: checks to run, fingerprints not needed');
+  ok(row.cells.fcsr.t === 'Copy for FCSR' && row.cells.edl.t === 'Copy for EDL' && row.cells.oig.s !== 'todo' && row.cells.fp.s === 'na' && row.hold === 'office' && row.job === 'fcsr', 'server row: checks to run, OIG alone is enough (no Missouri list), fingerprints not needed');
   row = P.tableRow({ answers: {}, step1_signed_at: '2026-10-19T15:00:00Z' }, {}, { ...scr0, raw: { screen_requested_at: '2026-10-20T15:00:00Z' }, steps: [0, 0, 0, 0, 0, 0, { checks: [{ key: 'edl', clear: true }, { key: 'oig', clear: true }] }] }, st0);
   ok(row.cells.fcsr.t === 'Pending at the state' && row.hold === 'state', 'server row: FCSR pending, waiting on the state');
   row = P.tableRow({ answers: {}, step1_signed_at: '2026-10-19T15:00:00Z' }, {}, { ...scr0, findings: true, review: 'gcw_needed' }, { ...st0, label: 'Waiting on Good Cause Waiver' });

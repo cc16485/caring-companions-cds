@@ -208,7 +208,7 @@ export function rosterPlan(packets, roster) {
 export function checkDatesFromPacket(g) {
   const sc = (g && g.screening) || {}, checks = sc.checks || [];
   const newest = keys => checks.filter(c => keys.includes(c.key) && c.clear && c.at).map(c => chiDay(c.at)).sort().pop() || '';
-  return { fcsrDate: sc.screened ? chiDay(sc.result_at || sc.reviewed_at) : '', edlDate: newest(['edl']), leieDate: newest(['oig', 'mo_medicaid']) };
+  return { fcsrDate: sc.screened ? chiDay(sc.result_at || sc.reviewed_at) : '', edlDate: newest(['edl']), leieDate: newest(['oig']) };
 }
 export function rosterRowFromPacket(a, g, now = new Date()) {
   const pool = (g && g.pool) || {};
@@ -474,14 +474,14 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
 // The same people as the Onboarding tab (buildGroups' starting list), one row each. The cells come from the
 // server (packetList .table, rules.js tableRow). Red: their consumer is waiting and nothing moved in 2 weekdays,
 // or an office to-do is past due. Gold: nothing moved in 10 days. Her switch: agency_data 'attendantsTable'.
-// The table's check columns and the checks each one holds (EDL with the DMH registry, OIG with the Missouri Medicaid exclusion).
+// The table's check columns and the checks each one holds (FCSR, EDL, OIG: her list 2026-11-18).
 export const REC_COLS = ['fcsr', 'edl', 'oig', 'fp'];
-export const REC_KEYS = { edl: ['edl'], oig: ['oig', 'mo_medicaid'], fp: ['fingerprints'] };
+export const REC_KEYS = { edl: ['edl'], oig: ['oig'], fp: ['fingerprints'] };
 // A check date: today or earlier (her pick 2026-11-06), never later than today.
 export const recDateOk = (v, today) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && v <= today;
 export function recordBoxHtml(col, g, today) {
   const first = esc(g.pool.first), name = esc(g.pool.first + ' ' + g.pool.last), p = g.packet || {};
-  const title = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG and Missouri Medicaid exclusion', fp: 'Fingerprints' }[col];
+  const title = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG', fp: 'Fingerprints' }[col];
   const fileRow = id => `<label class="small">Screenshot or PDF of the result <input type="file" id="${id}" accept="image/*,application/pdf"></label>`;
   let body = '';
   if (col === 'fcsr') {

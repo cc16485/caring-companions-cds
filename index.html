@@ -5602,7 +5602,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=29');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=30');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -16129,7 +16129,7 @@ async function syncApplicationAttendants(packets) {
   _appSync.busy = true;
   let changed = false;
   try {
-    const HP = await import('./caregiver-match/hub-packet.js?v=29');
+    const HP = await import('./caregiver-match/hub-packet.js?v=30');
     for (const a of HP.rosterPlan(packets, getData('attendants'))) {
       let g;
       try { g = await cdsMatchApi('packetGet', { pool_id: a.pool_id }); }
