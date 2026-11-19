@@ -182,7 +182,7 @@ export function tableRow(p, forms, scr, st) {
   const D = at => ({ s: 'done', t: at || null });
   const off = { s: 'off' };
   const s1 = st.step1, clear = st.checksClear, findings = !!(scr && scr.findings);
-  // A group of checks (OIG with the Missouri Medicaid exclusion): done when all are clear.
+  // A group of checks: done when all are clear.
   const group = (keys, act) => {
     const cs = keys.map(k => by[k]).filter(Boolean);
     if (!cs.length) return { s: 'na', t: 'Not needed' };
@@ -199,7 +199,7 @@ export function tableRow(p, forms, scr, st) {
   else if (raw.screen_requested_at) c.fcsr = { s: 'wait', t: 'Pending at the state' };
   else c.fcsr = s1 ? { s: 'todo', t: 'Copy for FCSR', act: 'open' } : off;
   c.edl = group(['edl'], 'Copy for EDL');   // no DMH registry (2026-11-18, we do not serve DMH clients)
-  c.oig = group(['oig', 'mo_medicaid'], 'Add the result');
+  c.oig = group(['oig'], 'Add the result');   // OIG only (2026-11-18, her word)
   const fp = by.fingerprints;
   c.fp = !fp ? { s: 'na', t: 'Not needed' } : fp.result === 'not_clear' ? { s: 'bad', t: 'Not clear' } : fp.clear ? D(fp.at)
     : p.fingerprints_sent_at ? { s: 'wait', t: 'Sent', at: p.fingerprints_sent_at, act: 'open', btn: 'Clear: add the result' }
