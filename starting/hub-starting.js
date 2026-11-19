@@ -867,7 +867,7 @@
   }
   // ---------------------------------------------------------------- the texts it wrote (part 2, 2026-11-17)
   // Practice: each one waits here for a person to read it, change it if they like, and press Send. On: they go by themselves.
-  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead', journey: 'Welcome text', packet: 'Enrollment packet, ready to send', apppacket: 'Attendant application, ready to send' };
+  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead', journey: 'Welcome text', reply: 'Answer to their text', packet: 'Enrollment packet, ready to send', apppacket: 'Attendant application, ready to send' };
   const msgsFor = (kind, id) => (_co.msgs || []).filter(m => m.person_kind === kind && String(m.person_id) === String(id));
   function msgsHtml(kind, id) {
     const list = msgsFor(kind, id).filter(m => ['draft', 'failed'].includes(m.status));

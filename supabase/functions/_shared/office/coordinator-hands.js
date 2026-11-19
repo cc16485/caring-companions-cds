@@ -15,6 +15,7 @@
 // No em dashes in anything a person reads (her rule).
 import './starting-rules.js';
 import { planJourney } from './coordinator-journey.js';
+import { planReplies, replyRequest, cleanReply, REPLY_KINDS } from './coordinator-replies.js';
 const S = () => globalThis.CDSStarting;
 export const LINE = '(417) 218-2888';
 export const HUB = 'https://hub.caringcds.com/#starting';
@@ -160,13 +161,50 @@ export function createHands({ db, ai, send, model, sendPacket, nowMs = () => Dat
       jmade++;
       if (auto) { const x = await sendOne(r.id, 'coordinator'); if (x.ok) jsent++; }
     }
+    // Answers to texts back (2026-11-18): at most 5 a run, each once (by key).
+    const rp = { reply: 0, person: 0, none: 0 };
+    try {
+      const sentRows = await q(`select kind, phone, sent_at, person_kind, person_id, person_name, to_name, body from cds_coord_msgs
+        where status = 'sent' and kind = any($1) and sent_at > now() - interval '14 days'`, [REPLY_KINDS]);
+      const phones = [...new Set(sentRows.map(m => ten(m.phone)).filter(Boolean))];
+      const comms = phones.length ? await q(`select id, channel, direction, at, phone10, body from cds_comms where channel = 'sms' and phone10 = any($1)
+        and at > now() - interval '15 days' order by at`, [phones]) : [];
+      for (const r of planReplies({ sent: sentRows, comms, nowMs: nowMs() }).slice(0, 5)) {
+        if (await one('select 1 from cds_coord_msgs where key = $1', [r.key])) continue;
+        const o = r.ours, who = o.person_kind === 'consumer' ? consumers.find(c => String(c.id) === String(o.person_id)) : pipeline.find(l => String(l.id) === String(o.person_id));
+        const sign = ((who && who.coordinator && !/^office$/i.test(who.coordinator)) ? first(who.coordinator) + ' at ' : '') + 'Caring Companions';
+        let x; try { x = cleanReply(await ai(replyRequest({ to_name: o.to_name, sign, ours: o.body, sent_at: o.sent_at, theirs: r.theirs }, model))); } catch (e) { continue; }   // tried again next run
+        const body = x.action === 'reply' ? safeText(x.reply) : '';
+        if (x.action === 'reply' && body) {
+          await q(`insert into cds_coord_msgs (key, kind, person_kind, person_id, person_name, to_name, phone, body, status) values ($1,'reply',$2,$3,$4,$5,$6,$7,'draft') on conflict (key) do nothing`,
+            [r.key, o.person_kind, o.person_id, o.person_name, o.to_name, r.phone, body]); rp.reply++;
+        } else {
+          if (x.action !== 'none') {   // a person must handle it (or the answer could not go as written): My Week today and the 4:30 email
+            await q(`insert into cds_coord_items (key, person_kind, person_id, person_name, kind, data, source, status, due) values ($1,$2,$3,$4,'concern',$5::jsonb,$6::jsonb,'open',$7) on conflict (key) do nothing`,
+              [o.person_kind + ':' + o.person_id + ':concern:' + r.key, o.person_kind, o.person_id, o.person_name, JSON.stringify({ text: (o.to_name ? first(o.to_name) + ' texted back: ' : 'They texted back: ') + (x.note || 'please read their text') }),
+               JSON.stringify({ line: 'cds', kind: 'texts', at: r.at, who: o.to_name || '', phone10: r.phone, summary: 'Texted back after our ' + o.kind + ' text.' }), today]);
+          }
+          await q(`insert into cds_coord_msgs (key, kind, person_kind, person_id, person_name, to_name, phone, body, status, sent_by, sent_at) values ($1,'reply',$2,$3,$4,$5,$6,$7,'skipped','coordinator',now()) on conflict (key) do nothing`,
+            [r.key, o.person_kind, o.person_id, o.person_name, o.to_name, r.phone, x.action === 'none' ? '(nothing to say back)' : '(for a person: ' + (x.note || 'their text') + ')']);
+          x.action === 'none' ? rp.none++ : rp.person++;
+        }
+      }
+    } catch (e) { rp.error = String(e && e.message || e).slice(0, 160); }
+    // Switch "The Coordinator's texts" (2026-11-18, setting coordinator_texts.live): on = its texts go by themselves,
+    // Mon-Sat 9-7, but only ones written after the switch went on (older Practice drafts always wait for a person).
+    const tsw = await one(`select value, updated_at from cds_match_settings where key = 'coordinator_texts'`);
+    const tLive = !!(tsw && tsw.value && tsw.value.live === true);
     let sent = 0, failed = 0;
-    if (mode === 'on' && sendingHours(nowMs())) {
+    if (tLive && sendingHours(nowMs())) {
+      for (const m of await q(`select id from cds_coord_msgs where status = 'draft' and kind in ('clock','dsds','check','reply') and created_at >= $1 and created_at > now() - interval '3 days' order by id limit 10`, [tsw.updated_at])) {
+        const r = await sendOne(m.id, 'coordinator'); r.ok ? sent++ : failed++;
+      }
+    } else if (mode === 'on' && sendingHours(nowMs())) {
       for (const m of await q(`select id from cds_coord_msgs where status = 'draft' and kind in ('clock','dsds','check') and created_at > now() - interval '3 days' order by id limit 10`)) {
         const r = await sendOne(m.id, 'coordinator'); r.ok ? sent++ : failed++;
       }
     }
-    return { mode, made, skipped, sent, failed, journey: { live: jLive, made: jmade, sent: jsent } };
+    return { mode: tLive ? 'on (switch)' : mode, made, skipped, sent, failed, replies: rp, journey: { live: jLive, made: jmade, sent: jsent } };
   }
   async function sendOne(id, by, body) {
     const m = await one(`select * from cds_coord_msgs where id = $1`, [+id]);
@@ -217,7 +255,7 @@ export function createHands({ db, ai, send, model, sendPacket, nowMs = () => Dat
       sent: msgs.filter(m => m.status === 'sent').map(m => 'Texted ' + m.to_name + ' (' + m.kind + ')'),
       late: open.filter(i => i.kind === 'promise' && i.due && i.due < today && i.due >= weekAgo).map(i => 'Late: ' + fmt(i)),
       waiting: open.filter(i => ['start_date', 'attendant', 'concern', 'need_contact', 'contact'].includes(i.kind) || (i.kind === 'promise' && i.due === today)).map(fmt2),
-      drafts: msgs.filter(m => m.status === 'draft').map(m => m.to_name + ' (' + ({ clock: 'clock-in help', dsds: 'has the state called', check: 'check-in', journey: 'welcome text', packet: 'enrollment packet, ready to send', apppacket: 'attendant application, ready to send' }[m.kind] || m.kind) + ')'),
+      drafts: msgs.filter(m => m.status === 'draft').map(m => m.to_name + ' (' + ({ clock: 'clock-in help', dsds: 'has the state called', check: 'check-in', journey: 'welcome text', reply: 'answer to their text', packet: 'enrollment packet, ready to send', apppacket: 'attendant application, ready to send' }[m.kind] || m.kind) + ')'),
       failed: msgs.filter(m => m.status === 'failed').map(m => (['packet', 'apppacket'].includes(m.kind) ? 'Packet for ' : 'Text to ') + m.to_name + ' did not go: ' + (m.error || '')) });
     try { await send({ email: to.email, subject: words.subject, text: words.text, html: words.html }); }
     catch (e) { return { email: 'failed: ' + String(e && e.message || e).slice(0, 160) }; }

@@ -53,7 +53,7 @@ const idx = readFileSync(ROOT + '/supabase/functions/cds-match/index.ts', 'utf8'
 ok(/role === 'job'[\s\S]{0,200}x-cron-secret/.test(idx), 'cds-match checks the schedule secret for role job');
 
 // The new SQL runs twice on top of the Coordinator's tables.
-for (const f of ['coordinator', 'coordinator_hands', 'coordinator_chat', 'coordinator_journey', 'coordinator_lead_texts', 'coordinator_jobs', 'coordinator_jobs'].filter((x, i, a) => true)) {
+for (const f of ['coordinator', 'coordinator_hands', 'coordinator_chat', 'coordinator_journey', 'coordinator_lead_texts', 'coordinator_jobs', 'coordinator_jobs', 'coordinator_replies', 'coordinator_replies'].filter((x, i, a) => true)) {
   try { await pg.exec(strip(readFileSync(ROOT + '/' + f + '.sql', 'utf8'))); ok(true, f + '.sql runs'); } catch (e) { ok(false, f + '.sql: ' + e.message); }
 }
 await pg.query(`insert into cds_coord_items (key, person_kind, person_id, kind, status) values ('a','consumer','C1','contact','suggested'), ('b','consumer','C1','need_contact','open')`);
@@ -61,6 +61,8 @@ await pg.query(`insert into cds_coord_msgs (key, kind, person_kind, person_id, p
 ok(true, 'the new kinds save');
 let bad = false; try { await pg.query(`insert into cds_coord_msgs (key, kind, person_kind, person_id, phone, body, status) values ('z','nope','consumer','C1','','x','draft')`); } catch { bad = true; }
 ok(bad, 'an unknown kind is still refused');
+await pg.query(`insert into cds_coord_msgs (key, kind, person_kind, person_id, phone, body, status) values ('reply:x','reply','consumer','C1','4175550142','x','draft')`);
+ok((await one(`select value from cds_match_settings where key = 'coordinator_texts'`)).value.live === false, 'answers save; the texts switch starts off');
 ok((await one(`select value from cds_match_settings where key = 'packet_sends'`)).value.live === false, 'the switch starts off');
 console.log(pass + ' passed, ' + failN + ' failed');
 process.exit(failN ? 1 : 0);

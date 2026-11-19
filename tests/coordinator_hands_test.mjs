@@ -51,6 +51,8 @@ const db = { async query(t, p = []) {
   if (/update cds_coord_msgs set status = 'failed'/.test(t)) { Object.assign(T.msgs.find(m => m.id === p[0]), { status: 'failed', error: p[1] }); return { rows: [] }; }
   if (/update cds_coord_msgs set status = 'skipped'/.test(t)) { const m = T.msgs.find(m => m.id === p[0] && ['draft', 'failed'].includes(m.status)); if (m) m.status = 'skipped'; return { rows: m ? [{ id: m.id }] : [] }; }
   if (/insert into cds_audit/.test(t)) { T.audit.push(p); return { rows: [] }; }
+  if (/key = 'coordinator_texts'/.test(t)) return { rows: [] };   // 2026-11-18: its texts' own switch, off here
+  if (/where status = 'sent' and kind = any/.test(t)) return { rows: [] };   // nobody texted back here
   if (/key = 'welcome_texts'/.test(t)) return { rows: T.welcome ? [{ value: { live: true } }] : [] };
   if (/from cds_enroll_packets/.test(t)) return { rows: [] };
   if (/from orientation_completions/.test(t)) return { rows: [] };
