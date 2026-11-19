@@ -867,7 +867,7 @@
   }
   // ---------------------------------------------------------------- the texts it wrote (part 2, 2026-11-17)
   // Practice: each one waits here for a person to read it, change it if they like, and press Send. On: they go by themselves.
-  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead', journey: 'Welcome text', reply: 'Answer to their text', packet: 'Enrollment packet, ready to send', apppacket: 'Attendant application, ready to send' };
+  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead', journey: 'Welcome text', reply: 'Answer to their text', fax: 'Tax form fax, ready to send', packet: 'Enrollment packet, ready to send', apppacket: 'Attendant application, ready to send' };
   const msgsFor = (kind, id) => (_co.msgs || []).filter(m => m.person_kind === kind && String(m.person_id) === String(id));
   function msgsHtml(kind, id) {
     const list = msgsFor(kind, id).filter(m => ['draft', 'failed'].includes(m.status));
@@ -875,7 +875,7 @@
     if (!list.length && !sent.length) return '';
     return '<div style="margin-top:8px"><b style="font-size:13px">Texts it wrote</b>' + list.map(m => '<div style="padding:8px 0;border-top:1px solid var(--gray-200)">' +
         '<div class="lt-sub">' + esc(MSG_KIND[m.kind] || m.kind) + ' · to ' + esc(m.to_name || 'them') + ' (phone ending ' + esc(m.last4 || '') + ')' + (m.status === 'failed' ? ' · <span class="lt-red">did not go: ' + esc(m.error || '') + '</span>' : '') + '</div>' +
-        (['packet', 'apppacket'].includes(m.kind) ? '<div style="font-size:13px;margin-top:4px">' + esc(m.body) + '</div>'   // sent by the hub's own packet code, not as these words
+        (['packet', 'apppacket', 'fax'].includes(m.kind) ? '<div style="font-size:13px;margin-top:4px">' + esc(m.body) + '</div>'   // sent by the hub's own packet code, not as these words
           : '<textarea id="stMsg' + m.id + '" rows="3" style="width:100%;font:inherit;font-size:13px;margin-top:4px">' + esc(m.body) + '</textarea>') +
         '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Send', 'StartHub.msgSend(' + m.id + ')') + btn('Skip', 'StartHub.msgSkip(' + m.id + ')', true) + '</div></div>').join('') +
       sent.map(m => '<div class="lt-sub" style="padding:4px 0;border-top:1px solid var(--gray-200)">Sent to ' + esc(m.to_name || '') + ' ' + esc(shortDay(String(m.sent_at || '').slice(0, 10))) + ': ' + esc(m.body) + '</div>').join('') + '</div>';
@@ -902,14 +902,14 @@
     const items = coordItems().filter(i => i.person_kind === 'lead' && String(i.person_id) === _leadHeardId && ['open', 'suggested'].includes(i.status));
     const msgs = msgsHtml('lead', _leadHeardId), chatBox = chatHtml(_leadHeardId);
     if (!items.length && !msgs && !chatBox) { box.innerHTML = ''; return; }
-    const label = { promise: 'We promised', their_word: 'They said they would', question: 'They asked', attendant: 'Attendant', start_date: 'Start date', contact: 'Found' };
+    const label = { promise: 'We promised', their_word: 'They said they would', question: 'They asked', attendant: 'Attendant', start_date: 'Start date', contact: 'Found', state_doc: 'State fax' };
     box.innerHTML = '<div class="card" style="padding:16px 18px;margin-bottom:14px;border:1px solid var(--primary)"><b style="color:var(--primary)">Heard on calls and texts</b>' +
       items.map(i => { const d = i.data || {};
         if (i.kind === 'contact') return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)">' + contactText(i) + '<div style="display:flex;gap:6px;margin-top:4px">' +
           btn('Use it', "StartHub.useContact('lead','" + q(_leadHeardId) + "'," + i.id + ')') + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>';
         return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(label[i.kind] || i.kind) + ':</b> ' + esc(d.what || d.text || d.name || d.note || d.date || '') +
         (i.due ? ' <span class="lt-sub' + (i.kind === 'promise' && String(i.due).slice(0, 10) < today() ? ' lt-red' : '') + '">' + (i.kind === 'their_word' ? 'check on ' : 'due ') + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : '') +
-        '<div class="lt-sub">' + esc([i.source && i.source.line === 'cc' ? 'From the Caring Companions line' : 'From the CDS line', i.source && i.source.at ? shortDay(String(i.source.at).slice(0, 10)) : ''].join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>' +
+        '<div class="lt-sub">' + esc([i.source && i.source.line === 'cc' ? 'From the Caring Companions line' : i.source && i.source.line === 'fax' ? 'From a state fax' : 'From the CDS line', i.source && i.source.at ? shortDay(String(i.source.at).slice(0, 10)) : ''].join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>' +
         '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Done', 'StartHub.coordDecide(' + i.id + ",'done',StartHub.mountLeadHeard)", true) + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>'; }).join('') + chatBox + msgs + '</div>';
   }
   // ---------------------------------------------------------------- texting a new website lead (2026-11-17, her yes on the mockup)
@@ -979,7 +979,7 @@
   function heardHtml(c) {
     const list = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status));
     const cid = q(c.id);
-    const from = i => !i.source || !i.source.at || i.source.kind === 'lookup' ? '' : '<div class="lt-sub">' + esc([i.source && i.source.kind === 'texts' ? 'From texts' : 'From a call', i.source && i.source.at ? 'on ' + shortDay(String(i.source.at).slice(0, 10)) : '',
+    const from = i => !i.source || !i.source.at || i.source.kind === 'lookup' || i.source.kind === 'fax' ? '' : '<div class="lt-sub">' + esc([i.source && i.source.kind === 'texts' ? 'From texts' : 'From a call', i.source && i.source.at ? 'on ' + shortDay(String(i.source.at).slice(0, 10)) : '',
       i.source && i.source.line === 'cc' ? 'on the Caring Companions line' : 'on the CDS line'].filter(Boolean).join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>';
     const row = (i, text, buttons) => '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><div>' + text + '</div>' + from(i) + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' + buttons + '</div></div>';
     const done = (i, label) => btn(label || 'Done', "StartHub.coordDecide(" + i.id + ",'done')", true), no = i => btn('Not right', "StartHub.coordDecide(" + i.id + ",'dismiss')", true);
@@ -989,6 +989,7 @@
         (d.date ? btn('Use ' + esc(shortDay(d.date)), "StartHub.useStart('" + cid + "'," + i.id + ",'" + q(d.date) + "')") : '') + done(i, d.date ? 'Already handled' : 'Got it') + no(i));
       if (i.kind === 'attendant') return row(i, '<b>Attendant:</b> ' + esc(d.name) + (d.relation ? ' (' + esc(d.relation) + ')' : '') + [d.phone ? ' · ' + esc(_laFmtPhone ? _laFmtPhone(d.phone) : d.phone) : '', d.email ? ' · ' + esc(d.email) : ''].join(''),
         btn('Add them and text the application', "StartHub.useAttendant('" + cid + "'," + i.id + ")") + done(i, 'Already added') + no(i));
+      if (i.kind === 'state_doc') return row(i, '<b>State fax:</b> ' + esc(d.text || '') + (d.amount ? ' <span class="lt-sub">' + esc(d.amount) + '</span>' : '') + '<div class="lt-sub">It is on Today with the other faxes that came in.</div>', done(i, 'Got it') + no(i));
       if (i.kind === 'contact') return row(i, contactText(i), btn('Use it', "StartHub.useContact('consumer','" + cid + "'," + i.id + ')') + no(i));
       if (i.kind === 'need_contact') return row(i, '<b>Need a phone' + (d.who === c.name ? ' or email' : '') + ' for ' + esc(d.who) + '</b> to send ' + esc(d.what) + '. The Coordinator looks on both lines and sends it once one is on file.', no(i));
       if (i.kind === 'their_word') return row(i, '<b>They said they would:</b> ' + esc(d.what) + (i.due ? ' <span class="lt-sub">check on ' + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : ''), done(i, 'They did') + no(i));

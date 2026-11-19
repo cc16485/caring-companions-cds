@@ -111,7 +111,7 @@ export function emailWords({ today, added, sent, waiting, drafts, failed, late }
   return { subject: 'CDS Coordinator: ' + ([...late, ...waiting, ...drafts].length) + ' waiting on you today', text, html };
 }
 
-export function createHands({ db, ai, send, model, sendPacket, nowMs = () => Date.now() }) {
+export function createHands({ db, ai, send, model, sendPacket, sendFax, nowMs = () => Date.now() }) {
   const q = async (t, p) => (await db.query(t, p || [])).rows;
   const one = async (t, p) => (await q(t, p))[0] || null;
   const AG = 'caring-companions-cds';
@@ -212,6 +212,7 @@ export function createHands({ db, ai, send, model, sendPacket, nowMs = () => Dat
     if (m.status === 'sent') return { ok: true, already: true };
     // A packet draft (2026-11-18) goes through the hub's own packet code, not as a text with these words.
     if (['packet', 'apppacket'].includes(m.kind)) return sendPacket ? sendPacket(m.id, by) : { ok: false, error: 'Packets cannot be sent from here.' };
+    if (m.kind === 'fax') return sendFax ? sendFax(m.id, by) : { ok: false, error: 'Faxes cannot be sent from here.' };   // 2026-11-18: the one-click fax code
     const text = safeText(body != null ? body : m.body);
     if (!text) return { ok: false, error: 'That text cannot go out as written (too long, or it has a long number or an amount). Change it and try again.' };
     try {
@@ -245,6 +246,7 @@ export function createHands({ db, ai, send, model, sendPacket, nowMs = () => Dat
     const fmt = i => i.person_name + ': ' + ({ promise: 'we promised ', their_word: 'they said they would ', question: 'they asked ', start_date: 'start date ', attendant: 'attendant ', concern: 'NEEDS YOU: ' }[i.kind] || '') + (i.data.what || i.data.text || i.data.name || i.data.date || i.data.note || '');
     // 2026-11-18: no way to reach someone, and a phone or email found for them.
     const fmt2 = i => i.kind === 'need_contact' ? 'Need a phone for ' + i.data.who + ' (' + i.data.what + (i.data.who !== i.person_name ? ', for ' + i.person_name : '') + ')'
+      : i.kind === 'state_doc' ? 'State fax for ' + i.person_name + ': ' + (i.data.text || '') + ' (check it on their profile)'
       : i.kind === 'contact' ? 'Found a ' + (i.data.phone ? 'phone' : 'email') + ' for ' + i.data.name + ' on ' + i.data.where + ': check it on their profile (Use it or Not right)' : fmt(i);
     const addedRows = await q(`select person_name, kind, data from cds_coord_items where created_at >= (now() at time zone 'America/Chicago')::date at time zone 'America/Chicago' order by id`);
     const open = await q(`select person_name, kind, data, due::text as due, status from cds_coord_items where status in ('open','suggested') order by due nulls last`);
@@ -254,9 +256,9 @@ export function createHands({ db, ai, send, model, sendPacket, nowMs = () => Dat
       added: addedRows.map(i => 'Heard: ' + fmt(i)),
       sent: msgs.filter(m => m.status === 'sent').map(m => 'Texted ' + m.to_name + ' (' + m.kind + ')'),
       late: open.filter(i => i.kind === 'promise' && i.due && i.due < today && i.due >= weekAgo).map(i => 'Late: ' + fmt(i)),
-      waiting: open.filter(i => ['start_date', 'attendant', 'concern', 'need_contact', 'contact'].includes(i.kind) || (i.kind === 'promise' && i.due === today)).map(fmt2),
-      drafts: msgs.filter(m => m.status === 'draft').map(m => m.to_name + ' (' + ({ clock: 'clock-in help', dsds: 'has the state called', check: 'check-in', journey: 'welcome text', reply: 'answer to their text', packet: 'enrollment packet, ready to send', apppacket: 'attendant application, ready to send' }[m.kind] || m.kind) + ')'),
-      failed: msgs.filter(m => m.status === 'failed').map(m => (['packet', 'apppacket'].includes(m.kind) ? 'Packet for ' : 'Text to ') + m.to_name + ' did not go: ' + (m.error || '')) });
+      waiting: open.filter(i => ['start_date', 'attendant', 'concern', 'need_contact', 'contact', 'state_doc'].includes(i.kind) || (i.kind === 'promise' && i.due === today)).map(fmt2),
+      drafts: msgs.filter(m => m.status === 'draft').map(m => m.to_name + ' (' + ({ clock: 'clock-in help', dsds: 'has the state called', check: 'check-in', journey: 'welcome text', reply: 'answer to their text', fax: 'tax form fax, ready to send', packet: 'enrollment packet, ready to send', apppacket: 'attendant application, ready to send' }[m.kind] || m.kind) + ')'),
+      failed: msgs.filter(m => m.status === 'failed').map(m => (['packet', 'apppacket'].includes(m.kind) ? 'Packet for ' : m.kind === 'fax' ? 'Fax for ' : 'Text to ') + m.to_name + ' did not go: ' + (m.error || '')) });
     try { await send({ email: to.email, subject: words.subject, text: words.text, html: words.html }); }
     catch (e) { return { email: 'failed: ' + String(e && e.message || e).slice(0, 160) }; }
     await q(`update cds_match_settings set value = value || $1::jsonb where key = 'coordinator'`, [JSON.stringify({ email_day: today })]);

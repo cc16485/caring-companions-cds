@@ -135,6 +135,7 @@ export function weekLine(it, today) {
   if (it.kind === 'question') return { t: who + ' asked: ' + d.text, date: it.due || today };
   if (it.kind === 'concern') return { t: who + ' needs you: ' + d.text, date: today };   // stays on today until answered
   // 2026-11-18: a phone or email found by name, and no way to reach someone (closed by itself once one is on file).
+  if (it.kind === 'state_doc') return { t: who + ': a state fax came in, check it (' + (d.kind || 'paper') + ')', date: today };   // 2026-11-18
   if (it.kind === 'contact') return { t: who + ': found a ' + (d.phone ? 'phone' : 'email') + ' for ' + d.name + ', check it', date: today };
   if (it.kind === 'need_contact') return { t: 'Need a phone for ' + d.who + (d.who !== who ? ' (' + who + "'s attendant)" : '') + ' to send ' + d.what, date: today };
   return null;
