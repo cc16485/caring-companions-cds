@@ -69,6 +69,9 @@ ok(dl.length >= 3 && dl.every(x => x.owner === 'Krystal') && dl[0].due <= dl[dl.
 t = T.tracker(base({ cdsStartDate: '2026-11-22', starting: { clockCall: { at: 'x', by: 'Sam', questions: 'Which app?' } } }), { today });
 ok(t.cells.clock.state === 'done' && /questions/.test(t.cells.clock.t), 'clock-in call done');
 
+// The day the packet was sent (2026-11-18, her ask).
+ok(T.tracker(c2, { today, auth: true, packet: { status: 'Sent, waiting', sent: '2026-11-08' } }).cells.packet.t === 'Sent 11/08, not signed', 'the packet cell says the day it was sent', T.tracker(c2, { today, auth: true, packet: { status: 'Sent, waiting', sent: '2026-11-08' } }).cells.packet.t);
+ok(T.tracker(c2, { today, auth: true, packet: { status: 'Sent, waiting' } }).cells.packet.t === 'Sent, not signed', 'no date known: as before');
 // No em dashes in anything a person reads.
 ok(!/[—–]/.test(JSON.stringify(T.tracker(c2, { today, auth: true }))), 'no em dashes');
 console.log(pass + ' passed, ' + failN + ' failed');
