@@ -134,6 +134,9 @@ export function weekLine(it, today) {
   if (it.kind === 'attendant') return { t: who + ': add ' + d.name + ' as the attendant', date: today };
   if (it.kind === 'question') return { t: who + ' asked: ' + d.text, date: it.due || today };
   if (it.kind === 'concern') return { t: who + ' needs you: ' + d.text, date: today };   // stays on today until answered
+  // 2026-11-18: a phone or email found by name, and no way to reach someone (closed by itself once one is on file).
+  if (it.kind === 'contact') return { t: who + ': found a ' + (d.phone ? 'phone' : 'email') + ' for ' + d.name + ', check it', date: today };
+  if (it.kind === 'need_contact') return { t: 'Need a phone for ' + d.who + (d.who !== who ? ' (' + who + "'s attendant)" : '') + ' to send ' + d.what, date: today };
   return null;
 }
 
@@ -237,7 +240,7 @@ export function createCoordinator({ db, ai, ccFeed, nowMs = () => Date.now() }) 
     const to = ACTIONS[answer];
     if (!to) throw new Error('Unknown answer');
     // Undo puts a suggestion back to waiting on the office, and a promise back to open.
-    const r = await one(`update cds_coord_items set status = case when $2 = 'open' and kind in ('start_date','attendant') then 'suggested' else $2 end,
+    const r = await one(`update cds_coord_items set status = case when $2 = 'open' and kind in ('start_date','attendant','contact') then 'suggested' else $2 end,
       decided_by = $3, decided_at = now() where id = $1 returning id, status`, [+id, to, String(email || '').slice(0, 120)]);
     if (!r) throw new Error('That item is gone. Refresh the page.');
     await q(`insert into cds_audit (actor, action, target, detail) values ($1, 'coordinator_item', $2, $3::jsonb)`, [String(email || ''), 'coord:' + id, JSON.stringify({ to })]);

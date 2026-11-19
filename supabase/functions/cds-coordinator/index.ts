@@ -5,12 +5,14 @@
 //   - The hub page (a signed-in CDS hub user) asks for the open items and answers one (done, undo, dismiss, used).
 // Reads the Caring Companions line through the Caring Companions server's cds-call-feed (header x-cc-handoff =
 // CC_HANDOFF_SECRET, the secret both servers already share). Claude through ANTHROPIC_API_KEY (the BAA-covered account).
-// It never texts, emails or calls anyone. Deploy: supabase functions deploy cds-coordinator --project-ref siivpekcaryeyttszwav --no-verify-jwt
+// Since part 2 it texts and emails as each switch allows; since 2026-11-18 it also sends packets (switch packet_sends) and
+// emails sign-in asks (coordinator-jobs.js). Deploy: supabase functions deploy cds-coordinator --project-ref siivpekcaryeyttszwav --no-verify-jwt
 import postgres from 'npm:postgres@3.4.4';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { createCoordinator, extractRequest, cleanExtract, COORD_MODEL } from '../_shared/office/coordinator.js';
 import { createHands } from '../_shared/office/coordinator-hands.js';
 import { createChat } from '../_shared/office/coordinator-chat.js';
+import { createJobs } from '../_shared/office/coordinator-jobs.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const ORIGINS = ['https://hub.caringcds.com'];
@@ -28,7 +30,7 @@ async function ai(req: Record<string, unknown>) {
   if (!r.ok) throw new Error('Claude ' + r.status + ': ' + String(j?.error?.message || '').slice(0, 160));
   return j;
 }
-async function ccFeed(body: { phones: string[]; since: string }) {
+async function ccFeed(body: { phones?: string[]; since?: string; names?: string[] }) {
   const secret = env('CC_HANDOFF_SECRET');
   if (secret.length < 32) throw new Error('CC_HANDOFF_SECRET is not set on the CDS server');
   const r = await fetch(CC_FEED, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', 'x-cc-handoff': secret }, signal: AbortSignal.timeout(60000) });
@@ -60,7 +62,19 @@ const coord = createCoordinator({
 });
 
 const db2 = { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) };
-const hands = createHands({ db: db2, ai, send, model: COORD_MODEL });
+// Packets go through cds-match, the same code as the hub's buttons, on the schedule's secret (2026-11-18).
+async function packetSend(kind: string, data: Record<string, unknown>, _by: string) {
+  const secret = env('CDS_JOB_SECRET');
+  if (!secret) throw new Error('CDS_JOB_SECRET is not set on the CDS server');
+  const action = kind === 'packet' ? 'coordEnrollSend' : 'coordAttendantSend';
+  const r = await fetch(env('SUPABASE_URL') + '/functions/v1/cds-match', { method: 'POST', body: JSON.stringify({ role: 'job', action, input: data }),
+    headers: { 'Content-Type': 'application/json', 'x-cron-secret': secret }, signal: AbortSignal.timeout(60000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return { ok: false, error: String(j?.error || ('cds-match ' + r.status)).slice(0, 200) };
+  return j;
+}
+const jobs = createJobs({ db: db2, send, packetSend, ccNames: (names: string[]) => ccFeed({ names }) });
+const hands = createHands({ db: db2, ai, send, model: COORD_MODEL, sendPacket: jobs.sendPacket });
 const chat = createChat({ db: db2, ai, send });   // texting new website leads (2026-11-17), every 2 minutes, body {chat: true}
 async function settingsNow() { const r = await sql`select value from cds_match_settings where key = 'coordinator'`; return (r[0]?.value || {}) as Record<string, unknown>; }
 
@@ -92,12 +106,16 @@ Deno.serve(async (req) => {
       if (body?.chat === true) { const set = await settingsNow(); return json(set.live === false ? { chat: 'the coordinator is off' } : await chat.run(set)); }
       // body {"email_test": true} (Desktop step only): the 4:30 email now, so she sees it arrive.
       if (body?.email_test === true) return json(await hands.dailyEmail(await settingsNow(), { force: true }));
+      // body {"signin_test": true} (Desktop step only): today's sign-in emails now, whatever the hour.
+      if (body?.signin_test === true) { const set = await settingsNow(); const g = await jobs.gather(); return json(await jobs.signIns(g, set, { force: true })); }
       const heard = await coord.run({ backfill: body?.backfill === true });
       const set = await settingsNow();
       if (set.live === false) return json(heard);
       const did = body?.backfill === true ? { texts: 'not during a backfill' } : await hands.work(set);
+      // 2026-11-18: find missing phones and emails, packets, sign-in asks. Before the 4:30 email so it lists them.
+      const more = body?.backfill === true ? {} : await jobs.run(set);
       const mail = body?.backfill === true ? {} : await hands.dailyEmail(set);
-      return json({ ...heard, texts: did, ...mail });
+      return json({ ...heard, texts: did, ...more, ...mail });
     }
     catch (e) { console.error(e); return json({ ok: false, error: String((e as Error)?.message || e) }, 500); }
   }

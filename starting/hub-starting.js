@@ -867,7 +867,7 @@
   }
   // ---------------------------------------------------------------- the texts it wrote (part 2, 2026-11-17)
   // Practice: each one waits here for a person to read it, change it if they like, and press Send. On: they go by themselves.
-  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead', journey: 'Welcome text' };
+  const MSG_KIND = { clock: 'Clock-in help before the start date', dsds: 'Has the state called or visited?', check: 'Checking in on what they said they would do', chat: 'Next text to this new lead', journey: 'Welcome text', packet: 'Enrollment packet, ready to send', apppacket: 'Attendant application, ready to send' };
   const msgsFor = (kind, id) => (_co.msgs || []).filter(m => m.person_kind === kind && String(m.person_id) === String(id));
   function msgsHtml(kind, id) {
     const list = msgsFor(kind, id).filter(m => ['draft', 'failed'].includes(m.status));
@@ -875,7 +875,8 @@
     if (!list.length && !sent.length) return '';
     return '<div style="margin-top:8px"><b style="font-size:13px">Texts it wrote</b>' + list.map(m => '<div style="padding:8px 0;border-top:1px solid var(--gray-200)">' +
         '<div class="lt-sub">' + esc(MSG_KIND[m.kind] || m.kind) + ' · to ' + esc(m.to_name || 'them') + ' (phone ending ' + esc(m.last4 || '') + ')' + (m.status === 'failed' ? ' · <span class="lt-red">did not go: ' + esc(m.error || '') + '</span>' : '') + '</div>' +
-        '<textarea id="stMsg' + m.id + '" rows="3" style="width:100%;font:inherit;font-size:13px;margin-top:4px">' + esc(m.body) + '</textarea>' +
+        (['packet', 'apppacket'].includes(m.kind) ? '<div style="font-size:13px;margin-top:4px">' + esc(m.body) + '</div>'   // sent by the hub's own packet code, not as these words
+          : '<textarea id="stMsg' + m.id + '" rows="3" style="width:100%;font:inherit;font-size:13px;margin-top:4px">' + esc(m.body) + '</textarea>') +
         '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Send', 'StartHub.msgSend(' + m.id + ')') + btn('Skip', 'StartHub.msgSkip(' + m.id + ')', true) + '</div></div>').join('') +
       sent.map(m => '<div class="lt-sub" style="padding:4px 0;border-top:1px solid var(--gray-200)">Sent to ' + esc(m.to_name || '') + ' ' + esc(shortDay(String(m.sent_at || '').slice(0, 10))) + ': ' + esc(m.body) + '</div>').join('') + '</div>';
   }
@@ -901,9 +902,12 @@
     const items = coordItems().filter(i => i.person_kind === 'lead' && String(i.person_id) === _leadHeardId && ['open', 'suggested'].includes(i.status));
     const msgs = msgsHtml('lead', _leadHeardId), chatBox = chatHtml(_leadHeardId);
     if (!items.length && !msgs && !chatBox) { box.innerHTML = ''; return; }
-    const label = { promise: 'We promised', their_word: 'They said they would', question: 'They asked', attendant: 'Attendant', start_date: 'Start date' };
+    const label = { promise: 'We promised', their_word: 'They said they would', question: 'They asked', attendant: 'Attendant', start_date: 'Start date', contact: 'Found' };
     box.innerHTML = '<div class="card" style="padding:16px 18px;margin-bottom:14px;border:1px solid var(--primary)"><b style="color:var(--primary)">Heard on calls and texts</b>' +
-      items.map(i => { const d = i.data || {}; return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(label[i.kind] || i.kind) + ':</b> ' + esc(d.what || d.text || d.name || d.note || d.date || '') +
+      items.map(i => { const d = i.data || {};
+        if (i.kind === 'contact') return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)">' + contactText(i) + '<div style="display:flex;gap:6px;margin-top:4px">' +
+          btn('Use it', "StartHub.useContact('lead','" + q(_leadHeardId) + "'," + i.id + ')') + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>';
+        return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(label[i.kind] || i.kind) + ':</b> ' + esc(d.what || d.text || d.name || d.note || d.date || '') +
         (i.due ? ' <span class="lt-sub' + (i.kind === 'promise' && String(i.due).slice(0, 10) < today() ? ' lt-red' : '') + '">' + (i.kind === 'their_word' ? 'check on ' : 'due ') + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : '') +
         '<div class="lt-sub">' + esc([i.source && i.source.line === 'cc' ? 'From the Caring Companions line' : 'From the CDS line', i.source && i.source.at ? shortDay(String(i.source.at).slice(0, 10)) : ''].join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>' +
         '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Done', 'StartHub.coordDecide(' + i.id + ",'done',StartHub.mountLeadHeard)", true) + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>'; }).join('') + chatBox + msgs + '</div>';
@@ -942,6 +946,27 @@
     const n = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status)).length + msgsFor('consumer', c.id).filter(m => m.status === 'draft').length;
     return n ? '<button type="button" class="lt-b lt-b-q" style="margin-top:4px" onclick="' + esc("_profTab='overview';openProfile('" + q(c.id) + "')") + '">Heard on a call: ' + n + ' to check</button>' : '';
   }
+  // A phone or email found by name (2026-11-18, her ask). Nothing was written; Use it puts it on the record here.
+  function contactText(i) {
+    const d = i.data || {}, what = d.phone ? (_laFmtPhone ? _laFmtPhone(d.phone) : d.phone) : d.email;
+    return '<b>Found a ' + (d.phone ? 'phone' : 'email') + ' for ' + esc(d.name) + (d.for === 'attendant' ? ' (attendant)' : '') + ':</b> ' + esc(what) +
+      '<div class="lt-sub">From ' + esc(d.where || 'a call') + (d.calls ? ', ' + d.calls + (d.calls === 1 ? ' call' : ' calls') : '') + (d.last ? ', last ' + esc(shortDay(d.last)) : '') + '. Found by their name: check it is really them before you use it.</div>';
+  }
+  function useContact(kind, pid, id) {
+    const it = (_co.items || []).find(i => String(i.id) === String(id)); if (!it) return;
+    const d = it.data || {}, phone = d.phone ? _laFmtPhone(d.phone) : '';
+    if (d.for === 'attendant') {   // the attendant: Add attendant, filled in, so Save and text sends the application
+      if (typeof openAddAttendant !== 'function') return;
+      openAddAttendant('c:' + pid, () => coordDecide(id, 'used'));
+      document.getElementById('aa_name').value = d.name || ''; document.getElementById('aa_phone').value = phone; document.getElementById('aa_email').value = d.email || '';
+      return;
+    }
+    const put = x => { if (phone && !x.phone) x.phone = phone; if (d.email && !x.email) x.email = d.email; };
+    const x = edit(kind, pid, put);
+    if (x && kind === 'consumer' && x.starting && x.starting.leadId) edit('lead', x.starting.leadId, put);   // the packet card reads the lead
+    coordDecide(id, 'used', kind === 'lead' ? mountLeadHeard : undefined);
+    if (typeof _ghlToast === 'function') _ghlToast('✅ Saved ' + (phone || d.email) + ' for ' + (d.name || 'them') + '.');
+  }
   function useStart(cid, id, date) { coordDecide(id, 'used', () => { if (date) setStart(cid, date); }); }
   function useAttendant(cid, id) {
     const it = (_co.items || []).find(i => String(i.id) === String(id)); if (!it || typeof openAddAttendant !== 'function') return;
@@ -954,7 +979,7 @@
   function heardHtml(c) {
     const list = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status));
     const cid = q(c.id);
-    const from = i => '<div class="lt-sub">' + esc([i.source && i.source.kind === 'texts' ? 'From texts' : 'From a call', i.source && i.source.at ? 'on ' + shortDay(String(i.source.at).slice(0, 10)) : '',
+    const from = i => !i.source || !i.source.at || i.source.kind === 'lookup' ? '' : '<div class="lt-sub">' + esc([i.source && i.source.kind === 'texts' ? 'From texts' : 'From a call', i.source && i.source.at ? 'on ' + shortDay(String(i.source.at).slice(0, 10)) : '',
       i.source && i.source.line === 'cc' ? 'on the Caring Companions line' : 'on the CDS line'].filter(Boolean).join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>';
     const row = (i, text, buttons) => '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><div>' + text + '</div>' + from(i) + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' + buttons + '</div></div>';
     const done = (i, label) => btn(label || 'Done', "StartHub.coordDecide(" + i.id + ",'done')", true), no = i => btn('Not right', "StartHub.coordDecide(" + i.id + ",'dismiss')", true);
@@ -964,6 +989,8 @@
         (d.date ? btn('Use ' + esc(shortDay(d.date)), "StartHub.useStart('" + cid + "'," + i.id + ",'" + q(d.date) + "')") : '') + done(i, d.date ? 'Already handled' : 'Got it') + no(i));
       if (i.kind === 'attendant') return row(i, '<b>Attendant:</b> ' + esc(d.name) + (d.relation ? ' (' + esc(d.relation) + ')' : '') + [d.phone ? ' · ' + esc(_laFmtPhone ? _laFmtPhone(d.phone) : d.phone) : '', d.email ? ' · ' + esc(d.email) : ''].join(''),
         btn('Add them and text the application', "StartHub.useAttendant('" + cid + "'," + i.id + ")") + done(i, 'Already added') + no(i));
+      if (i.kind === 'contact') return row(i, contactText(i), btn('Use it', "StartHub.useContact('consumer','" + cid + "'," + i.id + ')') + no(i));
+      if (i.kind === 'need_contact') return row(i, '<b>Need a phone' + (d.who === c.name ? ' or email' : '') + ' for ' + esc(d.who) + '</b> to send ' + esc(d.what) + '. The Coordinator looks on both lines and sends it once one is on file.', no(i));
       if (i.kind === 'their_word') return row(i, '<b>They said they would:</b> ' + esc(d.what) + (i.due ? ' <span class="lt-sub">check on ' + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : ''), done(i, 'They did') + no(i));
       if (i.kind === 'question') return row(i, '<b>They asked:</b> ' + esc(d.text), done(i, 'Answered') + no(i));
       return '';
@@ -1235,5 +1262,5 @@
   }
 
   window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard, chatApply };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, useContact, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard, chatApply };
 })();
