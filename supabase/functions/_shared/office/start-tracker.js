@@ -90,7 +90,8 @@
     cells.packet = pk.status === 'checking' ? { state: 'todo', t: 'Checking...' }
       : pk.done ? { state: 'done', t: 'Signed' }
       : pk.signed ? { state: 'now', t: 'Sign as agent', owner, due: due('packet') }
-      : pk.status ? { state: 'wait', t: 'Sent, not signed', owner: 'Consumer', due: due('packet') }
+      // 2026-11-18 (her ask): the day it was sent, so a packet waiting a week stands out.
+      : pk.status ? { state: 'wait', t: 'Sent' + (pk.sent ? ' ' + String(pk.sent).slice(5, 10).replace('-', '/') : '') + ', not signed', owner: 'Consumer', due: due('packet') }
       : { state: 'now', t: 'Send the packet', owner, due: due('packet') };
     // 4 Tax
     const tx = taxState(c);

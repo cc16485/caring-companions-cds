@@ -310,7 +310,7 @@
     const att = (getData('attendants') || []).filter(a => a.status !== 'inactive' && String(a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name)))[0] || null;
     const fs = typeof firstShiftOf === 'function' ? firstShiftOf(c) : '';
     return { today: today(), firstShift: fs || '', auth: !!auth, authRec: auth || null, rulesVersion: rules().version,
-             packet: { signed: !!(P && P.signed_at), done: !!(P && P.status === 'Done'), status: P ? P.status : '' },
+             packet: { signed: !!(P && P.signed_at), done: !!(P && P.status === 'Done'), status: P ? P.status : '', sent: P && P.sent_at ? new Date(P.sent_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) : '' },
              attendant: att ? { name: att.name, linked: true, ready: true } : (c.starting && c.starting.attendantName ? { name: c.starting.attendantName, linked: true, ready: false } : { linked: false, ready: false }) };
   }
 
@@ -1016,7 +1016,7 @@
     const roster = (getData('attendants') || []).filter(a => a.status !== 'inactive' && String(a.consumer || '').split(',').map(prNorm).includes(prNorm(c.name)))[0] || null;
     const done = orientList().find(o => nm(o.name) === nm(c.name));
     return Object.assign({}, cx, { today: today(), roster: roster ? { name: roster.name } : null, att: T().attendantFor(c, attRows()), orientDone: done ? String(done.completed_at || '').slice(0, 10) || true : false,
-      packet: P === undefined ? { status: 'checking' } : { signed: !!(P && P.signed_at), done: !!(P && P.status === 'Done'), status: P ? P.status : '' } });
+      packet: P === undefined ? { status: 'checking' } : { signed: !!(P && P.signed_at), done: !!(P && P.status === 'Done'), status: P ? P.status : '', sent: P && P.sent_at ? new Date(P.sent_at).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) : '' } });
   }
   function trackerOf(c) { return T().tracker(withHeard(c), trackerCtx(c)); }
   const GO = { medicaid: "_profTab='medicaid';", referral: "_profTab='state';", start: "_profTab='state';", packet: "_profTab='tax';", tax: "_profTab='tax';", clock: "_profTab='ready';", promise: "_profTab='overview';" };

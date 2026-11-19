@@ -218,6 +218,13 @@ with sync_playwright() as pw:
     ck('phone: saved from the card', pg.evaluate("()=>getData('consumers').find(c=>c.id==='C1').cdsStartDate") == day(12))
     shot(pg, '03-starting-page-phone')
     pg.evaluate("()=>showPage('pipeline')"); pg.wait_for_timeout(300); shot(pg, '04-leads-phone')
+    # 2026-11-18 (her ask): the Packet column says the day it was sent
+    pg.set_viewport_size({'width': 1440, 'height': 1000})
+    pg.evaluate("""()=>{ const c = getData('consumers').find(x=>x.status==='starting'); window.__pkName = c.name; c.cdsStartDate = c.cdsStartDate || ''; _profPacket[c.id] = { at: Date.now(), packet: { status: 'Sent, waiting', sent_at: '2026-11-08T15:00:00Z', signed_at: null } }; showPage('starting'); StartHub.renderPage(); }""")
+    pg.wait_for_timeout(400)
+    rowt = pg.inner_text("#startingPage .lt-wrap tr:has-text('" + pg.evaluate("()=>window.__pkName") + "')")
+    ck('Packet column: sent date shown', 'Sent 11/08, not signed' in rowt, rowt[:500])
+    shot(pg, '09-packet-sent-date')
     ck('no page errors', not errs, errs)
     b.close()
 print(f'{sum(res)}/{len(res)} passed'); raise SystemExit(0 if all(res) else 1)
