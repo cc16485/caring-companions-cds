@@ -5602,7 +5602,7 @@ async function renderActiveAttendants() {
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading attendants…</div>';
   try {
     const oig = await renderOigCard();
-    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=28');
+    const { mountHubPacket } = await import('./caregiver-match/hub-packet.js?v=29');
     root.innerHTML = '';
     mountHubPacket(root, { api: cdsMatchApi, roster: () => getData('attendants'),
       // Check dates typed on the card, and "No longer working", save to the Roster list.
@@ -5725,7 +5725,7 @@ async function renderCaregiverMatch(view) {
   }
   root.innerHTML = '<div style="padding:24px;color:#5a6570">Loading the Caregiver Directory…</div>';
   try {
-    const { mountHubMatch } = await import('./caregiver-match/hub-match.js?v=2');
+    const { mountHubMatch } = await import('./caregiver-match/hub-match.js?v=3');
     const api = async (action, input = {}) => {
       const { data } = await _db.auth.getSession();
       const jwt = data && data.session ? data.session.access_token : '';
@@ -16129,7 +16129,7 @@ async function syncApplicationAttendants(packets) {
   _appSync.busy = true;
   let changed = false;
   try {
-    const HP = await import('./caregiver-match/hub-packet.js?v=28');
+    const HP = await import('./caregiver-match/hub-packet.js?v=29');
     for (const a of HP.rosterPlan(packets, getData('attendants'))) {
       let g;
       try { g = await cdsMatchApi('packetGet', { pool_id: a.pool_id }); }
