@@ -208,7 +208,7 @@ export function rosterPlan(packets, roster) {
 export function checkDatesFromPacket(g) {
   const sc = (g && g.screening) || {}, checks = sc.checks || [];
   const newest = keys => checks.filter(c => keys.includes(c.key) && c.clear && c.at).map(c => chiDay(c.at)).sort().pop() || '';
-  return { fcsrDate: sc.screened ? chiDay(sc.result_at || sc.reviewed_at) : '', edlDate: newest(['edl', 'edr']), leieDate: newest(['oig', 'mo_medicaid']) };
+  return { fcsrDate: sc.screened ? chiDay(sc.result_at || sc.reviewed_at) : '', edlDate: newest(['edl']), leieDate: newest(['oig', 'mo_medicaid']) };
 }
 export function rosterRowFromPacket(a, g, now = new Date()) {
   const pool = (g && g.pool) || {};
@@ -476,12 +476,12 @@ export function buildGroups({ packets = [], roster = [], ended = [], autoOig = (
 // or an office to-do is past due. Gold: nothing moved in 10 days. Her switch: agency_data 'attendantsTable'.
 // The table's check columns and the checks each one holds (EDL with the DMH registry, OIG with the Missouri Medicaid exclusion).
 export const REC_COLS = ['fcsr', 'edl', 'oig', 'fp'];
-export const REC_KEYS = { edl: ['edl', 'edr'], oig: ['oig', 'mo_medicaid'], fp: ['fingerprints'] };
+export const REC_KEYS = { edl: ['edl'], oig: ['oig', 'mo_medicaid'], fp: ['fingerprints'] };
 // A check date: today or earlier (her pick 2026-11-06), never later than today.
 export const recDateOk = (v, today) => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && v <= today;
 export function recordBoxHtml(col, g, today) {
   const first = esc(g.pool.first), name = esc(g.pool.first + ' ' + g.pool.last), p = g.packet || {};
-  const title = { fcsr: 'FCSR', edl: 'EDL and DMH registry', oig: 'OIG and Missouri Medicaid exclusion', fp: 'Fingerprints' }[col];
+  const title = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG and Missouri Medicaid exclusion', fp: 'Fingerprints' }[col];
   const fileRow = id => `<label class="small">Screenshot or PDF of the result <input type="file" id="${id}" accept="image/*,application/pdf"></label>`;
   let body = '';
   if (col === 'fcsr') {
@@ -515,7 +515,7 @@ export const AT_COLS = [['step1', 'Step 1'], ['orient', 'Orientation'], ['fcsr',
   ['invite', 'Empeon invite'], ['empeon', 'Empeon'], ['call', 'ID video check'], ['i9', 'I-9 Section 2'], ['counter', 'Countersign']];
 export const AT_JOB = Object.fromEntries(AT_COLS.map(([k, l]) => [k, l === 'Step 1' ? 'Step 1 application' : l]));
 // Hover text on a done cell: what finished, and the full date (and time when we have one).
-export const AT_DONE = { step1: 'Step 1 signed', orient: 'Orientation watched', fcsr: 'FCSR clear', edl: 'EDL and DMH registry clear',
+export const AT_DONE = { step1: 'Step 1 signed', orient: 'Orientation watched', fcsr: 'FCSR clear', edl: 'EDL clear',
   oig: 'OIG and Missouri Medicaid clear', fp: 'Fingerprints clear', invite: 'Empeon invite sent', empeon: 'Empeon finished',
   call: 'ID seen on video', i9: 'I-9 Section 2 done', counter: 'Countersigned' };
 // A check date is a plain day (2026-11-03); read it as that day, not as midnight in London, which is the day before here.

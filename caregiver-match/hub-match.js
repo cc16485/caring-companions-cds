@@ -486,7 +486,7 @@ export function mountHubMatch(el, opts) {
         ${k === 'age18' ? '<p class="cm-small">Worked out from the date of birth the caregiver signed.</p>' : `
         <div class="cm-field"><label>Result</label><select class="rs"><option value="clear">Clear</option><option value="not_clear">Not clear</option></select></div>
         <div class="cm-field"><label>Checked on</label><input type="date" class="dt" value="${today()}"></div>
-        ${['edl', 'edr'].includes(k) ? '<p class="cm-small">This comes from the FCSR result letter.</p>' : ''}${proofPick(k)}
+        ${k === 'edl' ? '<p class="cm-small">This comes from the FCSR result letter.</p>' : ''}${proofPick(k)}
         <div class="cm-field"><label>Note</label><input class="nt"></div>`}
         <div class="cm-row" style="gap:6px"><button class="cm-btn sm" id="sv">Save</button><button class="cm-btn sm ghost" id="cx">Cancel</button></div></div>`;
       $('#cx', sform).onclick = () => { sform.innerHTML = ''; };

@@ -22,7 +22,7 @@ ok(HP.rosterPlan([packet], []).length === 1, 'finished application, nobody on th
 ok(HP.rosterPlan([{ ...packet, active: false }], []).length === 0, 'still onboarding: no record yet');
 const row = HP.rosterRowFromPacket(packet, g, now);
 ok(row.id === 'pool-P1' && row.poolId === 'P1' && row.status === 'active' && row.consumer === 'Ruth Caldwell' && row.phone === '4175550151' && row.addedFrom === 'Application', 'the record: id, consumer, phone, where it came from');
-ok(row.fcsrDate === '2026-11-03' && row.edlDate === '2026-11-03' && row.leieDate === '2026-11-02' && row.hiredate === '2026-11-09', 'the record carries the hiring check dates (Missouri day, newest clear one)');
+ok(row.fcsrDate === '2026-11-03' && row.edlDate === '2026-11-02' && row.leieDate === '2026-11-02' && row.hiredate === '2026-11-09', 'the record carries the hiring check dates (Missouri day, newest clear one)');
 ok(HP.rosterPlan([packet], [row]).length === 0, 'second run: nothing to do');
 ok(HP.checkDatesFromPacket({ screening: { screened: false, result_at: '2026-11-03T16:00:00Z', checks: [] } }).fcsrDate === '', 'FCSR not back clear: no date');
 
