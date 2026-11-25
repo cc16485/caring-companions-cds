@@ -340,17 +340,50 @@ export function createMatch(deps) {
     }
     return { state: 'approved', prospect: p };
   }
+  // Phone and email: the consumer roster first (the office keeps it current), then GoHighLevel.
+  async function consumerContact(p) {
+    const r = p.consumer_id ? (await consumerRoster()).find(x => String(x.id) === String(p.consumer_id)) : null;
+    const g = (await ghl.get(p.ghl_contact_id)) || {};
+    return { phone: String((r && r.phone) || g.phone || '').trim(), email: String((r && r.email) || g.email || '').trim() };
+  }
+  // Text AND email (her word 2026-11-25), each with its own link; the earlier links stop working.
   async function inviteConsumer(p, by) {
-    const c = await ghl.get(p.ghl_contact_id) || {};
-    const ch = c.phone ? 'sms' : 'email', to = ch === 'sms' ? c.phone : c.email;
-    if (!to) fail('No phone or email on file for this consumer.');
-    const token = await crypto.token();
+    const { phone, email } = await consumerContact(p);
+    if (!phone && !email) fail('No phone or email on file for this consumer.');
     await q('update cds_access set revoked_at=now(), revoked_by=$2 where prospect_id=$1 and revoked_at is null', [p.id, by + ' (replaced by a new link)']);
-    const a = await one('insert into cds_access (prospect_id, token_hash, invited_by, expires_at) values ($1,$2,$3,null) returning id', [p.id, await crypto.hash(token), by]);
-    const m = await message({ template: 'fam_invite_consumer', channel: ch, audience: 'family', prospect_id: p.id, to, vars: { first: p.first_name, link: links.family(token) }, by, automatic: by === 'automatic' });
-    if (m.status === 'sent' || m.status === 'practice') await stageIf(p.id, ['access_approved'], 'invited', by, 'Directory link ' + (m.status === 'practice' ? 'recorded (practice)' : 'sent'));
-    await audit(by, 'invited_consumer', 'prospect:' + p.id, { access: a.id, status: m.status });
-    return m;
+    const sent = [];
+    for (const [ch, to] of [['sms', phone], ['email', email]]) {
+      if (!to) continue;
+      const token = await crypto.token();
+      const a = await one('insert into cds_access (prospect_id, token_hash, invited_by, expires_at) values ($1,$2,$3,null) returning id', [p.id, await crypto.hash(token), by]);
+      const m = await message({ template: 'fam_invite_consumer', channel: ch, audience: 'family', prospect_id: p.id, to, vars: { first: p.first_name, link: links.family(token) }, by, automatic: by === 'automatic' });
+      await audit(by, 'invited_consumer', 'prospect:' + p.id, { access: a.id, channel: ch, status: m.status });
+      sent.push(m);
+    }
+    const okOne = sent.find(m => m.status === 'sent' || m.status === 'practice');
+    if (okOne) await stageIf(p.id, ['access_approved'], 'invited', by, 'Directory link ' + (okOne.status === 'practice' ? 'recorded (practice)' : 'sent'));
+    // One answer for the Hub: sent if any went, else the first problem.
+    return okOne || sent[0];
+  }
+  // Every quarter (her word 2026-11-25): an email reminding the consumer they have their own
+  // directory link. Only to consumers who were already sent their link, have an email, and
+  // only while invitations are switched on. A new link each time; earlier links keep working.
+  async function consumerQuarterlyEmails(now) {
+    const due = await q(`select p.* from cds_prospects p where p.consumer_id is not null and p.access_status='approved'
+      and exists (select 1 from cds_outbox o where o.prospect_id=p.id and o.template='fam_invite_consumer' and o.status in ('sent','practice'))
+      and coalesce((select max(o.created_at) from cds_outbox o where o.prospect_id=p.id and o.channel='email' and o.template in ('fam_invite_consumer','fam_directory_quarterly') and o.status in ('sent','practice')),
+                   (select min(o.created_at) from cds_outbox o where o.prospect_id=p.id and o.template='fam_invite_consumer' and o.status in ('sent','practice'))) <= $1::timestamptz - interval '90 days'
+      order by p.created_at limit 20`, [now]);
+    let n = 0;
+    for (const p of due) {
+      const { email } = await consumerContact(p);
+      if (!email) continue;
+      const token = await crypto.token();
+      await q('insert into cds_access (prospect_id, token_hash, invited_by, expires_at) values ($1,$2,$3,null)', [p.id, await crypto.hash(token), 'quarterly email']);
+      const m = await message({ template: 'fam_directory_quarterly', channel: 'email', audience: 'family', prospect_id: p.id, to: email, vars: { first: p.first_name, link: links.family(token) }, by: 'automatic', automatic: true });
+      if (m.status === 'sent' || m.status === 'practice') n++;
+    }
+    return n;
   }
   async function listedCompleteCount() {
     let n = 0;
@@ -361,7 +394,7 @@ export function createMatch(deps) {
     const cfg = await setting('consumer_directory', { auto_access: false });
     if (!cfg || cfg.auto_access !== true) return { live: false };
     const roster = await consumerRoster();
-    let given = 0, ended = 0, noContact = 0, invited = 0;
+    let given = 0, ended = 0, noContact = 0, invited = 0, quarterly = 0;
     for (const c of roster) {
       const st = String(c.status || '').toLowerCase();
       if (CD_LIVE.includes(st)) {
@@ -388,10 +421,11 @@ export function createMatch(deps) {
       if (enough && hour >= 9 && hour < 18 && day !== 'Sun') {
         const waiting = await q(`select p.* from cds_prospects p where p.consumer_id is not null and p.access_status='approved'
                                  and not exists (select 1 from cds_access a where a.prospect_id=p.id) order by p.created_at limit 10`);
-        for (const p of waiting) { try { const m = await inviteConsumer(p, 'automatic'); if (m.status === 'sent' || m.status === 'practice') invited++; } catch { /* no contact: shows on the consumer's page */ } }
+        for (const p of waiting) { try { const m = await inviteConsumer(p, 'automatic'); if (m && (m.status === 'sent' || m.status === 'practice')) invited++; } catch { /* no contact: shows on the consumer's page */ } }
       }
+      if (hour >= 9 && hour < 18 && day !== 'Sun') quarterly = await consumerQuarterlyEmails(now);
     }
-    return { live: true, roster: roster.length, given, ended, no_contact: noContact, invited };
+    return { live: true, roster: roster.length, given, ended, no_contact: noContact, invited, quarterly };
   }
 
   // ================= PUBLIC =================
@@ -1083,11 +1117,13 @@ export function createMatch(deps) {
       const cfg = await setting('consumer_directory', {});
       const out = {};
       for (const id of ids) {
-        const p = await one('select id, stage, access_status, hold_reason from cds_prospects where consumer_id=$1', [id]);
+        const p = await one('select id, stage, access_status, hold_reason, ghl_contact_id, consumer_id from cds_prospects where consumer_id=$1', [id]);
         if (!p) { out[id] = { state: 'none' }; continue; }
         const a = await one('select invited_at, last_sign_in_at, revoked_at from cds_access where prospect_id=$1 order by invited_at desc limit 1', [p.id]);
         const m = await one(`select status, error, created_at from cds_outbox where prospect_id=$1 and template='fam_invite_consumer' order by created_at desc limit 1`, [p.id]);
-        out[id] = { state: p.access_status !== 'approved' ? 'ended' : !a ? 'approved' : a.revoked_at ? 'approved' : a.last_sign_in_at ? 'signed_in' : 'invited',
+        const ct = await consumerContact(p);
+        const lastQ = await one(`select created_at from cds_outbox where prospect_id=$1 and template='fam_directory_quarterly' and status='sent' order by created_at desc limit 1`, [p.id]);
+        out[id] = { has_phone: !!ct.phone, has_email: !!ct.email, last_quarterly: lastQ && lastQ.created_at, state: p.access_status !== 'approved' ? 'ended' : !a ? 'approved' : a.revoked_at ? 'approved' : a.last_sign_in_at ? 'signed_in' : 'invited',
           invited_at: a && a.invited_at, last_sign_in_at: a && a.last_sign_in_at, message: m ? { status: m.status, error: m.error, at: m.created_at } : null, hold_reason: p.hold_reason };
       }
       return { consumers: out, listed: await listedCompleteCount(), invites_live: cfg.invites_live === true, invite_after_listed: cfg.invite_after_listed == null ? 10 : Number(cfg.invite_after_listed) };
