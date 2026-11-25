@@ -10,13 +10,16 @@ export const DAY_LABEL = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 
 export const PARTS = ['am', 'pm', 'eve', 'night'];
 export const PART_LABEL = { am: 'Mornings', pm: 'Afternoons', eve: 'Evenings', night: 'Overnights' };
 
+// CDS tasks only (MO HealthNet Personal Care Provider Manual 08-10-2026, sections
+// 2.1 and 2.8; Samantha's "Yes, use it" 2026-11-25). CDS pays for hands-on help,
+// never companionship, stand-by, reminders or cueing, or waiting at appointments,
+// so those choices were removed. CDS (not agency care) covers rides for essential
+// shopping, errands, school or work.
 export const HELP_TYPES = {
   personal_care: 'Bathing, dressing and personal care',
-  meals_housekeeping: 'Meals and light housekeeping',
+  meals_housekeeping: 'Meals, their laundry and light housekeeping',
   mobility_transfers: 'Getting around and transfers',
-  memory_care: 'Memory loss and dementia',
-  companionship: 'Companionship',
-  errands: 'Errands and appointments',
+  errands: 'Rides for shopping and errands',
 };
 
 // The 27 counties Caring Companions CDS serves (caringcds.com/service-area, checked 2026-10-16).
@@ -183,7 +186,7 @@ export function matchCaregiver(p, f) {
     if (!['sat', 'sun'].some(d => (av[d] || []).length)) return null;
     reasons.push('Available weekends');
   }
-  for (const h of f.help || []) {
+  for (const h of (f.help || []).filter(x => HELP_TYPES[x])) {
     if (!(p.help_types || []).includes(h)) return null;
     reasons.push('Comfortable with ' + HELP_TYPES[h].toLowerCase());
   }

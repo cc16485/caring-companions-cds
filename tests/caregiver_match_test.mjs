@@ -148,19 +148,19 @@ ok(!JSON.stringify(await H('caregiver', 'home', { link: seeded.caregiverLinks.te
 await H('family', 'saveCaregiver', { session: sess, pool_id: seeded.ids.jordan, saved: false });
 ok((await H('family', 'me', { session: sess })).saved_count === 2, 'unsave works');
 // needs
-await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true, junk: 'x' } });
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['mobility_transfers', 'personal_care', 'companionship'], drives: true, junk: 'x' } });
 me = await H('family', 'me', { session: sess });
-ok(me.has_needs && me.needs.county === 'Christian' && me.needs.hours === 20 && !('junk' in me.needs), 'needs saved and cleaned');
+ok(me.has_needs && me.needs.county === 'Christian' && me.needs.hours === 20 && !('junk' in me.needs) && !me.needs.help.includes('companionship'), 'needs saved and cleaned (companionship is not a CDS task, dropped)');
 const fit = await H('family', 'browse', { session: sess, filters: {}, useNeeds: true });
 ok(fit.using_needs && fit.caregivers.every(c => c.counties.includes('Christian')), 'matches for your needs: only caregivers who work in the family\'s county');
 const brendaFit = fit.caregivers.find(c => c.first_name === 'Brenda');
-ok(brendaFit && brendaFit.match.reasons.some(r => /memory loss/.test(r)) && brendaFit.match.total === 6, 'fit explains each need (6 needs counted)');
-await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['sat'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true } });
+ok(brendaFit && brendaFit.match.reasons.some(r => /getting around/.test(r)) && brendaFit.match.total === 6, 'fit explains each need (6 needs counted)');
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['sat'], parts: ['am'], hours: 20, help: ['mobility_transfers', 'personal_care'], drives: true } });
 const satFit = await H('family', 'browse', { session: sess, filters: {}, useNeeds: true });
 const brendaSat = satFit.caregivers.find(c => c.first_name === 'Brenda');
 ok(brendaSat && brendaSat.match.gaps.some(g => /Not listed for/.test(g)), 'gaps are shown as worth-asking-about, not hidden');
 ok(satFit.caregivers.length === fit.caregivers.length && fit.caregivers.length === 2, 'needs mode never hides caregivers in the county just for a partial fit');
-await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true } });
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['mobility_transfers', 'personal_care'], drives: true } });
 const elg = await S('eligibility', { prospect_id: (await (async () => (await S('prospects', {})).prospects.find(p => p.first_name === 'Dale and June'))()).id });
 ok(elg.saved_caregivers.length === 2 && elg.family_needs.county === 'Christian', 'office sees the family\'s saved caregivers and needs');
 
@@ -477,6 +477,10 @@ ok((await db.query(`select count(*)::int n from cds_tasks where pool_id=$1 and k
 const nb = (await db.query(`select extract(isodow from cds_next_business_4pm('2026-10-16 15:00-05') at time zone 'America/Chicago')::int d, to_char(cds_next_business_4pm('2026-10-16 15:00-05') at time zone 'America/Chicago','HH24:MI') t`)).rows[0];
 ok(nb.d === 1 && nb.t === '16:00', 'Friday sign-up is due Monday 4pm');
 
+
+// CDS tasks only (state manual 08-10-2026).
+ok(Object.keys(R.HELP_TYPES).join() === 'personal_care,meals_housekeeping,mobility_transfers,errands' && R.HELP_TYPES.errands === 'Rides for shopping and errands', 'help choices are CDS tasks only');
+ok(JSON.stringify(R.cleanProfileDraft({ help_types: ['companionship', 'memory_care', 'personal_care'] }).profile.help_types) === '["personal_care"]', 'old non-CDS choices are dropped when a profile is saved');
 
 // ---------- easier sign-up, reminders, former-caregiver links (2026-11-24) ----------
 const easySql = strip(readFileSync(ROOT + '/caregiver_signup_easier.sql', 'utf8'));

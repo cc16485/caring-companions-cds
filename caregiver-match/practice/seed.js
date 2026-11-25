@@ -15,12 +15,12 @@ const AV = {
 export const CAREGIVERS = [
   { key: 'teresa', first: 'Teresa', last: 'Practice', town: 'Ozark', city: 'Ozark', counties: ['Christian', 'Greene'], stage: 'eligible', video: true, confirmedDaysAgo: 6,
     look: { skin: '#e8b98f', hair: '#6b3f1f', style: 'bob', top: '#2f8b86', bg: '#e9f6f5' }, av: AV.weekdayAm, hours: [15, 25], car: true, miles: 20,
-    help: ['personal_care', 'meals_housekeeping', 'memory_care', 'errands'], certs: ['cpr'], languages: ['English'],
+    help: ['personal_care', 'meals_housekeeping', 'errands'], certs: ['cpr'], languages: ['English'],
     about: 'I took care of my grandmother for three years and found out it\'s what I\'m good at. I\'m patient, I like to cook, and I\'ll always show up when I say I will.',
     enjoy: 'Getting to know someone\'s stories and routines, and making their day a little easier.', interests: 'Gardening, card games, old movies', setting: 'Quiet homes, mornings, one person at a time', exp: '3 years caring for a family member, 1 year in a care home' },
   { key: 'brenda', first: 'Brenda', last: 'Practice', town: 'Nixa', city: 'Nixa', counties: ['Christian'], stage: 'eligible', video: false, confirmedDaysAgo: 0,
     look: { skin: '#f0c8a8', hair: '#b9b2a8', style: 'bun', top: '#1b4d7e', bg: '#f2f0e9' }, av: AV.weekdayAmPm, hours: [20, 30], car: true, miles: 15,
-    help: ['personal_care', 'memory_care', 'companionship'], certs: ['cpr', 'cna'], languages: ['English'],
+    help: ['personal_care', 'mobility_transfers'], certs: ['cpr', 'cna'], languages: ['English'],
     about: 'Retired CNA who missed the work. I spent 20 years in home health and I\'d like to help one or two people again.',
     enjoy: 'The little wins. A good bath, a good meal, a good laugh.', interests: 'Quilting, church choir, my grandkids', setting: 'Someone who likes conversation', exp: '20 years as a CNA in home health' },
   { key: 'jordan', first: 'Jordan', last: 'Practice', town: 'Springfield', city: 'Springfield', counties: ['Greene', 'Webster'], stage: 'eligible', video: false, confirmedDaysAgo: 38,
@@ -30,12 +30,12 @@ export const CAREGIVERS = [
     enjoy: 'Helping someone stay in their own home.', interests: 'Basketball, cooking, fixing things', setting: 'Weekends, someone who needs a hand getting around', exp: '2 years helping my uncle after his stroke' },
   { key: 'marisol', first: 'Marisol', last: 'Practice', town: 'Republic', city: 'Republic', counties: ['Greene', 'Lawrence'], stage: 'screen_pending', video: true, confirmedDaysAgo: 12,
     look: { skin: '#c98d5e', hair: '#1d1410', style: 'long', top: '#c17a12', bg: '#fbf1df' }, av: AV.mixed, hours: [15, 30], car: true, miles: 20,
-    help: ['meals_housekeeping', 'mobility_transfers', 'companionship'], certs: ['cpr'], languages: ['English', 'Spanish'],
+    help: ['meals_housekeeping', 'mobility_transfers'], certs: ['cpr'], languages: ['English', 'Spanish'],
     about: 'Mother of three, bilingual, and very organized. I cared for my father until he passed and I want to keep doing this work.',
     enjoy: 'Making a home feel calm and taken care of.', interests: 'Cooking, walking, telenovelas', setting: 'Families who want help with the house and the person', exp: '4 years caring for my father' },
   { key: 'luis', first: 'Luis', last: 'Practice', town: 'Ozark', city: 'Ozark', counties: ['Christian', 'Taney'], stage: 'instructions', video: false, confirmedDaysAgo: 9,
     look: { skin: '#b07a52', hair: '#2a1a10', style: 'curly', top: '#0e3860', bg: '#fbf1df' }, av: AV.evenings, hours: [10, 20], car: true, miles: 30,
-    help: ['mobility_transfers', 'errands', 'companionship'], certs: [], languages: ['English', 'Spanish'],
+    help: ['mobility_transfers', 'errands'], certs: [], languages: ['English', 'Spanish'],
     about: 'I work days at a warehouse and want evening and Saturday hours. I\'m calm, I\'m strong, and I\'m good company.',
     enjoy: 'Getting someone out of the house for errands and a coffee.', interests: 'Fishing, the Royals, grilling', setting: 'Evenings and Saturdays', exp: '1 year helping a neighbor' },
   { key: 'kayla', first: 'Kayla', last: 'Practice', town: 'Nixa', city: 'Nixa', counties: ['Christian', 'Greene'], stage: 'building', video: false, confirmedDaysAgo: 3,
@@ -179,7 +179,7 @@ export async function seed(match, db, { staff = 'linda@caringcds.com', photoFor 
   await match.handle('family', 'requestIntro', { session: ruth, pool_id: cg.jordan, how: 'home', preferred_times: 'Evenings' });
   await match.handle('family', 'requestIntro', { session: ann, pool_id: cg.teresa, how: 'elsewhere', preferred_times: 'Wednesday' });
   // Ruth answered the needs questions and saved a few caregivers.
-  await match.handle('family', 'setNeeds', { session: ruth, needs: { county: 'Christian', days: ['mon', 'tue', 'wed', 'thu', 'fri'], parts: ['am'], hours: 20, help: ['personal_care', 'memory_care'], drives: true } });
+  await match.handle('family', 'setNeeds', { session: ruth, needs: { county: 'Christian', days: ['mon', 'tue', 'wed', 'thu', 'fri'], parts: ['am'], hours: 20, help: ['personal_care', 'meals_housekeeping'], drives: true } });
   for (const k of ['teresa', 'brenda', 'jordan']) await match.handle('family', 'saveCaregiver', { session: ruth, pool_id: cg[k], saved: true });
 
   const intros = (await S('intros', {})).intros;
