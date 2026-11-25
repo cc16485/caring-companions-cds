@@ -34,6 +34,29 @@ export const TEMPLATES = {
     email_subject: 'Your private link to finish your caregiver profile',
     email: 'Hi {first},\n\nThanks for joining our caregiver list. Here is your private link to finish your profile, add a photo and an optional intro video, and complete the state requirements:\n\n{link}\n\nThe link works only for you, so please don\'t share it. You can come back to it any time to update your days and times.\n\n' + SIGN_OFF,
   },
+  // Finish-your-profile reminders (2026-11-24). Sent by the 15-minute job only
+  // while setting cg_profile_reminders.live is true. Shorter than the link text.
+  cg_profile_nudge1: {
+    audience: 'caregiver', label: 'Reminder 1: finish your profile (next day)',
+    sms: 'Hi {first}, it\'s Caring Companions CDS. Your caregiver profile is started. Pick up where you left off here: {link} Questions? Call 417-218-2888.',
+    email_subject: 'Your caregiver profile is started',
+    email: 'Hi {first},\n\nThanks again for joining our caregiver list. Your profile is started, and you can pick up right where you left off:\n\n{link}\n\nStill to do: {todo}.\n\nThe link works only for you, so please don\'t share it. Questions? Just call us.\n\n' + SIGN_OFF,
+  },
+  cg_profile_nudge2: {
+    audience: 'caregiver', label: 'Reminder 2: finish your profile (3 days later)',
+    sms: 'Hi {first}, it\'s Caring Companions CDS. Families can\'t see your profile until it\'s finished. A photo and a few words is all it takes: {link}',
+    email_subject: 'Families can\'t see your profile yet',
+    email: 'Hi {first},\n\nFamilies looking for a caregiver can\'t see your profile until it\'s finished. A photo and a few words about you is most of it:\n\n{link}\n\nStill to do: {todo}.\n\nIf you\'d rather do it over the phone, call us and we\'ll help. If you\'ve changed your mind, that\'s OK too, and we won\'t send more reminders.\n\n' + SIGN_OFF,
+  },
+  // First text to a former Caring Companions caregiver (the "545" send). Wording
+  // for her approval; nothing sends it yet. First text to them, so it carries
+  // the opt-out line (her rule: STOP on the first text only).
+  cg_former_invite: {
+    audience: 'caregiver', label: 'Invitation to former Caring Companions caregivers',
+    sms: 'Hi {first}, it\'s Caring Companions. Families in our CDS program hire their own caregiver at $15 to $16 an hour, paid weekly. Join our caregiver list in about a minute: {link} Reply STOP to opt out.',
+    email_subject: '{first}, families are looking for caregivers like you',
+    email: 'Hi {first},\n\nThank you for the care you gave as part of Caring Companions. We\'d love to have you back in a new way.\n\nThrough Missouri\'s Consumer Directed Services (CDS) program, families hire their own caregiver. Caring Companions CDS handles payroll, taxes and the paperwork, and we help families meet caregivers near them.\n\n$15 to $16 an hour, paid weekly every Thursday\nFull time, part time or fill-in shifts\nYou say yes or no to every family\n\nYour personal link already has your name on it, so joining takes about a minute:\n\n{link}\n\nQuestions? Call us any weekday, 9am to 4pm.\n\n' + SIGN_OFF,
+  },
   cg_intro_request: {
     audience: 'caregiver', label: 'A family would like to meet you',
     sms: 'Hi {first}, it\'s Caring Companions CDS. A family near {town} would like to meet you ({how}). Tap to see what they need and answer yes or no: {link}',
