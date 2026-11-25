@@ -11034,6 +11034,53 @@ async function moFormsLoad(force) {
   catch (e) { _moForms.error = e.message; _moForms.at = Date.now(); }
   return _moForms;
 }
+// Caregiver directory on the consumer profile (2026-11-25, her "Yes, build it"): every active and starting
+// consumer gets access automatically (cds-match job). Invitation texts wait until enough caregivers are listed;
+// the office can send one by hand here.
+function cdDirBtn(label, js, quiet) { return '<button class="btn btn-sm ' + (quiet ? 'btn-outline' : 'btn-primary') + '" onclick="' + js + '">' + esc(label) + '</button>'; }
+function cdDirLive(c) { return ['active', 'starting'].includes(String(c.status || '').toLowerCase()); }
+function directoryBox(c) {
+  if (!cdDirLive(c)) return '';
+  return '<div class="cp-box" id="cdDir_' + esc(c.id) + '" style="margin-top:14px"><h4>Caregiver directory</h4><div style="font-size:13px;color:#55677a">Loading…</div></div>';
+}
+async function directoryFill(c, note) {
+  const host = document.getElementById('cdDir_' + c.id);
+  if (!host) return;
+  let r;
+  try { r = await cdsMatchApi('consumerDirectory', { consumer_ids: [c.id] }); }
+  catch (e) { host.innerHTML = '<h4>Caregiver directory</h4><div style="font-size:13px;color:var(--danger)">Could not load: ' + esc(e.message) + '</div>'; return; }
+  const d = r.consumers[c.id] || { state: 'none' }, day = iso => esc(_niceDay(String(iso).slice(0, 10)));
+  const contact = String(c.phone || '').trim() || String(c.email || '').trim();
+  const held = !r.invites_live ? 'Directory links are not sent automatically yet.'
+    : r.listed < r.invite_after_listed ? 'Links go out automatically once ' + r.invite_after_listed + ' caregivers are listed (' + r.listed + ' now).' : '';
+  let line, btnLabel = 'Send the directory link';
+  if (d.state === 'none') line = contact ? 'Access is being set up. Check back in 15 minutes.' : '<span style="color:var(--danger)">No phone or email on file. Add one so they can get the directory.</span>';
+  else if (d.state === 'ended') line = 'No access: ' + esc(d.hold_reason || 'on hold') + '.';
+  else if (d.state === 'approved') line = 'Has access. Their link has not been sent yet.' + (held ? ' ' + esc(held) : '');
+  else if (d.state === 'invited') { line = 'Link sent ' + day(d.invited_at) + '. Not signed in yet.'; btnLabel = 'Send a new link'; }
+  else { line = '<span style="color:var(--cute-teal);font-weight:600">Signed in ' + day(d.last_sign_in_at) + '</span>'; btnLabel = 'Send a new link'; }
+  if (d.message && ['failed', 'held'].includes(d.message.status)) line += '<div style="color:var(--danger);margin-top:4px">Last link ' + esc(d.message.status) + ': ' + esc(d.message.error || '') + '</div>';
+  const canSend = contact && d.state !== 'ended';
+  host.innerHTML = '<h4>Caregiver directory</h4><div style="font-size:13px;color:#55677a">' + line + (note ? '<div style="margin-top:4px;font-weight:600">' + esc(note) + '</div>' : '') + '</div>' +
+    (canSend ? '<div id="cdDirAsk_' + esc(c.id) + '" style="margin-top:8px">' + cdDirBtn(btnLabel, "directoryAsk('" + c.id + "')") + '</div>' : '') +
+    (r.listed === 0 ? '<div style="font-size:12px;color:#55677a;margin-top:6px">No caregivers are listed in the directory yet, so it would look empty today.</div>' : '');
+}
+// The confirm sits inside the card (pop-ups can be blocked inside GoHighLevel).
+function directoryAsk(id) {
+  const c = getData('consumers').find(x => x.id === id), host = document.getElementById('cdDirAsk_' + id);
+  if (!c || !host) return;
+  const to = String(c.phone || '').trim() ? 'text it to ' + c.phone : 'email it to ' + c.email;
+  host.innerHTML = '<div class="alert alert-warn" style="font-size:13px"><div><strong>Send ' + esc(c.name) + ' their directory link?</strong><br>We\'ll ' + esc(to) + '. Any earlier link stops working.</div>' +
+    '<div style="margin-top:8px">' + cdDirBtn('Send it', "directorySend('" + id + "')") + ' ' + cdDirBtn('Cancel', "directoryFill(getData('consumers').find(x=>x.id==='" + id + "'))", true) + '</div></div>';
+}
+async function directorySend(id) {
+  const c = getData('consumers').find(x => x.id === id);
+  if (!c) return;
+  let note;
+  try { const r = await cdsMatchApi('consumerDirectoryInvite', { consumer_id: id }); note = r.status === 'sent' ? 'Link sent.' : 'Not sent (' + r.status + '): ' + (r.error || ''); }
+  catch (e) { note = 'Not sent: ' + e.message; }
+  directoryFill(c, note);
+}
 // One consumer's state, from the cache: { rights, office, given, trained, att } with the latest request each.
 function moFormsOf(c) {
   const o = _moForms.consumers[c.id] || {}, y = _moForms.year;
@@ -11851,7 +11898,7 @@ function renderProfile() {
             (next.d ? '<div style="font-size:13px;color:#55677a">' + esc(next.d) + '</div>' : '') + '</div>' + next.b + '</div>' +
           prepCard + lateCard +
           '<div class="cp-pair">' + callBox + visitBox + '</div>') +
-      moFormsBox(c) +
+      moFormsBox(c) + directoryBox(c) +
       endingCard(c) + changeCards(c) + noShiftCard(c) +
       '<div class="cp-tabs" role="tablist">' + tabs + '</div>' + body +
       '<div class="quiet-links"><a href="#" onclick="openAuditBinder(\'' + c.id + '\');return false">Audit Binder</a>' +
@@ -11864,6 +11911,7 @@ function renderProfile() {
             '<a href="#" onclick="makeConsumerActive(\'' + c.id + '\');if(_profileId)renderProfile();return false">Make active again</a></div>') +
     '</div>';  if (window.cdsCommHistory) window.cdsCommHistory(host);
   if (hubSwitchOn('moForms') && CDSRules.isActive(c)) moFormsFill(c);
+  if (cdDirLive(c)) directoryFill(c);
   if (packetOn && tab === 'tax') mountProfileEnroll(c);
 }
 // The Hub enrollment packet on the consumer's profile (2026-11-04, her ask: a signed packet

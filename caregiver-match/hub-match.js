@@ -18,7 +18,7 @@ const STAGE_OPTS = [['new_request', 'New directory request'], ['medicaid_needed'
   ['authorization_pending', 'CDS eligibility and authorization pending'], ['attendant_onboarding', 'Attendant onboarding'], ['ready_to_begin', 'Ready to begin services'],
   ['services_started', 'Services started'], ['on_hold', 'On hold'], ['not_eligible', 'Not eligible right now'], ['follow_up_later', 'Follow up later'], ['closed', 'Closed']];
 const STAGE_NAME = Object.fromEntries(STAGE_OPTS);
-const HELP_NAME = { personal_care: 'personal care', meals_housekeeping: 'meals and housekeeping', mobility_transfers: 'getting around and transfers', memory_care: 'memory care', companionship: 'companionship', errands: 'errands' };
+const HELP_NAME = { personal_care: 'personal care', meals_housekeeping: 'meals and housekeeping', mobility_transfers: 'getting around and transfers', errands: 'rides for shopping and errands' };
 function famNeeds(n) {
   if (!n) return '';
   const D = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' }, P = { am: 'mornings', pm: 'afternoons', eve: 'evenings', night: 'overnights' };

@@ -148,19 +148,19 @@ ok(!JSON.stringify(await H('caregiver', 'home', { link: seeded.caregiverLinks.te
 await H('family', 'saveCaregiver', { session: sess, pool_id: seeded.ids.jordan, saved: false });
 ok((await H('family', 'me', { session: sess })).saved_count === 2, 'unsave works');
 // needs
-await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true, junk: 'x' } });
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['mobility_transfers', 'personal_care', 'companionship'], drives: true, junk: 'x' } });
 me = await H('family', 'me', { session: sess });
-ok(me.has_needs && me.needs.county === 'Christian' && me.needs.hours === 20 && !('junk' in me.needs), 'needs saved and cleaned');
+ok(me.has_needs && me.needs.county === 'Christian' && me.needs.hours === 20 && !('junk' in me.needs) && !me.needs.help.includes('companionship'), 'needs saved and cleaned (companionship is not a CDS task, dropped)');
 const fit = await H('family', 'browse', { session: sess, filters: {}, useNeeds: true });
 ok(fit.using_needs && fit.caregivers.every(c => c.counties.includes('Christian')), 'matches for your needs: only caregivers who work in the family\'s county');
 const brendaFit = fit.caregivers.find(c => c.first_name === 'Brenda');
-ok(brendaFit && brendaFit.match.reasons.some(r => /memory loss/.test(r)) && brendaFit.match.total === 6, 'fit explains each need (6 needs counted)');
-await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['sat'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true } });
+ok(brendaFit && brendaFit.match.reasons.some(r => /getting around/.test(r)) && brendaFit.match.total === 6, 'fit explains each need (6 needs counted)');
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['sat'], parts: ['am'], hours: 20, help: ['mobility_transfers', 'personal_care'], drives: true } });
 const satFit = await H('family', 'browse', { session: sess, filters: {}, useNeeds: true });
 const brendaSat = satFit.caregivers.find(c => c.first_name === 'Brenda');
 ok(brendaSat && brendaSat.match.gaps.some(g => /Not listed for/.test(g)), 'gaps are shown as worth-asking-about, not hidden');
 ok(satFit.caregivers.length === fit.caregivers.length && fit.caregivers.length === 2, 'needs mode never hides caregivers in the county just for a partial fit');
-await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['memory_care', 'personal_care'], drives: true } });
+await H('family', 'setNeeds', { session: sess, needs: { county: 'Christian', days: ['mon', 'wed', 'fri'], parts: ['am'], hours: 20, help: ['mobility_transfers', 'personal_care'], drives: true } });
 const elg = await S('eligibility', { prospect_id: (await (async () => (await S('prospects', {})).prospects.find(p => p.first_name === 'Dale and June'))()).id });
 ok(elg.saved_caregivers.length === 2 && elg.family_needs.county === 'Christian', 'office sees the family\'s saved caregivers and needs');
 
@@ -478,6 +478,10 @@ const nb = (await db.query(`select extract(isodow from cds_next_business_4pm('20
 ok(nb.d === 1 && nb.t === '16:00', 'Friday sign-up is due Monday 4pm');
 
 
+// CDS tasks only (state manual 08-10-2026).
+ok(Object.keys(R.HELP_TYPES).join() === 'personal_care,meals_housekeeping,mobility_transfers,errands' && R.HELP_TYPES.errands === 'Rides for shopping and errands', 'help choices are CDS tasks only');
+ok(JSON.stringify(R.cleanProfileDraft({ help_types: ['companionship', 'memory_care', 'personal_care'] }).profile.help_types) === '["personal_care"]', 'old non-CDS choices are dropped when a profile is saved');
+
 // ---------- easier sign-up, reminders, former-caregiver links (2026-11-24) ----------
 const easySql = strip(readFileSync(ROOT + '/caregiver_signup_easier.sql', 'utf8'));
 await pg.exec(easySql); await pg.exec(easySql);
@@ -573,6 +577,67 @@ for (const k of ['cg_profile_nudge1', 'cg_profile_nudge2', 'cg_former_invite']) 
 const len = t => t.replace('{link}', 'https://findcdscaregivers.com/caregiver/?c=' + 'x'.repeat(32)).replace('{first}', 'Christina').length;
 ok(len(TEMPLATES.cg_profile_nudge1.sms) <= len(TEMPLATES.cg_profile_link.sms) && len(TEMPLATES.cg_profile_nudge2.sms) <= len(TEMPLATES.cg_profile_link.sms), 'reminder texts are no longer than the profile link text');
 ok(/Reply STOP/.test(TEMPLATES.cg_former_invite.sms) && !/STOP/.test(TEMPLATES.cg_profile_nudge1.sms + TEMPLATES.cg_profile_nudge2.sms), 'opt-out line only on the first text');
+
+
+// ---------- every CDS consumer gets the caregiver directory (2026-11-25) ----------
+const cdSql = strip(readFileSync(ROOT + '/consumer_directory.sql', 'utf8'));
+await pg.exec(`create table if not exists agency_data (id serial primary key, agency_id text, data_key text, data_value jsonb, updated_at timestamptz default now())`);
+await pg.exec(cdSql); await pg.exec(cdSql);
+ok(true, 'consumer directory SQL runs twice');
+const cdCfg = (await db.query(`select value from cds_match_settings where key='consumer_directory'`)).rows[0].value;
+ok(cdCfg.auto_access === true && cdCfg.invites_live === false && cdCfg.invite_after_listed === 10, 'access on, invitation texts held, 10 listed caregivers before sending');
+const roster = [
+  { id: 'c-cAnn', name: 'Ann Active', status: 'active', phone: '(417) 555-0201', county: 'Greene', address: '1 Main St, Springfield, MO 65804' },
+  { id: 'c-sam', name: 'Sam Starting', status: 'starting', phone: '417-555-0202', county: 'Christian' },
+  { id: 'c-ivy', name: 'Ivy Inactive', status: 'inactive', phone: '417-555-0203' },
+  { id: 'c-nop', name: 'Noah Nophone', status: 'active' },
+];
+await db.query(`insert into agency_data (agency_id, data_key, data_value) values ('caring-companions-cds','consumers',$1::jsonb)`, [JSON.stringify(roster)]);
+const outBefore = (await db.query(`select count(*)::int n from cds_outbox where template='fam_invite_consumer'`)).rows[0].n;
+const cd1 = await match.roles.job.consumerDirectorySync({ at: '2026-11-25 10:00-06' });
+ok(cd1.given === 2 && cd1.no_contact === 1 && cd1.ended === 0, 'active and starting consumers get access; one with no phone or email is counted: ' + JSON.stringify(cd1));
+const cAnn = (await db.query(`select * from cds_prospects where consumer_id='c-cAnn'`)).rows[0];
+ok(cAnn && cAnn.kind === 'consumer' && cAnn.access_status === 'approved' && cAnn.access_path === 'cds_consumer' && cAnn.town === 'Springfield' && cAnn.county === 'Greene' && cAnn.first_name === 'Ann', 'consumer record: approved, town and county filled');
+ok((await db.query(`select dsds_cds from cds_eligibility where prospect_id=$1`, [cAnn.id])).rows[0].dsds_cds === 'confirmed', 'CDS eligibility marked confirmed for a current consumer');
+ok(!(await db.query(`select 1 from cds_prospects where consumer_id='c-ivy'`)).rows.length, 'inactive consumers get nothing');
+ok((await db.query(`select count(*)::int n from cds_outbox where template='fam_invite_consumer'`)).rows[0].n === outBefore, 'invitation texts held: nothing sent');
+const cd2 = await match.roles.job.consumerDirectorySync({ at: '2026-11-25 10:15-06' });
+ok(cd2.given === 0 && (await db.query(`select count(*)::int n from cds_prospects where consumer_id is not null`)).rows[0].n === 2, 'running again changes nothing');
+// The Hub line, and the office sending one by hand.
+const cdView = await S('consumerDirectory', { consumer_ids: ['c-cAnn', 'c-ivy', 'c-nop'] });
+ok(cdView.consumers['c-cAnn'].state === 'approved' && cdView.consumers['c-ivy'].state === 'none' && cdView.invites_live === false && typeof cdView.listed === 'number', 'Hub sees each consumer\'s state');
+await throwsLike(() => S('consumerDirectoryInvite', { consumer_id: 'c-nop' }), /phone or email/, 'no phone or email: the office is told to add one');
+await throwsLike(() => S('consumerDirectoryInvite', { consumer_id: 'c-ivy' }), /active and starting/, 'inactive consumers cannot be sent the directory');
+const sent = await S('consumerDirectoryInvite', { consumer_id: 'c-cAnn' });
+const cAnnMsg = (await db.query(`select * from cds_outbox where prospect_id=$1 and template='fam_invite_consumer'`, [cAnn.id])).rows;
+ok(sent.status === 'practice' && cAnnMsg.length === 1 && cAnnMsg[0].channel === 'sms' && /backup or new caregiver/.test(cAnnMsg[0].body) && !/—/.test(cAnnMsg[0].body), 'office sends the directory link by text');
+const cAnnAcc = (await db.query(`select * from cds_access where prospect_id=$1 and revoked_at is null`, [cAnn.id])).rows;
+ok(cAnnAcc.length === 1 && cAnnAcc[0].expires_at === null, 'a consumer\'s link never expires');
+ok((await S('consumerDirectory', { consumer_ids: ['c-cAnn'] })).consumers['c-cAnn'].state === 'invited', 'Hub shows invited');
+// Automatic invitations: only when switched on AND enough caregivers are listed AND daytime.
+await db.query(`update cds_match_settings set value = value || '{"invites_live": true, "invite_after_listed": 1000}'::jsonb where key='consumer_directory'`);
+await match.roles.job.consumerDirectorySync({ at: '2026-11-25 10:30-06' });
+ok(!(await db.query(`select 1 from cds_outbox o join cds_prospects p on p.id=o.prospect_id where p.consumer_id='c-sam'`)).rows.length, 'switched on but not enough listed caregivers: still held');
+await db.query(`update cds_match_settings set value = value || '{"invite_after_listed": 0}'::jsonb where key='consumer_directory'`);
+await match.roles.job.consumerDirectorySync({ at: '2026-11-25 21:00-06' });
+ok(!(await db.query(`select 1 from cds_outbox o join cds_prospects p on p.id=o.prospect_id where p.consumer_id='c-sam'`)).rows.length, 'no invitations at night');
+const cd3 = await match.roles.job.consumerDirectorySync({ at: '2026-11-25 11:00-06' });
+ok(cd3.invited === 1 && (await db.query(`select count(*)::int n from cds_outbox o join cds_prospects p on p.id=o.prospect_id where p.consumer_id='c-sam' and o.template='fam_invite_consumer'`)).rows[0].n === 1, 'switched on with enough caregivers, daytime: the starting consumer is invited once');
+await match.roles.job.consumerDirectorySync({ at: '2026-11-25 11:15-06' });
+ok((await db.query(`select count(*)::int n from cds_outbox where template='fam_invite_consumer'`)).rows[0].n === outBefore + 2, 'nobody is invited twice');
+await db.query(`update cds_match_settings set value = value || '{"invites_live": false, "invite_after_listed": 10}'::jsonb where key='consumer_directory'`);
+// Ann goes inactive: access ends. Active again: access comes back.
+roster[0].status = 'inactive';
+await db.query(`update agency_data set data_value=$1::jsonb where data_key='consumers'`, [JSON.stringify(roster)]);
+const cd4 = await match.roles.job.consumerDirectorySync({ at: '2026-11-26 10:00-06' });
+const cAnnEnd = (await db.query(`select access_status, hold_reason from cds_prospects where id=$1`, [cAnn.id])).rows[0];
+ok(cd4.ended === 1 && cAnnEnd.access_status === 'on_hold' && /No longer/.test(cAnnEnd.hold_reason) && !(await db.query(`select 1 from cds_access where prospect_id=$1 and revoked_at is null`, [cAnn.id])).rows.length, 'inactive consumer: access ends and the link stops working');
+roster[0].status = 'active';
+await db.query(`update agency_data set data_value=$1::jsonb where data_key='consumers'`, [JSON.stringify(roster)]);
+await match.roles.job.consumerDirectorySync({ at: '2026-11-27 10:00-06' });
+ok((await db.query(`select access_status from cds_prospects where id=$1`, [cAnn.id])).rows[0].access_status === 'approved', 'active again: access comes back');
+const tpl = (await import(ROOT + '/supabase/functions/_shared/match/messages.js')).TEMPLATES;
+ok(tpl.fam_invite_consumer.sms.length <= tpl.fam_invite.sms.length && !/STOP/.test(tpl.fam_invite_consumer.sms), 'consumer text is shorter than the family invitation, no opt-out line (not a first text)');
 
 console.log(`\n${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);

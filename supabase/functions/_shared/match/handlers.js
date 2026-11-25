@@ -306,6 +306,94 @@ export function createMatch(deps) {
     return { live: true, sent };
   }
 
+  // ---------- every CDS consumer gets the caregiver directory (2026-11-25) ----------
+  // Active and starting consumers on the roster (agency_data 'consumers') get a directory
+  // record with access approved, automatically. A consumer marked inactive loses access.
+  // Invitation texts wait for setting consumer_directory.invites_live and enough listed
+  // caregivers; the office can send one by hand from the consumer's page.
+  const CD_LIVE = ['active', 'starting'];
+  async function consumerRoster() {
+    const r = await one(`select data_value from agency_data where agency_id='caring-companions-cds' and data_key='consumers' limit 1`).catch(() => null);
+    let v = r && r.data_value; if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = []; } }
+    return Array.isArray(v) ? v.filter(c => c && c.id) : [];
+  }
+  const cdFirst = c => String(c.name || '').trim().split(/\s+/)[0].slice(0, 60);
+  const cdTown = c => { const a = c.address; const t = typeof a === 'string' ? (a.split(',').slice(-2, -1)[0] || '') : (a && (a.city || a.town)) || ''; return String(t).trim().slice(0, 60); };
+  async function ensureConsumerAccess(c, by) {
+    let p = await one('select * from cds_prospects where consumer_id=$1', [String(c.id)]);
+    const phone = String(c.phone || '').trim(), email = String(c.email || '').trim();
+    if (!p) {
+      if (!phone && !email) return { state: 'no_contact' };
+      const parts = String(c.name || '').trim().split(/\s+/);
+      const contactId = await ghl.upsert({ first_name: parts[0], last_name: parts.slice(1).join(' '), phone, email, tags: ['cds-directory'] });
+      p = await one(`insert into cds_prospects (ghl_contact_id, first_name, town, county, kind, source, consumer_id, stage, access_status, access_path, access_decided_by, access_decided_at, access_note)
+                     values ($1,$2,$3,$4,'consumer','consumer-roster',$5,'access_approved','approved','cds_consumer',$6,now(),'Caring Companions CDS consumer: access given automatically') returning *`,
+        [contactId, cdFirst(c) || 'there', cdTown(c), R.COUNTIES.includes(c.county) ? c.county : null, String(c.id), by]);
+      await q(`insert into cds_eligibility (prospect_id, dsds_cds, dsds_cds_on, dsds_cds_by, dsds_note) values ($1,'confirmed',current_date,$2,'Existing Caring Companions CDS consumer')
+               on conflict (prospect_id) do nothing`, [p.id, by]);
+      await event(p.id, by, 'created', null, 'access_approved', 'CDS consumer: directory access given automatically');
+      await audit(by, 'consumer_directory_access', 'prospect:' + p.id, { consumer: String(c.id) });
+    } else if (p.access_status !== 'approved') {
+      await q(`update cds_prospects set access_status='approved', access_path='cds_consumer', hold_reason=null, access_decided_by=$2, access_decided_at=now(), updated_at=now() where id=$1`, [p.id, by]);
+      await audit(by, 'consumer_directory_access', 'prospect:' + p.id, { consumer: String(c.id), again: true });
+      p = await one('select * from cds_prospects where id=$1', [p.id]);
+    }
+    return { state: 'approved', prospect: p };
+  }
+  async function inviteConsumer(p, by) {
+    const c = await ghl.get(p.ghl_contact_id) || {};
+    const ch = c.phone ? 'sms' : 'email', to = ch === 'sms' ? c.phone : c.email;
+    if (!to) fail('No phone or email on file for this consumer.');
+    const token = await crypto.token();
+    await q('update cds_access set revoked_at=now(), revoked_by=$2 where prospect_id=$1 and revoked_at is null', [p.id, by + ' (replaced by a new link)']);
+    const a = await one('insert into cds_access (prospect_id, token_hash, invited_by, expires_at) values ($1,$2,$3,null) returning id', [p.id, await crypto.hash(token), by]);
+    const m = await message({ template: 'fam_invite_consumer', channel: ch, audience: 'family', prospect_id: p.id, to, vars: { first: p.first_name, link: links.family(token) }, by, automatic: by === 'automatic' });
+    if (m.status === 'sent' || m.status === 'practice') await stageIf(p.id, ['access_approved'], 'invited', by, 'Directory link ' + (m.status === 'practice' ? 'recorded (practice)' : 'sent'));
+    await audit(by, 'invited_consumer', 'prospect:' + p.id, { access: a.id, status: m.status });
+    return m;
+  }
+  async function listedCompleteCount() {
+    let n = 0;
+    for (const c of await listedCaregivers()) if (c.listing.state === 'complete') n++;
+    return n;
+  }
+  async function consumerDirectorySync(at) {
+    const cfg = await setting('consumer_directory', { auto_access: false });
+    if (!cfg || cfg.auto_access !== true) return { live: false };
+    const roster = await consumerRoster();
+    let given = 0, ended = 0, noContact = 0, invited = 0;
+    for (const c of roster) {
+      const st = String(c.status || '').toLowerCase();
+      if (CD_LIVE.includes(st)) {
+        const had = await one('select access_status from cds_prospects where consumer_id=$1', [String(c.id)]);
+        const r = await ensureConsumerAccess(c, 'automatic');
+        if (r.state === 'no_contact') noContact++; else if (!had || had.access_status !== 'approved') given++;
+      } else {
+        const p = await one(`select * from cds_prospects where consumer_id=$1 and access_status='approved'`, [String(c.id)]);
+        if (!p) continue;
+        await q('update cds_access set revoked_at=now(), revoked_by=$2 where prospect_id=$1 and revoked_at is null', [p.id, 'automatic: no longer an active CDS consumer']);
+        await q(`update cds_sessions set ended_at=now() where ended_at is null and access_id in (select id from cds_access where prospect_id=$1)`, [p.id]);
+        await q(`update cds_prospects set access_status='on_hold', hold_reason='No longer an active CDS consumer', updated_at=now() where id=$1`, [p.id]);
+        await audit('automatic', 'consumer_directory_ended', 'prospect:' + p.id, { consumer: String(c.id) });
+        ended++;
+      }
+    }
+    // Invitations: only when switched on, enough caregivers are listed, and in the daytime.
+    if (cfg.invites_live === true) {
+      const now = deps.mode === 'practice' && at ? at : await nowIso();
+      const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)));
+      const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short' }).format(new Date(now));
+      const need = cfg.invite_after_listed == null || isNaN(Number(cfg.invite_after_listed)) ? 10 : Number(cfg.invite_after_listed);
+      const enough = (await listedCompleteCount()) >= need;
+      if (enough && hour >= 9 && hour < 18 && day !== 'Sun') {
+        const waiting = await q(`select p.* from cds_prospects p where p.consumer_id is not null and p.access_status='approved'
+                                 and not exists (select 1 from cds_access a where a.prospect_id=p.id) order by p.created_at limit 10`);
+        for (const p of waiting) { try { const m = await inviteConsumer(p, 'automatic'); if (m.status === 'sent' || m.status === 'practice') invited++; } catch { /* no contact: shows on the consumer's page */ } }
+      }
+    }
+    return { live: true, roster: roster.length, given, ended, no_contact: noContact, invited };
+  }
+
   // ================= PUBLIC =================
   const pub = {
     // Counts of fully screened, listed caregivers by county. People never.
@@ -988,6 +1076,32 @@ export function createMatch(deps) {
       await audit('staff:' + s, 'sent_profile_link', 'pool:' + id, { status: m.status });
       return { status: m.status, error: m.error, practice_link: deps.mode === 'practice' ? link : undefined };
     },
+    // The Directory line on a consumer's Hub page (2026-11-25): where each consumer stands.
+    async consumerDirectory({ staff: s, consumer_ids }) {
+      who(s);
+      const ids = (Array.isArray(consumer_ids) ? consumer_ids : []).map(String).slice(0, 500);
+      const cfg = await setting('consumer_directory', {});
+      const out = {};
+      for (const id of ids) {
+        const p = await one('select id, stage, access_status, hold_reason from cds_prospects where consumer_id=$1', [id]);
+        if (!p) { out[id] = { state: 'none' }; continue; }
+        const a = await one('select invited_at, last_sign_in_at, revoked_at from cds_access where prospect_id=$1 order by invited_at desc limit 1', [p.id]);
+        const m = await one(`select status, error, created_at from cds_outbox where prospect_id=$1 and template='fam_invite_consumer' order by created_at desc limit 1`, [p.id]);
+        out[id] = { state: p.access_status !== 'approved' ? 'ended' : !a ? 'approved' : a.revoked_at ? 'approved' : a.last_sign_in_at ? 'signed_in' : 'invited',
+          invited_at: a && a.invited_at, last_sign_in_at: a && a.last_sign_in_at, message: m ? { status: m.status, error: m.error, at: m.created_at } : null, hold_reason: p.hold_reason };
+      }
+      return { consumers: out, listed: await listedCompleteCount(), invites_live: cfg.invites_live === true, invite_after_listed: cfg.invite_after_listed == null ? 10 : Number(cfg.invite_after_listed) };
+    },
+    async consumerDirectoryInvite({ staff: s, consumer_id }) {
+      who(s);
+      const c = (await consumerRoster()).find(x => String(x.id) === String(consumer_id));
+      if (!c) fail('That consumer was not found on the roster.');
+      if (!CD_LIVE.includes(String(c.status || '').toLowerCase())) fail('Only active and starting consumers get the directory.');
+      const r = await ensureConsumerAccess(c, 'staff:' + s);
+      if (r.state === 'no_contact') fail('Add a phone or email for this consumer first.');
+      const m = await inviteConsumer(r.prospect, s);
+      return { status: m.status, error: m.error };
+    },
     // Personal sign-up links for former Caring Companions caregivers (2026-11-24).
     // Makes the links only. Sending them is a separate step she approves.
     // people: [{ first_name, last_name, phone, email, city }]
@@ -1535,8 +1649,10 @@ export function createMatch(deps) {
     const r = await packet.packetJob();
     let e; try { e = await enroll.enrollJob(); } catch (err) { e = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
     let pr; try { pr = await profileReminders(); } catch (err) { pr = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
-    return { ...r, enroll: e, profile_reminders: pr };
+    let cd; try { cd = await consumerDirectorySync(); } catch (err) { cd = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
+    return { ...r, enroll: e, profile_reminders: pr, consumer_directory: cd };
   },
+  consumerDirectorySync: ({ at } = {}) => consumerDirectorySync(at),
   profileReminders: ({ at } = {}) => profileReminders(at),
   // The CDS Coordinator sends packets (2026-11-18, her ask) through the very same code as the hub's buttons, as
   // 'cds-coordinator'. Never twice: a packet that already went out (from the hub or before) is not sent again.

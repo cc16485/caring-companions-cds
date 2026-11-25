@@ -70,6 +70,14 @@ export const TEMPLATES = {
     email_subject: 'Your invitation to our private caregiver directory',
     email: 'Hi {first},\n\nAs we talked about, here is your personal invitation to the Caring Companions CDS private caregiver directory:\n\n{link}\n\nWhen you open it, we\'ll send a code to this email or your phone to confirm it\'s you. The invitation is just for you, so please don\'t forward it. If someone else in your family would like their own, call us.\n\nIt\'s free to look, and you don\'t have to choose us or switch programs to browse. You can choose any CDS provider.\n\n{staff}\n' + SIGN_OFF,
   },
+  // Current and starting CDS consumers (2026-11-25). They already have a caregiver,
+  // so the directory is for a backup or a new one. Shorter than fam_invite.
+  fam_invite_consumer: {
+    audience: 'family', label: 'Directory link for a current CDS consumer',
+    sms: 'Hi {first}, it\'s Caring Companions CDS. Here is your own link to our caregiver directory, for when you need a backup or new caregiver: {link} It\'s just for you.',
+    email_subject: 'Your link to our caregiver directory',
+    email: 'Hi {first},\n\nAs a Caring Companions CDS consumer, you have your own link to our private caregiver directory:\n\n{link}\n\nUse it any time you need a backup caregiver or want to find a new one. You can see caregivers near you, watch their short intro videos, and ask to meet them. When you open it, we\'ll send a code to your phone or email to confirm it\'s you.\n\nThe link is just for you, so please don\'t forward it. Questions? Call us.\n\n' + SIGN_OFF,
+  },
   fam_code: {
     audience: 'family', label: 'Sign-in code (sent only when the family asks)',
     sms: 'Your Caring Companions CDS sign-in code is {code}. It expires in 10 minutes. If you didn\'t ask for it, you can ignore this.',
