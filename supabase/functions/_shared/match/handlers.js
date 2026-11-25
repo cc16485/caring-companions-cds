@@ -214,6 +214,7 @@ export function createMatch(deps) {
       availability_confirmed_at: c.profile.availability_confirmed_at,
       confirmed_text: R.agoText(c.profile.availability_confirmed_at, nowIso),
       has_video: !!c.profile.video_approved,
+      direct_contact: R.hasConsent(c.consents, 'contact') && !!contactFor(c.pool),
       photo_url: c.profile.photo_approved ? await media.url(c.profile.photo_approved) : null,
       help_types: (a.help_types || []).map(h => R.HELP_TYPES[h]),
       quote: a.about_me ? String(a.about_me).split(/(?<=[.!?])\s/)[0].slice(0, 140) : '',
@@ -232,7 +233,16 @@ export function createMatch(deps) {
       certs_verified: a.certs || [],
       current_cds_hours: !!a.current_cds_hours,
       video_url: c.profile.video_approved && R.hasConsent(c.consents, 'video') ? await media.url(c.profile.video_approved) : null,
+      // Only with the caregiver's own OK (consent 'contact', her word 11-25). Never the address or last name.
+      contact: R.hasConsent(c.consents, 'contact') ? contactFor(c.pool) : null,
     };
+  }
+  function contactFor(pool) {
+    const d = String(pool.phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+    const phone = d.length === 10 ? d : null;
+    const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(pool.email || '').trim()) ? String(pool.email).trim() : null;
+    if (!phone && !email) return null;
+    return { phone: phone ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : null, phone_e164: phone ? '+1' + d : null, email };
   }
 
   async function listedCaregivers() {
@@ -851,7 +861,8 @@ export function createMatch(deps) {
         availability: c.profile.availability || {}, hours_min: c.profile.hours_min, hours_max: c.profile.hours_max,
         availability_confirmed_text: R.agoText(c.profile.availability_confirmed_at, now),
         accepting_intros: c.profile.accepting_intros, paused: c.profile.paused, withdrawn: !!c.profile.withdrawn_at,
-        consents: { profile: R.hasConsent(c.consents, 'profile'), video: R.hasConsent(c.consents, 'video') },
+        consents: { profile: R.hasConsent(c.consents, 'profile'), video: R.hasConsent(c.consents, 'video'), contact: R.hasConsent(c.consents, 'contact') },
+        contact_preview: contactFor(c.pool),
         consent_wording: CONSENT_WORDING,
         requirements: {
           explainer: FCSR_EXPLAINER,

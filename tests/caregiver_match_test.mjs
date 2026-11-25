@@ -97,6 +97,30 @@ ok(vid.caregivers.every(c => c.has_video), 'video filter');
 const prof = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
 ok(prof.caregiver.about_me && prof.caregiver.certs_verified.includes('cpr') && prof.caregiver.video_url, 'profile shows approved content, verified certs, video');
 await throwsLike(() => H('family', 'profile', { session: sess, id: seeded.ids.kayla }), /isn.t available/, 'unlisted caregiver profile refused');
+// ---------- caregivers choose to share phone and email (her word 11-25) ----------
+console.log('\ncontact sharing');
+await pg.exec(strip(readFileSync(ROOT + '/contact_sharing.sql', 'utf8')));
+await pg.exec(strip(readFileSync(ROOT + '/contact_sharing.sql', 'utf8')));
+const tL = seeded.caregiverLinks.teresa;
+const tOrig = (await db.query('select phone, email from attendant_pool where id=$1', [seeded.ids.teresa])).rows[0];
+await db.query(`update attendant_pool set phone='417-555-0142', email='teresa@example.com' where id=$1`, [seeded.ids.teresa]);
+let cp = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
+ok(cp.caregiver.contact === null && !JSON.stringify(cp).includes('555-0142') && !JSON.stringify(cp).includes('teresa@example'), 'no consent: families never see phone or email');
+const th0 = await H('caregiver', 'home', { link: tL });
+ok(th0.consents.contact === false && th0.contact_preview.phone === '(417) 555-0142' && /directly/.test(th0.consent_wording.contact.text), 'caregiver sees the contact consent and their own number to preview');
+await H('caregiver', 'giveConsent', { link: tL, kind: 'contact' });
+cp = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
+ok(cp.caregiver.contact && cp.caregiver.contact.phone === '(417) 555-0142' && cp.caregiver.contact.phone_e164 === '+14175550142' && cp.caregiver.contact.email === 'teresa@example.com', 'with consent: signed-in families see phone and email');
+ok(!JSON.stringify(cp).includes(seeded.teresaLast || 'zzzz-none') && !('address' in cp.caregiver.contact), 'never the address');
+const cb = await H('family', 'browse', { session: sess, filters: {} });
+ok(cb.caregivers.find(c => c.id === seeded.ids.teresa).direct_contact === true && !JSON.stringify(cb).includes('555-0142'), 'list says "contact directly" without showing the number');
+await throwsLike(() => H('family', 'profile', { session: 'not-a-session', id: seeded.ids.teresa }), /./, 'no session: no profile, no contact');
+await H('caregiver', 'withdrawConsent', { link: tL, kind: 'contact' });
+cp = await H('family', 'profile', { session: sess, id: seeded.ids.teresa });
+ok(cp.caregiver.contact === null && (await H('caregiver', 'home', { link: tL })).consents.contact === false, 'stop sharing: hidden again right away');
+ok(/only if I agree below/.test((await import(ROOT + '/supabase/functions/_shared/match/messages.js')).CONSENT_WORDING.profile.text), 'listing consent no longer promises the phone is never shown');
+await db.query('update attendant_pool set phone=$2, email=$3 where id=$1', [seeded.ids.teresa, tOrig.phone, tOrig.email]);
+
 
 // ---------- introduction ----------
 await H('family', 'requestIntro', { session: sess, pool_id: seeded.ids.jordan, how: 'video', preferred_times: 'Saturdays' });
