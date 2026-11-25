@@ -667,6 +667,8 @@ await mk('Pat', '(417) 555-0301', 'pat@x.test');
 await mk('Nev', '(417) 555-0302', 'nev@x.test', 'never_hired=true');
 await mk('Opt', '(417) 555-0303', 'opt@x.test', 'skip_sms=true');
 await mk('Rae', '(417) 555-0304', null);
+// Fixed order (the four are created in the same instant otherwise).
+for (const [n, f] of [[1, 'Pat'], [2, 'Nev'], [3, 'Opt'], [4, 'Rae']]) await db.query(`update cds_cg_invites set created_at = '2026-11-25 01:00-06'::timestamptz + make_interval(secs => $1) where first_name=$2 and batch='former-caregivers-2026-11'`, [n, f]);
 const FS = match.roles.job;
 ok((await FS.formerSend({ at: '2026-11-25 10:00-06' })).live === false, 'switched off: nothing');
 await db.query(`update cds_match_settings set value = value || '{"live": true, "start_at": "2026-11-25T10:00:00-06:00", "batch_size": 3}'::jsonb where key='former_send'`);
