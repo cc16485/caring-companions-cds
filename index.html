@@ -11059,6 +11059,8 @@ async function directoryFill(c, note) {
   else if (d.state === 'approved') line = 'Has access. Their link has not been sent yet.' + (held ? ' ' + esc(held) : '');
   else if (d.state === 'invited') { line = 'Link sent ' + day(d.invited_at) + '. Not signed in yet.'; btnLabel = 'Send a new link'; }
   else { line = '<span style="color:var(--cute-teal);font-weight:600">Signed in ' + day(d.last_sign_in_at) + '</span>'; btnLabel = 'Send a new link'; }
+  if (d.state !== 'none' && d.state !== 'ended') line += '<div style="margin-top:4px">' + (d.has_phone ? 'Text' : 'No phone') + ' · ' +
+    (d.has_email ? 'Email, with a reminder every 3 months' + (d.last_quarterly ? ' (last ' + day(d.last_quarterly) + ')' : '') : '<span style="color:var(--danger)">No email on file, so no email or 3-month reminder</span>') + '</div>';
   if (d.message && ['failed', 'held'].includes(d.message.status)) line += '<div style="color:var(--danger);margin-top:4px">Last link ' + esc(d.message.status) + ': ' + esc(d.message.error || '') + '</div>';
   const canSend = contact && d.state !== 'ended';
   host.innerHTML = '<h4>Caregiver directory</h4><div style="font-size:13px;color:#55677a">' + line + (note ? '<div style="margin-top:4px;font-weight:600">' + esc(note) + '</div>' : '') + '</div>' +
@@ -11069,7 +11071,8 @@ async function directoryFill(c, note) {
 function directoryAsk(id) {
   const c = getData('consumers').find(x => x.id === id), host = document.getElementById('cdDirAsk_' + id);
   if (!c || !host) return;
-  const to = String(c.phone || '').trim() ? 'text it to ' + c.phone : 'email it to ' + c.email;
+  const ph = String(c.phone || '').trim(), em = String(c.email || '').trim();
+  const to = [ph && 'text it to ' + ph, em && 'email it to ' + em].filter(Boolean).join(' and ');
   host.innerHTML = '<div class="alert alert-warn" style="font-size:13px"><div><strong>Send ' + esc(c.name) + ' their directory link?</strong><br>We\'ll ' + esc(to) + '. Any earlier link stops working.</div>' +
     '<div style="margin-top:8px">' + cdDirBtn('Send it', "directorySend('" + id + "')") + ' ' + cdDirBtn('Cancel', "directoryFill(getData('consumers').find(x=>x.id==='" + id + "'))", true) + '</div></div>';
 }

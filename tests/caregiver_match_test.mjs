@@ -587,7 +587,7 @@ ok(true, 'consumer directory SQL runs twice');
 const cdCfg = (await db.query(`select value from cds_match_settings where key='consumer_directory'`)).rows[0].value;
 ok(cdCfg.auto_access === true && cdCfg.invites_live === false && cdCfg.invite_after_listed === 10, 'access on, invitation texts held, 10 listed caregivers before sending');
 const roster = [
-  { id: 'c-cAnn', name: 'Ann Active', status: 'active', phone: '(417) 555-0201', county: 'Greene', address: '1 Main St, Springfield, MO 65804' },
+  { id: 'c-ann', name: 'Ann Active', status: 'active', phone: '(417) 555-0201', email: 'ann@x.test', county: 'Greene', address: '1 Main St, Springfield, MO 65804' },
   { id: 'c-sam', name: 'Sam Starting', status: 'starting', phone: '417-555-0202', county: 'Christian' },
   { id: 'c-ivy', name: 'Ivy Inactive', status: 'inactive', phone: '417-555-0203' },
   { id: 'c-nop', name: 'Noah Nophone', status: 'active' },
@@ -596,7 +596,7 @@ await db.query(`insert into agency_data (agency_id, data_key, data_value) values
 const outBefore = (await db.query(`select count(*)::int n from cds_outbox where template='fam_invite_consumer'`)).rows[0].n;
 const cd1 = await match.roles.job.consumerDirectorySync({ at: '2026-11-25 10:00-06' });
 ok(cd1.given === 2 && cd1.no_contact === 1 && cd1.ended === 0, 'active and starting consumers get access; one with no phone or email is counted: ' + JSON.stringify(cd1));
-const cAnn = (await db.query(`select * from cds_prospects where consumer_id='c-cAnn'`)).rows[0];
+const cAnn = (await db.query(`select * from cds_prospects where consumer_id='c-ann'`)).rows[0];
 ok(cAnn && cAnn.kind === 'consumer' && cAnn.access_status === 'approved' && cAnn.access_path === 'cds_consumer' && cAnn.town === 'Springfield' && cAnn.county === 'Greene' && cAnn.first_name === 'Ann', 'consumer record: approved, town and county filled');
 ok((await db.query(`select dsds_cds from cds_eligibility where prospect_id=$1`, [cAnn.id])).rows[0].dsds_cds === 'confirmed', 'CDS eligibility marked confirmed for a current consumer');
 ok(!(await db.query(`select 1 from cds_prospects where consumer_id='c-ivy'`)).rows.length, 'inactive consumers get nothing');
@@ -604,16 +604,16 @@ ok((await db.query(`select count(*)::int n from cds_outbox where template='fam_i
 const cd2 = await match.roles.job.consumerDirectorySync({ at: '2026-11-25 10:15-06' });
 ok(cd2.given === 0 && (await db.query(`select count(*)::int n from cds_prospects where consumer_id is not null`)).rows[0].n === 2, 'running again changes nothing');
 // The Hub line, and the office sending one by hand.
-const cdView = await S('consumerDirectory', { consumer_ids: ['c-cAnn', 'c-ivy', 'c-nop'] });
-ok(cdView.consumers['c-cAnn'].state === 'approved' && cdView.consumers['c-ivy'].state === 'none' && cdView.invites_live === false && typeof cdView.listed === 'number', 'Hub sees each consumer\'s state');
+const cdView = await S('consumerDirectory', { consumer_ids: ['c-ann', 'c-ivy', 'c-nop'] });
+ok(cdView.consumers['c-ann'].state === 'approved' && cdView.consumers['c-ivy'].state === 'none' && cdView.invites_live === false && typeof cdView.listed === 'number', 'Hub sees each consumer\'s state');
 await throwsLike(() => S('consumerDirectoryInvite', { consumer_id: 'c-nop' }), /phone or email/, 'no phone or email: the office is told to add one');
 await throwsLike(() => S('consumerDirectoryInvite', { consumer_id: 'c-ivy' }), /active and starting/, 'inactive consumers cannot be sent the directory');
-const sent = await S('consumerDirectoryInvite', { consumer_id: 'c-cAnn' });
+const sent = await S('consumerDirectoryInvite', { consumer_id: 'c-ann' });
 const cAnnMsg = (await db.query(`select * from cds_outbox where prospect_id=$1 and template='fam_invite_consumer'`, [cAnn.id])).rows;
-ok(sent.status === 'practice' && cAnnMsg.length === 1 && cAnnMsg[0].channel === 'sms' && /backup or new caregiver/.test(cAnnMsg[0].body) && !/—/.test(cAnnMsg[0].body), 'office sends the directory link by text');
+ok(sent.status === 'practice' && cAnnMsg.length === 2 && cAnnMsg.map(m => m.channel).sort().join() === 'email,sms' && cAnnMsg.every(m => /backup/.test(m.body) && /\/directory\/\?i=/.test(m.body) && !/—/.test(m.body)), 'office sends the directory link by text AND email');
 const cAnnAcc = (await db.query(`select * from cds_access where prospect_id=$1 and revoked_at is null`, [cAnn.id])).rows;
-ok(cAnnAcc.length === 1 && cAnnAcc[0].expires_at === null, 'a consumer\'s link never expires');
-ok((await S('consumerDirectory', { consumer_ids: ['c-cAnn'] })).consumers['c-cAnn'].state === 'invited', 'Hub shows invited');
+ok(cAnnAcc.length === 2 && cAnnAcc.every(a => a.expires_at === null), 'a link each for text and email, and they never expire');
+ok((await S('consumerDirectory', { consumer_ids: ['c-ann'] })).consumers['c-ann'].state === 'invited', 'Hub shows invited');
 // Automatic invitations: only when switched on AND enough caregivers are listed AND daytime.
 await db.query(`update cds_match_settings set value = value || '{"invites_live": true, "invite_after_listed": 1000}'::jsonb where key='consumer_directory'`);
 await match.roles.job.consumerDirectorySync({ at: '2026-11-25 10:30-06' });
@@ -622,9 +622,25 @@ await db.query(`update cds_match_settings set value = value || '{"invite_after_l
 await match.roles.job.consumerDirectorySync({ at: '2026-11-25 21:00-06' });
 ok(!(await db.query(`select 1 from cds_outbox o join cds_prospects p on p.id=o.prospect_id where p.consumer_id='c-sam'`)).rows.length, 'no invitations at night');
 const cd3 = await match.roles.job.consumerDirectorySync({ at: '2026-11-25 11:00-06' });
-ok(cd3.invited === 1 && (await db.query(`select count(*)::int n from cds_outbox o join cds_prospects p on p.id=o.prospect_id where p.consumer_id='c-sam' and o.template='fam_invite_consumer'`)).rows[0].n === 1, 'switched on with enough caregivers, daytime: the starting consumer is invited once');
+ok(cd3.invited === 1 && (await db.query(`select count(*)::int n from cds_outbox o join cds_prospects p on p.id=o.prospect_id where p.consumer_id='c-sam' and o.template='fam_invite_consumer'`)).rows[0].n === 1, 'switched on with enough caregivers, daytime: the starting consumer is invited once (text only, no email on file)');
 await match.roles.job.consumerDirectorySync({ at: '2026-11-25 11:15-06' });
-ok((await db.query(`select count(*)::int n from cds_outbox where template='fam_invite_consumer'`)).rows[0].n === outBefore + 2, 'nobody is invited twice');
+ok((await db.query(`select count(*)::int n from cds_outbox where template='fam_invite_consumer'`)).rows[0].n === outBefore + 3, 'nobody is invited twice');
+const qN = async () => (await db.query(`select count(*)::int n from cds_outbox where prospect_id=$1 and template='fam_directory_quarterly'`, [cAnn.id])).rows[0].n;
+await db.query(`update cds_outbox set created_at='2026-08-20 10:00-05' where prospect_id=$1 and template='fam_invite_consumer'`, [cAnn.id]);
+await db.query(`update cds_match_settings set value = value || '{"invites_live": true, "invite_after_listed": 0}'::jsonb where key='consumer_directory'`);
+await match.roles.job.consumerDirectorySync({ at: '2026-11-17 10:00-06' });
+ok(await qN() === 0, 'not before 90 days');
+await match.roles.job.consumerDirectorySync({ at: '2026-11-25 20:00-06' });
+ok(await qN() === 0, 'no quarterly email at night');
+const cdQ = await match.roles.job.consumerDirectorySync({ at: '2026-11-25 11:30-06' });
+const qMsg = (await db.query(`select * from cds_outbox where prospect_id=$1 and template='fam_directory_quarterly'`, [cAnn.id])).rows;
+ok(cdQ.quarterly === 1 && qMsg.length === 1 && qMsg[0].channel === 'email' && /once every three months/.test(qMsg[0].body) && /\/directory\/\?i=/.test(qMsg[0].body), 'after 90 days: one quarterly email with a fresh link');
+await match.roles.job.consumerDirectorySync({ at: '2026-11-25 11:45-06' });
+ok(await qN() === 1, 'quarterly email only once a quarter');
+ok(!(await db.query(`select 1 from cds_outbox o join cds_prospects p on p.id=o.prospect_id where p.consumer_id='c-sam' and o.template='fam_directory_quarterly'`)).rows.length, 'no email on file: no quarterly email');
+await db.query(`update cds_match_settings set value = value || '{"invites_live": false, "invite_after_listed": 10}'::jsonb where key='consumer_directory'`);
+const annView = (await S('consumerDirectory', { consumer_ids: ['c-ann', 'c-sam'] })).consumers;
+ok(annView['c-ann'].has_email && annView['c-ann'].has_phone && !annView['c-sam'].has_email, 'Hub sees who has a phone and an email');
 await db.query(`update cds_match_settings set value = value || '{"invites_live": false, "invite_after_listed": 10}'::jsonb where key='consumer_directory'`);
 // Ann goes inactive: access ends. Active again: access comes back.
 roster[0].status = 'inactive';

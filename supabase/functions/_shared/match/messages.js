@@ -78,6 +78,12 @@ export const TEMPLATES = {
     email_subject: 'Your link to our caregiver directory',
     email: 'Hi {first},\n\nAs a Caring Companions CDS consumer, you have your own link to our private caregiver directory:\n\n{link}\n\nUse it any time you need a backup caregiver or want to find a new one. You can see caregivers near you, watch their short intro videos, and ask to meet them. When you open it, we\'ll send a code to your phone or email to confirm it\'s you.\n\nThe link is just for you, so please don\'t forward it. Questions? Call us.\n\n' + SIGN_OFF,
   },
+  // Every quarter to current CDS consumers who have an email (her word 2026-11-25). Email only.
+  fam_directory_quarterly: {
+    audience: 'family', label: 'Quarterly reminder: your caregiver directory link (email)',
+    email_subject: 'Your caregiver directory link, for when you need a backup',
+    email: 'Hi {first},\n\nA quick reminder from Caring Companions CDS: you have your own link to our private caregiver directory.\n\n{link}\n\nIf your caregiver ever needs time off, or you\'d like to add or change a caregiver, you can see caregivers near you, watch their short intro videos, and ask to meet them. When you open it, we\'ll send a code to your phone or email to confirm it\'s you.\n\nThe link is just for you, so please don\'t forward it. We send this reminder once every three months. If you\'d rather not get it, just reply and let us know.\n\n' + SIGN_OFF,
+  },
   fam_code: {
     audience: 'family', label: 'Sign-in code (sent only when the family asks)',
     sms: 'Your Caring Companions CDS sign-in code is {code}. It expires in 10 minutes. If you didn\'t ask for it, you can ignore this.',
