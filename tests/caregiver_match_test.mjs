@@ -576,7 +576,7 @@ for (const k of ['cg_profile_nudge1', 'cg_profile_nudge2', 'cg_former_invite']) 
 }
 const len = t => t.replace('{link}', 'https://findcdscaregivers.com/caregiver/?c=' + 'x'.repeat(32)).replace('{first}', 'Christina').length;
 ok(len(TEMPLATES.cg_profile_nudge1.sms) <= len(TEMPLATES.cg_profile_link.sms) && len(TEMPLATES.cg_profile_nudge2.sms) <= len(TEMPLATES.cg_profile_link.sms), 'reminder texts are no longer than the profile link text');
-ok(/Reply STOP/.test(TEMPLATES.cg_former_invite.sms) && !/STOP/.test(TEMPLATES.cg_profile_nudge1.sms + TEMPLATES.cg_profile_nudge2.sms), 'opt-out line only on the first text');
+ok(!/STOP/.test(TEMPLATES.cg_former_invite.sms + TEMPLATES.cg_profile_nudge1.sms + TEMPLATES.cg_profile_nudge2.sms) && /this is Samantha with Caring Companions/.test(TEMPLATES.cg_former_invite.sms), 'no opt-out line (her word 11-25: past employees), Samantha introduces herself');
 
 
 // ---------- every CDS consumer gets the caregiver directory (2026-11-25) ----------
@@ -683,7 +683,7 @@ ok(pat.length === 2 && pat.some(m => m.channel === 'sms') && pat.some(m => m.cha
 ok(pat.find(m => m.channel === 'email').body.includes('because you worked with Caring Companions') && nev.find(m => m.channel === 'email').body.includes('because you applied with Caring Companions'), 'never hired: "applied with"');
 ok(opt.length === 1 && opt[0].channel === 'email', 'opted out of texts: email only');
 const patSms = pat.find(m => m.channel === 'sms').body;
-ok(/Reply STOP to opt out\.$/.test(patSms) && /findcdscaregivers\.com\/caregivers\/\?i=|x\.test\/caregivers\/\?i=/.test(patSms) && patSms.length < 260, 'text: one personal link and the opt-out line');
+ok(!/STOP/.test(patSms) && /\?i=[^ ]+$/.test(patSms) && /findcdscaregivers\.com\/caregivers\/\?i=|x\.test\/caregivers\/\?i=/.test(patSms) && patSms.length < 340, 'text: one personal link at the end, no opt-out line');
 const patMail = pat.find(m => m.channel === 'email').body;
 ok(/See the directory families use: findcdscaregivers\.com/.test(patMail) && /1331 N Stewart Ave, Springfield, MO 65802/.test(patMail) && /reply and we'll take you off the list/.test(patMail) && !/—/.test(patMail) && !/love to have you back/i.test(patMail), 'email: website, address, opt-out line, no em dashes');
 // The link works, says who they are, and greets the never-hired differently.
