@@ -199,6 +199,7 @@ const match = createMatch({
     return String((r?.message || r)?.status || '');
   },
   links: { family: (t: string) => `${SITE}/directory/?i=${t}`, caregiver: (t: string) => `${SITE}/caregiver/?c=${t}`,
+           signup: (t: string) => `${SITE}/caregivers/?i=${t}`,
            packet: (t: string) => `https://www.caringcds.com/apply/?c=${t}`,
            enroll: (t: string) => `https://www.caringcds.com/enroll/?c=${t}`,
            sign: (t: string) => `https://www.caringcds.com/sign/?c=${t}` },

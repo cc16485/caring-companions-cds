@@ -158,8 +158,8 @@ export function createMatch(deps) {
       name: [p.first_name, p.last_name].filter(Boolean).join(' '),
       name_short: p.first_name + (p.last_name ? ' ' + p.last_name.slice(0, 1) + '.' : ''),
       phone: p.phone || 'none', email: p.email || 'none', town: p.city || 'not given', counties: counties || 'none picked',
-      hours: p.hours_wanted || 'not answered', experience: p.experience || 'not answered', has,
-      fcsr: { yes: 'Yes', no: 'No', not_sure: 'Not sure' }[p.fcsr_registered_answer] || 'not answered',
+      hours: p.hours_wanted || 'asked in their profile', experience: p.experience || 'asked in their profile', has,
+      fcsr: { yes: 'Yes', no: 'No', not_sure: 'Not sure' }[p.fcsr_registered_answer] || 'asked in their profile',
     };
     const subject = fill(t.email_subject, vars), body = fill(t.email, vars);
     let failed = 0;
@@ -246,6 +246,66 @@ export function createMatch(deps) {
     return out;
   }
 
+  // ---------- personal sign-up links for former caregivers (2026-11-24) ----------
+  const digits10 = v => String(v || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  async function inviteFor(token) {
+    if (!token) return null;
+    const v = await one('select * from cds_cg_invites where token_hash=$1', [await crypto.hash(String(token))]);
+    if (!v || new Date(v.expires_at) <= new Date(await nowIso())) return null;
+    return v;
+  }
+  async function newCaregiverLink(poolId, by) {
+    const token = await crypto.token();
+    await q('insert into cds_cg_links (pool_id, token_hash, created_by, expires_at) values ($1,$2,$3,$4)',
+      [poolId, await crypto.hash(token), by, addDays(await nowIso(), R.CAREGIVER_LINK_DAYS)]);
+    return links.caregiver(token);
+  }
+
+  // ---------- finish-your-profile reminders (2026-11-24) ----------
+  // Runs with the 15-minute job. Only while setting cg_profile_reminders.live is
+  // true, 9am to 6pm Central Monday to Saturday, for people who signed up on the
+  // website in the last window_days and haven't sent their profile in. Two at most:
+  // the next day, then 3 days later. Nothing is recorded while it is off.
+  async function profileReminders(at) {
+    const cfg = await setting('cg_profile_reminders', { live: false });
+    if (!cfg || cfg.live !== true) return { live: false, sent: 0 };
+    // Tests pass a clock time; live always uses the database clock.
+    const now = deps.mode === 'practice' && at ? at : await nowIso();
+    const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)));
+    const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short' }).format(new Date(now));
+    if (hour < 9 || hour >= 18 || day === 'Sun') return { live: true, quiet: true, sent: 0 };
+    const first = Number(cfg.first_after_hours) || 20, second = Number(cfg.second_after_hours) || 72, windowDays = Number(cfg.window_days) || 14;
+    const due = await q(`select p.id, p.first_name, p.phone, p.email, p.submitted_at,
+        (select max(o.created_at) from cds_outbox o where o.pool_id=p.id and o.template='cg_profile_nudge1') as n1,
+        (select count(*)::int from cds_outbox o where o.pool_id=p.id and o.template='cg_profile_nudge2') as n2,
+        (select max(l.last_used_at) from cds_cg_links l where l.pool_id=p.id) as used
+      from attendant_pool p left join cds_cg_profiles g on g.pool_id=p.id
+      where p.source='findcdscaregivers.com' and not coalesce(p.archived,false)
+        and p.submitted_at > $2::timestamptz - make_interval(days => $1)
+        and coalesce(g.review_status,'draft') not in ('submitted','approved') and g.withdrawn_at is null
+        and exists (select 1 from cds_cg_links l where l.pool_id=p.id)
+      order by p.submitted_at limit 25`, [windowDays, now]);
+    let sent = 0;
+    for (const p of due) {
+      const usedRecently = p.used && (Date.parse(now) - Date.parse(p.used)) < 12 * 3600000;
+      let template = null;
+      if (!p.n1 && (Date.parse(now) - Date.parse(p.submitted_at)) >= first * 3600000) template = 'cg_profile_nudge1';
+      else if (p.n1 && !p.n2 && (Date.parse(now) - Date.parse(p.n1)) >= second * 3600000) template = 'cg_profile_nudge2';
+      if (!template || usedRecently) continue;
+      const c = await loadCaregiver(p.id);
+      const hasAuth = !!(c.screening.raw && c.screening.raw.authorization_signed_at);
+      const todo = R.caregiverChecklist({ profile: c.profile, consents: c.consents, screening: c.screening, hasAuth })
+        .filter(x => !x.done && !x.optional).map(x => x.label.replace(/ \(FCSR\)$/, '').toLowerCase());
+      const link = await newCaregiverLink(p.id, 'reminder');
+      const vars = { first: p.first_name, link, todo: todo.length ? todo.join(', ') : 'send it in on the last step' };
+      await message({ template, channel: 'sms', audience: 'caregiver', pool_id: p.id, to: p.phone, vars, by: 'reminder', automatic: true });
+      if (p.email) await message({ template, channel: 'email', audience: 'caregiver', pool_id: p.id, to: p.email, vars, by: 'reminder', automatic: true });
+      await audit('job', 'caregiver_profile_reminder', 'pool:' + p.id, { template });
+      sent++;
+    }
+    return { live: true, sent };
+  }
+
   // ================= PUBLIC =================
   const pub = {
     // Counts of fully screened, listed caregivers by county. People never.
@@ -259,11 +319,29 @@ export function createMatch(deps) {
       }
       return { counts };
     },
+    // A former caregiver's personal sign-up link (?i=...). Shows their first name
+    // and fills the form. The phone is never sent back in full.
+    async inviteLookup({ invite }) {
+      const v = await inviteFor(invite);
+      if (!v) return { ok: false };
+      if (!v.opened_at) await q('update cds_cg_invites set opened_at=now() where id=$1', [v.id]);
+      return { ok: true, first_name: v.first_name || '', last_name: v.last_name || '', email: v.email || '', city: v.city || '',
+        phone_hint: R.maskPhone(v.phone), used: !!v.used_at };
+    },
     // The caregiver sign-up form (findcdscaregivers.com/caregivers/). Saves to
     // the caregiver list, the database trigger adds the Hub to-do, and the
     // office gets an email. The same phone signing up again updates the person.
     async joinList(i) {
       if (i.website) return { ok: true };   // spam trap field
+      const inv = await inviteFor(i.invite);
+      if (inv) {
+        i = { ...i };
+        for (const k of ['first_name', 'last_name', 'email']) if (!String(i[k] || '').trim() && inv[k]) i[k] = inv[k];
+        if (!String(i.city || '').trim() && inv.city) i.city = inv.city;
+        if (!digits10(i.phone) && inv.phone) i.phone = inv.phone;
+        i.worked_here_before = true;
+        if (!i.how_heard) i.how_heard = 'Former Caring Companions caregiver (personal link)';
+      }
       const s = (v, n) => String(v ?? '').trim().slice(0, n);
       const opt = v => s(v, 300) || null;
       const first = s(i.first_name, 60), last = s(i.last_name, 60);
@@ -293,6 +371,12 @@ export function createMatch(deps) {
         how_heard: opt(i.how_heard), applicant_notes: s(i.applicant_notes, 2000) || null,
         fcsr_registered_answer: ['yes', 'no', 'not_sure'].includes(i.fcsr_registered_answer) ? i.fcsr_registered_answer : null,
       };
+      // Leave out what the short form no longer asks, so a repeat sign-up keeps it.
+      for (const k of Object.keys(row)) if (row[k] === null) delete row[k];
+      if (i.cert_cpr === undefined) delete row.cert_cpr;
+      if (i.cert_cna === undefined) delete row.cert_cna;
+      if (i.worked_here_before === undefined) delete row.worked_here_before;
+      if (i.availability === undefined) delete row.availability;
       const cols = Object.keys(row);
       const existing = await one(`select id from attendant_pool where coalesce(archived,false)=false
         and right(regexp_replace(coalesce(phone,''), '[^0-9]', '', 'g'), 10) = $1 order by submitted_at limit 1`, [digits]);
@@ -307,18 +391,28 @@ export function createMatch(deps) {
                  values ('cg_signup', $2, $1, $3, cds_next_business_4pm(now())) on conflict (dedupe_key) do nothing`,
           [id, ('Signed up again: ' + first + ' ' + last + (row.city ? ', ' + row.city : '') + '. Call to say hello, then use Send profile link (their link was not shown on screen).').slice(0, 300), 'cg_signup_again:' + id + ':' + today]);
         await audit('public', 'caregiver_signup_repeat', 'pool:' + id, {});
+        if (inv) await q('update cds_cg_invites set used_at=coalesce(used_at, now()), pool_id=$2 where id=$1', [inv.id, id]);
       } else {
         const r = await one(`insert into attendant_pool (agency_id, source, status, background_ok, show_anonymously, ${cols.join(', ')})
           values ('caring-companions-cds', 'findcdscaregivers.com', 'new', true, false, ${cols.map((c, n) => '$' + (n + 1) + (c === 'counties' || c === 'availability' ? '::jsonb' : '')).join(', ')}) returning id`,
           cols.map(c => row[c]));
         id = r.id;
         await audit('public', 'caregiver_signup', 'pool:' + id, {});
+        if (inv) await q('update cds_cg_invites set used_at=coalesce(used_at, now()), pool_id=$2 where id=$1', [inv.id, id]);
       }
       const p = await one('select * from attendant_pool where id=$1', [id]);
       const alert = await officeSignupAlert(typeof p.counties === 'string' ? { ...p, counties: JSON.parse(p.counties) } : p, !!existing);
       // Someone signing up again with a phone we already have never gets a link
       // on screen: whoever typed the form might not be that person. The office
       // sends their link to the phone on file instead.
+      // Except a personal link sent to this same phone: that is the person, so
+      // they go straight back to their profile.
+      if (existing && inv && digits10(inv.phone) === digits) {
+        await ensureProfile(id);
+        const link = await newCaregiverLink(id, 'sign-up');
+        await audit('public', 'caregiver_signup_link', 'pool:' + id, { invite: true });
+        return { ok: true, alerted: alert.emails > 0 && !alert.failed, link };
+      }
       if (existing) return { ok: true, repeat: true, alerted: alert.emails > 0 && !alert.failed };
       // New person: straight to their profile. Start it with what they just told us.
       await ensureProfile(id);
@@ -585,6 +679,7 @@ export function createMatch(deps) {
       const reg = c.screening.raw;
       return {
         first_name: c.pool.first_name,
+        worked_here_before: c.pool.worked_here_before === true,
         checklist: R.caregiverChecklist({ profile: c.profile, consents: c.consents, screening: c.screening, hasAuth }),
         draft: c.profile.draft || {},
         verified_certs: ((c.profile.approved || {}).certs) || [],
@@ -624,6 +719,7 @@ export function createMatch(deps) {
       await q(`update cds_cg_profiles set draft = draft || $2::jsonb,
                review_status = case when review_status='approved' then 'draft' else review_status end, updated_at=now() where pool_id=$1`,
         [pool_id, JSON.stringify(profile)]);
+      if (typeof (draft || {}).worked_here_before === 'boolean') await q('update attendant_pool set worked_here_before=$2 where id=$1', [pool_id, draft.worked_here_before]);
       await audit('caregiver:' + pool_id, 'saved_profile', 'pool:' + pool_id, { fields: Object.keys(profile) });
       return { ok: true };
     },
@@ -891,6 +987,28 @@ export function createMatch(deps) {
       await q(`update cds_tasks set done_at=now(), done_by=$2 where pool_id=$1 and kind='cg_signup' and done_at is null`, [id, s]);
       await audit('staff:' + s, 'sent_profile_link', 'pool:' + id, { status: m.status });
       return { status: m.status, error: m.error, practice_link: deps.mode === 'practice' ? link : undefined };
+    },
+    // Personal sign-up links for former Caring Companions caregivers (2026-11-24).
+    // Makes the links only. Sending them is a separate step she approves.
+    // people: [{ first_name, last_name, phone, email, city }]
+    async createInvites({ staff: s, people, batch }) {
+      who(s);
+      const list = Array.isArray(people) ? people.slice(0, 1000) : [];
+      const b = String(batch || 'former-caregivers').trim().slice(0, 60);
+      const out = [];
+      for (const x of list) {
+        const d = digits10(x.phone);
+        const first = String(x.first_name || '').trim().slice(0, 60);
+        if (!first || (d.length !== 10 && !String(x.email || '').includes('@'))) { out.push({ first_name: first, skipped: 'needs a first name and a phone or email' }); continue; }
+        const token = await crypto.token();
+        const phone = d.length === 10 ? '(' + d.slice(0, 3) + ') ' + d.slice(3, 6) + '-' + d.slice(6) : null;
+        await q(`insert into cds_cg_invites (token_hash, first_name, last_name, phone, email, city, batch, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [await crypto.hash(token), first, String(x.last_name || '').trim().slice(0, 60) || null, phone,
+           String(x.email || '').trim().slice(0, 200) || null, String(x.city || '').trim().slice(0, 60) || null, b, s]);
+        out.push({ first_name: first, phone, link: links.signup(token) });
+      }
+      await audit('staff:' + s, 'created_signup_invites', 'batch:' + b, { made: out.filter(o => o.link).length, skipped: out.filter(o => o.skipped).length });
+      return { batch: b, invites: out };
     },
     async sendRegistrationSteps({ staff: s, id, channel }) {
       who(s);
@@ -1416,8 +1534,10 @@ export function createMatch(deps) {
   const job = { packetJob: async () => {
     const r = await packet.packetJob();
     let e; try { e = await enroll.enrollJob(); } catch (err) { e = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
-    return { ...r, enroll: e };
+    let pr; try { pr = await profileReminders(); } catch (err) { pr = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
+    return { ...r, enroll: e, profile_reminders: pr };
   },
+  profileReminders: ({ at } = {}) => profileReminders(at),
   // The CDS Coordinator sends packets (2026-11-18, her ask) through the very same code as the hub's buttons, as
   // 'cds-coordinator'. Never twice: a packet that already went out (from the hub or before) is not sent again.
   async coordEnrollSend({ lead, consumer_id }) {

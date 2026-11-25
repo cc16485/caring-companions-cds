@@ -477,5 +477,102 @@ ok((await db.query(`select count(*)::int n from cds_tasks where pool_id=$1 and k
 const nb = (await db.query(`select extract(isodow from cds_next_business_4pm('2026-10-16 15:00-05') at time zone 'America/Chicago')::int d, to_char(cds_next_business_4pm('2026-10-16 15:00-05') at time zone 'America/Chicago','HH24:MI') t`)).rows[0];
 ok(nb.d === 1 && nb.t === '16:00', 'Friday sign-up is due Monday 4pm');
 
+
+// ---------- easier sign-up, reminders, former-caregiver links (2026-11-24) ----------
+const easySql = strip(readFileSync(ROOT + '/caregiver_signup_easier.sql', 'utf8'));
+await pg.exec(easySql); await pg.exec(easySql);
+ok(true, 'easier sign-up SQL runs twice');
+const remCfg = (await db.query(`select value from cds_match_settings where key='cg_profile_reminders'`)).rows[0].value;
+ok(remCfg.live === false, 'profile reminders start switched OFF');
+ok((await db.query(`select count(*)::int n from information_schema.role_table_grants where table_name='cds_cg_invites' and grantee in ('anon','authenticated')`)).rows[0].n === 0, 'the public cannot read invites');
+// The short form: only name, phone, town, counties, has-someone and the screening box.
+const shortIn = { first_name: 'Sam', last_name: 'Short', phone: '4175550144', city: 'Nixa', counties: ['Christian'], has_potential_consumer: 'No', background_ok: true };
+const sh = await H('public', 'joinList', shortIn);
+const shRow = (await db.query(`select * from attendant_pool where phone='(417) 555-0144'`)).rows[0];
+ok(sh.link && shRow && shRow.hours_wanted === null && shRow.cert_cpr !== true, 'the short form signs someone up and opens their profile');
+const shMail = (await db.query(`select body from cds_outbox where pool_id=$1 and audience='office' limit 1`, [shRow.id])).rows[0].body;
+ok(/Looking for: asked in their profile/.test(shMail) && /FCSR: asked in their profile/.test(shMail), 'office email says the skipped answers come in the profile');
+// Repeat sign-up from the short form keeps answers it no longer asks.
+await db.query(`update attendant_pool set cert_cpr=true, worked_here_before=true, availability='["Saturdays"]' where id=$1`, [shRow.id]);
+await H('public', 'joinList', shortIn);
+const shRow2 = (await db.query(`select * from attendant_pool where id=$1`, [shRow.id])).rows[0];
+ok(shRow2.cert_cpr === true && shRow2.worked_here_before === true && JSON.stringify(shRow2.availability) === '["Saturdays"]', 'signing up again on the short form keeps earlier answers');
+// worked here before saved from the profile
+const shTok = new URL(sh.link).searchParams.get('c');
+await H('caregiver', 'saveProfile', { link: shTok, draft: { worked_here_before: false, about_me: 'Hi' } });
+ok((await db.query(`select worked_here_before w from attendant_pool where id=$1`, [shRow.id])).rows[0].w === false, 'the profile saves "worked for Caring Companions before"');
+ok((await H('caregiver', 'home', { link: shTok })).worked_here_before === false, 'the profile shows that answer back');
+
+// Personal links for former caregivers.
+await throwsLike(() => H('staff', 'createInvites', { people: [] }), /sign in/i, 'invite links need a Hub sign-in');
+await throwsLike(() => createMatch({ ...practiceDeps(db, { familyBase: 'https://x.test/d/', caregiverBase: 'https://x.test/c/' }), mode: 'live' }).handle('staff', 'createInvites', { staff: 'nobody@x.test', people: [] }), /staff list/, 'live: only the office staff list can make invite links');
+const invs = (await S('createInvites', { batch: 'test-former', people: [
+  { first_name: 'Fran', last_name: 'Former', phone: '417-555-0155', email: 'fran@x.test', city: 'Ozark' },
+  { first_name: 'Opal', last_name: 'Onfile', phone: '4175550144' },
+  { first_name: '', phone: '4175550000' },
+] })).invites;
+ok(invs.length === 3 && invs[0].link.includes('/caregivers/?i=') && invs[2].skipped, 'invite links made, a row with no name is skipped');
+const iTok = new URL(invs[0].link).searchParams.get('i');
+const look = await H('public', 'inviteLookup', { invite: iTok });
+ok(look.ok && look.first_name === 'Fran' && look.city === 'Ozark' && look.phone_hint.endsWith('55') && !JSON.stringify(look).includes('0155'), 'the link fills the name and town, never the full phone');
+ok((await H('public', 'inviteLookup', { invite: 'made-up' })).ok === false, 'a made-up link finds nothing');
+const fj = await H('public', 'joinList', { invite: iTok, counties: ['Christian'], has_potential_consumer: 'Not sure', background_ok: true });
+const fRow = (await db.query(`select * from attendant_pool where phone='(417) 555-0155'`)).rows[0];
+ok(fj.link && fRow && fRow.first_name === 'Fran' && fRow.email === 'fran@x.test' && fRow.worked_here_before === true && /Former Caring Companions/.test(fRow.how_heard), 'joining from the link: name, phone, email filled, marked worked here before');
+ok((await db.query(`select used_at, pool_id from cds_cg_invites where batch='test-former' and first_name='Fran'`)).rows[0].pool_id === fRow.id, 'the invite records who joined');
+// Already on the list, same phone as the link: straight back to their profile.
+const oTok = new URL(invs[1].link).searchParams.get('i');
+const oj = await H('public', 'joinList', { invite: oTok, counties: ['Christian'], has_potential_consumer: 'No', background_ok: true });
+ok(oj.link && !oj.repeat, 'already on the list + their own link: goes straight to the profile');
+// Their link but a different phone typed: treated like any repeat/new person, no link for someone else's record.
+const xj = await H('public', 'joinList', { invite: oTok, phone: '417-555-0100', counties: ['Christian'], has_potential_consumer: 'No', background_ok: true });
+ok(xj.repeat === true && !xj.link, 'a different phone already on the list still gets no link on screen');
+
+// Finish-your-profile reminders.
+const J = match.roles.job;
+const outN = async (id, t) => (await db.query(`select count(*)::int n from cds_outbox where pool_id=$1 and template=$2`, [id, t])).rows[0].n;
+await db.query(`update attendant_pool set submitted_at='2026-11-16 15:00-06' where id=$1`, [fRow.id]);
+ok((await J.profileReminders({ at: '2026-11-17 14:00-06' })).live === false && await outN(fRow.id, 'cg_profile_nudge1') === 0, 'switched off: nothing is sent or recorded');
+await db.query(`update cds_match_settings set value = jsonb_set(value, '{live}', 'true') where key='cg_profile_reminders'`);
+await db.query(`update cds_cg_links set last_used_at='2026-11-16 15:05-06' where pool_id=$1`, [fRow.id]);
+const night = await J.profileReminders({ at: '2026-11-17 21:00-06' });
+ok(night.quiet && await outN(fRow.id, 'cg_profile_nudge1') === 0, 'no reminders at night');
+ok((await J.profileReminders({ at: '2026-11-22 11:00-06' })).quiet, 'no reminders on Sunday');
+await J.profileReminders({ at: '2026-11-16 20:00-06' });
+ok(await outN(fRow.id, 'cg_profile_nudge1') === 0, 'not before the next day');
+const r1 = await J.profileReminders({ at: '2026-11-17 14:00-06' });
+ok(await outN(fRow.id, 'cg_profile_nudge1') === 2 && r1.sent >= 1, 'next day: reminder 1 by text and email');
+const n1 = (await db.query(`select body from cds_outbox where pool_id=$1 and template='cg_profile_nudge1' and channel='email'`, [fRow.id])).rows[0].body;
+ok(/\/caregiver\/\?c=/.test(n1) && /Still to do: state requirements, about you, your photo, days and times/.test(n1), 'reminder carries a fresh link and what is left: ' + n1.split('\n').find(l => l.startsWith('Still')));
+await J.profileReminders({ at: '2026-11-17 15:00-06' });
+ok(await outN(fRow.id, 'cg_profile_nudge1') === 2, 'reminder 1 only once');
+await db.query(`update cds_outbox set created_at='2026-11-17 14:00-06' where pool_id=$1 and template='cg_profile_nudge1'`, [fRow.id]);
+await J.profileReminders({ at: '2026-11-19 14:00-06' });
+ok(await outN(fRow.id, 'cg_profile_nudge2') === 0, 'reminder 2 waits 3 days');
+await J.profileReminders({ at: '2026-11-20 15:00-06' });
+ok(await outN(fRow.id, 'cg_profile_nudge2') === 2, 'reminder 2 after 3 days');
+await J.profileReminders({ at: '2026-11-25 15:00-06' });
+ok(await outN(fRow.id, 'cg_profile_nudge1') + await outN(fRow.id, 'cg_profile_nudge2') === 4, 'never more than two reminders');
+// Someone who sent their profile in, or signed up long ago, gets none.
+await db.query(`update attendant_pool set submitted_at='2026-11-16 15:00-06' where id=$1`, [shRow.id]);
+await db.query(`update cds_cg_links set last_used_at=null where pool_id=$1`, [shRow.id]);
+await db.query(`update cds_cg_profiles set review_status='submitted' where pool_id=$1`, [shRow.id]);
+await J.profileReminders({ at: '2026-11-17 14:00-06' });
+ok(await outN(shRow.id, 'cg_profile_nudge1') === 0, 'a profile already sent in gets no reminder');
+const old = (await db.query(`select id from attendant_pool where phone='(417) 555-0100'`)).rows[0];
+await db.query(`update attendant_pool set submitted_at='2026-10-01 15:00-05' where id=$1`, [old.id]);
+await J.profileReminders({ at: '2026-11-17 14:00-06' });
+ok(await outN(old.id, 'cg_profile_nudge1') === 0, 'old sign-ups (outside the window) get no reminder');
+await db.query(`update cds_match_settings set value = jsonb_set(value, '{live}', 'false') where key='cg_profile_reminders'`);
+// Wording rules.
+const { TEMPLATES } = await import(ROOT + '/supabase/functions/_shared/match/messages.js');
+for (const k of ['cg_profile_nudge1', 'cg_profile_nudge2', 'cg_former_invite']) {
+  const t = TEMPLATES[k];
+  ok(![t.sms, t.email, t.email_subject].some(x => /—/.test(x)), k + ': no em dashes');
+}
+const len = t => t.replace('{link}', 'https://findcdscaregivers.com/caregiver/?c=' + 'x'.repeat(32)).replace('{first}', 'Christina').length;
+ok(len(TEMPLATES.cg_profile_nudge1.sms) <= len(TEMPLATES.cg_profile_link.sms) && len(TEMPLATES.cg_profile_nudge2.sms) <= len(TEMPLATES.cg_profile_link.sms), 'reminder texts are no longer than the profile link text');
+ok(/Reply STOP/.test(TEMPLATES.cg_former_invite.sms) && !/STOP/.test(TEMPLATES.cg_profile_nudge1.sms + TEMPLATES.cg_profile_nudge2.sms), 'opt-out line only on the first text');
+
 console.log(`\n${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);

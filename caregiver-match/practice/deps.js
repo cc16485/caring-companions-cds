@@ -87,6 +87,7 @@ export function practiceDeps(db, { familyBase, caregiverBase }) {
     links: {
       family: t => familyBase + '?i=' + t,
       caregiver: t => caregiverBase + '?c=' + t,
+      signup: t => caregiverBase.replace(/caregiver\/?$/, 'caregivers/') + '?i=' + t,
     },
   };
 }
