@@ -49,14 +49,15 @@ export const TEMPLATES = {
     email_subject: 'Families can\'t see your profile yet',
     email: 'Hi {first},\n\nFamilies looking for a caregiver can\'t see your profile until it\'s finished. A photo and a few words about you is most of it:\n\n{link}\n\nStill to do: {todo}.\n\nIf you\'d rather do it over the phone, call us and we\'ll help. If you\'ve changed your mind, that\'s OK too, and we won\'t send more reminders.\n\n' + SIGN_OFF,
   },
-  // First text to a former Caring Companions caregiver (the "545" send). Wording
-  // approved by Samantha 11-24; nothing sends it yet (the send is its own step). First text to them, so it carries
-  // the opt-out line (her rule: STOP on the first text only).
+  // First text to a past Caring Companions caregiver (the "545" send, 2026-11-25, her wording rounds
+  // 11-24/11-25). First text from the CDS line, so it carries the opt-out line (STOP on the first text
+  // only). Her PRN rule: say we're reaching out because they worked with us, never "we'd love to have you
+  // back". {past} is "worked with", or "applied with" for people never hired.
   cg_former_invite: {
-    audience: 'caregiver', label: 'Invitation to former Caring Companions caregivers',
-    sms: 'Hi {first}, it\'s Caring Companions. Families in our CDS program hire their own caregiver at $15 to $16 an hour, paid weekly. Join our caregiver list in about a minute: {link} Reply STOP to opt out.',
-    email_subject: '{first}, families are looking for caregivers like you',
-    email: 'Hi {first},\n\nThank you for the care you gave as part of Caring Companions. We\'d love to have you back in a new way.\n\nThrough Missouri\'s Consumer Directed Services (CDS) program, families hire their own caregiver. Caring Companions CDS handles payroll, taxes and the paperwork, and we help families meet caregivers near them.\n\n$15 to $16 an hour, paid weekly every Thursday\nFull time, part time or fill-in shifts\nYou say yes or no to every family\n\nYour personal link already has your name on it, so joining takes about a minute:\n\n{link}\n\nQuestions? Call us any weekday, 9am to 4pm.\n\n' + SIGN_OFF,
+    audience: 'caregiver', label: 'Invitation to past Caring Companions caregivers',
+    sms: 'Hi {first}, it\'s Caring Companions. Add your profile to our CDS caregiver directory, where local families find you and reach out. $15 to $16 an hour, paid weekly: {link} Reply STOP to opt out.',
+    email_subject: '{first}, local families are looking for a caregiver like you',
+    email: 'Hi {first},\n\nWe\'re reaching out because you {past} Caring Companions in the past. We\'ve started a caregiver directory for families in Missouri\'s Consumer Directed Services (CDS) program, and we\'d like your profile in it.\n\nHow it works:\n1. You make a short profile: a photo, a few words about you, the days you can work, and if you like, a short video answering a few questions.\n2. Families near you who need care look through the directory and see your profile.\n3. When a family would like to meet you, they ask right in the directory, and we text you. You say yes or no, and you decide together if it\'s a fit. In CDS, the family hires you.\n\nYour phone number and last name stay private.\n\n$15 to $16 an hour, paid weekly every Thursday\nFull time, part time or fill-in shifts\nCaring Companions CDS handles payroll, taxes and the paperwork\n\nSee the directory families use: findcdscaregivers.com\n\nWhen you\'re ready, here is your personal link. It already has your name on it, so getting started takes about a minute:\n\n{link}\n\nQuestions? Call us any weekday, 9am to 4pm.\n\n' + SIGN_OFF + '\n1331 N Stewart Ave, Springfield, MO 65802\n\nYou\'re getting this because you {past} Caring Companions. If you\'d rather not get emails from us, reply and we\'ll take you off the list.',
   },
   cg_intro_request: {
     audience: 'caregiver', label: 'A family would like to meet you',
