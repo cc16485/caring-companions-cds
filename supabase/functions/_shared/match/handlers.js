@@ -428,6 +428,45 @@ export function createMatch(deps) {
     return { live: true, roster: roster.length, given, ended, no_contact: noContact, invited, quarterly };
   }
 
+  // ---------- the invitation to past caregivers (the "545" send, 2026-11-25) ----------
+  // Once setting former_send.live is true and start_at has passed, each 15-minute run sends the
+  // next group (batch_size) between 9am and 6pm Central, Monday to Saturday: a text from the CDS
+  // line and an email, each with the person's own sign-up link (made at send time). Each person
+  // is tried once; known opt-outs are skipped per channel.
+  async function formerSend(at) {
+    const cfg = await setting('former_send', { live: false });
+    if (!cfg || cfg.live !== true || !cfg.start_at) return { live: false };
+    const now = deps.mode === 'practice' && at ? at : await nowIso();
+    if (new Date(now) < new Date(cfg.start_at)) return { live: true, waiting: true, sent: 0 };
+    const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)));
+    const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short' }).format(new Date(now));
+    if (hour < 9 || hour >= 18 || day === 'Sun') return { live: true, quiet: true, sent: 0 };
+    const size = Math.max(1, Math.min(100, Number(cfg.batch_size) || 50));
+    const rows = await q(`select * from cds_cg_invites where batch=$1 and sent_at is null order by created_at, id limit $2`, [cfg.batch, size]);
+    let sent = 0;
+    for (const v of rows) {
+      const token = await crypto.token();
+      // Claim the row first, so a slow run can never send to the same person twice.
+      const claimed = await one(`update cds_cg_invites set token_hash=$2, sent_at=now() where id=$1 and sent_at is null returning id`, [v.id, await crypto.hash(token)]);
+      if (!claimed) continue;
+      const vars = { first: v.first_name, link: links.signup(token), past: v.never_hired ? 'applied with' : 'worked with' };
+      let smsStatus = 'none', emailStatus = 'none', err = [];
+      if (v.phone && !v.skip_sms) {
+        const m = await message({ template: 'cg_former_invite', channel: 'sms', audience: 'caregiver', to: v.phone, vars, by: 'former-send', automatic: true });
+        smsStatus = m.status; if (m.error) err.push('text: ' + m.error);
+      } else if (v.phone) smsStatus = 'skipped (opted out)';
+      if (v.email && !v.skip_email) {
+        const m = await message({ template: 'cg_former_invite', channel: 'email', audience: 'caregiver', to: v.email, vars, by: 'former-send', automatic: true });
+        emailStatus = m.status; if (m.error) err.push('email: ' + m.error);
+      } else if (v.email) emailStatus = 'skipped (opted out)';
+      await q(`update cds_cg_invites set sms_status=$2, email_status=$3, send_error=$4 where id=$1`, [v.id, smsStatus, emailStatus, err.join('; ').slice(0, 300) || null]);
+      if (smsStatus === 'sent' || emailStatus === 'sent' || smsStatus === 'practice' || emailStatus === 'practice') sent++;
+    }
+    const left = (await one(`select count(*)::int n from cds_cg_invites where batch=$1 and sent_at is null`, [cfg.batch])).n;
+    if (rows.length) await audit('job', 'former_send_group', 'batch:' + cfg.batch, { tried: rows.length, sent, left });
+    return { live: true, tried: rows.length, sent, left };
+  }
+
   // ================= PUBLIC =================
   const pub = {
     // Counts of fully screened, listed caregivers by county. People never.
@@ -448,7 +487,7 @@ export function createMatch(deps) {
       if (!v) return { ok: false };
       if (!v.opened_at) await q('update cds_cg_invites set opened_at=now() where id=$1', [v.id]);
       return { ok: true, first_name: v.first_name || '', last_name: v.last_name || '', email: v.email || '', city: v.city || '',
-        phone_hint: R.maskPhone(v.phone), used: !!v.used_at };
+        phone_hint: R.maskPhone(v.phone), used: !!v.used_at, never_hired: v.never_hired === true };
     },
     // The caregiver sign-up form (findcdscaregivers.com/caregivers/). Saves to
     // the caregiver list, the database trigger adds the Hub to-do, and the
@@ -1686,8 +1725,10 @@ export function createMatch(deps) {
     let e; try { e = await enroll.enrollJob(); } catch (err) { e = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
     let pr; try { pr = await profileReminders(); } catch (err) { pr = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
     let cd; try { cd = await consumerDirectorySync(); } catch (err) { cd = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
-    return { ...r, enroll: e, profile_reminders: pr, consumer_directory: cd };
+    let fs; try { fs = await formerSend(); } catch (err) { fs = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
+    return { ...r, enroll: e, profile_reminders: pr, consumer_directory: cd, former_send: fs };
   },
+  formerSend: ({ at } = {}) => formerSend(at),
   consumerDirectorySync: ({ at } = {}) => consumerDirectorySync(at),
   profileReminders: ({ at } = {}) => profileReminders(at),
   // The CDS Coordinator sends packets (2026-11-18, her ask) through the very same code as the hub's buttons, as

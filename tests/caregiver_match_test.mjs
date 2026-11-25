@@ -655,5 +655,47 @@ ok((await db.query(`select access_status from cds_prospects where id=$1`, [cAnn.
 const tpl = (await import(ROOT + '/supabase/functions/_shared/match/messages.js')).TEMPLATES;
 ok(tpl.fam_invite_consumer.sms.length <= tpl.fam_invite.sms.length && !/STOP/.test(tpl.fam_invite_consumer.sms), 'consumer text is shorter than the family invitation, no opt-out line (not a first text)');
 
+
+// ---------- the invitation to past caregivers (the "545" send, 2026-11-25) ----------
+const fsSql = strip(readFileSync(ROOT + '/former_caregiver_send.sql', 'utf8'));
+await pg.exec(fsSql); await pg.exec(fsSql);
+ok(true, 'past-caregiver send SQL runs twice');
+ok((await db.query(`select value from cds_match_settings where key='former_send'`)).rows[0].value.live === false, 'the send starts switched OFF');
+const mk = (first, phone, email, extra = '') => db.query(`insert into cds_cg_invites (token_hash, first_name, last_name, phone, email, batch, created_by${extra ? ', ' + extra.split('=')[0] : ''})
+  values ('pending-' || gen_random_uuid(), $1, 'Past', $2, $3, 'former-caregivers-2026-11', 'test'${extra ? ', ' + extra.split('=')[1] : ''})`, [first, phone, email]);
+await mk('Pat', '(417) 555-0301', 'pat@x.test');
+await mk('Nev', '(417) 555-0302', 'nev@x.test', 'never_hired=true');
+await mk('Opt', '(417) 555-0303', 'opt@x.test', 'skip_sms=true');
+await mk('Rae', '(417) 555-0304', null);
+const FS = match.roles.job;
+ok((await FS.formerSend({ at: '2026-11-25 10:00-06' })).live === false, 'switched off: nothing');
+await db.query(`update cds_match_settings set value = value || '{"live": true, "start_at": "2026-11-25T10:00:00-06:00", "batch_size": 3}'::jsonb where key='former_send'`);
+ok((await FS.formerSend({ at: '2026-11-25 09:45-06' })).waiting === true, 'before 10am: waits');
+const fsOut = async () => (await db.query(`select * from cds_outbox where template='cg_former_invite' order by created_at, channel`)).rows;
+ok((await fsOut()).length === 0, 'nothing sent before the start time');
+const g1 = await FS.formerSend({ at: '2026-11-25 10:00-06' });
+ok(g1.tried === 3 && g1.left === 1, 'first group of 3 at 10am, 1 left: ' + JSON.stringify(g1));
+const o1 = await fsOut();
+const pat = o1.filter(m => /Hi Pat/.test(m.body)), nev = o1.filter(m => /Hi Nev/.test(m.body)), opt = o1.filter(m => /Hi Opt/.test(m.body));
+ok(pat.length === 2 && pat.some(m => m.channel === 'sms') && pat.some(m => m.channel === 'email'), 'a text and an email each');
+ok(pat.find(m => m.channel === 'email').body.includes('because you worked with Caring Companions') && nev.find(m => m.channel === 'email').body.includes('because you applied with Caring Companions'), 'never hired: "applied with"');
+ok(opt.length === 1 && opt[0].channel === 'email', 'opted out of texts: email only');
+const patSms = pat.find(m => m.channel === 'sms').body;
+ok(/Reply STOP to opt out\.$/.test(patSms) && /findcdscaregivers\.com\/caregivers\/\?i=|x\.test\/caregivers\/\?i=/.test(patSms) && patSms.length < 260, 'text: one personal link and the opt-out line');
+const patMail = pat.find(m => m.channel === 'email').body;
+ok(/See the directory families use: findcdscaregivers\.com/.test(patMail) && /1331 N Stewart Ave, Springfield, MO 65802/.test(patMail) && /reply and we'll take you off the list/.test(patMail) && !/—/.test(patMail) && !/love to have you back/i.test(patMail), 'email: website, address, opt-out line, no em dashes');
+// The link works, says who they are, and greets the never-hired differently.
+const nevTok = new URL(nev.find(m => m.channel === 'sms').body.match(/https?:\/\/\S+/)[0]).searchParams.get('i');
+const nevLook = await H('public', 'inviteLookup', { invite: nevTok });
+ok(nevLook.ok && nevLook.first_name === 'Nev' && nevLook.never_hired === true, 'the link opens their invitation (never hired marked)');
+ok((await db.query(`select count(*)::int n from cds_cg_invites where batch='former-caregivers-2026-11' and sent_at is not null and token_hash like 'pending-%'`)).rows[0].n === 0, 'every sent row has its real link');
+await FS.formerSend({ at: '2026-11-25 10:00-06' });
+ok((await fsOut()).length === 6, 'running again in the same window only sends the rest (Rae: text only)');
+ok((await FS.formerSend({ at: '2026-11-25 10:15-06' })).tried === 0, 'nobody gets it twice');
+ok((await db.query(`select sms_status, email_status from cds_cg_invites where first_name='Opt'`)).rows[0].sms_status === 'skipped (opted out)', 'opt-out recorded');
+await db.query(`update cds_cg_invites set sent_at=null where first_name='Rae'`);
+ok((await FS.formerSend({ at: '2026-11-25 19:00-06' })).quiet === true, 'no sending after 6pm');
+await db.query(`update cds_match_settings set value = value || '{"live": false}'::jsonb where key='former_send'`);
+
 console.log(`\n${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);
