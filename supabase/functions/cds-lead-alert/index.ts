@@ -6,12 +6,15 @@
 // (name, phone, email only). Practice until setting lead_ghl.live. Logic: lead-ghl.js.
 // Then (2026-10-31) every website form: caregiver sign-ups into GoHighLevel, findcdscaregivers families
 // onto Leads, one note on each contact. Practice until setting lead_forms.live. Logic: lead-forms.js.
-import { jobs, leadForms, leadGhl, scheduled } from '../_shared/office/server.ts';
+// Then (2026-11-26) the start-date alert: Katlin and Samantha hear when the state's start date goes in (start-alert.js).
+import { jobs, leadForms, leadGhl, scheduled, startAlert } from '../_shared/office/server.ts';
 Deno.serve(scheduled(async () => {
   const alerts = await jobs.run();
   let ghl: unknown;
   try { ghl = await leadGhl.run(); } catch (e) { ghl = { ok: false, error: String((e as Error)?.message || e) }; }
   let forms: unknown;
   try { forms = await leadForms.run(); } catch (e) { forms = { ok: false, error: String((e as Error)?.message || e) }; }
-  return { ...alerts, ghl, forms };
+  let start: unknown;
+  try { start = await startAlert.run(); } catch (e) { start = { ok: false, error: String((e as Error)?.message || e) }; }
+  return { ...alerts, ghl, forms, start };
 }));
