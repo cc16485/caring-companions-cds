@@ -41,8 +41,8 @@ const db = { query: async (t, p = []) => {
   if (/^select distinct on \(consumer_id\) consumer_id/.test(s)) { const by = {}; T.fusion.forEach((f) => { by[f.consumer_id] = f; }); return rows(Object.values(by)); }
   if (/^select value from cds_match_settings where key = 'fusion_checks'/.test(s)) return rows([{ value: { every_days: 3 } }]);
   if (/^insert into cds_fusion_checks/.test(s)) { T.fusion.push({ consumer_id: p[0], consumer_name: p[1], day: p[2], result: p[3], close_by: p[4], assessment: p[5], state_phone: p[6], note: p[7], by_email: p[8] }); return rows([]); }
-  if (/^select id, target_id, target_name, step, by_email, at from cds_hub_updates/.test(s)) return rows(T.hub.filter((u) => !u.applied_at));
-  if (/^insert into cds_hub_updates/.test(s)) { const u = { id: T.hub.length + 1, target_id: p[0], target_name: p[1], step: p[2], by_email: p[3], at: new Date(NOW).toISOString() }; T.hub.push(u); return rows([{ id: u.id, at: u.at }]); }
+  if (/^select id, target_id, target_name, step, by_email, at, value from cds_hub_updates/.test(s)) return rows(T.hub.filter((u) => !u.applied_at));
+  if (/^insert into cds_hub_updates/.test(s)) { const u = { id: T.hub.length + 1, target_id: p[0], target_name: p[1], step: p[2], by_email: p[3], value: p[4], at: new Date(NOW).toISOString() }; T.hub.push(u); return rows([{ id: u.id, at: u.at }]); }
   if (/^update cds_hub_updates set applied_at/.test(s)) { const r = []; T.hub.forEach((u) => { if (p[0].includes(u.id) && !u.applied_at) { u.applied_at = 'now'; u.applied_by = p[1]; r.push({ id: u.id }); } }); return rows(r); }
   if (/^select id, kind, data, updated_at from cds_todo where data->>'who'/.test(s)) return rows([...T.todo.values()].filter((r) => r.data.who === p[0]));
   if (/^select distinct data->>'who'/.test(s)) return rows([]);
@@ -185,6 +185,20 @@ ok('...and on Pat\'s profile', [...T.seen.values()].some((x) => x.person_ref ===
 r = await c.call(K, 'starting', { id: 'C3' }, { jwt: 'katlin-token' });
 ok('...the next Fusion check is tomorrow (watched closely until they reach the state)', r.people[0].fusion_check.due === '2026-11-27' && r.people[0].fusion_check.close_by === '2026-12-03', r.people[0].fusion_check);
 
+// 2026-11-26: the referral or PCCP is in Fusion (starts the Fusion checks)
+{ const before = T.hub.length;
+  r = await c.call(K, 'referral_in', { id: 'C1', date: '2026-11-19' });
+  ok('referral_in: a new-to-CDS consumer gets "Referral sent", first Fusion check a week later', r.saved && r.what === 'Referral sent' && r.date === '2026-11-19' && r.first_fusion_check === '2026-11-26' && T.hub[before].step === 'referral_sent' && T.hub[before].value === '2026-11-19', r);
+  r = await c.call(K, 'starting', { id: 'C1' }, { jwt: 'katlin-token' });
+  ok('...counts at once: Linda\'s Fusion check is due today, before the hub page applies it', r.people[0].fusion_check && r.people[0].fusion_check.due === '2026-11-26' && r.people[0].fusion_check.kind === 'Referral', r.people[0].fusion_check);
+  r = await c.call(K, 'referral_in', { id: 'C5' });
+  ok('referral_in: a transfer consumer gets "PCCP / transfer entered", today by default', r.what === 'PCCP / transfer entered' && r.date === '2026-11-26' && T.hub[T.hub.length - 1].step === 'transfer_entered');
+  ok('referral_in: a future date is refused', await refused(() => c.call(K, 'referral_in', { id: 'C1', date: '2026-11-30' }), 400, /future/));
+  ok('referral_in: a date over 90 days ago is refused', await refused(() => c.call(K, 'referral_in', { id: 'C1', date: '2026-07-01' }), 400, /90 days/));
+  ok('referral_in: not on Starting is refused', await refused(() => c.call(K, 'referral_in', { id: 'C4' })));
+  ok('mark_step cannot be used for the referral date', await refused(() => c.call(K, 'mark_step', { id: 'C1', step: 'referral_sent' })));
+}
+
 // MCP
 const call = (m, params, id = 1) => rpc(c, K, { jsonrpc: '2.0', id, method: m, params });
 r = await call('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-ai' } });
@@ -193,7 +207,7 @@ r = await call('initialize', { protocolVersion: '1999-01-01' });
 ok('...an unknown version gets the newest we know', r.result.protocolVersion === PROTOCOLS[0]);
 ok('...a notification gets no answer', (await rpc(c, K, { jsonrpc: '2.0', method: 'notifications/initialized' })) === null);
 r = await call('tools/list');
-ok('tools/list: the 12 tools, each with a schema', r.result.tools.length === 12 && r.result.tools.every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object'));
+ok('tools/list: the 13 tools, each with a schema', r.result.tools.length === 13 && r.result.tools.every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object'));
 ok('...the read-only ones say so', ['tonight', 'starting', 'find_person', 'person'].every((n) => r.result.tools.find((t) => t.name === n).annotations.readOnlyHint === true));
 r = await call('tools/call', { name: 'find_person', arguments: { search: 'linda' } });
 ok('tools/call: text and structured answer', !r.result.isError && r.result.structuredContent.people[0].id === 'C1' && JSON.parse(r.result.content[0].text).found === 1);
