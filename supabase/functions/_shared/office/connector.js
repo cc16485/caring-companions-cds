@@ -20,6 +20,8 @@ import './starting-rules.js';
 import './start-tracker.js';
 import { leadFor, packetOf } from './coordinator-jobs.js';
 import { createHubUpdates, STEPS, HubUpdateError } from './hub-updates.js';
+// 2026-11-26 (her ask): checking Fusion 7+ days after a referral or PCCP, for state notes that it cannot reach them
+import { createFusionChecks, fusionDue, RESULTS as FUSION_RESULTS } from './fusion-checks.js';
 const TR = () => globalThis.CDSTracker;
 
 export class ToolError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
@@ -42,13 +44,17 @@ const LIST = (what) => ({ type: 'array', maxItems: 6, items: { type: 'string', m
 const DATED = (what) => ({ type: 'array', maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['what'], properties: {
   what: { type: 'string', maxLength: 240 }, due: { type: 'string', description: 'YYYY-MM-DD, Missouri date. Leave out if none was said.' } } }, description: what });
 export const TOOLS = [
-  { name: 'tonight', title: 'Tonight', description: 'Start here. Your to-do for tonight (Missouri day), Samantha\'s notes, the people to call tonight (leads that answered our texts and are ready for a call, promises or check-ins due today or late), and the Starting summary: which attendants need background checks, who needs WellSky setup, and each Starting consumer\'s next step. Read only.',
+  { name: 'tonight', title: 'Tonight', description: 'Start here. Your to-do for tonight (Missouri day), Samantha\'s notes, the people to call tonight (leads that answered our texts and are ready for a call, promises or check-ins due today or late), and the Starting summary: whose Fusion profile to check tonight (referral or PCCP 7+ days old, no authorization), which attendants need background checks, who needs WellSky setup, and each Starting consumer\'s next step. Read only.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { day: { type: 'string', description: 'YYYY-MM-DD Missouri date; leave out for tonight' } } }, annotations: { readOnlyHint: true } },
   { name: 'starting', title: 'Starting: who needs what', description: 'Everyone on the Starting page, soonest start date first: each step (Medicaid, referral or PCCP, packet, tax, attendant background checks, Empeon and I-9, orientation, clock-in call, start date) with what is next, who owns it and when it is due; the attendant and each background check (FCSR, EDL, OIG, fingerprints); and the WellSky setup (authorization, tasks) and clock-in steps. Read only.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', description: 'One consumer id; leave out for everyone' } } }, annotations: { readOnlyHint: true } },
   { name: 'mark_step', title: 'Mark a Starting step done', description: 'After Katlin finishes a step, mark it done on the consumer\'s Starting profile: wellsky_authorization, wellsky_tasks, consumer_told_clock_in or attendant_clock_in. Only when she says it is really done. It shows on the profile the next time the CDS hub is opened.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['id', 'step'], properties: { id: { type: 'string', description: 'The consumer id from starting' },
       step: { type: 'string', enum: Object.keys(STEPS) } } } },
+  { name: 'fusion_checked', title: 'Record a Fusion check', description: 'After Katlin opens a consumer\'s Fusion profile and reads the newest notes and documents: record what she found. state_cant_reach needs the close-out date the state gave (close_by) and, if given, the state\'s phone number: it puts a call to the consumer at the top of her to-do and tells Samantha. Do not include the DCN.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id', 'result'], properties: { id: { type: 'string', description: 'The consumer id from starting' },
+      result: { type: 'string', enum: Object.keys(FUSION_RESULTS) }, close_by: { type: 'string', description: 'YYYY-MM-DD the state will close the referral' },
+      assessment: { type: 'string', description: 'YYYY-MM-DD the assessment the state set' }, state_phone: { type: 'string', maxLength: 20 }, note: { type: 'string', maxLength: 500 } } } },
   { name: 'find_person', title: 'Find a person', description: 'Find leads and consumers by name or the last digits of a phone number. Read only.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['search'], properties: { search: { type: 'string', minLength: 2, maxLength: 80 } } }, annotations: { readOnlyHint: true } },
   { name: 'person', title: 'One person in full', description: 'Everything the hub knows about one lead or consumer before a call: their record, what they answered by text, what was heard on calls and texts, open promises and questions, and the date of birth and DCN for the Medicaid check in eMOMED. Read only.',
@@ -86,6 +92,7 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
   const one = async (t, p = []) => (await q(t, p))[0] || null;
   const todo = createTodo({ db, now });
   const hubUpdates = createHubUpdates({ db });
+  const fusion = createFusionChecks({ db, now });
   const data = async (key) => { const r = await one('select data_value from agency_data where agency_id = $1 and data_key = $2', [AGENCY, key]); return (r && r.data_value) || []; };
   async function access(email) {
     const me = lc(email);
@@ -196,6 +203,7 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
     const packets = await q(`select lead_id, consumer_id, sent_at, signed_at, office_signed_at, answers->>'first' as first, answers->>'last' as last from cds_enroll_packets`);
     const att = await attendantsFor(ctx);
     const pend = await hubUpdates.pending();
+    const fLast = await fusion.lastByConsumer(), fEvery = await fusion.every();
     const list = all.consumers.filter((c) => c && String(c.status || '').toLowerCase() === 'starting' && !/^(example|test)\b/i.test(String(c.name || '').trim()))
       .filter((c) => !args.id || String(c.id) === String(args.id));
     if (args.id && !list.length) throw new ToolError('No one on the Starting page has that id.', 404);
@@ -215,6 +223,7 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
           background_checks: rost ? 'on the roster (done)' : ar ? ar.checks : 'not started (no application yet)', next: ar ? ar.next : '' } : null,
         wellsky: { authorization_in: has('wellsky_authorization', prep.authWellSky), tasks_in: has('wellsky_tasks', prep.tasksWellSky),
           consumer_told_clock_in: has('consumer_told_clock_in', prep.toldClockIn), attendant_clock_in: has('attendant_clock_in', st.attClockIn) },
+        fusion_check: fusionDue(c, !!auths[normN(c.name)], fLast[String(c.id)] || null, today, fEvery),
         waiting_to_show_in_hub: mine, promises: t.promises.filter((p) => p.open).map((p) => ({ what: p.what, due: p.due || '', late: !!p.late })) };
     }).sort((x, y) => String(x.start_date || '9999').localeCompare(String(y.start_date || '9999')));
     return { today, people: out, attendants_note: att.error || '' };
@@ -228,7 +237,16 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
       const ws = p.wellsky, miss = [!ws.authorization_in && 'authorization', !ws.tasks_in && 'tasks'].filter(Boolean);
       if (miss.length && (p.start_date || (p.steps['Referral or PCCP'] || {}).what === 'Authorized')) wellsky.push({ consumer: p.name, id: p.id, start_date: p.start_date, needs: 'WellSky: consumer, attendant, ' + miss.join(' and ') });
     }
-    return { background_checks_needed: checks, wellsky_setup_needed: wellsky, starting_count: s.people.length, next_steps: s.people.slice(0, 8).map((p) => ({ consumer: p.name, id: p.id, start_date: p.start_date, next: p.next })), note: s.attendants_note };
+    const fusionDueList = s.people.filter((p) => p.fusion_check && p.fusion_check.due <= s.today).map((p) => ({ consumer: p.name, id: p.id, what: p.fusion_check.kind + ' went in ' + p.fusion_check.sent + ' (' + p.fusion_check.days_since + ' days)',
+      last_checked: p.fusion_check.last_checked || 'never', last_found: p.fusion_check.last_result, close_by: p.fusion_check.close_by, late: p.fusion_check.late }))
+      .sort((a, b) => (b.close_by ? 1 : 0) - (a.close_by ? 1 : 0) || String(a.close_by || '9').localeCompare(String(b.close_by || '9')));
+    return { fusion_checks_due: fusionDueList, background_checks_needed: checks, wellsky_setup_needed: wellsky, starting_count: s.people.length, next_steps: s.people.slice(0, 8).map((p) => ({ consumer: p.name, id: p.id, start_date: p.start_date, next: p.next })), note: s.attendants_note };
+  }
+  async function fusionChecked(a, args) {
+    const all = await people(), r = recordOf(all, 'consumer', args.id);
+    if (longNumber(args.note)) throw new ToolError('Leave the DCN out of the note.');
+    try { return Object.assign({ consumer: r.name }, await fusion.record(a.me, r, args, nameOf(a.me))); }
+    catch (e) { if (e instanceof ToolError) throw e; if (/^(Pick what|What date)/.test(String(e && e.message))) throw new ToolError(e.message); throw e; }
   }
   async function markStep(a, args) {
     const all = await people(), r = recordOf(all, 'consumer', args.id);
@@ -326,6 +344,7 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
         case 'tonight': return await tonight(a, args, ctx);
         case 'starting': return await startingList(a, args, ctx);
         case 'mark_step': return await markStep(a, args);
+        case 'fusion_checked': return await fusionChecked(a, args);
         case 'find_person': return await findPerson(a, args);
         case 'person': return await person(a, args);
         case 'save_call': return await saveCall(a, args);

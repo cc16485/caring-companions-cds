@@ -11,7 +11,8 @@ const agency = {
     { id: 'web-9', name: 'Harold Sample', phone: '', status: 'new', notes: [] } ],
   consumers: [{ id: 'C1', name: 'Linda Testcase', phone: '4175550133', status: 'starting', cdsStartDate: '2026-11-23', starting: { attendantName: 'Marcus Fake' } },
     { id: 'C2', name: 'Joe Madeup', status: 'starting', cdsStartDate: '2026-12-08', starting: { attendantName: 'Kayla Madeup' }, firstShiftPrep: { authWellSky: { at: 'x' } } },
-    { id: 'C3', name: 'Pat Nostart', status: 'starting' },
+    { id: 'C3', name: 'Pat Nostart', status: 'starting', starting: { referralSent: '2026-11-16' } },
+    { id: 'C5', name: 'Sue Transfer', status: 'starting', starting: { kind: 'move', transferEntered: '2026-11-22' } },
     { id: 'C9', name: 'Example Practice', status: 'starting', cdsStartDate: '2026-12-01' },
     { id: 'C4', name: 'Old Active', status: 'active', cdsStartDate: '2026-01-01' }],
   authorizations: { records: { a1: { consumer: 'Joe Madeup' } } },
@@ -25,7 +26,7 @@ const ATT = { attendants: [
     table: { cells: { fcsr: { s: 'done' }, edl: { s: 'done' }, oig: { s: 'done' }, fp: { s: 'na' }, invite: { s: 'todo' } } } } ] };
 let matchCalls = [], matchFail = false;
 const matchApi = async (jwt, action) => { matchCalls.push([jwt, action]); if (matchFail) throw new Error('the CDS server answered 500'); return ATT; };
-const T = { hub: [], todo: new Map(), items: [], seen: new Map(), msgs: [], cal: new Map(), chats: [
+const T = { fusion: [], hub: [], todo: new Map(), items: [], seen: new Map(), msgs: [], cal: new Map(), chats: [
   { lead_id: 'web-9', name: 'Harold Sample', status: 'ready', answers: { consumer_name: 'Harold Sample', consumer_phone: '4175550144', consumer_dob: '1950-01-01', county: 'Christian' }, followup: null, note: '' } ] };
 T.todo.set('i:ktcall01', { id: 'i:ktcall01', kind: 'item', data: { who: 'katlin@mo-care.com', n: 3, when: 'days', days: [1, 2, 3, 4, 5], by: 'samantha@mo-care.com', t: 'Call the leads that are ready', how: 'Talk with the consumer.' } });
 T.items.push({ id: 1, key: 'consumer:C1:promise:x', person_kind: 'consumer', person_id: 'C1', person_name: 'Linda Testcase', kind: 'promise', data: { what: 'call back about clock-in' }, status: 'open', due: '2026-11-25', source: {}, created_at: '2026-11-24' });
@@ -37,6 +38,9 @@ const db = { query: async (t, p = []) => {
   if (/^select value from cds_match_settings where key = \$1/.test(s)) return rows(p[0] in settings ? [{ value: settings[p[0]] }] : []);
   if (/^select data_value from agency_data/.test(s)) return rows(agency[p[1]] ? [{ data_value: agency[p[1]] }] : []);
   if (/^select lead_id, consumer_id, sent_at, signed_at, office_signed_at/.test(s)) return rows(PACKETS);
+  if (/^select distinct on \(consumer_id\) consumer_id/.test(s)) { const by = {}; T.fusion.forEach((f) => { by[f.consumer_id] = f; }); return rows(Object.values(by)); }
+  if (/^select value from cds_match_settings where key = 'fusion_checks'/.test(s)) return rows([{ value: { every_days: 3 } }]);
+  if (/^insert into cds_fusion_checks/.test(s)) { T.fusion.push({ consumer_id: p[0], consumer_name: p[1], day: p[2], result: p[3], close_by: p[4], assessment: p[5], state_phone: p[6], note: p[7], by_email: p[8] }); return rows([]); }
   if (/^select id, target_id, target_name, step, by_email, at from cds_hub_updates/.test(s)) return rows(T.hub.filter((u) => !u.applied_at));
   if (/^insert into cds_hub_updates/.test(s)) { const u = { id: T.hub.length + 1, target_id: p[0], target_name: p[1], step: p[2], by_email: p[3], at: new Date(NOW).toISOString() }; T.hub.push(u); return rows([{ id: u.id, at: u.at }]); }
   if (/^update cds_hub_updates set applied_at/.test(s)) { const r = []; T.hub.forEach((u) => { if (p[0].includes(u.id) && !u.applied_at) { u.applied_at = 'now'; u.applied_by = p[1]; r.push({ id: u.id }); } }); return rows(r); }
@@ -143,7 +147,7 @@ ok('tonight has the Starting summary: background checks needed', sm && sm.backgr
 ok('...Kayla\'s checks are clear, so Joe is not on the checks list', !sm.background_checks_needed.some((x) => x.consumer === 'Joe Madeup'));
 ok('...WellSky setup needed: Joe (start date, authorization in, tasks missing) and Linda', sm.wellsky_setup_needed.some((x) => x.consumer === 'Joe Madeup' && /tasks/.test(x.needs) && !/authorization/.test(x.needs)) && sm.wellsky_setup_needed.some((x) => x.consumer === 'Linda Testcase' && /authorization and tasks/.test(x.needs)), sm.wellsky_setup_needed);
 ok('...Pat has no start date or authorization yet, so no WellSky line', !sm.wellsky_setup_needed.some((x) => x.consumer === 'Pat Nostart'));
-ok('...the Example record is left out', !JSON.stringify(sm).includes('Example Practice') && sm.starting_count === 3);
+ok('...the Example record is left out', !JSON.stringify(sm).includes('Example Practice') && sm.starting_count === 4);
 ok('...the checks were read with Katlin\'s own sign-in', matchCalls.some(([j, a]) => j === 'katlin-token' && a === 'packetList'));
 r = await c.call(K, 'starting', { id: 'C2' }, { jwt: 'katlin-token' });
 const joe = r.people[0];
@@ -153,9 +157,9 @@ ok('...WellSky: authorization in, tasks not', joe.wellsky.authorization_in === t
 ok('...the next step (Medicaid comes first: not verified) and days to start', /Medicaid/.test(joe.next) && joe.days_to_start === 12, [joe.next, joe.days_to_start]);
 ok('starting: a made-up id is refused', await refused(() => c.call(K, 'starting', { id: 'nope' }, { jwt: 'x' }), 404));
 r = await c.call(K, 'starting', {}, { jwt: 'katlin-token' });
-ok('starting: soonest start date first, no start date last', r.people.map((x) => x.name).join() === 'Linda Testcase,Joe Madeup,Pat Nostart', r.people.map((x) => x.name));
+ok('starting: soonest start date first, no start date last', r.people.map((x) => x.name).slice(0, 2).join() === 'Linda Testcase,Joe Madeup' && r.people.length === 4, r.people.map((x) => x.name));
 matchFail = true; r = await c.call(K, 'starting', {}, { jwt: 'katlin-token' }); matchFail = false;
-ok('if the checks cannot be read, it says so plainly (no guessing)', /could not be read/.test(r.attendants_note) && r.people.length === 3);
+ok('if the checks cannot be read, it says so plainly (no guessing)', /could not be read/.test(r.attendants_note) && r.people.length === 4);
 r = await c.call(K, 'mark_step', { id: 'C2', step: 'wellsky_tasks' });
 ok('mark_step: saved for the hub to apply, with who', r.marked && r.step === 'WellSky: tasks are in' && T.hub.length === 1 && T.hub[0].by_email === 'katlin@mo-care.com' && T.hub[0].target_id === 'C2');
 r = await c.call(K, 'starting', { id: 'C2' }, { jwt: 'katlin-token' });
@@ -163,6 +167,23 @@ ok('...and the Starting list shows it done right away (waiting to show in the hu
 ok('mark_step: an unknown step is refused', await refused(() => c.call(K, 'mark_step', { id: 'C2', step: 'close_lead' })));
 ok('mark_step: someone not on Starting is refused', await refused(() => c.call(K, 'mark_step', { id: 'C4', step: 'wellsky_tasks' })));
 ok('mark_step: a lead id is refused', await refused(() => c.call(K, 'mark_step', { id: 'L1', step: 'wellsky_tasks' }), 404));
+
+// 2026-11-26: checking Fusion 7+ days after a referral or PCCP
+r = await c.call(K, 'tonight', {}, { jwt: 'katlin-token' });
+const fd = r.starting.fusion_checks_due;
+ok('tonight: Pat (referral 10 days ago, no authorization, never checked) is on the Fusion list', fd.some((x) => x.consumer === 'Pat Nostart' && /Referral went in 2026-11-16 \(10 days\)/.test(x.what) && x.last_checked === 'never' && x.late), fd);
+ok('...Sue (transfer 4 days ago) is not due yet, Joe (authorized) never', !fd.some((x) => x.consumer === 'Sue Transfer') && !fd.some((x) => x.consumer === 'Joe Madeup'));
+ok('the Fusion result is required to be one we know', await refused(() => c.call(K, 'fusion_checked', { id: 'C3', result: 'maybe' })));
+ok('state_cant_reach needs the close-out date, and says so', await refused(() => c.call(K, 'fusion_checked', { id: 'C3', result: 'state_cant_reach' }), 400, /What date did the state say/));
+ok('a DCN in the note is refused', await refused(() => c.call(K, 'fusion_checked', { id: 'C3', result: 'nothing_new', note: 'DCN 12345678' })));
+r = await c.call(K, 'fusion_checked', { id: 'C3', result: 'state_cant_reach', close_by: '2026-12-03', state_phone: '(573) 555-0100', note: 'DSDS left 2 voicemails; note uploaded 11/24.' });
+ok('state cannot reach: saved', r.saved && r.close_by === '2026-12-03' && T.fusion.length === 1 && T.fusion[0].by_email === 'katlin@mo-care.com');
+const pc = T.items.filter((i) => i.person_id === 'C3');
+ok('...a needs-you item for Samantha and a promise to call today', pc.some((i) => i.kind === 'concern' && /cannot reach Pat Nostart and will close the referral on Thursday, December 3/.test(i.data.text) && /\(573\) 555-0100/.test(i.data.text)) && pc.some((i) => i.kind === 'promise' && i.due === '2026-11-26' && /call Pat Nostart today/.test(i.data.what)), pc);
+ok('...a CALL item at the top of Katlin\'s to-do today', [...T.todo.values()].map((x) => x.data).some((x) => x.who === 'katlin@mo-care.com' && x.n === 0 && x.date === '2026-11-26' && /^CALL Pat Nostart: the state cannot reach them, closes Thursday, December 3/.test(x.t)), [...T.todo.values()]);
+ok('...and on Pat\'s profile', [...T.seen.values()].some((x) => x.person_ref === 'consumer:C3' && /Fusion checked by Katlin: The state has tried to call and cannot reach them; the state will close the referral on Thursday, December 3\. DSDS left 2 voicemails/.test(x.summary)));
+r = await c.call(K, 'starting', { id: 'C3' }, { jwt: 'katlin-token' });
+ok('...the next Fusion check is tomorrow (watched closely until they reach the state)', r.people[0].fusion_check.due === '2026-11-27' && r.people[0].fusion_check.close_by === '2026-12-03', r.people[0].fusion_check);
 
 // MCP
 const call = (m, params, id = 1) => rpc(c, K, { jsonrpc: '2.0', id, method: m, params });
@@ -172,7 +193,7 @@ r = await call('initialize', { protocolVersion: '1999-01-01' });
 ok('...an unknown version gets the newest we know', r.result.protocolVersion === PROTOCOLS[0]);
 ok('...a notification gets no answer', (await rpc(c, K, { jsonrpc: '2.0', method: 'notifications/initialized' })) === null);
 r = await call('tools/list');
-ok('tools/list: the 11 tools, each with a schema', r.result.tools.length === 11 && r.result.tools.every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object'));
+ok('tools/list: the 12 tools, each with a schema', r.result.tools.length === 12 && r.result.tools.every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object'));
 ok('...the read-only ones say so', ['tonight', 'starting', 'find_person', 'person'].every((n) => r.result.tools.find((t) => t.name === n).annotations.readOnlyHint === true));
 r = await call('tools/call', { name: 'find_person', arguments: { search: 'linda' } });
 ok('tools/call: text and structured answer', !r.result.isError && r.result.structuredContent.people[0].id === 'C1' && JSON.parse(r.result.content[0].text).found === 1);
