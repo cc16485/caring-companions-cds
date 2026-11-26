@@ -903,7 +903,7 @@ export function createMatch(deps) {
         availability: c.profile.availability || {}, hours_min: c.profile.hours_min, hours_max: c.profile.hours_max,
         availability_confirmed_text: R.agoText(c.profile.availability_confirmed_at, now),
         accepting_intros: c.profile.accepting_intros, paused: c.profile.paused, withdrawn: !!c.profile.withdrawn_at,
-        consents: { profile: R.hasConsent(c.consents, 'profile'), video: R.hasConsent(c.consents, 'video'), contact: R.hasConsent(c.consents, 'contact') },
+        consents: { profile: R.hasConsent(c.consents, 'profile'), video: R.hasConsent(c.consents, 'video'), contact: R.hasConsent(c.consents, 'contact'), public: R.hasConsent(c.consents, 'public') },
         contact_preview: contactFor(c.pool),
         consent_wording: CONSENT_WORDING,
         requirements: {

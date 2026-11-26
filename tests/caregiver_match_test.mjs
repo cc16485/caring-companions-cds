@@ -121,6 +121,17 @@ ok(cp.caregiver.contact === null && (await H('caregiver', 'home', { link: tL }))
 ok(/only if I agree below/.test((await import(ROOT + '/supabase/functions/_shared/match/messages.js')).CONSENT_WORDING.profile.text), 'listing consent no longer promises the phone is never shown');
 await db.query('update attendant_pool set phone=$2, email=$3 where id=$1', [seeded.ids.teresa, tOrig.phone, tOrig.email]);
 
+// ---------- the public-page yes (2026-11-26) ----------
+await pg.exec(strip(readFileSync(ROOT + '/public_profile_consent.sql', 'utf8'))); await pg.exec(strip(readFileSync(ROOT + '/public_profile_consent.sql', 'utf8')));
+const pw = (await import(ROOT + '/supabase/functions/_shared/match/messages.js')).CONSENT_WORDING.public;
+ok(pw && /public findcdscaregivers\.com page/.test(pw.text) && /never shown/.test(pw.text) && /at any time/.test(pw.text) && !/—/.test(pw.text), 'public wording: what shows, what never shows, can stop any time, no em dash');
+ok((await H('caregiver', 'home', { link: tL })).consents.public === false, 'public: off until the caregiver says yes');
+await H('caregiver', 'giveConsent', { link: tL, kind: 'public' });
+ok((await H('caregiver', 'home', { link: tL })).consents.public === true, 'public: yes is saved');
+ok((await db.query(`select wording_version from cds_consents where pool_id=$1 and kind='public' and withdrawn_at is null`, [seeded.ids.teresa])).rows[0].wording_version === 'public-2026-11-26', 'public: the exact wording version is kept');
+await H('caregiver', 'withdrawConsent', { link: tL, kind: 'public' });
+ok((await H('caregiver', 'home', { link: tL })).consents.public === false, 'public: can stop any time');
+
 
 // ---------- introduction ----------
 await H('family', 'requestIntro', { session: sess, pool_id: seeded.ids.jordan, how: 'video', preferred_times: 'Saturdays' });
