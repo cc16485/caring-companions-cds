@@ -4,6 +4,7 @@ import postgres from 'npm:postgres@3.4.4';
 import { createLeadAlerts } from './lead-alerts.js';
 import { createLeadGhl, checkBody } from './lead-ghl.js';
 import { createLeadForms } from './lead-forms.js';
+import { createStartAlert } from './start-alert.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const GHL = 'https://services.leadconnectorhq.com';
@@ -19,11 +20,8 @@ async function ghl(path: string, body: unknown) {
   return j;
 }
 
-export const jobs = createLeadAlerts({
-  // Same fix as cds-match: keep JSON parameters exactly as sent.
-  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
-  // Only reached when the job's live setting is true (both start false).
-  async send({ channel, to, subject, text, html }: { channel: string; to: string; subject?: string; text: string; html?: string }) {
+// One office email or text through the CDS sub-account. Only reached when a job's live setting is true.
+export async function officeSend({ channel, to, subject, text, html }: { channel: string; to: string; subject?: string; text: string; html?: string }) {
     const locationId = env('CDS_GHL_LOCATION_ID');
     if (!env('CDS_GHL_TOKEN') || locationId !== CDS_LOCATION) throw new Error('GoHighLevel is not set to the CDS sub-account on the server');
     const c = await ghl('/contacts/upsert', { locationId, ...(channel === 'sms' ? { phone: to } : { email: to }), firstName: 'Caring Companions' });
@@ -32,7 +30,18 @@ export const jobs = createLeadAlerts({
     await ghl('/conversations/messages', channel === 'sms'
       ? { type: 'SMS', contactId, message: text }
       : { type: 'Email', contactId, subject, html: html || text.replace(/\n/g, '<br>') });
-  },
+}
+
+export const jobs = createLeadAlerts({
+  // Same fix as cds-match: keep JSON parameters exactly as sent.
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
+  send: officeSend,
+});
+
+// The start-date alert (2026-11-26): Katlin and Samantha hear when the state's start date goes in (start-alert.js).
+export const startAlert = createStartAlert({
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
+  send: officeSend,
 });
 
 // Website leads into GoHighLevel (2026-10-20): read-only search; create sends ONLY the four
