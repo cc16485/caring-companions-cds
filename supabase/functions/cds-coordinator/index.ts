@@ -15,6 +15,8 @@ import { createChat } from '../_shared/office/coordinator-chat.js';
 import { createJobs } from '../_shared/office/coordinator-jobs.js';
 import { createPaper } from '../_shared/office/coordinator-paper.js';
 import { createFax } from '../_shared/office/fax.js';
+// 2026-11-26: the state's calls on the CDS line (start dates); the start-date alert hears them (state-calls.js)
+import { createStateCalls } from '../_shared/office/state-calls.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const ORIGINS = ['https://hub.caringcds.com'];
@@ -82,6 +84,7 @@ const faxer = createFax({ db: faxDb, store: null as never, token: () => crypto.r
 const paper = createPaper({ db: db2, ai, model: COORD_MODEL,
   faxQueue: async (consumerId: string, formKey: string, _by: string) => { await faxer.hub('cds-coordinator', { action: 'queue', consumerId, formKey }); },
   download: async (path: string) => { const { data, error } = await admin.storage.from('ein-proof').download(path); if (error || !data) throw new Error('fax file not found'); return new Uint8Array(await data.arrayBuffer()); } });
+const stateCalls = createStateCalls({ db: db2, ai, model: COORD_MODEL });
 const hands = createHands({ db: db2, ai, send, model: COORD_MODEL, sendPacket: jobs.sendPacket, sendFax: paper.sendFax });
 const chat = createChat({ db: db2, ai, send });   // texting new website leads (2026-11-17), every 2 minutes, body {chat: true}
 async function settingsNow() { const r = await sql`select value from cds_match_settings where key = 'coordinator'`; return (r[0]?.value || {}) as Record<string, unknown>; }
@@ -125,6 +128,7 @@ Deno.serve(async (req) => {
       if (body?.backfill !== true) {
         try { (more as Record<string, unknown>).faxes = await paper.faxes(); } catch (e) { (more as Record<string, unknown>).faxes = { error: String((e as Error)?.message || e).slice(0, 160) }; }
         try { (more as Record<string, unknown>).mail = await paper.mail(); } catch (e) { (more as Record<string, unknown>).mail = { error: String((e as Error)?.message || e).slice(0, 160) }; }
+        try { (more as Record<string, unknown>).state_calls = await stateCalls.run(); } catch (e) { (more as Record<string, unknown>).state_calls = { error: String((e as Error)?.message || e).slice(0, 160) }; }
       }
       const mail = body?.backfill === true ? {} : await hands.dailyEmail(set);
       return json({ ...heard, texts: did, ...more, ...mail });

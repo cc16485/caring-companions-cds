@@ -46,9 +46,11 @@ export function words(ch) {
     ch.attendant ? 'Make sure ' + ch.attendant + ' has the packet done and the background checks back' : 'Make sure the attendant is chosen, the packet is done and the background checks are back',
     'Clock-in call before the first shift',
   ];
-  const text = 'CDS START DATE: ' + shortName(ch.name) + ' starts ' + verb + '. The state set it. Next: WellSky authorization, profile and tasks. ' + HUB.replace('https://', '');
+  const heard = !!ch.heard;
+  const text = 'CDS START DATE: ' + shortName(ch.name) + ' starts ' + (heard ? when : verb) + '. ' + (heard ? 'The state called the CDS line. Check it and press Use it on Starting. ' : 'The state set it. ') + 'Next: WellSky authorization, profile and tasks. ' + HUB.replace('https://', '');
   const body = [
-    'The state gave a start date for ' + ch.name + ': ' + verb + '.',
+    heard ? 'The state called the CDS line with a start date for ' + ch.name + ': ' + when + '.' + (ch.was && ch.was !== ch.date ? ' The profile says ' + longDay(ch.was) + ' now.' : '') : 'The state gave a start date for ' + ch.name + ': ' + verb + '.',
+    heard ? 'The Coordinator heard it on the call' + (ch.caller ? ' with ' + ch.caller : '') + '. It is not on the profile yet: open their Starting profile, check the call, and press Use it.' + (ch.summary ? '\nWhat was said: ' + ch.summary : '') : '',
     [ch.by ? 'Put in the hub by ' + ch.by + '.' : '', ch.county ? 'County: ' + ch.county + '.' : '', ch.attendant ? 'Attendant: ' + ch.attendant + '.' : ''].filter(Boolean).join('\n'),
     '',
     'What is next:',
@@ -58,12 +60,13 @@ export function words(ch) {
   ].join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '');
   const html = '<div style="font-family:Arial,sans-serif;font-size:15px;color:#1f2a37">'
     + '<div style="background:#9C6410;color:#fff;border-radius:10px;padding:14px 16px;font-size:18px;font-weight:bold">Start date from the state: ' + esc(ch.name) + '</div>'
-    + '<p style="font-size:17px"><b>' + esc(verb.charAt(0).toUpperCase() + verb.slice(1)) + '</b></p>'
+    + '<p style="font-size:17px"><b>' + esc(heard ? 'Starts ' + when : verb.charAt(0).toUpperCase() + verb.slice(1)) + '</b></p>'
+    + (heard ? '<p style="background:#FEF3C7;border-radius:8px;padding:10px 12px">The state called the CDS line' + (ch.caller ? ' (' + esc(ch.caller) + ')' : '') + ' and the Coordinator heard this date. <b>It is not on the profile yet.</b> Open the Starting profile, check the call, and press <b>Use it</b>.' + (ch.summary ? '<br><br>What was said: ' + esc(ch.summary) : '') + '</p>' : '')
     + (ch.by ? '<p>Put in the hub by ' + esc(ch.by) + '.</p>' : '')
     + (ch.county || ch.attendant ? '<p>' + [ch.county ? 'County: ' + esc(ch.county) : '', ch.attendant ? 'Attendant: ' + esc(ch.attendant) : ''].filter(Boolean).join('<br>') + '</p>' : '')
     + '<p><b>What is next</b></p><ul>' + next.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>'
     + '<p><a href="' + HUB + '" style="background:#1F7A8C;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:bold">Open the Starting page</a></p></div>';
-  const item = 'START DATE: ' + ch.name + ' starts ' + verb + '. WellSky: authorization, profile and tasks.';
+  const item = 'START DATE: ' + ch.name + ' starts ' + (heard ? when + ' (the state called; press Use it on Starting)' : verb) + '. WellSky: authorization, profile and tasks.';
   return { subject, text, body, html, item, next };
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -100,6 +103,17 @@ export function createStartAlert(deps) {
       await save(cfg);
       return { ok: true, seeded: Object.keys(cfg.seen).length };
     }
+    // 2026-11-26: a start date the Coordinator heard on a call from the state (state-calls.js), not on the profile yet
+    const alerted = new Set(cfg.items_alerted || []);
+    const heardRows = await q(`select id, person_kind, person_id, person_name, data, source from cds_coord_items
+      where kind = 'start_date' and data->>'saidBy' = 'state' and status = 'suggested' and created_at >= $1::timestamptz order by id`, [cfg.seeded]);
+    for (const it of heardRows) {
+      if (alerted.has(String(it.id)) || !isDay(it.data && it.data.date)) continue;
+      const c = it.person_kind === 'consumer' ? consumers.find((x) => String(x.id) === String(it.person_id)) : null;
+      found.push({ id: String(it.person_id), name: it.person_name || '', date: it.data.date, was: (c && c.cdsStartDate) || '', heard: true, itemId: String(it.id),
+        caller: String((it.source && it.source.who) || '').replace(/^The state \(|\)$/g, ''), summary: (it.source && it.source.summary) || '', kind: it.person_kind,
+        county: (c && c.county) || '', attendant: (c && c.starting && c.starting.attendantName) || '', by: '' });
+    }
     const results = [];
     for (const ch of found) {
       const w = words(ch);
@@ -121,7 +135,8 @@ export function createStartAlert(deps) {
           on conflict (id) do update set data = excluded.data, updated_at = now()`,
         ['i:start-' + String(ch.id).replace(/[^a-z0-9-]/gi, '').slice(0, 30) + '-' + ch.date, JSON.stringify({ t: w.item.slice(0, 160), date: today, every: 'once', time: '', cat: 'cds', note: w.next.join('. ') + '.' })]);
       }
-      cfg.seen[ch.id] = ch.date;
+      if (ch.heard) { alerted.add(ch.itemId); if (ch.kind === 'consumer') cfg.seen[ch.id] = ch.date; }   // pressing Use it later is not a second alert
+      else cfg.seen[ch.id] = ch.date;
     }
     // night texts wait for 7 AM; a date changed again since then sends only the newest
     if ((cfg.pending || []).length && textHours(t, cfg.text_from, cfg.text_until)) {
@@ -132,6 +147,7 @@ export function createStartAlert(deps) {
       }
       cfg.pending = keep;
     }
+    cfg.items_alerted = [...alerted].slice(-300);
     cfg.last_run = new Date(t).toISOString();
     if (found.length || results.length) cfg.last_alert = { at: cfg.last_run, people: found.map((f) => f.name), results: results.map((r) => r.channel + ' ' + r.toName + ' ' + r.status) };
     await save(cfg);
