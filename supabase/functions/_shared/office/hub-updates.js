@@ -9,19 +9,23 @@ export const STEPS = {
   wellsky_tasks: { field: 'tasksWellSky', where: 'firstShiftPrep', words: 'WellSky: tasks are in' },
   consumer_told_clock_in: { field: 'toldClockIn', where: 'firstShiftPrep', words: 'Told the consumer how to clock in' },
   attendant_clock_in: { field: 'attClockIn', where: 'starting', words: 'The attendant can clock in (WellSky app set up)' },
+  // 2026-11-26 (her "Yes, add it"): the day the referral or PCCP went into Fusion, which starts the Fusion checks
+  referral_sent: { field: 'referralSent', where: 'starting', words: 'Referral sent to DSDS', date: true },
+  transfer_entered: { field: 'transferEntered', where: 'starting', words: 'Transfer entered in the state portal', date: true },
 };
 export class HubUpdateError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 
 export function createHubUpdates({ db }) {
   const q = async (t, p = []) => (await db.query(t, p)).rows;
-  async function add(email, consumerId, step, name) {
+  async function add(email, consumerId, step, name, value) {
     if (!STEPS[step]) throw new HubUpdateError('Unknown step. Use one of: ' + Object.keys(STEPS).join(', '));
-    const r = await q(`insert into cds_hub_updates (target_kind, target_id, target_name, step, by_email)
-      values ('consumer', $1, $2, $3, $4) returning id, at`, [String(consumerId), String(name || '').slice(0, 120), step, String(email || '').toLowerCase()]);
+    if (STEPS[step].date && !/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) throw new HubUpdateError('Please give the date (YYYY-MM-DD).');
+    const r = await q(`insert into cds_hub_updates (target_kind, target_id, target_name, step, by_email, value)
+      values ('consumer', $1, $2, $3, $4, $5) returning id, at`, [String(consumerId), String(name || '').slice(0, 120), step, String(email || '').toLowerCase(), STEPS[step].date ? String(value) : null]);
     return r[0];
   }
   async function pending() {
-    return q(`select id, target_id, target_name, step, by_email, at from cds_hub_updates where applied_at is null order by id limit 200`);
+    return q(`select id, target_id, target_name, step, by_email, at, value from cds_hub_updates where applied_at is null order by id limit 200`);
   }
   async function applied(email, ids) {
     const list = (Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 200);

@@ -50,11 +50,14 @@ export const TOOLS = [
     inputSchema: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', description: 'One consumer id; leave out for everyone' } } }, annotations: { readOnlyHint: true } },
   { name: 'mark_step', title: 'Mark a Starting step done', description: 'After Katlin finishes a step, mark it done on the consumer\'s Starting profile: wellsky_authorization, wellsky_tasks, consumer_told_clock_in or attendant_clock_in. Only when she says it is really done. It shows on the profile the next time the CDS hub is opened.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['id', 'step'], properties: { id: { type: 'string', description: 'The consumer id from starting' },
-      step: { type: 'string', enum: Object.keys(STEPS) } } } },
+      step: { type: 'string', enum: Object.keys(STEPS).filter((k) => !STEPS[k].date) } } } },
   { name: 'fusion_checked', title: 'Record a Fusion check', description: 'After Katlin opens a consumer\'s Fusion profile and reads the newest notes and documents: record what she found. state_cant_reach needs the close-out date the state gave (close_by) and, if given, the state\'s phone number: it puts a call to the consumer at the top of her to-do and tells Samantha. Do not include the DCN.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['id', 'result'], properties: { id: { type: 'string', description: 'The consumer id from starting' },
       result: { type: 'string', enum: Object.keys(FUSION_RESULTS) }, close_by: { type: 'string', description: 'YYYY-MM-DD the state will close the referral' },
       assessment: { type: 'string', description: 'YYYY-MM-DD the assessment the state set' }, state_phone: { type: 'string', maxLength: 20 }, note: { type: 'string', maxLength: 500 } } } },
+  { name: 'referral_in', title: 'The referral or PCCP is in Fusion', description: 'After Katlin puts a consumer\'s referral (new to CDS) or PCCP / transfer into Fusion: record the day on their Starting profile. This starts the Fusion checks (day 7, then every 3 days). Only when she says it is really in.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', description: 'The consumer id from starting' },
+      date: { type: 'string', description: 'YYYY-MM-DD Missouri date it went in; leave out for today' } } } },
   { name: 'find_person', title: 'Find a person', description: 'Find leads and consumers by name or the last digits of a phone number. Read only.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['search'], properties: { search: { type: 'string', minLength: 2, maxLength: 80 } } }, annotations: { readOnlyHint: true } },
   { name: 'person', title: 'One person in full', description: 'Everything the hub knows about one lead or consumer before a call: their record, what they answered by text, what was heard on calls and texts, open promises and questions, and the date of birth and DCN for the Medicaid check in eMOMED. Read only.',
@@ -207,7 +210,10 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
     const list = all.consumers.filter((c) => c && String(c.status || '').toLowerCase() === 'starting' && !/^(example|test)\b/i.test(String(c.name || '').trim()))
       .filter((c) => !args.id || String(c.id) === String(args.id));
     if (args.id && !list.length) throw new ToolError('No one on the Starting page has that id.', 404);
-    const out = list.map((c) => {
+    const out = list.map((c0) => {
+      // a referral or PCCP date Claude recorded counts at once, before the hub page applies it
+      const dates = pend.filter((u) => String(u.target_id) === String(c0.id) && STEPS[u.step] && STEPS[u.step].date && u.value);
+      const c = dates.length ? Object.assign({}, c0, { starting: Object.assign({}, c0.starting, Object.fromEntries(dates.map((u) => [STEPS[u.step].field, u.value]))) }) : c0;
       const lead = leadFor(c, all.pipeline), P = packetOf(c, packets, lead);
       const ar = TR().attendantFor(c, att.rows);
       const rost = (Array.isArray(roster) ? roster : []).filter((r) => r && r.status !== 'inactive' && String(r.consumer || '').split(',').map(normN).includes(normN(c.name)))[0] || null;
@@ -248,7 +254,20 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
     try { return Object.assign({ consumer: r.name }, await fusion.record(a.me, r, args, nameOf(a.me))); }
     catch (e) { if (e instanceof ToolError) throw e; if (/^(Pick what|What date)/.test(String(e && e.message))) throw new ToolError(e.message); throw e; }
   }
+  async function referralIn(a, args) {
+    const all = await people(), r = recordOf(all, 'consumer', args.id);
+    if (String(r.status || '').toLowerCase() !== 'starting') throw new ToolError(r.name + ' is not on the Starting page.');
+    const today = moDay(now()), d = args.date ? String(args.date) : today;
+    if (!isDay(d)) throw new ToolError('Please give the date as YYYY-MM-DD.');
+    if (d > today) throw new ToolError('That date is in the future. Give the day it went into Fusion.');
+    if (d < new Date(Date.parse(today + 'T12:00:00Z') - 90 * 864e5).toISOString().slice(0, 10)) throw new ToolError('That date is more than 90 days ago. Ask Samantha.');
+    const move = (r.starting || {}).kind === 'move', step = move ? 'transfer_entered' : 'referral_sent';
+    const u = await hubUpdates.add(a.me, r.id, step, r.name, d);
+    const first = new Date(Date.parse(d + 'T12:00:00Z') + 7 * 864e5).toISOString().slice(0, 10);
+    return { saved: true, consumer: r.name, what: move ? 'PCCP / transfer entered' : 'Referral sent', date: d, first_fusion_check: first, at: u && u.at, shows_in_hub: 'on the Starting profile the next time the CDS hub is opened' };
+  }
   async function markStep(a, args) {
+    if (STEPS[args.step] && STEPS[args.step].date) throw new ToolError('Use referral_in for the referral or PCCP date.');
     const all = await people(), r = recordOf(all, 'consumer', args.id);
     if (String(r.status || '').toLowerCase() !== 'starting') throw new ToolError(r.name + ' is not on the Starting page.');
     try { const u = await hubUpdates.add(a.me, r.id, args.step, r.name); return { marked: true, consumer: r.name, step: STEPS[args.step].words, at: u && u.at, shows_in_hub: 'the next time the CDS hub is opened' }; }
@@ -344,6 +363,7 @@ export function createConnector({ db, now = () => Date.now(), matchApi = null })
         case 'tonight': return await tonight(a, args, ctx);
         case 'starting': return await startingList(a, args, ctx);
         case 'mark_step': return await markStep(a, args);
+        case 'referral_in': return await referralIn(a, args);
         case 'fusion_checked': return await fusionChecked(a, args);
         case 'find_person': return await findPerson(a, args);
         case 'person': return await person(a, args);

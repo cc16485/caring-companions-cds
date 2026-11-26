@@ -750,7 +750,8 @@
   // (cds_hub_updates); the page applies them here, the same way its own buttons do, with who did it, then marks them
   // applied. Once per page load, and again at most every 5 minutes.
   const PENDING_FIELDS = { wellsky_authorization: ['firstShiftPrep', 'authWellSky', 'WellSky: authorization is in'], wellsky_tasks: ['firstShiftPrep', 'tasksWellSky', 'WellSky: tasks are in'],
-    consumer_told_clock_in: ['firstShiftPrep', 'toldClockIn', 'Told the consumer how to clock in'], attendant_clock_in: ['starting', 'attClockIn', 'The attendant can clock in (WellSky app set up)'] };
+    consumer_told_clock_in: ['firstShiftPrep', 'toldClockIn', 'Told the consumer how to clock in'], attendant_clock_in: ['starting', 'attClockIn', 'The attendant can clock in (WellSky app set up)'],
+    referral_sent: ['starting', 'referralSent', 'Referral sent to DSDS', true], transfer_entered: ['starting', 'transferEntered', 'Transfer entered in the state portal', true] };
   let _pendAt = 0, _pendBusy = false;
   async function applyPending(force) {
     if (_pendBusy || (!force && Date.now() - _pendAt < 5 * 60e3)) return 0;
@@ -771,7 +772,9 @@
         const f = PENDING_FIELDS[u.step]; if (!f) return;
         const c = getData('consumers').find(x => String(x.id) === String(u.target_id));
         if (!c) { done.push(u.id); return; }   // gone from the list: nothing to put it on
-        if (!(c[f[0]] || {})[f[1]]) edit('consumer', c.id, x => { x[f[0]] = Object.assign({}, x[f[0]], { [f[1]]: { at: u.at, by: who(u.by_email) } }); logTo(x, f[2] + ' (' + who(u.by_email) + ', with Claude).'); });
+        if (f[3]) {   // a date (referral sent, transfer entered): set it unless the same date is already there
+          if (/^\d{4}-\d{2}-\d{2}$/.test(String(u.value || '')) && (c[f[0]] || {})[f[1]] !== u.value) edit('consumer', c.id, x => { const was = (x[f[0]] || {})[f[1]] || ''; x[f[0]] = Object.assign({}, x[f[0]], { [f[1]]: u.value }); logTo(x, f[2] + ': ' + day(u.value) + (was ? ' (was ' + day(was) + ')' : '') + ' (' + who(u.by_email) + ', with Claude).'); });
+        } else if (!(c[f[0]] || {})[f[1]]) edit('consumer', c.id, x => { x[f[0]] = Object.assign({}, x[f[0]], { [f[1]]: { at: u.at, by: who(u.by_email) } }); logTo(x, f[2] + ' (' + who(u.by_email) + ', with Claude).'); });
         done.push(u.id);
       });
       if (done.length) await call({ action: 'hub_applied', ids: done });
