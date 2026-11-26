@@ -28,7 +28,7 @@
 <script src="supabase/functions/_shared/office/cds-rules.js?v=43"></script>
 <script src="supabase/functions/_shared/office/starting-rules.js?v=9"></script>
 <script src="supabase/functions/_shared/office/start-tracker.js?v=3"></script><!-- 2026-11-17 the start tracker (shared with the CDS Coordinator) -->
-<script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><script src="my-week.js?v=20261117n"></script><script src="annual/annual-report.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
+<script src="marketing/marketing.js?v=16"></script><script src="owners/owners.js?v=1"></script><script src="my-week.js?v=20261117n"></script><script src="todo/todo.js?v=1"></script><!-- 2026-11-26 To-do lists (Katlin first) --><script src="annual/annual-report.js?v=1"></script><!-- 2026-11-09 Owners tab: the monthly content scorecard --><!-- 2026-11-05 Marketing tab; v2 11-08 Weekly Reels; v3-v6 11-08/09 YouTube long videos -->
 <script src="starting/call-answers.js?v=1"></script><!-- 2026-11-05 answers from recorded calls (rides on the call_notes switch) --><!-- 2026-11-04 Starting profile rules (switch starting) -->
 <script src="leads-table.js?v=8"></script><!-- 2026-11-03 Leads as one table (switch leadsTable) -->
 <script src="followups-table.js?v=1"></script><!-- 2026-11-05 Follow-ups as one table (switch followupsTable) -->
@@ -1034,6 +1034,8 @@ table.fut-one td, table.fut-one .lt-n { position:static; box-shadow:none !import
      tab in Today, with a sub tab for each part of the job. Hash #howto (and #howto-consumer and so on). -->
 <!-- 2026-11-17 My Week: Samantha's weekly schedule with Claude (my-week.js), only she sees the tab -->
 <div id="page-myweek" class="page"><div id="mwWrap"></div></div>
+<!-- 2026-11-26 To-do (her ask: "Katlins to-do needs to be in the Caring Companions CDS Subaccount"): todo/todo.js -->
+<div id="page-todo" class="page"><div id="tdWrap"></div></div>
 <div id="page-howto" class="page">
   <div class="card" style="margin-bottom:16px">
     <div class="section-title" style="margin-bottom:4px">How-to for the CDS coordinator</div>
@@ -5228,6 +5230,7 @@ function _afterLoad(user) {
   const emailEl = document.getElementById('header_user');
   if (emailEl) emailEl.textContent = user.email;
   initApp();    // runs the original DOMContentLoaded body
+  try { if (window.TD) TD.boot(); } catch (e) { /* the to-do tab shows once its server answers */ }
 }
 
 // Real-time sync: if another user saves data, refresh current view
@@ -5329,7 +5332,10 @@ const SECTIONS = [
       { page: 'howto',     label: 'How-to' },
       // My Week (her "Yes, build it" 2026-11-17): Samantha's own weekly schedule with Claude, only she sees it.
       // my-week.js is the same file as in the Caring Companions hub, so the two tabs match.
-      { page: 'myweek',    label: 'My Week', show: () => !!(window.MW && MW.allowed()) } ] },
+      { page: 'myweek',    label: 'My Week', show: () => !!(window.MW && MW.allowed()) },
+      // To-do (her ask 2026-11-26: "Katlins to-do needs to be in the Caring Companions CDS Subaccount"): each office
+      // person's list (todo/todo.js, server cds-todo). Katlin sees "My to-do"; the owners see "Katlin's to-do".
+      { page: 'todo',      get label() { return typeof window !== 'undefined' && window.TD ? window.TD.label() : 'To-do'; }, show: () => !!(typeof window !== 'undefined' && window.TD && window.TD.shown()) } ] },
   { id: 'leads',      label: 'Leads',       tabs: [] },
   // Starting (her ask 2026-11-05): its own tab and GoHighLevel link. Shown once the Starting switch is on
   // (or anyone is Starting); #starting always opens it.
@@ -5508,6 +5514,7 @@ function showPage(id) {
   if (id === 'dashboard' || id === 'numbers' || id === 'goals') updateDashboard();
   if (id === 'howto') showHowTo();
   if (id === 'myweek' && window.MW) MW.render('mwWrap');
+  if (id === 'todo' && window.TD) TD.render('tdWrap');
   if (id === 'automations') {
     renderAutomations();
     const u = document.getElementById('sw_user');
