@@ -438,6 +438,48 @@ export function createMatch(deps) {
     return { live: true, roster: roster.length, given, ended, no_contact: noContact, invited, quarterly };
   }
 
+  // ---------- one-time "photo upload is fixed" text (2026-11-26) ----------
+  // Once setting photo_fixed_send.live is true and start_at has passed, each 15-minute run texts
+  // the next group (9am to 6pm Central, Monday to Saturday): caregivers on the Hub's Caregivers
+  // list with a phone, no photo yet, profile not sent in or approved, not withdrawn. One text per
+  // phone number (duplicate sign-ups share it), never twice. Each gets a fresh private link.
+  async function photoFixedSend(at) {
+    const cfg = await setting('photo_fixed_send', { live: false });
+    if (!cfg || cfg.live !== true || !cfg.start_at) return { live: false };
+    const now = deps.mode === 'practice' && at ? at : await nowIso();
+    if (new Date(now) < new Date(cfg.start_at)) return { live: true, waiting: true, sent: 0 };
+    const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hourCycle: 'h23' }).format(new Date(now)));
+    const day = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short' }).format(new Date(now));
+    if (hour < 9 || hour >= 18 || day === 'Sun') return { live: true, quiet: true, sent: 0 };
+    const size = Math.max(1, Math.min(100, Number(cfg.batch_size) || 40));
+    const rows = await photoFixedDue(size);
+    let sent = 0;
+    for (const p of rows) {
+      await ensureProfile(p.id);
+      const link = await newCaregiverLink(p.id, 'photo-fixed');
+      const m = await message({ template: 'cg_photo_fixed', channel: 'sms', audience: 'caregiver', pool_id: p.id, to: p.phone,
+        vars: { first: p.first_name, link }, by: 'photo-fixed', automatic: true });
+      if (m.status === 'sent' || m.status === 'practice') sent++;
+    }
+    const left = (await photoFixedDue(1000)).length;
+    if (rows.length) await audit('job', 'photo_fixed_send_group', 'cg_photo_fixed', { tried: rows.length, sent, left });
+    return { live: true, tried: rows.length, sent, left };
+  }
+  async function photoFixedDue(limit) {
+    return q(`select * from (
+        select distinct on (regexp_replace(p.phone, '\\D', '', 'g')) p.id, p.first_name, p.phone, regexp_replace(p.phone, '\\D', '', 'g') as digits
+        from attendant_pool p left join cds_cg_profiles g on g.pool_id = p.id
+        where coalesce(p.archived, false) = false
+          and (coalesce(p.source, '') <> 'apply' or exists (select 1 from cds_packets k where k.pool_id = p.id and k.list_choice = 'join'))
+          and length(regexp_replace(coalesce(p.phone, ''), '\\D', '', 'g')) >= 10
+          and g.photo_draft is null and g.photo_approved is null and g.withdrawn_at is null
+          and coalesce(g.review_status, 'draft') not in ('submitted', 'approved')
+        order by regexp_replace(p.phone, '\\D', '', 'g'), p.submitted_at desc) d
+      where not exists (select 1 from cds_outbox o join attendant_pool x on x.id = o.pool_id
+        where o.template = 'cg_photo_fixed' and regexp_replace(x.phone, '\\D', '', 'g') = d.digits)
+      order by d.first_name, d.id limit $1`, [limit]);
+  }
+
   // ---------- the invitation to past caregivers (the "545" send, 2026-11-25) ----------
   // Once setting former_send.live is true and start_at has passed, each 15-minute run sends the
   // next group (batch_size) between 9am and 6pm Central, Monday to Saturday: a text from the CDS
@@ -1737,9 +1779,11 @@ export function createMatch(deps) {
     let pr; try { pr = await profileReminders(); } catch (err) { pr = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
     let cd; try { cd = await consumerDirectorySync(); } catch (err) { cd = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
     let fs; try { fs = await formerSend(); } catch (err) { fs = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
-    return { ...r, enroll: e, profile_reminders: pr, consumer_directory: cd, former_send: fs };
+    let pf; try { pf = await photoFixedSend(); } catch (err) { pf = { ok: false, error: String(err && err.message || err).slice(0, 200) }; }
+    return { ...r, enroll: e, profile_reminders: pr, consumer_directory: cd, former_send: fs, photo_fixed: pf };
   },
   formerSend: ({ at } = {}) => formerSend(at),
+  photoFixedSend: ({ at } = {}) => photoFixedSend(at),
   consumerDirectorySync: ({ at } = {}) => consumerDirectorySync(at),
   profileReminders: ({ at } = {}) => profileReminders(at),
   // The CDS Coordinator sends packets (2026-11-18, her ask) through the very same code as the hub's buttons, as
