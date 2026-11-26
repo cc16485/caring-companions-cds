@@ -49,6 +49,15 @@ export const TEMPLATES = {
     email_subject: 'Families can\'t see your profile yet',
     email: 'Hi {first},\n\nFamilies looking for a caregiver can\'t see your profile until it\'s finished. A photo and a few words about you is most of it:\n\n{link}\n\nStill to do: {todo}.\n\nIf you\'d rather do it over the phone, call us and we\'ll help. If you\'ve changed your mind, that\'s OK too, and we won\'t send more reminders.\n\n' + SIGN_OFF,
   },
+  // One-time note (2026-11-26, her wording "Yes, Friday 9 AM"): the photo button opened only the camera
+  // on phones (fixed in findcdscaregivers#16). Sent once by the photo_fixed_send job to caregivers with
+  // no photo yet. Not a first text, so no opt-out line.
+  cg_photo_fixed: {
+    audience: 'caregiver', label: 'Photo upload fixed (one-time note)',
+    sms: 'Hi {first}, it\'s Caring Companions. Good news: you can now add your profile photo straight from your photo library. Finish your profile here: {link}',
+    email_subject: 'You can now add your photo from your photo library',
+    email: 'Hi {first},\n\nGood news: you can now add your profile photo straight from your photo library. Finish your profile here:\n\n{link}\n\n' + SIGN_OFF,
+  },
   // First text to a past Caring Companions caregiver (the "545" send, 2026-11-25, her wording rounds
   // 11-24/11-25). First text from the CDS line, so it carries the opt-out line (STOP on the first text
   // only). Her PRN rule: say we're reaching out because they worked with us, never "we'd love to have you

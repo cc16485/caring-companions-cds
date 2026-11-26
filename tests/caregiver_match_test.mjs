@@ -723,5 +723,39 @@ await db.query(`update cds_cg_invites set sent_at=null where first_name='Rae'`);
 ok((await FS.formerSend({ at: '2026-11-25 19:00-06' })).quiet === true, 'no sending after 6pm');
 await db.query(`update cds_match_settings set value = value || '{"live": false}'::jsonb where key='former_send'`);
 
+
+// ---------- one-time "photo upload is fixed" text (2026-11-26) ----------
+await pg.exec(strip(readFileSync(ROOT + '/photo_fixed_send.sql', 'utf8'))); await pg.exec(strip(readFileSync(ROOT + '/photo_fixed_send.sql', 'utf8')));
+ok((await db.query(`select value from cds_match_settings where key='photo_fixed_send'`)).rows[0].value.live === false, 'photo text starts switched OFF');
+const pfAdd = async (first, phone, when) => (await db.query(`insert into attendant_pool (agency_id, first_name, last_name, phone, source, submitted_at) values ('caring-companions-cds', $1, 'Pf', $2, 'findcdscaregivers.com', $3) returning id`, [first, phone, when])).rows[0].id;
+const pfNew = await pfAdd('Nora', '(417) 555-0901', '2026-11-25 10:00-06');
+const pfOld = await pfAdd('Nora', '417-555-0901', '2026-09-01 10:00-06');      // the same person signed up twice
+const pfPic = await pfAdd('Pia', '(417) 555-0902', '2026-11-25 10:00-06');
+const pfSub = await pfAdd('Sam', '(417) 555-0903', '2026-11-25 10:00-06');
+const pfGone = await pfAdd('Wes', '(417) 555-0904', '2026-11-25 10:00-06');
+const pfNone = await pfAdd('Noph', '', '2026-11-25 10:00-06');
+for (const id of [pfPic, pfSub, pfGone]) await db.query('insert into cds_cg_profiles (pool_id) values ($1) on conflict do nothing', [id]);
+const pfMedia = (await db.query(`insert into cds_media (pool_id, kind) values ($1, 'photo') returning id`, [pfPic])).rows[0].id;
+await db.query('update cds_cg_profiles set photo_draft=$2 where pool_id=$1', [pfPic, pfMedia]);
+await db.query(`update cds_cg_profiles set review_status='submitted' where pool_id=$1`, [pfSub]);
+await db.query(`update cds_cg_profiles set withdrawn_at=now() where pool_id=$1`, [pfGone]);
+const PF = match.roles.job;
+ok((await PF.photoFixedSend({ at: '2026-11-27 09:00-06' })).live === false, 'photo text: switched off sends nothing');
+await db.query(`update cds_match_settings set value = value || '{"live": true, "start_at": "2026-11-27T09:00:00-06:00"}'::jsonb where key='photo_fixed_send'`);
+ok((await PF.photoFixedSend({ at: '2026-11-27 08:45-06' })).waiting === true, 'photo text: waits for Friday 9am');
+ok((await PF.photoFixedSend({ at: '2026-11-26 14:00-06' })).waiting === true, 'photo text: nothing on Thanksgiving');
+const pfIds = [pfNew, pfOld, pfPic, pfSub, pfGone, pfNone];
+const pfOut = async () => (await db.query(`select * from cds_outbox where template='cg_photo_fixed' and pool_id = any($1::uuid[])`, [pfIds])).rows;
+ok((await pfOut()).length === 0, 'photo text: nothing before the start time');
+const pf1 = await PF.photoFixedSend({ at: '2026-11-27 09:00-06' });
+ok(pf1.live && pf1.tried >= 1 && pf1.left === 0, 'photo text: goes out at 9am Friday: ' + JSON.stringify(pf1));
+const pfo = await pfOut();
+ok(pfo.length === 1 && pfo[0].pool_id === pfNew && pfo[0].channel === 'sms', 'one text for Nora (newest sign-up), none for photo / sent in / withdrawn / no phone');
+ok(/^Hi Nora, it's Caring Companions\. Good news: you can now add your profile photo straight from your photo library\. Finish your profile here: https:\/\/x\.test\/caregiver\/\S+$/.test(pfo[0].body) && !/STOP|—/.test(pfo[0].body), 'photo text: her wording, private link at the end, no opt-out line, no em dash');
+ok((await db.query('select count(*)::int n from cds_cg_profiles where pool_id=$1', [pfNew])).rows[0].n === 1, 'photo text: profile made so the link opens');
+ok((await PF.photoFixedSend({ at: '2026-11-27 09:15-06' })).tried === 0, 'photo text: nobody gets it twice');
+ok((await PF.photoFixedSend({ at: '2026-11-28 19:00-06' })).quiet === true, 'photo text: no sending after 6pm');
+await db.query(`update cds_match_settings set value = value || '{"live": false}'::jsonb where key='photo_fixed_send'`);
+
 console.log(`\n${pass} passed, ${failN} failed`);
 process.exit(failN ? 1 : 0);
