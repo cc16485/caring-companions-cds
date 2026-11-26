@@ -859,7 +859,7 @@
   }
   // A promise it heard, as the tracker sees it (same shape as a typed one).
   const asPromise = i => ({ id: 'co' + i.id, coId: i.id, what: i.data.what, due: i.due ? String(i.due).slice(0, 10) : '', owner: '', done: ['done', 'applied', 'dismissed'].includes(i.status) ? { at: i.decided_at || '', by: (i.decided_by || '').split('@')[0] } : null,
-    from: { kind: i.source && i.source.kind === 'texts' ? 'text' : 'call', at: i.source && i.source.at, line: i.source && i.source.line === 'cc' ? '417-234-8494' : 'CDS line' } });
+    from: { kind: i.source && i.source.kind === 'texts' ? 'text' : 'call', at: i.source && i.source.at, line: i.source && i.source.line === 'cc' ? '417-234-8494' : i.source && i.source.line === 'night' ? (i.source.who || 'Office') + "'s call" : 'CDS line' } });
   function withHeard(c) {
     const heard = coordFor(c).filter(i => i.kind === 'promise').map(asPromise);
     if (!heard.length) return c;
@@ -909,7 +909,7 @@
           btn('Use it', "StartHub.useContact('lead','" + q(_leadHeardId) + "'," + i.id + ')') + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>';
         return '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><b>' + esc(label[i.kind] || i.kind) + ':</b> ' + esc(d.what || d.text || d.name || d.note || d.date || '') +
         (i.due ? ' <span class="lt-sub' + (i.kind === 'promise' && String(i.due).slice(0, 10) < today() ? ' lt-red' : '') + '">' + (i.kind === 'their_word' ? 'check on ' : 'due ') + esc(shortDay(String(i.due).slice(0, 10))) + '</span>' : '') +
-        '<div class="lt-sub">' + esc([i.source && i.source.line === 'cc' ? 'From the Caring Companions line' : i.source && i.source.line === 'fax' ? 'From a state fax' : 'From the CDS line', i.source && i.source.at ? shortDay(String(i.source.at).slice(0, 10)) : ''].join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>' +
+        '<div class="lt-sub">' + esc([i.source && i.source.line === 'cc' ? 'From the Caring Companions line' : i.source && i.source.line === 'fax' ? 'From a state fax' : i.source && i.source.line === 'night' ? 'From ' + (i.source.who || 'the office') + "'s call (Claude)" : 'From the CDS line', i.source && i.source.at ? shortDay(String(i.source.at).slice(0, 10)) : ''].join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>' +
         '<div style="display:flex;gap:6px;margin-top:4px">' + btn('Done', 'StartHub.coordDecide(' + i.id + ",'done',StartHub.mountLeadHeard)", true) + btn('Not right', 'StartHub.coordDecide(' + i.id + ",'dismiss',StartHub.mountLeadHeard)", true) + '</div></div>'; }).join('') + chatBox + msgs + '</div>';
   }
   // ---------------------------------------------------------------- texting a new website lead (2026-11-17, her yes on the mockup)
@@ -979,8 +979,8 @@
   function heardHtml(c) {
     const list = coordFor(c).filter(i => i.kind !== 'promise' && ['open', 'suggested'].includes(i.status));
     const cid = q(c.id);
-    const from = i => !i.source || !i.source.at || i.source.kind === 'lookup' || i.source.kind === 'fax' ? '' : '<div class="lt-sub">' + esc([i.source && i.source.kind === 'texts' ? 'From texts' : 'From a call', i.source && i.source.at ? 'on ' + shortDay(String(i.source.at).slice(0, 10)) : '',
-      i.source && i.source.line === 'cc' ? 'on the Caring Companions line' : 'on the CDS line'].filter(Boolean).join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>';
+    const from = i => !i.source || !i.source.at || i.source.kind === 'lookup' || i.source.kind === 'fax' ? '' : '<div class="lt-sub">' + esc([i.source && i.source.kind === 'texts' ? 'From texts' : i.source && i.source.line === 'night' ? 'From ' + (i.source.who || 'the office') + "'s notes" : 'From a call', i.source && i.source.at ? 'on ' + shortDay(String(i.source.at).slice(0, 10)) : '',
+      i.source && i.source.line === 'cc' ? 'on the Caring Companions line' : i.source && i.source.line === 'night' ? 'after a call (saved with Claude)' : 'on the CDS line'].filter(Boolean).join(' ')) + (i.source && i.source.summary ? '. ' + esc(i.source.summary) : '') + '</div>';
     const row = (i, text, buttons) => '<div style="padding:6px 0;border-top:1px solid var(--gray-200)"><div>' + text + '</div>' + from(i) + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">' + buttons + '</div></div>';
     const done = (i, label) => btn(label || 'Done', "StartHub.coordDecide(" + i.id + ",'done')", true), no = i => btn('Not right', "StartHub.coordDecide(" + i.id + ",'dismiss')", true);
     const rows = list.map(i => {
