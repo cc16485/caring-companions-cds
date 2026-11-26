@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Connect Claude · Caring Companions CDS</title>
+<link rel="icon" href="/cds-icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+<!-- 2026-11-26 (Samantha: "I want the cds hub connector"): the sign-in and Allow page for the CDS Hub connector.
+     Claude sends the person here (Supabase Auth OAuth 2.1 server, authorization path /oauth/consent). They sign in with
+     their CDS hub email and password, read what Claude may do, and press Allow or No thanks. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<style>
+  :root{--navy:#0e3860;--teal:#1F7A8C;--ink:#1f2a37;--muted:#57606a;--line:#e4e1d8;--bg:#f6f5f0;--panel:#fff;--red:#B91C1C;--pale:#EAF4F6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Poppins',-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.5}
+  header{background:var(--navy);color:#fff;padding:18px max(16px,env(safe-area-inset-left,0px))}
+  header b{font-size:19px}
+  main{max-width:520px;margin:28px auto;padding:0 max(16px,env(safe-area-inset-left,0px))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;display:grid;gap:14px}
+  h1{font-size:21px;color:var(--navy);margin:0}
+  p{margin:0}
+  .muted{color:var(--muted);font-size:13.5px}
+  label{display:grid;gap:5px;font-weight:600;font-size:13.5px;color:var(--navy)}
+  input{font:inherit;border:1.5px solid #d0d7de;border-radius:9px;padding:10px 12px}
+  input:focus{outline:2px solid var(--teal);outline-offset:1px}
+  button{font:inherit;font-weight:600;border-radius:10px;padding:11px 16px;border:1.5px solid var(--teal);background:#fff;color:var(--teal);cursor:pointer}
+  button.pri{background:var(--teal);color:#fff}
+  button:disabled{opacity:.6;cursor:default}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row button{flex:1;min-width:140px}
+  ul{margin:0;padding-left:20px;display:grid;gap:4px;font-size:14px}
+  .box{background:var(--pale);border-radius:10px;padding:12px 14px}
+  .never{border:1px dashed var(--line);border-radius:10px;padding:12px 14px}
+  .err{color:var(--red);font-size:14px}
+</style>
+</head>
+<body>
+<header><b>Caring Companions CDS</b></header>
+<main><div class="card" id="box"><p class="muted">Loading…</p></div></main>
+<script>
+(function(){
+  var URL_ = 'https://siivpekcaryeyttszwav.supabase.co', KEY = 'sb_publishable_iDJ00Ve4hw5iw2YtVmiulg__FmjShmO';
+  var box = document.getElementById('box');
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; }); };
+  var id = new URLSearchParams(location.search).get('authorization_id') || '';
+  var sb = window.supabase ? window.supabase.createClient(URL_, KEY) : null;
+  function show(html){ box.innerHTML = html; }
+  function fail(msg){ show('<h1>Something went wrong</h1><p class="err">' + esc(msg) + '</p><p class="muted">Close this page and press Connect in Claude again. If it keeps happening, tell Samantha.</p>'); }
+  if (!sb) { fail('The sign-in tools did not load. Check your internet connection.'); return; }
+  if (!/^[A-Za-z0-9._-]{6,200}$/.test(id)) { fail('This page opens from Claude when you connect the CDS Hub. It was opened without its link.'); return; }
+
+  function signInForm(note){
+    show('<h1>Connect Claude to the CDS Hub</h1>'
+      + '<p>Sign in with your CDS hub email and password.</p>'
+      + (note ? '<p class="err">' + esc(note) + '</p>' : '')
+      + '<form id="f" style="display:grid;gap:12px"><label>Email<input id="em" type="email" autocomplete="username" required></label>'
+      + '<label>Password<input id="pw" type="password" autocomplete="current-password" required></label>'
+      + '<button class="pri" type="submit" id="go">Sign in</button></form>');
+    document.getElementById('f').addEventListener('submit', async function(e){
+      e.preventDefault();
+      var b = document.getElementById('go'); b.disabled = true; b.textContent = 'Signing in…';
+      var r = await sb.auth.signInWithPassword({ email: document.getElementById('em').value.trim(), password: document.getElementById('pw').value });
+      if (r.error) { signInForm(r.error.message === 'Invalid login credentials' ? 'That email and password did not match.' : r.error.message); return; }
+      ask();
+    });
+    setTimeout(function(){ var f = document.getElementById('em'); if (f) f.focus(); }, 30);
+  }
+
+  async function ask(){
+    var s = await sb.auth.getSession();
+    var user = s && s.data && s.data.session && s.data.session.user;
+    if (!user) { signInForm(''); return; }
+    var d = await sb.auth.oauth.getAuthorizationDetails(id);
+    if (d.error) { fail(d.error.message || 'This connection request has expired.'); return; }
+    var det = d.data || {};
+    if (det.redirect_url && !det.authorization_id) { location.assign(det.redirect_url); return; }   // already allowed before
+    var app = (det.client && (det.client.name || det.client.client_name)) || 'Claude';
+    show('<h1>Let ' + esc(app) + ' use the CDS Hub?</h1>'
+      + '<p class="muted">Signed in as <b>' + esc(user.email) + '</b>. <a href="#" id="other">Not you?</a></p>'
+      + '<div class="box"><b>Claude will be able to:</b><ul>'
+      + '<li>Read tonight\'s list, your to-do, and the leads and consumers on it</li>'
+      + '<li>Read what was heard on calls and texts, and a person\'s date of birth and DCN for the Medicaid check</li>'
+      + '<li>Save what happened on your calls and your Medicaid checks</li>'
+      + '<li>Check off and add to your to-do, and send Samantha your end-of-night note</li>'
+      + '<li>Save follow-up texts as drafts for the office to send</li></ul></div>'
+      + '<div class="never"><b>It will never:</b> send a text or email, close or move a lead, change a start date, or touch money or settings.</div>'
+      + '<div class="row"><button class="pri" id="yes" type="button">Allow</button><button id="no" type="button">No thanks</button></div>');
+    document.getElementById('other').addEventListener('click', async function(e){ e.preventDefault(); await sb.auth.signOut(); signInForm(''); });
+    document.getElementById('yes').addEventListener('click', async function(){
+      this.disabled = true; this.textContent = 'Connecting…';
+      var r = await sb.auth.oauth.approveAuthorization(id);
+      if (r.error) { fail(r.error.message || 'Could not connect.'); return; }
+      if (r.data && r.data.redirect_url) location.assign(r.data.redirect_url);
+      else show('<h1>Connected</h1><p>Go back to Claude.</p>');
+    });
+    document.getElementById('no').addEventListener('click', async function(){
+      var r = await sb.auth.oauth.denyAuthorization(id);
+      if (r.data && r.data.redirect_url) location.assign(r.data.redirect_url);
+      else show('<h1>Not connected</h1><p>You can close this page.</p>');
+    });
+  }
+  ask().catch(function(e){ fail((e && e.message) || 'Could not load this request.'); });
+})();
+</script>
+</body>
+</html>
