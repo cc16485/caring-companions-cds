@@ -72,7 +72,7 @@ const dayOf = v => !v ? null : v instanceof Date ? v.toISOString().slice(0, 10) 
 
 // Words for the kinds of people (cards and profiles).
 export const KIND_LABEL = { lead: 'Lead', consumer: 'Consumer', family: 'Family', attendant: 'Attendant', pool: 'Attendant',
-  applicant: 'Applicant', staff: 'Our team', ignore: 'Not for CDS' };
+  applicant: 'Applicant', staff: 'Our team', ignore: 'Not for CDS', state: 'The state' };
 
 // ---------- one GoHighLevel message, made plain ----------
 // Calls: messageType TYPE_CALL (and IVR/custom calls), TYPE_VOICEMAIL. Duration and status sit in

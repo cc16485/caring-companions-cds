@@ -11,12 +11,13 @@ function world(liveSetting = true) {
       { id: 'C2', name: 'Ruth Example', status: 'starting' },
       { id: 'C3', name: 'Joe Madeup', status: 'starting', county: 'Christian', starting: { attendantName: 'Kayla Madeup' } },
       { id: 'C4', name: 'Old Active', status: 'active', cdsStartDate: '2026-10-01' } ],
-    outbox: [], todo: new Map(), cal: new Map(), sent: [], failNext: false };
+    outbox: [], todo: new Map(), cal: new Map(), sent: [], failNext: false, items: [] };
   W.db = { query: async (t, p = []) => {
     const s = t.replace(/\s+/g, ' ').trim();
     if (/^select value from cds_match_settings where key = 'start_alerts'/.test(s)) return { rows: W.settings.start_alerts ? [{ value: JSON.parse(JSON.stringify(W.settings.start_alerts)) }] : [] };
     if (/^update cds_match_settings set value = \$1::jsonb/.test(s)) { W.settings.start_alerts = JSON.parse(p[0]); return { rows: [] }; }
     if (/^select data_value from agency_data/.test(s)) return { rows: [{ data_value: JSON.parse(JSON.stringify(W.consumers)) }] };
+    if (/^select id, person_kind, person_id, person_name, data, source from cds_coord_items/.test(s)) return { rows: W.items.filter((i) => i.kind === 'start_date' && i.data.saidBy === 'state' && i.status === 'suggested' && i.created_at >= p[0]) };
     if (/^insert into cds_outbox/.test(s)) { W.outbox.push({ channel: p[0], to: p[1], body: p[2], status: p[3], error: p[4] }); return { rows: [] }; }
     if (/^insert into cds_todo/.test(s)) { W.todo.set(p[0], JSON.parse(p[1])); return { rows: [] }; }
     if (/^insert into owner_calendar/.test(s)) { W.cal.set(p[0], JSON.parse(p[1])); return { rows: [] }; }
@@ -85,6 +86,26 @@ await C.run(); X.consumers.push({ id: 'C9', name: 'Example Practice', status: 's
 ok('an Example or Test record stays quiet', r.found === 0 && X.sent.length === 0);
 const N = world(); N.settings.start_alerts = null;
 ok('no setting yet: does nothing', (await createStartAlert({ db: N.db, send: N.send, now: () => DAY }).run()).skipped);
+
+// 2026-11-26: a start date heard on a call from the state (state-calls.js)
+{
+  const H = world(); let hc = DAY; const HA = createStartAlert({ db: H.db, send: H.send, now: () => hc });
+  await HA.run();
+  H.items.push({ id: 7, kind: 'start_date', person_kind: 'consumer', person_id: 'C3', person_name: 'Joe Madeup', status: 'suggested', created_at: new Date(DAY + 60e3).toISOString(),
+    data: { date: '2026-12-14', saidBy: 'state' }, source: { who: 'The state (Pam at DSDS)', summary: 'DSDS called with a start date of December 14.' } });
+  hc = DAY + 120e3; const hr = await HA.run();
+  const he = H.sent.find((m) => m.channel === 'email'), ht = H.sent.find((m) => m.channel === 'sms');
+  ok('heard on a state call: emails both and texts Samantha', hr.found === 1 && H.sent.length === 3, hr);
+  ok('...the email says the state called, it is not on the profile yet, press Use it', /The state called the CDS line with a start date for Joe Madeup: Monday, December 14/.test(he.text) && /not on the profile yet/.test(he.text) && /Use it/.test(he.html) && /Pam at DSDS/.test(he.html) && /DSDS called with a start date/.test(he.text), he.text);
+  ok('...the text says to press Use it', /The state called the CDS line\. Check it and press Use it on Starting/.test(ht.text), ht.text);
+  ok('...on Katlin\'s to-do with "press Use it"', [...H.todo.values()].some((x) => /Joe Madeup starts Monday, December 14 \(the state called; press Use it on Starting\)/.test(x.t)));
+  hc += 120e3; ok('...said once', (await HA.run()).found === 0 && H.sent.length === 3);
+  H.consumers[2].cdsStartDate = '2026-12-14'; hc += 120e3;
+  ok('pressing Use it later (the date lands on the profile) is not a second alert', (await HA.run()).found === 0 && H.sent.length === 3);
+  H.items.push({ id: 8, kind: 'start_date', person_kind: 'consumer', person_id: 'C1', person_name: 'Linda Testcase', status: 'suggested', created_at: new Date(DAY - 864e5).toISOString(), data: { date: '2026-12-20', saidBy: 'state' }, source: {} });
+  H.items.push({ id: 9, kind: 'start_date', person_kind: 'consumer', person_id: 'C1', person_name: 'Linda Testcase', status: 'suggested', created_at: new Date(hc).toISOString(), data: { date: '2026-12-20', saidBy: 'family' }, source: {} });
+  hc += 120e3; ok('older than the first look, or said by family: no alert', (await HA.run()).found === 0);
+}
 
 // pure parts
 ok('changes(): only Starting people with a real date that is new or different', changes([{ id: 1, status: 'starting', cdsStartDate: '2026-12-01' }, { id: 2, status: 'starting', cdsStartDate: 'soon' }, { id: 3, status: 'active', cdsStartDate: '2026-12-01' }, { id: 4, status: 'Starting', cdsStartDate: '2026-12-02' }], { 4: '2026-12-02' }).map((x) => x.id).join() === '1');
