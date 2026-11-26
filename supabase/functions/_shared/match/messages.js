@@ -129,6 +129,9 @@ export const CONSENT_WORDING = {
   profile: { version: 'profile-2026-11-25', text: 'I agree that Caring Companions CDS may show my first name, photo, town, the areas I work in, my availability, and the profile I wrote to families invited to its private caregiver directory, so they can ask to meet me. My last name, address and screening details are never shown. My phone and email are shown only if I agree below. I can change or remove my listing at any time.' },
   // Her word 2026-11-25: families reach caregivers directly; we are not the go-between.
   contact: { version: 'contact-2026-11-25', text: 'I agree that Caring Companions CDS may show my mobile phone number and email to families signed in to its private caregiver directory, so they can call, text or email me directly to set up an interview. I can stop sharing them at any time.' },
+  // Public browsing (2026-11-26, her ask): an optional, separate yes to show the profile on the
+  // open findcdscaregivers.com page. Phone, email, full last name and address stay private.
+  public: { version: 'public-2026-11-26', text: 'I agree that Caring Companions CDS may also show my profile on the public findcdscaregivers.com page, where anyone can see it: my first name and last initial, photo, town, the areas I work in, my availability, what I wrote, my intro video if I agreed to show it, and whether my state screening is finished. My full last name, address, phone and email are never shown there. Only families with Caring Companions CDS can reach me. I can stop showing my profile publicly at any time.' },
   video: { version: 'video-2026-10-15', text: 'I agree that Caring Companions CDS may show my intro video to families invited to its private caregiver directory. I can replace or remove it at any time, and it will be taken down when I ask.' },
 };
 
