@@ -5940,7 +5940,7 @@ function addConsumer() {
 
 function renderConsumers() {
   // Starting people whose first shift is in WellSky move to Active first (2026-11-04).
-  if (window.StartHub) StartHub.promoteAll();
+  if (window.StartHub) { StartHub.promoteAll(); StartHub.applyPending(); }
   const consumers = getData('consumers');
   const tbody = document.getElementById('consumerTableBody');
   const now = new Date();
@@ -16519,7 +16519,7 @@ async function _loadDashOig() {
   } catch (e) { console.error('dashboard OIG:', e); }
 }
 function updateDashboard() {
-  if (window.StartHub) StartHub.promoteAll();   // first shift in WellSky: Starting moves to Active (2026-11-04)
+  if (window.StartHub) { StartHub.promoteAll(); StartHub.applyPending(); }   // first shift in WellSky: Starting moves to Active (2026-11-04)
   // keep the morning list in step with everything else the dashboard shows
   try { renderDailyRoutine(); } catch (e) { console.error('daily routine:', e); }
   try { renderCdsGoal(); } catch (e) { console.error('cds goal:', e); }
@@ -18263,7 +18263,7 @@ async function bpDelete(id) {
 
 document.addEventListener('DOMContentLoaded', () => { initApp_boot(); bpFillCountySelects(); });
 </script>
-<script src="starting/hub-starting.js?v=28"></script>
+<script src="starting/hub-starting.js?v=29"></script>
 <script src="starting/tax-help.js?v=1"></script><!-- 2026-11-17 tax copy-and-paste sheets and the EIN letter reader -->
 <script src="starting/hub-call.js?v=7"></script><!-- 2026-11-04 the first call (switch starting) --><!-- 2026-11-04 Starting profile (switch starting) -->
 <!-- Claims for eMOMED (2026-11-16): the authorization reader uses its section reader -->

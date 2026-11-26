@@ -171,5 +171,5 @@ export function createTodo({ db, now = () => Date.now() }) {
     }
     throw new TodoError('Unknown action.');
   }
-  return { handle };
+  return { handle, access };
 }

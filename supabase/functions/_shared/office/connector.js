@@ -14,6 +14,13 @@
 import { AGENCY, watchList, itemsFrom, weekLine } from './coordinator.js';
 import { safeText } from './coordinator-hands.js';
 import { createTodo, moDay, okDate, TodoError } from './todo.js';
+// 2026-11-26 (her ask: "is it also showing her which attendants need to have background checks, who needs entered into
+// Wellsky"): the Starting list, from the same start tracker the hub draws, and marking WellSky and clock-in steps done.
+import './starting-rules.js';
+import './start-tracker.js';
+import { leadFor, packetOf } from './coordinator-jobs.js';
+import { createHubUpdates, STEPS, HubUpdateError } from './hub-updates.js';
+const TR = () => globalThis.CDSTracker;
 
 export class ToolError extends Error { constructor(m, status = 400) { super(m); this.status = status; } }
 const lc = (s) => String(s || '').trim().toLowerCase();
@@ -35,8 +42,13 @@ const LIST = (what) => ({ type: 'array', maxItems: 6, items: { type: 'string', m
 const DATED = (what) => ({ type: 'array', maxItems: 6, items: { type: 'object', additionalProperties: false, required: ['what'], properties: {
   what: { type: 'string', maxLength: 240 }, due: { type: 'string', description: 'YYYY-MM-DD, Missouri date. Leave out if none was said.' } } }, description: what });
 export const TOOLS = [
-  { name: 'tonight', title: 'Tonight', description: 'Start here. Your to-do for tonight (Missouri day), Samantha\'s notes, and the people to call tonight: leads that answered our texts and are ready for a call, and promises or check-ins due today or late. Read only.',
+  { name: 'tonight', title: 'Tonight', description: 'Start here. Your to-do for tonight (Missouri day), Samantha\'s notes, the people to call tonight (leads that answered our texts and are ready for a call, promises or check-ins due today or late), and the Starting summary: which attendants need background checks, who needs WellSky setup, and each Starting consumer\'s next step. Read only.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { day: { type: 'string', description: 'YYYY-MM-DD Missouri date; leave out for tonight' } } }, annotations: { readOnlyHint: true } },
+  { name: 'starting', title: 'Starting: who needs what', description: 'Everyone on the Starting page, soonest start date first: each step (Medicaid, referral or PCCP, packet, tax, attendant background checks, Empeon and I-9, orientation, clock-in call, start date) with what is next, who owns it and when it is due; the attendant and each background check (FCSR, EDL, OIG, fingerprints); and the WellSky setup (authorization, tasks) and clock-in steps. Read only.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: { id: { type: 'string', description: 'One consumer id; leave out for everyone' } } }, annotations: { readOnlyHint: true } },
+  { name: 'mark_step', title: 'Mark a Starting step done', description: 'After Katlin finishes a step, mark it done on the consumer\'s Starting profile: wellsky_authorization, wellsky_tasks, consumer_told_clock_in or attendant_clock_in. Only when she says it is really done. It shows on the profile the next time the CDS hub is opened.',
+    inputSchema: { type: 'object', additionalProperties: false, required: ['id', 'step'], properties: { id: { type: 'string', description: 'The consumer id from starting' },
+      step: { type: 'string', enum: Object.keys(STEPS) } } } },
   { name: 'find_person', title: 'Find a person', description: 'Find leads and consumers by name or the last digits of a phone number. Read only.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['search'], properties: { search: { type: 'string', minLength: 2, maxLength: 80 } } }, annotations: { readOnlyHint: true } },
   { name: 'person', title: 'One person in full', description: 'Everything the hub knows about one lead or consumer before a call: their record, what they answered by text, what was heard on calls and texts, open promises and questions, and the date of birth and DCN for the Medicaid check in eMOMED. Read only.',
@@ -67,10 +79,13 @@ export const TOOLS = [
     inputSchema: { type: 'object', additionalProperties: false, required: ['note'], properties: { note: { type: 'string', minLength: 10, maxLength: 2000 } } } },
 ];
 
-export function createConnector({ db, now = () => Date.now() }) {
+// matchApi(jwt, action, input): the CDS hub's own server (cds-match), called with the person's own sign-in, for the
+// attendants' onboarding table (Step 1 and background checks). Missing = the list says the checks could not be read.
+export function createConnector({ db, now = () => Date.now(), matchApi = null }) {
   const q = async (t, p = []) => (await db.query(t, p)).rows;
   const one = async (t, p = []) => (await q(t, p))[0] || null;
   const todo = createTodo({ db, now });
+  const hubUpdates = createHubUpdates({ db });
   const data = async (key) => { const r = await one('select data_value from agency_data where agency_id = $1 and data_key = $2', [AGENCY, key]); return (r && r.data_value) || []; };
   async function access(email) {
     const me = lc(email);
@@ -94,7 +109,7 @@ export function createConnector({ db, now = () => Date.now() }) {
   const short = (x, kind) => ({ kind, id: String(x.id), name: x.name || '', status: x.status || '', county: x.county || '', phone: last4(x.phone) });
 
   /* ---------- read ---------- */
-  async function tonight(a, args) {
+  async function tonight(a, args, ctx) {
     const day = isDay(args.day) ? args.day : moDay(now());
     const td = await todo.handle(a.me, { action: 'list', day });
     const all = await people();
@@ -123,7 +138,8 @@ export function createConnector({ db, now = () => Date.now() }) {
       notes: td.notes.map((n) => ({ from: nameOf(n.data.by), text: n.data.t + (n.data.how ? ' ' + n.data.how : '') })),
       todo: td.tonight.map((x) => ({ item_id: x.id, title: x.data.t, how: x.data.how || '', done: !!x.done, late: !!x.late })),
       coming_up: td.later.slice(0, 10).map((x) => ({ item_id: x.id, title: x.data.t })),
-      calls };
+      calls,
+      starting: startingSummary(await startingList(a, {}, ctx)) };
   }
   async function findPerson(a, args) {
     const s = norm(args.search), digits = String(args.search || '').replace(/\D/g, '');
@@ -152,6 +168,73 @@ export function createConnector({ db, now = () => Date.now() }) {
       heard_on_calls_and_texts: heard.map((h) => ({ at: String(h.at).slice(0, 10), what: h.summary })),
       open: items.filter((i) => ['open', 'suggested'].includes(i.status)).map((i) => ({ type: i.kind, what: i.data.what || i.data.text || i.data.name || i.data.date || '', due: i.due || '' })),
       rules: 'Talk with the consumer themselves (family may join). Get their OK to send the referral. Never promise hours, eligibility or a start date. Calls to families end at 7 PM Missouri time.' };
+  }
+
+  /* ---------- Starting: who needs what ---------- */
+  const normN = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const CHECK = { fcsr: 'FCSR', edl: 'EDL', oig: 'OIG', fp: 'Fingerprints' };
+  const STEP_NAMES = { medicaid: 'Medicaid', referral: 'Referral or PCCP', packet: 'Consumer packet', tax: 'Tax set up', checks: 'Attendant background checks',
+    empeon: 'Empeon and I-9', orient: 'Consumer orientation', clock: 'Clock-in call', start: 'Start date' };
+  async function attendantsFor(ctx) {
+    if (!matchApi || !ctx || !ctx.jwt) return { rows: [], error: 'The attendants\' background checks could not be read right now.' };
+    try {
+      const r = await matchApi(ctx.jwt, 'packetList', {});
+      return { rows: ((r && r.attendants) || []).map((a) => {
+        const c = (a.table && a.table.cells) || {}, ok = (k) => !c[k] || ['done', 'na'].includes(c[k].s);
+        return { name: a.name, consumer: a.consumer || '', active: !!a.active, step1: !!a.step1_at || !!a.active,
+          checksClear: !!a.active || (['fcsr', 'edl', 'oig', 'fp'].every(ok) && !!c.fcsr), invite: !!a.active || (c.invite || {}).s === 'done',
+          empeon: !!a.active || (c.empeon || {}).s === 'done', i9: !!a.active || (c.i9 || {}).s === 'done', hold: (a.table && a.table.hold) || '', next: a.next || '',
+          checks: Object.fromEntries(Object.keys(CHECK).map((k) => [CHECK[k], !c[k] ? (a.active ? 'done' : 'not started') : c[k].s === 'done' ? 'done' : c[k].s === 'na' ? 'not needed' : c[k].s === 'bad' ? 'NOT CLEAR: ' + (c[k].t || '') : c[k].s === 'wait' ? 'waiting: ' + (c[k].t || '') : c[k].s === 'off' ? 'after Step 1' : 'to do: ' + (c[k].t || '')])) };
+      }) };
+    } catch (e) { return { rows: [], error: 'The attendants\' background checks could not be read: ' + String((e && e.message) || e).slice(0, 120) }; }
+  }
+  async function startingList(a, args, ctx) {
+    const all = await people(), today = moDay(now());
+    const authRec = ((await data('authorizations')) || {}).records || {};
+    const auths = Object.fromEntries(Object.values(authRec).map((x) => [normN(x.consumer), true]));
+    const roster = await data('attendants');
+    const packets = await q(`select lead_id, consumer_id, sent_at, signed_at, office_signed_at, answers->>'first' as first, answers->>'last' as last from cds_enroll_packets`);
+    const att = await attendantsFor(ctx);
+    const pend = await hubUpdates.pending();
+    const list = all.consumers.filter((c) => c && String(c.status || '').toLowerCase() === 'starting' && !/^(example|test)\b/i.test(String(c.name || '').trim()))
+      .filter((c) => !args.id || String(c.id) === String(args.id));
+    if (args.id && !list.length) throw new ToolError('No one on the Starting page has that id.', 404);
+    const out = list.map((c) => {
+      const lead = leadFor(c, all.pipeline), P = packetOf(c, packets, lead);
+      const ar = TR().attendantFor(c, att.rows);
+      const rost = (Array.isArray(roster) ? roster : []).filter((r) => r && r.status !== 'inactive' && String(r.consumer || '').split(',').map(normN).includes(normN(c.name)))[0] || null;
+      const t = TR().tracker(c, { today, auth: !!auths[normN(c.name)], att: ar, roster: rost ? { name: rost.name } : null,
+        packet: P ? { signed: !!P.signed_at, done: !!P.office_signed_at, status: P.sent_at ? 'Sent' : '', sent: P.sent_at } : {} });
+      const mine = pend.filter((u) => String(u.target_id) === String(c.id)).map((u) => u.step);
+      const prep = (c.firstShiftPrep || {}), st = (c.starting || {});
+      const has = (step, v) => !!v || mine.includes(step);
+      const steps = Object.fromEntries(Object.keys(STEP_NAMES).map((k) => { const x = t.cells[k] || {}; return [STEP_NAMES[k], { status: x.state || '', what: x.t || '', owner: x.owner || '', due: x.due || '', late: !!x.late }]; }));
+      return { id: String(c.id), name: c.name || '', start_date: c.cdsStartDate || '', days_to_start: t.cells.start && t.cells.start.days !== undefined ? t.cells.start.days : null,
+        next: t.next ? t.next.t + (t.next.due ? ' (due ' + t.next.due + ')' : '') + (t.next.late ? ' LATE' : '') : '', urgent: !!t.urgent, steps,
+        attendant: t.attName ? { name: t.attName, on_roster: !!rost, step1_signed: ar ? ar.step1 : null, checks_clear: rost ? true : ar ? ar.checksClear : null,
+          background_checks: rost ? 'on the roster (done)' : ar ? ar.checks : 'not started (no application yet)', next: ar ? ar.next : '' } : null,
+        wellsky: { authorization_in: has('wellsky_authorization', prep.authWellSky), tasks_in: has('wellsky_tasks', prep.tasksWellSky),
+          consumer_told_clock_in: has('consumer_told_clock_in', prep.toldClockIn), attendant_clock_in: has('attendant_clock_in', st.attClockIn) },
+        waiting_to_show_in_hub: mine, promises: t.promises.filter((p) => p.open).map((p) => ({ what: p.what, due: p.due || '', late: !!p.late })) };
+    }).sort((x, y) => String(x.start_date || '9999').localeCompare(String(y.start_date || '9999')));
+    return { today, people: out, attendants_note: att.error || '' };
+  }
+  /* the short version for "Start my night" */
+  function startingSummary(s) {
+    const checks = [], wellsky = [];
+    for (const p of s.people) {
+      if (p.attendant && !p.attendant.checks_clear) checks.push({ consumer: p.name, id: p.id, attendant: p.attendant.name, checks: p.attendant.background_checks, start_date: p.start_date, due: (p.steps['Attendant background checks'] || {}).due || '', late: !!(p.steps['Attendant background checks'] || {}).late });
+      else if (!p.attendant) checks.push({ consumer: p.name, id: p.id, attendant: 'not chosen yet', checks: 'find out who the attendant is', start_date: p.start_date, due: (p.steps['Attendant background checks'] || {}).due || '', late: !!(p.steps['Attendant background checks'] || {}).late });
+      const ws = p.wellsky, miss = [!ws.authorization_in && 'authorization', !ws.tasks_in && 'tasks'].filter(Boolean);
+      if (miss.length && (p.start_date || (p.steps['Referral or PCCP'] || {}).what === 'Authorized')) wellsky.push({ consumer: p.name, id: p.id, start_date: p.start_date, needs: 'WellSky: consumer, attendant, ' + miss.join(' and ') });
+    }
+    return { background_checks_needed: checks, wellsky_setup_needed: wellsky, starting_count: s.people.length, next_steps: s.people.slice(0, 8).map((p) => ({ consumer: p.name, id: p.id, start_date: p.start_date, next: p.next })), note: s.attendants_note };
+  }
+  async function markStep(a, args) {
+    const all = await people(), r = recordOf(all, 'consumer', args.id);
+    if (String(r.status || '').toLowerCase() !== 'starting') throw new ToolError(r.name + ' is not on the Starting page.');
+    try { const u = await hubUpdates.add(a.me, r.id, args.step, r.name); return { marked: true, consumer: r.name, step: STEPS[args.step].words, at: u && u.at, shows_in_hub: 'the next time the CDS hub is opened' }; }
+    catch (e) { if (e instanceof HubUpdateError) throw new ToolError(e.message, e.status); throw e; }
   }
 
   /* ---------- write ---------- */
@@ -234,13 +317,15 @@ export function createConnector({ db, now = () => Date.now() }) {
     return { sent: true, where: 'On Samantha\'s My Week for ' + morning + ' morning', at: at.toISOString() };
   }
 
-  async function call(email, name, args) {
+  async function call(email, name, args, ctx = {}) {
     const a = await access(email);
     args = args && typeof args === 'object' ? args : {};
     if ((name === 'person' || name === 'save_call' || name === 'medicaid_checked' || name === 'draft_text') && !['lead', 'consumer'].includes(args.kind)) throw new ToolError('kind must be lead or consumer.');
     try {
       switch (name) {
-        case 'tonight': return await tonight(a, args);
+        case 'tonight': return await tonight(a, args, ctx);
+        case 'starting': return await startingList(a, args, ctx);
+        case 'mark_step': return await markStep(a, args);
         case 'find_person': return await findPerson(a, args);
         case 'person': return await person(a, args);
         case 'save_call': return await saveCall(a, args);
@@ -263,7 +348,7 @@ export function createConnector({ db, now = () => Date.now() }) {
 export const SERVER_INFO = { name: 'caring-companions-cds-hub', title: 'Caring Companions CDS Hub', version: '1.0.0' };
 export const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 export const INSTRUCTIONS = 'The Caring Companions CDS hub. Start with the tonight tool. Calls are with the consumer themselves; never promise hours, eligibility or start dates. Nothing here sends a text: draft_text only saves a draft for Samantha. Times and days are Missouri (America/Chicago).';
-export async function rpc(connector, email, msg) {
+export async function rpc(connector, email, msg, ctx = {}) {
   const id = msg && msg.id, isNote = !msg || msg.id === undefined || msg.id === null;
   const ok = (result) => ({ jsonrpc: '2.0', id, result });
   const err = (code, message) => ({ jsonrpc: '2.0', id: id === undefined ? null : id, error: { code, message } });
@@ -278,7 +363,7 @@ export async function rpc(connector, email, msg) {
   if (m === 'tools/list') return ok({ tools: TOOLS });
   if (m === 'tools/call') {
     try {
-      const out = await connector.call(email, p.name, p.arguments || {});
+      const out = await connector.call(email, p.name, p.arguments || {}, ctx);
       return ok({ content: [{ type: 'text', text: JSON.stringify(out, null, 1) }], structuredContent: out, isError: false });
     } catch (e) {
       if (e instanceof ToolError) return ok({ content: [{ type: 'text', text: e.message }], isError: true });

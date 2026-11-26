@@ -9,9 +9,23 @@ const agency = {
     { id: 'L1', name: 'Ruth Example', phone: '4175550111', county: 'Greene', dob: '1945-03-02', dcn: '12345678', status: 'new',
       relatedPeople: [{ name: 'Ann Example', relation: 'daughter', phone: '4175550122' }], notes: [{ date: '2026-11-24', text: 'Daughter called about CDS' }] },
     { id: 'web-9', name: 'Harold Sample', phone: '', status: 'new', notes: [] } ],
-  consumers: [{ id: 'C1', name: 'Linda Testcase', phone: '4175550133', status: 'starting', cdsStartDate: '2026-11-23', starting: { attendantName: 'Marcus Fake' } }],
+  consumers: [{ id: 'C1', name: 'Linda Testcase', phone: '4175550133', status: 'starting', cdsStartDate: '2026-11-23', starting: { attendantName: 'Marcus Fake' } },
+    { id: 'C2', name: 'Joe Madeup', status: 'starting', cdsStartDate: '2026-12-08', starting: { attendantName: 'Kayla Madeup' }, firstShiftPrep: { authWellSky: { at: 'x' } } },
+    { id: 'C3', name: 'Pat Nostart', status: 'starting' },
+    { id: 'C9', name: 'Example Practice', status: 'starting', cdsStartDate: '2026-12-01' },
+    { id: 'C4', name: 'Old Active', status: 'active', cdsStartDate: '2026-01-01' }],
+  authorizations: { records: { a1: { consumer: 'Joe Madeup' } } },
+  attendants: [],
 };
-const T = { todo: new Map(), items: [], seen: new Map(), msgs: [], cal: new Map(), chats: [
+const PACKETS = [{ lead_id: null, consumer_id: 'C2', sent_at: '2026-11-20', signed_at: '2026-11-21', office_signed_at: '2026-11-22', first: 'Joe', last: 'Madeup' }];
+const ATT = { attendants: [
+  { name: 'Marcus Fake', consumer: 'Linda Testcase', active: false, step1_at: '2026-11-10', next: 'Waiting on the FCSR result from the state',
+    table: { cells: { fcsr: { s: 'wait', t: 'Pending at the state' }, edl: { s: 'done' }, oig: { s: 'done' }, fp: { s: 'na', t: 'Not needed' }, invite: { s: 'off' } } } },
+  { name: 'Kayla Madeup', consumer: 'Joe Madeup', active: false, step1_at: '2026-11-12', next: 'Send the Empeon invite',
+    table: { cells: { fcsr: { s: 'done' }, edl: { s: 'done' }, oig: { s: 'done' }, fp: { s: 'na' }, invite: { s: 'todo' } } } } ] };
+let matchCalls = [], matchFail = false;
+const matchApi = async (jwt, action) => { matchCalls.push([jwt, action]); if (matchFail) throw new Error('the CDS server answered 500'); return ATT; };
+const T = { hub: [], todo: new Map(), items: [], seen: new Map(), msgs: [], cal: new Map(), chats: [
   { lead_id: 'web-9', name: 'Harold Sample', status: 'ready', answers: { consumer_name: 'Harold Sample', consumer_phone: '4175550144', consumer_dob: '1950-01-01', county: 'Christian' }, followup: null, note: '' } ] };
 T.todo.set('i:ktcall01', { id: 'i:ktcall01', kind: 'item', data: { who: 'katlin@mo-care.com', n: 3, when: 'days', days: [1, 2, 3, 4, 5], by: 'samantha@mo-care.com', t: 'Call the leads that are ready', how: 'Talk with the consumer.' } });
 T.items.push({ id: 1, key: 'consumer:C1:promise:x', person_kind: 'consumer', person_id: 'C1', person_name: 'Linda Testcase', kind: 'promise', data: { what: 'call back about clock-in' }, status: 'open', due: '2026-11-25', source: {}, created_at: '2026-11-24' });
@@ -22,6 +36,10 @@ const db = { query: async (t, p = []) => {
   if (/^select key, value from cds_match_settings where key in/.test(s)) return rows(Object.entries(settings).map(([key, value]) => ({ key, value })));
   if (/^select value from cds_match_settings where key = \$1/.test(s)) return rows(p[0] in settings ? [{ value: settings[p[0]] }] : []);
   if (/^select data_value from agency_data/.test(s)) return rows(agency[p[1]] ? [{ data_value: agency[p[1]] }] : []);
+  if (/^select lead_id, consumer_id, sent_at, signed_at, office_signed_at/.test(s)) return rows(PACKETS);
+  if (/^select id, target_id, target_name, step, by_email, at from cds_hub_updates/.test(s)) return rows(T.hub.filter((u) => !u.applied_at));
+  if (/^insert into cds_hub_updates/.test(s)) { const u = { id: T.hub.length + 1, target_id: p[0], target_name: p[1], step: p[2], by_email: p[3], at: new Date(NOW).toISOString() }; T.hub.push(u); return rows([{ id: u.id, at: u.at }]); }
+  if (/^update cds_hub_updates set applied_at/.test(s)) { const r = []; T.hub.forEach((u) => { if (p[0].includes(u.id) && !u.applied_at) { u.applied_at = 'now'; u.applied_by = p[1]; r.push({ id: u.id }); } }); return rows(r); }
   if (/^select id, kind, data, updated_at from cds_todo where data->>'who'/.test(s)) return rows([...T.todo.values()].filter((r) => r.data.who === p[0]));
   if (/^select distinct data->>'who'/.test(s)) return rows([]);
   if (/^select data from cds_todo where id = \$1 and kind = 'item'/.test(s)) { const r = T.todo.get(p[0]); return rows(r && r.kind === 'item' ? [r] : []); }
@@ -39,7 +57,7 @@ const db = { query: async (t, p = []) => {
   if (/^insert into owner_calendar/.test(s)) { T.cal.set(p[0], { id: p[0], data: JSON.parse(p[1]), by: p[2] }); return rows([]); }
   throw new Error('unexpected sql ' + s);
 } };
-const c = createConnector({ db, now: () => NOW });
+const c = createConnector({ db, now: () => NOW, matchApi });
 let pass = 0, fail = 0;
 const ok = (n, cond, d) => { if (cond) pass++; else fail++; console.log(cond ? 'PASS' : 'FAIL', '·', n, cond ? '' : JSON.stringify(d ?? '')); };
 const refused = async (fn, status, words) => { try { await fn(); return false; } catch (e) { return e instanceof ToolError && (!status || e.status === status) && (!words || words.test(e.message)); } };
@@ -51,7 +69,7 @@ ok('no email is refused', await refused(() => c.call('', 'tonight', {}), 401));
 ok('an unknown tool is refused', await refused(() => c.call(K, 'close_lead', {}), 404));
 
 // tonight
-let r = await c.call(K, 'tonight', {});
+let r = await c.call(K, 'tonight', {}, { jwt: 'katlin-token' });
 ok('tonight is the Missouri day and says so', r.day === '2026-11-26' && /Thursday/.test(r.missouri_now), r);
 ok('...her to-do is there with item ids', r.todo.length === 1 && r.todo[0].item_id === 'ktcall01' && !r.todo[0].done);
 ok('...the lead who texted and is ready is first, with Medicaid check first', r.calls[0].name === 'Harold Sample' && r.calls[0].medicaid_check_first && r.calls[0].call === '(417) 555-0144', r.calls);
@@ -118,6 +136,34 @@ const cal = T.cal.get('i:night-katlin-2026-11-26');
 ok('end_night: on Samantha\'s My Week for Friday morning', r.sent && cal && cal.data.date === '2026-11-27' && cal.data.t === 'Katlin\'s night (2026-11-26)' && /spend-down/.test(cal.data.note) && cal.data.every === 'once', cal);
 ok('nothing was sent anywhere (no sent texts, every message a draft)', T.msgs.every((m) => m.status === 'draft'));
 
+// 2026-11-26: Starting, who needs what (background checks, WellSky) and marking steps done
+r = await c.call(K, 'tonight', {}, { jwt: 'katlin-token' });
+const sm = r.starting;
+ok('tonight has the Starting summary: background checks needed', sm && sm.background_checks_needed.some((x) => x.consumer === 'Linda Testcase' && x.attendant === 'Marcus Fake' && /waiting: Pending at the state/.test(x.checks.FCSR)) && sm.background_checks_needed.some((x) => x.consumer === 'Pat Nostart' && x.attendant === 'not chosen yet'), sm);
+ok('...Kayla\'s checks are clear, so Joe is not on the checks list', !sm.background_checks_needed.some((x) => x.consumer === 'Joe Madeup'));
+ok('...WellSky setup needed: Joe (start date, authorization in, tasks missing) and Linda', sm.wellsky_setup_needed.some((x) => x.consumer === 'Joe Madeup' && /tasks/.test(x.needs) && !/authorization/.test(x.needs)) && sm.wellsky_setup_needed.some((x) => x.consumer === 'Linda Testcase' && /authorization and tasks/.test(x.needs)), sm.wellsky_setup_needed);
+ok('...Pat has no start date or authorization yet, so no WellSky line', !sm.wellsky_setup_needed.some((x) => x.consumer === 'Pat Nostart'));
+ok('...the Example record is left out', !JSON.stringify(sm).includes('Example Practice') && sm.starting_count === 3);
+ok('...the checks were read with Katlin\'s own sign-in', matchCalls.some(([j, a]) => j === 'katlin-token' && a === 'packetList'));
+r = await c.call(K, 'starting', { id: 'C2' }, { jwt: 'katlin-token' });
+const joe = r.people[0];
+ok('starting: one consumer in full, every step with what, owner, due', r.people.length === 1 && joe.name === 'Joe Madeup' && joe.steps['Consumer packet'].status === 'done' && joe.steps['Referral or PCCP'].what === 'Authorized' && joe.steps['Attendant background checks'].status === 'done', joe.steps);
+ok('...the attendant and each check', joe.attendant.name === 'Kayla Madeup' && joe.attendant.checks_clear === true && joe.attendant.background_checks.FCSR === 'done' && joe.attendant.next === 'Send the Empeon invite', joe.attendant);
+ok('...WellSky: authorization in, tasks not', joe.wellsky.authorization_in === true && joe.wellsky.tasks_in === false, joe.wellsky);
+ok('...the next step (Medicaid comes first: not verified) and days to start', /Medicaid/.test(joe.next) && joe.days_to_start === 12, [joe.next, joe.days_to_start]);
+ok('starting: a made-up id is refused', await refused(() => c.call(K, 'starting', { id: 'nope' }, { jwt: 'x' }), 404));
+r = await c.call(K, 'starting', {}, { jwt: 'katlin-token' });
+ok('starting: soonest start date first, no start date last', r.people.map((x) => x.name).join() === 'Linda Testcase,Joe Madeup,Pat Nostart', r.people.map((x) => x.name));
+matchFail = true; r = await c.call(K, 'starting', {}, { jwt: 'katlin-token' }); matchFail = false;
+ok('if the checks cannot be read, it says so plainly (no guessing)', /could not be read/.test(r.attendants_note) && r.people.length === 3);
+r = await c.call(K, 'mark_step', { id: 'C2', step: 'wellsky_tasks' });
+ok('mark_step: saved for the hub to apply, with who', r.marked && r.step === 'WellSky: tasks are in' && T.hub.length === 1 && T.hub[0].by_email === 'katlin@mo-care.com' && T.hub[0].target_id === 'C2');
+r = await c.call(K, 'starting', { id: 'C2' }, { jwt: 'katlin-token' });
+ok('...and the Starting list shows it done right away (waiting to show in the hub)', r.people[0].wellsky.tasks_in === true && r.people[0].waiting_to_show_in_hub.includes('wellsky_tasks'));
+ok('mark_step: an unknown step is refused', await refused(() => c.call(K, 'mark_step', { id: 'C2', step: 'close_lead' })));
+ok('mark_step: someone not on Starting is refused', await refused(() => c.call(K, 'mark_step', { id: 'C4', step: 'wellsky_tasks' })));
+ok('mark_step: a lead id is refused', await refused(() => c.call(K, 'mark_step', { id: 'L1', step: 'wellsky_tasks' }), 404));
+
 // MCP
 const call = (m, params, id = 1) => rpc(c, K, { jsonrpc: '2.0', id, method: m, params });
 r = await call('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-ai' } });
@@ -126,8 +172,8 @@ r = await call('initialize', { protocolVersion: '1999-01-01' });
 ok('...an unknown version gets the newest we know', r.result.protocolVersion === PROTOCOLS[0]);
 ok('...a notification gets no answer', (await rpc(c, K, { jsonrpc: '2.0', method: 'notifications/initialized' })) === null);
 r = await call('tools/list');
-ok('tools/list: the 9 tools, each with a schema', r.result.tools.length === 9 && r.result.tools.every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object'));
-ok('...the read-only ones say so', ['tonight', 'find_person', 'person'].every((n) => r.result.tools.find((t) => t.name === n).annotations.readOnlyHint === true));
+ok('tools/list: the 11 tools, each with a schema', r.result.tools.length === 11 && r.result.tools.every((t) => t.name && t.description && t.inputSchema && t.inputSchema.type === 'object'));
+ok('...the read-only ones say so', ['tonight', 'starting', 'find_person', 'person'].every((n) => r.result.tools.find((t) => t.name === n).annotations.readOnlyHint === true));
 r = await call('tools/call', { name: 'find_person', arguments: { search: 'linda' } });
 ok('tools/call: text and structured answer', !r.result.isError && r.result.structuredContent.people[0].id === 'C1' && JSON.parse(r.result.content[0].text).found === 1);
 r = await call('tools/call', { name: 'person', arguments: { kind: 'lead', id: 'nope' } });

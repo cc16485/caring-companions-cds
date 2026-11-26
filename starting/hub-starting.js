@@ -746,6 +746,40 @@
   }
   function promoteAll() { getData('consumers').filter(S.isStarting).forEach(promote); }
 
+  // 2026-11-26 (Katlin's Night Desk): steps Claude marked done through the CDS Hub connector wait on the server
+  // (cds_hub_updates); the page applies them here, the same way its own buttons do, with who did it, then marks them
+  // applied. Once per page load, and again at most every 5 minutes.
+  const PENDING_FIELDS = { wellsky_authorization: ['firstShiftPrep', 'authWellSky', 'WellSky: authorization is in'], wellsky_tasks: ['firstShiftPrep', 'tasksWellSky', 'WellSky: tasks are in'],
+    consumer_told_clock_in: ['firstShiftPrep', 'toldClockIn', 'Told the consumer how to clock in'], attendant_clock_in: ['starting', 'attClockIn', 'The attendant can clock in (WellSky app set up)'] };
+  let _pendAt = 0, _pendBusy = false;
+  async function applyPending(force) {
+    if (_pendBusy || (!force && Date.now() - _pendAt < 5 * 60e3)) return 0;
+    _pendBusy = true; _pendAt = Date.now();
+    try {
+      const call = window.TD_HUB_API || (async (body) => {
+        const ss = await _db.auth.getSession(); const tk = ss && ss.data && ss.data.session && ss.data.session.access_token;
+        if (!tk) return null;
+        const r = await fetch(SUPABASE_URL + '/functions/v1/cds-todo', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk }, body: JSON.stringify(body) });
+        return r.ok ? r.json() : null;
+      });
+      const r = await call({ action: 'hub_updates' });
+      const ups = (r && r.updates) || [];
+      if (!ups.length) return 0;
+      const done = [];
+      const who = e => { const f = String(e || '').split('@')[0].split(/[._-]/)[0]; return f ? f.charAt(0).toUpperCase() + f.slice(1) : 'Office'; };
+      ups.forEach(u => {
+        const f = PENDING_FIELDS[u.step]; if (!f) return;
+        const c = getData('consumers').find(x => String(x.id) === String(u.target_id));
+        if (!c) { done.push(u.id); return; }   // gone from the list: nothing to put it on
+        if (!(c[f[0]] || {})[f[1]]) edit('consumer', c.id, x => { x[f[0]] = Object.assign({}, x[f[0]], { [f[1]]: { at: u.at, by: who(u.by_email) } }); logTo(x, f[2] + ' (' + who(u.by_email) + ', with Claude).'); });
+        done.push(u.id);
+      });
+      if (done.length) await call({ action: 'hub_applied', ids: done });
+      if (done.length) rerender();
+      return done.length;
+    } catch (e) { return 0; } finally { _pendBusy = false; }
+  }
+
   // ---------------------------------------------------------------- Consumers list, Today
   function startingRows() {
     return getData('consumers').filter(S.isStarting).map(c => ({ c, st: S.startingSteps(c, ctxFor(c)) }))
@@ -1262,6 +1296,6 @@
     const sp = document.getElementById('page-starting'); if (sp && sp.classList.contains('active')) renderPage();
   }
 
-  window.StartHub = { readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
+  window.StartHub = { applyPending, readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
     renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, useContact, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard, chatApply };
 })();

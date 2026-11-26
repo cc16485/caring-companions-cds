@@ -6,11 +6,16 @@
 import postgres from 'npm:postgres@3.4.4';
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 import { createTodo, TodoError } from '../_shared/office/todo.js';
+// 2026-11-26: steps Claude marked done (CDS Hub connector) that the hub page applies (hub-updates.js)
+import { createHubUpdates } from '../_shared/office/hub-updates.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const ORIGINS = ['https://hub.caringcds.com'];
 const sql = postgres(env('SUPABASE_DB_URL'), { prepare: false, max: 2, idle_timeout: 20, max_lifetime: 60 * 10 });
 const admin = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
+const hubUpdates = createHubUpdates({
+  db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text, params as never[]) }) },
+});
 const todo = createTodo({
   db: { query: async (text: string, params: unknown[] = []) => ({ rows: await sql.unsafe(text.replace(/\$(\d+)::jsonb/g, '($$$1::text)::jsonb'), params as never[]) }) },
 });
@@ -27,7 +32,14 @@ Deno.serve(async (req) => {
   const u = await admin.auth.getUser(jwt);
   const email = u.error ? '' : (u.data.user?.email || '');
   if (!email) return json({ error: 'Please sign in again.' }, 401);
-  try { return json(await todo.handle(email, await req.json().catch(() => ({})))); }
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body && (body.action === 'hub_updates' || body.action === 'hub_applied')) {
+      const a = await todo.access(email);   // office team only, the same as the to-do
+      return json(body.action === 'hub_updates' ? { ok: true, updates: await hubUpdates.pending() } : await hubUpdates.applied(a.me, body.ids));
+    }
+    return json(await todo.handle(email, body));
+  }
   catch (e) {
     if (e instanceof TodoError) return json({ error: e.message }, e.status);
     console.error(e);
