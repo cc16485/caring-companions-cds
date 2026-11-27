@@ -6839,8 +6839,9 @@ function markBackupReviewed(cid) {
   renderProfile();
 }
 // (5)(H)4 and (5)(H)8: letters, emails and other papers kept in the consumer's file. Files go in the
-// same private bucket as the EIN proof (signed links only). kind: letter | careplan | other.
-const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['emomed', 'eMOMED eligibility page'], ['review', 'ME code review proof'], ['other', 'Other document']];
+// same private bucket as the EIN proof (signed links only). kind: letter | careplan | referral | emomed | review | other.
+const DOC_KINDS = [['letter', 'Letter or email (DHSS, doctor, other provider, agency)'], ['careplan', 'Care plan or authorization'], ['referral', 'State referral or transfer request (Fusion)'], ['emomed', 'eMOMED eligibility page'], ['review', 'ME code review proof'], ['other', 'Other document']];
+const DOC_GROUP = { letter: 'Letters and emails', careplan: 'Care plans and authorizations', referral: 'State referrals and transfer requests', emomed: 'eMOMED eligibility pages', review: 'ME code review proof' };
 function consumerDocsHtml(c) {
   const docs = (c.docs || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const open = d => '<button class="btn btn-sm btn-outline" style="font-size:11px" onclick="openProofFile(\'' + esc(d.path).replace(/'/g, "\\'") + '\')">View</button>';
@@ -6862,7 +6863,7 @@ function consumerDocsHtml(c) {
       '<label>File (PDF or photo)<input type="file" id="doc_file" accept=".pdf,image/*" style="display:block;margin-top:3px"></label>' +
       '<button class="btn btn-primary btn-sm" onclick="uploadConsumerDoc(\'' + c.id + '\')">Save to the file</button></div>' +
     '<div id="doc_status" style="font-size:12.5px;margin-top:6px"></div></div>' +
-    DOC_KINDS.map(([k, l]) => group(k, k === 'letter' ? 'Letters and emails' : k === 'careplan' ? 'Care plans and authorizations' : 'Other documents')).join('') + packet;
+    DOC_KINDS.map(([k, l]) => group(k, DOC_GROUP[k] || 'Other documents')).join('') + packet;
 }
 async function uploadConsumerDoc(cid) {
   const status = document.getElementById('doc_status'), f = (document.getElementById('doc_file').files || [])[0];
