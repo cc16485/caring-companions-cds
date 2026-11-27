@@ -692,12 +692,35 @@
     const s = c.starting || {}, move = s.kind === 'move';
     return '<div class="alert alert-info" style="font-size:13.5px;margin:10px 0"><div><b>Medicaid eligibility is not authorization.</b> A good ME code means Medicaid can pay for CDS. Only DSDS decides whether they get CDS, after its assessment.</div></div>' +
       (move ? line('Transfer entered in the state portal', dateField(c, 'transferEntered')) : line('Referral sent to DSDS', dateField(c, 'referralSent'))) +
-      line(move ? 'Provider change request ID' : 'Referral request ID', '<input type="text" value="' + esc((c.starting || {}).requestId || '') + '" placeholder="From the state portal" onchange="StartHub.setReq(\'' + q(c.id) + '\',this.value)" style="font-size:13px;width:min(220px,100%)">') +
+      line(move ? 'Provider change request ID' : 'Referral request ID', '<input type="text" value="' + esc((c.starting || {}).requestId || '') + '" placeholder="From the state portal" onchange="StartHub.setReq(\'' + q(c.id) + '\',this.value)" style="font-size:13px;width:min(260px,100%)">') +
+      line(move ? 'Provider change request PDF' : 'Referral PDF', reqPdfHtml(c, move)) +
       (move ? '' : line('DSDS assessment', dateField(c, 'assessment'))) +
       (((c.starting || {})[move ? 'transferEntered' : 'referralSent']) && !ctx.auth ? '<div class="field-note" style="margin:4px 0 8px">If no authorization comes back within ' + esc(String(waits()[move ? 'transfer' : 'referral'])) + ' days' + (move ? ', it shows on Today to call DSDS.' : ', it shows on Today: first ask the consumer if DSDS has called or visited, then call DSDS at day ' + Math.max(S.STATE_CALL_DAYS.referral, waits().referral) + ' (counted from the assessment once it has happened).') + '</div>' : '') +
       line('Start date from the state', '<input type="date" value="' + esc(c.cdsStartDate || '') + '" onchange="StartHub.setStart(\'' + q(c.id) + '\',this.value)" style="font-size:13px"> <span class="field-note">The consumer and the attendant must be ready to clock in that day.</span>') +
       line('Authorization', ctx.auth ? '<span style="color:var(--success)">On file' + (ctx.authRec && ctx.authRec.planEnd ? ', ends ' + esc(day(ctx.authRec.planEnd)) : '') + '</span>'
         : '<span style="color:#9C6410">Not uploaded yet</span> ' + btn('Upload the authorization', "profAuthPick('" + q(c.id) + "')", true));
+  }
+  // The PDF the state portal gives back after a referral or transfer is sent (her ask 2026-11-27). Kept with the consumer's documents, kind 'referral'.
+  function reqPdfHtml(c, move) {
+    const have = (c.docs || []).filter(d => d.kind === 'referral');
+    const links = have.map(d => '<a href="#" onclick="openProofFile(\'' + q(d.path) + '\');return false">' + esc(d.name) + '</a> <span class="field-note">' + esc(day(d.date || d.at)) + '</span>').join('<br>');
+    return (links ? links + '<br>' : '<span style="color:#9C6410">Not uploaded yet</span><br>') +
+      '<input type="file" id="stReqPdf" accept=".pdf,image/*" style="font-size:12.5px;margin-top:4px"> ' +
+      btn(have.length ? 'Add another' : 'Upload the ' + (move ? 'request' : 'referral') + ' PDF', "StartHub.saveReqPdf('" + q(c.id) + "')", true) +
+      '<div id="stReqMsg" class="field-note"></div>';
+  }
+  async function saveReqPdf(cid) {
+    const c0 = getData('consumers').find(x => x.id === cid), msg = document.getElementById('stReqMsg'), inp = document.getElementById('stReqPdf');
+    const file = inp && inp.files ? inp.files[0] : null;
+    if (!c0) return;
+    if (!file) { msg.innerHTML = '<span style="color:var(--danger)">Pick the PDF first.</span>'; return; }
+    const move = (c0.starting || {}).kind === 'move', rid = (c0.starting || {}).requestId || '';
+    msg.textContent = 'Saving ' + file.name + '…';
+    let doc;
+    try { doc = await _saveConsumerDoc(c0, file, { kind: 'referral', date: (c0.starting || {})[move ? 'transferEntered' : 'referralSent'] || today(), about: (move ? 'Provider change request' : 'Referral to DSDS') + (rid ? ' ' + rid : '') }); }
+    catch (e) { msg.innerHTML = '<span style="color:var(--danger)">The file did not save: ' + esc(e.message || e) + '</span>'; return; }
+    edit('consumer', cid, c => { c.docs = (c.docs || []).concat([doc]); logTo(c, (move ? 'Provider change request' : 'Referral') + ' PDF saved' + (rid ? ' (' + rid + ')' : '') + ' by ' + meName() + '.'); });
+    rerender();
   }
   function dateField(c, k) {
     const v = (c.starting || {})[k] || '';
@@ -1300,5 +1323,5 @@
   }
 
   window.StartHub = { applyPending, readPdf, on, mountLead, yesAsk, yesCancel, setCoordinator, startFromLead, setStage, saveFollowup, familyApproved, compose, cmpCh, cmpTo, cmpAbd, cmpEdit, cmpReset, cmpClose, cmpSend,
-    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, useContact, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard, chatApply };
+    renderProfile, openLead, preview, saveCheck, flag, supAct, closeStarting, dnsOpen, dnsSet, dnsSave, DNS, setDate, setStart, pageStart, pageStartEdit, pageStartBlur, attClock, markReady, prep, promote, promoteAll, rosterHtml, startingRows, renderPage, shown, waitingLeads, todayHtml, failedHtml, handled, rules, messages, ctxFor, deliveryLabel, renderAdmin, admEdit, admSaveRule, admSaveMsgs, admSaveWaits, setReq, saveReqPdf, waits, readyList, promiseAdd, promiseDone, clockCall, trackerOf, trackerHtml, coordDecide, useStart, useAttendant, useContact, coordItems, coordRefresh, msgSend, msgSkip, mountLeadHeard, chatApply };
 })();
